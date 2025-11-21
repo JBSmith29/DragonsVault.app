@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Something Went Wrong · DragonsVault{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="text-center">
+        <h1 class="display-4 fw-bold">500</h1>
+        <p class="lead">
+          Uh oh — something went wrong on our side.
+        </p>
+
+        {% if message is defined and message %}
+          <div class="alert alert-danger mt-3" role="alert">
+            {{ message }}
+          </div>
+        {% elif e is defined and e %}
+          <div class="alert alert-danger mt-3" role="alert">
+            {{ e.description if e.description is defined else e }}
+          </div>
+        {% endif %}
+
+        <div class="mt-4">
+          <a href="/" class="btn btn-primary btn-lg">
+            ← Back to Dashboard
+          </a>
+        </div>
+
+        <p class="text-muted mt-3">
+          The error has been logged (if logging is enabled). Try again, or head back to the dashboard.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,2524 @@
+{% extends "base.html" %}
+{% block title %}{{ folder.name }} - Deck Detail{% endblock %}
+{% block breadcrumbs %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{{ url_for('views.dashboard') }}">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('views.decks_overview') }}">Decks</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ folder.name }}</li>
+  </ol>
+</nav>
+{% endblock %}
+{% block content %}
+
+<style>
+  .cards-table { table-layout:auto; width:100%; }
+  .cards-table > :not(caption) > * > * { padding-top:.85rem; padding-bottom:.85rem; }
+  .cards-table thead th { border-bottom:1px solid var(--bs-border-color); background:transparent !important; }
+  .cards-table thead th a{color: var(--bs-primary); text-decoration: none; }
+  .cards-table thead th a:hover{color: var(--bs-link-hover-color, var(--bs-primary)); text-decoration: underline;}
+  .cards-table td, .cards-table th { vertical-align:middle; white-space:normal; }
+  .cards-table tbody tr.deck-row { cursor: pointer; transition: background-color .12s ease; }
+  .cards-table tbody tr.deck-row:focus-visible { outline:0; box-shadow:0 0 0 .2rem rgba(var(--bs-primary-rgb), .35); }
+
+  .nowrap { white-space:nowrap !important; }
+
+  .badge, .badge-folder { border-radius:.375rem; padding:.35em .5em; font-weight:600; line-height:1; }
+  .badge-type { background:#475569; color:#fff; margin-right:.25rem; margin-bottom:.2rem; display:inline-block; }
+  .badge-folder { background:#334155; color:#e2e8f0; }
+  .proxy-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:.25rem;
+    padding:.2rem .5rem;
+    border-radius:.45rem;
+    font-size:.75rem;
+    font-weight:600;
+    background:rgba(13,110,253,.15);
+    color:var(--bs-primary);
+  }
+
+  .badge-type-artifact     { background:#94A3B8; color:#fff; }
+  .badge-type-battle       { background:#F97316; color:#fff; }
+  .badge-type-creature     { background:#198754; color:#fff; }
+  .badge-type-enchantment  { background:#8B5CF6; color:#fff; }
+  .badge-type-instant      { background:#0EA5E9; color:#fff; }
+  .badge-type-land         { background:#8B5E3C; color:#fff; }
+  .badge-type-planeswalker { background:#EAB308; color:#fff; }
+  .badge-type-sorcery      { background:#EF4444; color:#fff; }
+
+  .badge.badge-folder.badge-folder-common   { background-color: rgba(var(--bs-secondary-rgb), 1); color:#fff; }
+  .badge.badge-folder.badge-folder-uncommon { background-color: rgba(var(--bs-success-rgb), 1);   color:#fff; }
+  .badge.badge-folder.badge-folder-rare     { background-color: rgba(var(--bs-warning-rgb), 1);   color:#000; }
+  .badge.badge-folder.badge-folder-mythic   { background-color: rgba(var(--bs-danger-rgb), 1);    color:#fff; }
+
+  .col-art{ width:56px; }
+  .col-colors{ width:auto; min-width:unset; white-space:nowrap; }
+  .col-cmc{ width:80px; min-width:72px; font-variant-numeric: tabular-nums; text-align:center; }
+  .cmc-chip{
+    display:inline-flex;
+    min-width:2.75ch;
+    justify-content:center;
+    align-items:center;
+    padding:0 .25rem;
+  }
+  .art-thumb{ width:48px; height:auto; border-radius:.5rem; display:block; }
+
+  .pip-row{ gap:.25rem; }
+  .pip{ height:1.05em; vertical-align:text-bottom; }
+
+  .summary-row{ --gap: 1rem; display:grid; gap:var(--gap); grid-template-columns: 1fr; }
+  @media (min-width:992px){ .summary-row{ grid-template-columns: repeat(3, 1fr); } }
+  .section-title{ font-weight:600; margin:.25rem 0 .5rem; text-align:center; }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+    padding:.35rem .75rem;
+    border-radius:.5rem;
+    background: var(--bs-secondary-bg);
+    border:1px solid var(--bs-border-color);
+  }
+
+  .summary-center { text-align:center; display:flex; flex-direction:column; align-items:center; }
+  .summary-center .d-flex.flex-wrap{ justify-content:center; }
+  .summary-center .pill{ margin-bottom:.25rem; }
+  .summary-metrics{
+    display:flex;
+    flex-wrap:wrap;
+    gap:1.25rem;
+    justify-content:center;
+    text-align:center;
+  }
+  .summary-metric{
+    min-width:160px;
+  }
+  .summary-metric .summary-label{
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    font-size:.75rem;
+    color: var(--bs-secondary-color);
+  }
+  .summary-metric .summary-value{
+    font-size:2rem;
+    font-weight:700;
+  }
+  .summary-metric .summary-note{
+    font-size:.85rem;
+    color: var(--bs-secondary-color);
+  }
+
+  .commander-summary{
+    display:flex;
+    flex-wrap:wrap;
+    gap:1.5rem;
+    align-items:stretch;
+  }
+  .commander-portrait{
+    flex:0 0 200px;
+    max-width:200px;
+    align-self:stretch;
+  }
+  .commander-portrait-frame{
+    border-radius:1rem;
+    overflow:hidden;
+    background:rgba(15,23,42,.65);
+    border:1px solid rgba(255,255,255,.1);
+    box-shadow:0 .75rem 1.5rem rgba(0,0,0,.35);
+  }
+  .commander-portrait img{
+    width:100%;
+    display:block;
+  }
+  .commander-portrait-placeholder{
+    min-height:260px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:1rem;
+    color:var(--bs-secondary-color);
+    background:rgba(15,23,42,.4);
+  }
+  .commander-meta{
+    flex:1 1 260px;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+  }
+  .commander-meta .summary-value{
+    font-size:2.5rem;
+    font-weight:700;
+    line-height:1.1;
+  }
+  .commander-name-btn{
+    background:transparent;
+    border:0;
+    padding:0;
+    color:inherit;
+    font:inherit;
+    line-height:inherit;
+    text-align:left;
+    cursor:pointer;
+  }
+  .commander-name-btn:focus-visible{
+    outline:2px solid var(--bs-primary);
+    outline-offset:2px;
+  }
+.commander-meta-header{
+  flex:0 0 auto;
+}
+.commander-status-toggle{
+  margin-top:1rem;
+  display:flex;
+  justify-content:center;
+  width:100%;
+}
+.toggle-pill{
+  position:relative;
+  width:100%;
+  height:40px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.2);
+  background:rgba(255,255,255,.08);
+  display:flex;
+  align-items:center;
+  padding:0 .35rem;
+}
+.toggle-pill .toggle-track{
+  position:absolute;
+  inset:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,.12);
+}
+.toggle-pill .toggle-thumb{
+  position:absolute;
+  top:4px;
+  width:calc(50% - 8px);
+  height:32px;
+  border-radius:999px;
+  background:var(--bs-primary);
+  box-shadow:0 .35rem .8rem rgba(13,110,253,.35);
+  transition:transform .2s ease;
+}
+.toggle-pill.proxy .toggle-thumb{
+  transform:translateX(calc(100% + 8px));
+}
+.toggle-pill .toggle-labels{
+  position:relative;
+  z-index:1;
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  font-weight:600;
+  font-size:.9rem;
+}
+.toggle-pill .toggle-option{
+  flex:1;
+  text-align:center;
+  color:rgba(255,255,255,.75);
+}
+.toggle-pill .toggle-option.active{
+  color:#fff;
+}
+  .commander-name{
+    font-size:clamp(1.1rem, 2vw, 1.6rem);
+    font-weight:600;
+    line-height:1.2;
+    margin-bottom:.35rem;
+    word-break:break-word;
+  }
+  .commander-meta-secondary{
+    flex:1 1 auto;
+    display:flex;
+    flex-wrap:wrap;
+    gap:1.25rem;
+    align-items:flex-start;
+  }
+  .commander-meta-block{
+    flex:0 0 auto;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+  }
+  .commander-meta-divider{
+    flex:0 0 auto;
+    width:1px;
+    background:var(--bs-border-color);
+    align-self:stretch;
+  }
+  .owner-action-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.5rem;
+    align-items:center;
+  }
+  .owner-trigger-btn{
+    text-transform:none;
+    font-weight:600;
+  }
+  .identity-body{
+    flex:1 1 auto;
+    display:flex;
+    flex-direction:column;
+    gap:.75rem;
+    align-items:center;
+    text-align:center;
+  }
+  .identity-body.counts-body{
+    gap:.35rem;
+  }
+  .card-count-block{
+    flex:0 0 auto;
+    text-align:center;
+    align-items:center;
+    min-width:0;
+  }
+  .card-count-block .counts-body{
+    gap:0;
+  }
+  .card-count-block .card-count-total{
+    font-size:clamp(1.8rem, 3vw, 2rem);
+    line-height:1;
+  }
+  .mana-row{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:.35rem;
+    justify-content:center;
+  }
+  .commander-meta .mana{
+    height:32px;
+    width:auto;
+  }
+  @media (max-width: 576px){
+    .commander-portrait{
+      flex:1 1 100%;
+      max-width:100%;
+    }
+    .commander-portrait-frame{
+      max-width:260px;
+      margin:0 auto;
+    }
+    .commander-meta-block{
+      min-width:100%;
+    }
+    .commander-meta-divider{
+      display:none;
+    }
+  }
+
+  .synergy-card{
+    border:1px solid rgba(255,255,255,.08);
+    background: var(--bs-body-bg);
+    box-shadow: 0 .6rem 1.6rem rgba(0,0,0,.2);
+  }
+  .synergy-card .vr{
+    height:48px;
+    opacity:.25;
+  }
+  .synergy-tag-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+    padding:.35rem .75rem;
+    border-radius:.5rem;
+    background: linear-gradient(135deg, #0b2b63, #050f2c);
+    color: #f0f4ff;
+    border: 1px solid rgba(11, 43, 99, .6);
+    font-weight:600;
+    font-size:.95rem;
+    line-height:1.2;
+    align-self:flex-start;
+    width:auto;
+  }
+  .synergy-role-chip{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    gap:.5rem;
+    padding:.9rem;
+    border-radius:.9rem;
+    background: linear-gradient(145deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.12);
+    min-width: 160px;
+    width: 100%;
+    max-width: 220px;
+    cursor: pointer;
+    transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    text-align: left;
+  }
+  .synergy-role-chip:hover{
+    border-color: rgba(var(--bs-primary-rgb, 13,110,253), .35);
+    transform: translateY(-1px);
+    box-shadow: 0 .4rem 1.2rem rgba(0,0,0,.18);
+  }
+  .synergy-role-chip.active{
+    border-color: rgba(var(--bs-primary-rgb, 13,110,253), .75);
+    box-shadow: 0 .55rem 1.3rem rgba(13,110,253,.2);
+    background: linear-gradient(145deg, rgba(13,110,253,.12), rgba(255,255,255,.03));
+  }
+  .synergy-role-chip:focus-visible{
+    outline: 2px solid rgba(var(--bs-primary-rgb, 13,110,253), .65);
+    outline-offset: 3px;
+  }
+  .synergy-role-chip.needs-attention{
+    border-color: rgba(255,193,7,.55);
+    background: linear-gradient(145deg, rgba(255,193,7,.14), rgba(255,255,255,.02));
+  }
+  .synergy-role-chip .role-title{
+    font-size:.95rem; font-weight:700; letter-spacing:.02em;
+  }
+  .synergy-role-chip .role-count{
+    display: inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:.35rem .75rem;
+    border-radius: 12px;
+    border:1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.06);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--bs-emphasis-color);
+    width: fit-content;
+  }
+  .role-detail-card .role-card-thumb{
+    width:42px;
+    height:60px;
+    object-fit:cover;
+    border-radius:.35rem;
+  }
+  .role-detail-card .role-card-thumb.shadow-sm{
+    box-shadow:0 .25rem .75rem rgba(0,0,0,.2);
+  }
+  .role-detail-card .list-unstyled{
+    margin-bottom:0;
+  }
+  .role-detail-card .list-unstyled li:last-child{
+    margin-bottom:0;
+  }
+  .role-section{
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: .85rem;
+    padding: 1rem;
+    height: 100%;
+  }
+  .role-section-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.5rem;
+    margin-bottom:.75rem;
+  }
+  .role-section-header .title{
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-size: .8rem;
+    color: var(--bs-secondary-color);
+    font-weight: 700;
+  }
+  .role-section .role-empty{
+    color: var(--bs-secondary-color);
+  }
+  .synergy-role-progress{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.5rem;
+    padding:.35rem .6rem;
+    border-radius:.55rem;
+    background: rgba(255,255,255,.08);
+    font-size:.75rem;
+    font-weight:600;
+    overflow:hidden;
+  }
+  .synergy-role-progress.no-target{
+    justify-content:center;
+  }
+  .synergy-role-bar{
+    position:absolute;
+    inset:0;
+    background: rgba(25,135,84,.35);
+    border-radius:inherit;
+    pointer-events:none;
+  }
+  .synergy-role-bar.warn{
+    background: rgba(255,193,7,.35);
+  }
+  .synergy-role-metric{
+    position:relative;
+    z-index:1;
+  }
+  .synergy-theme .badge{
+    background: rgba(13,110,253,.2);
+    color: var(--bs-primary);
+    border:1px solid rgba(13,110,253,.35);
+  }
+
+  .type-pill {
+    cursor: pointer;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    color: inherit;
+    border-radius: .5rem;
+    padding: .35rem .75rem;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    font: inherit;
+  }
+  .type-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .45rem 1.2rem rgba(0,0,0,.25);
+    border-color: rgba(255,255,255,.25);
+  }
+  .type-pill.active {
+    background: var(--bs-primary);
+    color: #fff;
+    border-color: rgba(255,255,255,.35);
+  }
+
+  .bracket-pill {
+    font-weight:600;
+    border-radius:.35rem;
+    padding:.2rem .55rem;
+    background:var(--bs-primary);
+    border:1px solid var(--bs-primary);
+    color:#fff;
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+    font-size:.8rem;
+    line-height:1;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
+  }
+  .bracket-pill:hover{
+    transform:translateY(-1px);
+    box-shadow:0 .35rem .9rem rgba(13,110,253,.4);
+    color:#fff;
+  }
+  .bracket-pill[aria-expanded="true"] {
+    background:var(--bs-primary);
+    color:#fff;
+  }
+
+  .bracket-insight .bracket-pill-row{
+    margin-left: calc(-1 * var(--bs-card-spacer-x, 1rem));
+  }
+
+  .stats-grid{ display:grid; gap:.75rem; grid-template-columns: 1fr; margin-top:.5rem; }
+  @media (min-width:768px){ .stats-grid{ grid-template-columns: repeat(3, 1fr); } }
+  .stat-card{
+    background:transparent; border:0; border-radius:.75rem;
+    padding:.75rem 1rem; display:flex; align-items:center; justify-content:space-between;
+  }
+  .stat-card .label{ color:var(--bs-secondary-color); }
+  .stat-card .value{ font-weight:600; }
+
+  .curve-grid{
+    display:grid; grid-template-columns: repeat(4, minmax(60px, 1fr)); gap:.75rem;
+    width:max-content; margin-inline:auto;
+  }
+  @media (min-width:768px){ .curve-grid{ grid-template-columns: repeat(8, 48px); gap:.75rem; } }
+  .curve-col{ text-align:center; }
+  .curve-bar-btn{
+    background:transparent;
+    border:0;
+    width:100%;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:.35rem;
+    color:inherit;
+    transition:transform .12s ease;
+  }
+  .curve-bar-btn:hover{
+    transform: translateY(-3px);
+  }
+  .curve-bar-btn.active .curve-bar{
+    border-color: var(--bs-primary);
+    box-shadow:0 .45rem 1.2rem rgba(13,110,253,.35);
+  }
+  .curve-bar-btn:focus-visible{
+    outline:2px solid var(--bs-primary);
+    outline-offset:4px;
+  }
+  .curve-bar{
+    position:relative; height:150px; border:1px solid var(--bs-border-color);
+    border-radius:.65rem; background:rgba(255,255,255,.04); overflow:hidden; width:100%;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .curve-bar .fill{
+    width:100%;
+    background:var(--bs-primary);
+    opacity:.3;
+    border-radius:.65rem .65rem 0 0;
+    transition:height .18s ease;
+  }
+  .curve-label{ font-size:.9rem; color:var(--bs-secondary-color); }
+  .curve-count{
+    position:absolute;
+    left:50%;
+    top:.4rem;
+    transform:translateX(-50%);
+    background:rgba(0,0,0,.55);
+    color:#fff;
+    font-weight:700;
+    padding:.1rem .45rem;
+    border-radius:.35rem;
+    font-size:.9rem;
+  }
+
+  .token-section.card{ background:transparent; border:0; }
+  .token-section .card-header{ background:transparent; border:0; }
+  .token-section .card-body{ background:transparent; }
+
+  .token-item{ background:transparent; border:0; border-radius:.75rem; padding:.5rem; }
+  .token-thumb { width:96px; flex:0 0 96px; }
+  .token-thumb img { width:96px; height:96px; object-fit:contain; border-radius:.5rem; display:block; background:transparent; }
+
+  .btn-plain{ background:transparent; border:0; padding:.25rem; line-height:1; }
+  .btn-plain:focus{ box-shadow:none; }
+  .btn-plain:hover{ background:rgba(255,255,255,.06); border-radius:.5rem; }
+  .tap-toggle img{ height:1.15rem; vertical-align:text-bottom; opacity:.9; }
+
+  .token-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.5rem}
+  .token-card{border:1px solid var(--bs-border-color);border-radius:.5rem;padding:.5rem;text-align:center;height:100%}
+  .token-name{font-weight:600;font-size:.85rem}
+  .token-type{font-size:.75rem;color:var(--bs-secondary-color)}
+
+  .card-chip-list{ display:flex; flex-direction:column; gap:.25rem; }
+  .card-chip-link{
+    display:inline-flex; align-items:center; gap:.25rem;
+    color:var(--bs-body-color); text-decoration:none; font-weight:600;
+    transition:color .12s ease, text-decoration .12s ease;
+  }
+  .card-chip-link:hover{ color:var(--bs-primary); text-decoration:underline; }
+
+  .spellbook-combo-groups{display:flex;flex-direction:column;gap:1rem;}
+  .spellbook-combo-group{display:flex;flex-direction:column;gap:.5rem;}
+  .spellbook-combo-heading{font-weight:600;font-size:.9rem;color:var(--bs-secondary-color);}
+  .spellbook-combo-list{display:flex;flex-direction:column;gap:.6rem;min-width:0;}
+  .spellbook-combo{display:flex;flex-direction:column;align-items:flex-start;gap:.4rem;padding:.5rem .8rem;border-radius:.6rem;border:1px solid var(--bs-border-color);background:rgba(255,255,255,.035);color:inherit;text-decoration:none;transition:background .12s ease,border-color .12s ease,transform .12s ease;}
+  .spellbook-combo:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);transform:translateY(-1px);}
+  .spellbook-combo .combo-link{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;width:100%;color:inherit;font-weight:600;}
+  .spellbook-combo .combo-card-name{display:inline-flex;align-items:center;cursor:pointer;}
+  .spellbook-combo .combo-card-name:hover{color:var(--bs-primary);text-decoration:underline;}
+  .spellbook-combo .combo-plus{display:inline-flex;margin:0 .4rem;font-weight:600;color:inherit;flex:0 0 auto;}
+  .spellbook-combo-tags{display:flex;flex-wrap:wrap;gap:.3rem;}
+  .spellbook-combo-tag{display:inline-flex;align-items:center;gap:.2rem;padding:.15rem .45rem;border-radius:.45rem;background:rgba(255,255,255,.08);font-size:.75rem;font-weight:600;}
+
+  .signals-wrapper .hover-card{
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: .75rem;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .signals-wrapper .hover-card:hover{
+    transform: translateY(-3px);
+    box-shadow: 0 .45rem 1.2rem rgba(0,0,0,.25);
+    border-color: rgba(255,255,255,.2);
+  }
+  .signals-wrapper .hover-card .card-body{
+    background: transparent;
+  }
+  .score-info-btn{
+    color:var(--bs-secondary-color);
+    transition: color .12s ease;
+  }
+  .score-info-btn:hover{
+    color:var(--bs-primary);
+  }
+  .score-info-btn .info-icon{
+    width:1.5rem;
+    height:1.5rem;
+    display:block;
+  }
+
+  .offcanvas-end.w-500 { width:500px; }
+  .offcanvas .card-art { width:100%; height:auto; border-radius:.5rem; display:block; margin:0 auto; background:#111; }
+  .small-muted { font-size:.875rem; color:#6c757d; }
+  .detail-label { font-weight:600; color:#6c757d; width:140px; }
+
+  .commander-card{
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  .commander-card .card-body,
+  .commander-card .card-header,
+  .commander-card .card-footer{
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  /* Drawer carousel + flip */
+  .carousel-wrap { position: relative; }
+  .img-action {
+    position: absolute; top: .5rem; right: .5rem;
+    display: flex; gap: .25rem; z-index: 5;
+  }
+  .img-action .btn-icon {
+    border: 0; padding: .35rem .5rem; border-radius: .375rem;
+    background: rgba(0,0,0,.55); color: #fff; line-height: 1;
+  }
+  .img-action .btn-icon[disabled] { opacity:.35; cursor:not-allowed; }
+
+  /* --- Commander picker: uniform tiles & clamped titles --- */
+  .legend-grid {
+    --gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--gap);
+  }
+  .legend-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    align-items: start;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: .5rem;
+    padding: .5rem .75rem;
+    min-height: 120px; /* consistent height */
+  }
+  .legend-thumb-wrap {
+    --w: 72px;
+    --h: calc(var(--w) * 1.396); /* card ratio */
+    width: var(--w);
+    height: var(--h);
+    border-radius: .35rem;
+    overflow: hidden;
+    background: #161616;
+    flex: 0 0 auto;
+  }
+  .legend-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* shows full front, works for MDFC/flip */
+    display: block;
+  }
+  .legend-body { min-width: 0; }
+.legend-title {
+    font-weight: 600;
+    line-height: 1.2;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2; /* clamp to 2 lines */
+    max-height: 2.4em;
+  }
+  .legend-sub {
+    font-size: .875rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+
+{% macro spellbook_combo_list(combos) %}
+  <div class="spellbook-combo-list">
+    {% for combo in combos %}
+      <a class="spellbook-combo"
+         href="{{ combo.url or '#' }}"
+         data-categories="{{ combo.result_labels|join(' ') }}"
+         {% if combo.url %}target="_blank" rel="noopener"{% endif %}>
+        {% if combo.tags %}
+          <div class="spellbook-combo-tags">
+            {% for tag in combo.tags %}
+              <span class="spellbook-combo-tag">{{ tag }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="combo-link" title="{{ combo.cards_line }}">
+          {% for card in combo.cards %}
+            <span class="combo-card-name"
+                  data-card-name="{{ card.name|e }}"
+                  data-hover-src="{{ card.hover }}">
+              {{ card.label or card.name }}
+            </span>
+            {% if not loop.last %}
+              <span class="combo-plus">+</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% set is_collection_bucket = folder.is_collection %}
+{% set owner_options = owner_name_options if owner_name_options is defined else [] %}
+{% if current_user and current_user.is_authenticated and current_user.username %}
+  {% set preferred_owner = (current_user.username or current_user.email) %}
+  {% if preferred_owner and preferred_owner not in owner_options %}
+    {% set owner_options = [preferred_owner] + owner_options %}
+  {% endif %}
+{% endif %}
+{% set default_owner_value = folder.owner or (preferred_owner if preferred_owner is defined else '') %}
+{% if preferred_owner is defined and preferred_owner and folder.owner and (current_user.email is defined and folder.owner == current_user.email) %}
+  {% set default_owner_value = preferred_owner %}
+{% endif %}
+
+
+<div class="page-section">
+  <!-- Page header -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-0">
+        <a class="text-decoration-none text-reset"
+           href="{{ cards_link }}">{{ folder.name }}</a>
+      </h1>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+      {% if not folder.is_collection %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('views.deck_synergy', folder_id=folder.id) }}">View Synergy</a>
+      {% endif %}
+      <a class="btn btn-sm btn-outline-primary"
+         href="{{ cards_link }}">View cards</a>
+    </div>
+  </div>
+
+  {% if synergy_summary %}
+    <div class="card synergy-card mb-3">
+      <div class="card-body">
+        <div class="commander-summary mb-3">
+          <div class="commander-portrait">
+            <div class="commander-portrait-frame card-hover-shadow hover-lift">
+              {% if commander_media %}
+                <img src="{{ commander_media.image }}"
+                     alt="{{ commander_media.name or 'Commander art' }}"
+                     class="commander-img"
+                     {% if commander_media.hover %}data-hover-src="{{ commander_media.hover }}"{% endif %}>
+              {% else %}
+                <div class="commander-portrait-placeholder">
+                  <div class="fw-semibold mb-1">{{ folder.commander_name or 'Commander not set' }}</div>
+                  <div class="small text-muted">Commander art unavailable</div>
+                </div>
+              {% endif %}
+            </div>
+            <div class="text-muted small mt-2 text-center">
+              {{ synergy_summary.deck.color_label or 'Colorless' }}
+            </div>
+            {% if not folder.is_collection %}
+              <div class="commander-status-toggle">
+                <form method="post"
+                      action="{{ url_for('views.set_folder_proxy', folder_id=folder.id) }}"
+                      class="w-100">
+                  <input type="hidden" name="is_proxy" value="{{ '0' if folder.is_proxy else '1' }}">
+                  <button class="toggle-pill {{ 'proxy' if folder.is_proxy else '' }}"
+                          type="submit"
+                          title="Toggle whether this deck is tracked as owned or a proxy">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                    <span class="toggle-labels">
+                      <span class="toggle-option {{ '' if folder.is_proxy else 'active' }}">Owned Deck</span>
+                      <span class="toggle-option {{ 'active' if folder.is_proxy else '' }}">Proxy Deck</span>
+                    </span>
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+          </div>
+          <div class="commander-meta">
+            <div class="commander-meta-header">
+              <div class="text-uppercase text-muted small fw-semibold">Commander</div>
+              {% if not is_collection_bucket %}
+                <button class="commander-name-btn"
+                        type="button"
+                        data-bs-toggle="modal"
+                        data-bs-target="#commanderPickerModal"
+                        aria-controls="commanderPickerModal"
+                        aria-label="Manage commander">
+                  <span class="commander-name">{{ folder.commander_name or 'Commander not set' }}</span>
+                </button>
+              {% else %}
+                <div class="commander-name">{{ folder.commander_name or 'Commander not set' }}</div>
+              {% endif %}
+            </div>
+            {% if synergy_summary.tag_focus %}
+              <div class="synergy-tag-chip mt-1">
+                <span class="text-uppercase small fw-semibold">Tag focus</span>
+                <span class="fw-semibold">{{ synergy_summary.tag_focus.label }}</span>
+                {% if synergy_summary.tag_focus.score %}
+                  <span class="text-muted small">· score {{ synergy_summary.tag_focus.score }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% set has_edhrec_metric = synergy_summary.coverage.present_average_synergy_percent %}
+              <div class="commander-meta-secondary">
+                <div class="commander-meta-block">
+                  <div class="text-uppercase text-muted small fw-semibold">Color identity</div>
+                  <div class="identity-body">
+                    <div class="mana-row">
+                    {% set color_list = synergy_summary.deck.color_list %}
+                    {% if color_list %}
+                      {% for color in color_list %}
+                        <img class="mana" src="{{ url_for('static', filename='symbols/' ~ color|upper ~ '.svg') }}" alt="{{ color }}" title="{{ color }}">
+                      {% endfor %}
+                    {% else %}
+                      <img class="mana" src="{{ url_for('static', filename='symbols/C.svg') }}" alt="Colorless" title="Colorless">
+                    {% endif %}
+                  </div>
+                  {% if has_edhrec_metric %}
+                    <div class="mt-3">
+                      <div class="text-uppercase text-muted small fw-semibold">EDHREC synergy</div>
+                      <div class="summary-value mb-0">{{ synergy_summary.coverage.present_average_synergy_percent }}%</div>
+                    </div>
+                {% endif %}
+              </div>
+                </div>
+                <div class="commander-meta-divider d-none d-lg-block"></div>
+                <div class="commander-meta-block card-count-block align-items-center">
+                  <div class="identity-body counts-body">
+                    <div class="text-uppercase text-muted small fw-semibold">Card counts</div>
+                    <div class="fw-semibold card-count-total">{{ synergy_summary.deck.total_cards or 0 }}</div>
+                    {% if commander_bracket and not folder.is_collection %}
+                      <div class="mt-4">
+                        <div class="text-uppercase text-muted small fw-semibold">Bracket</div>
+                        <div class="summary-value mb-0">{{ commander_bracket.level }}</div>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% if (not is_collection_bucket) or synergy_summary.roles %}
+          <div class="mt-4 pt-3 border-top border-secondary-subtle">
+            {% if not is_collection_bucket %}
+              {% set deck_tag_label = folder.deck_tag or 'Not set' %}
+              <div class="owner-action-row{% if synergy_summary.roles %} mb-3{% endif %}" id="tagPicker">
+                <button class="btn btn-outline-secondary btn-owner-trigger"
+                        type="button"
+                        data-bs-toggle="modal"
+                        data-bs-target="#ownerModal">
+                  Owner: {{ folder.owner or 'Unassigned' }}
+                </button>
+                <button class="btn btn-outline-secondary btn-deck-tag-trigger"
+                        type="button"
+                        data-bs-toggle="modal"
+                        data-bs-target="#tagPickerModal">
+                  Deck Tag: {{ deck_tag_label }}
+                </button>
+                {% if commander_bracket and not folder.is_collection %}
+                  <button class="btn btn-outline-secondary"
+                          type="button"
+                          data-bs-toggle="modal"
+                          data-bs-target="#bracketModal">
+                    Bracket: {{ commander_bracket.level }}
+                  </button>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if synergy_summary.roles %}
+              <div class="text-uppercase text-muted small fw-semibold mb-2">
+                Core roles
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                {% for role in synergy_summary.roles %}
+                  <div class="synergy-role-chip"
+                       role="button"
+                       tabindex="0"
+                       data-role-key="{{ role.key or '' }}"
+                       aria-pressed="false">
+                    <div class="role-title text-truncate">{{ role.label }}</div>
+                    <div class="role-count">{{ role.current }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="card role-detail-card mt-3 card-hover-shadow hover-lift">
+                <div class="card-body">
+                  <div id="roleDetailPlaceholder" class="text-muted small">
+                    Select a role above to review the cards in your deck and see upgrade suggestions.
+                  </div>
+                  {% for role in synergy_summary.roles %}
+                    <div class="role-detail d-none" data-role-detail="{{ role.key or '' }}">
+                      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                        <h5 class="h6 mb-0">{{ role.label }}</h5>
+                        <span class="badge text-bg-secondary">{{ role.current }} cards tagged</span>
+                      </div>
+                      <div class="row g-3 role-detail-grid">
+                        <div class="col-lg-6">
+                          <div class="role-section h-100">
+                            <div class="role-section-header">
+                              <span class="title">Cards in deck</span>
+                            </div>
+                            {% if role.cards %}
+                              <ul class="list-unstyled">
+                                {% for card in role.cards %}
+                                  <li class="mb-3">
+                                    <div class="d-flex align-items-center gap-3">
+                                      {% if card.hover_image %}
+                                        <img src="{{ card.hover_image }}" alt="" class="role-card-thumb shadow-sm" data-hover-src="{{ card.hover_image }}">
+                                      {% endif %}
+                                      <div class="w-100">
+                                        <div class="fw-semibold text-truncate"
+                                             {% if card.hover_image %}
+                                               data-hover-src="{{ card.hover_image }}"
+                                             {% endif %}>
+                                          {{ card.name }}
+                                        </div>
+                                        <div class="text-muted small d-flex gap-2 flex-wrap">
+                                          <span>x{{ card.quantity or 1 }}</span>
+                                          {% if card.best_synergy_percent is not none %}
+                                            <span>{{ '%+d%%' % card.best_synergy_percent }} synergy</span>
+                                          {% endif %}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </li>
+                                {% endfor %}
+                              </ul>
+                            {% else %}
+                              <div class="role-empty small">No cards tagged for this role yet.</div>
+                            {% endif %}
+                          </div>
+                        </div>
+                        <div class="col-lg-6">
+                          <div class="role-section h-100">
+                            <div class="role-section-header">
+                              <span class="title">Upgrade ideas</span>
+                            </div>
+                            {% set curated_all = role.recommendations | list %}
+                            {% set curated_missing = curated_all | selectattr('already_in_deck', 'equalto', False) | list %}
+                            {% set curated_display = curated_missing if curated_missing else curated_all %}
+                            {% set edhrec_all = role.edhrec_recommendations | list %}
+                            {% set edhrec_display = edhrec_all | selectattr('already_in_deck', 'equalto', False) | list %}
+                            {% if (curated_display and curated_display|length) or (edhrec_display and edhrec_display|length) %}
+                              {% if curated_display and curated_display|length %}
+                                <div class="mb-3">
+                                  <div class="fw-semibold small text-muted text-uppercase mb-1">Curated Picks</div>
+                                  <ul class="list-unstyled">
+                                    {% for rec in curated_display[:5] %}
+                                      <li class="mb-2">
+                                        <div class="d-flex align-items-center gap-2">
+                                          {% set hover_src = rec.hover_image %}
+                                          {% if rec.scryfall_url %}
+                                            <a href="{{ rec.scryfall_url }}" target="_blank" rel="noopener" class="fw-semibold text-decoration-none text-truncate"
+                                               {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
+                                              {{ rec.name }}
+                                            </a>
+                                          {% else %}
+                                            <span class="fw-semibold text-truncate"
+                                                  {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
+                                              {{ rec.name }}
+                                            </span>
+                                          {% endif %}
+                                          {% if rec.already_in_deck %}
+                                            <span class="badge text-bg-secondary ms-auto">In deck</span>
+                                          {% endif %}
+                                        </div>
+                                        {% if rec.notes %}
+                                          <div class="text-muted small">{{ rec.notes }}</div>
+                                        {% endif %}
+                                      </li>
+                                    {% endfor %}
+                                  </ul>
+                                </div>
+                              {% endif %}
+                              {% if edhrec_display and edhrec_display|length %}
+                                <div>
+                                  <div class="fw-semibold small text-muted text-uppercase mb-1">EDHREC Upgrades</div>
+                                  <ul class="list-unstyled">
+                                    {% for rec in edhrec_display[:5] %}
+                                      <li class="mb-2">
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                          <div class="text-truncate">
+                                            {% set hover_src = rec.hover_image %}
+                                            {% if rec.url %}
+                                              <a href="{{ rec.url }}" target="_blank" rel="noopener" class="fw-semibold text-decoration-none"
+                                                 {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
+                                                {{ rec.name }}
+                                              </a>
+                                            {% else %}
+                                              <span class="fw-semibold"
+                                                    {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
+                                                {{ rec.name }}
+                                              </span>
+                                            {% endif %}
+                                          </div>
+                                          {% if rec.synergy_percent is not none %}
+                                            <span class="badge badge-synergy">{{ '%+d%%' % rec.synergy_percent }} synergy</span>
+                                          {% endif %}
+                                        </div>
+                                      </li>
+                                    {% endfor %}
+                                  </ul>
+                                </div>
+                              {% endif %}
+                            {% else %}
+                              <div class="role-empty small">No upgrade suggestions available right now.</div>
+                            {% endif %}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
+
+
+
+      </div>
+    </div>
+  {% elif synergy_error %}
+    <div class="alert alert-warning mb-3 small">{{ synergy_error }}</div>
+  {% endif %}
+
+{# Commander picker #}
+{% if not is_collection_bucket and folder.is_proxy %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-end gap-3">
+        <span class="proxy-badge mb-0">Proxy Deck</span>
+        <form method="post"
+              action="{{ url_for('views.rename_proxy_deck', folder_id=folder.id) }}"
+              class="d-flex flex-wrap align-items-end gap-2">
+          <div>
+            <label for="proxyRenameInput" class="form-label small mb-1">Deck name</label>
+            <input class="form-control form-control-sm"
+                   id="proxyRenameInput"
+                   name="new_name"
+                   value="{{ folder.name or '' }}"
+                   placeholder="Enter new deck name">
+          </div>
+          <button class="btn btn-sm btn-outline-primary" type="submit">Update</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+  <div class="modal fade" id="tagPickerModal" tabindex="-1" aria-labelledby="tagPickerLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <form method="post"
+            action="{{ url_for('views.set_folder_tag', folder_id=folder.id) }}"
+            class="modal-content"
+            data-hx-boost="false">
+        <div class="modal-header">
+          <h5 class="modal-title" id="tagPickerLabel">Select a Deck Tag</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div class="text-muted small">Choose a tag to classify this deck.</div>
+            <input id="tagFilter"
+                   class="form-control form-control-sm"
+                   placeholder="Filter tags..."
+                   autocomplete="off"
+                   style="max-width: 220px;">
+          </div>
+          {% if folder.deck_tag %}
+            {% set formatted_deck_tag = folder_tag_category ~ ': ' ~ folder.deck_tag if folder_tag_category else folder.deck_tag %}
+            <div class="alert alert-info border-info-subtle small py-2 px-3 mb-3">
+              Current tag: <strong>{{ formatted_deck_tag }}</strong>
+            </div>
+          {% endif %}
+          <div class="tag-group-stack d-flex flex-column gap-3">
+            {% for category, tags in deck_tag_groups.items() %}
+              <div class="tag-category" data-category="{{ category|lower }}">
+                <div class="small text-uppercase text-muted fw-semibold mb-2">{{ category }}</div>
+                <div class="d-flex flex-wrap gap-2">
+                  {% for tag in tags %}
+                    <button type="submit"
+                            name="tag"
+                            value="{{ tag }}"
+                            class="type-pill tag-option{% if folder.deck_tag == tag %} active{% endif %}"
+                            data-label="{{ tag|lower }}"
+                            data-category="{{ category|lower }}"
+                            data-ripple="true"
+                            aria-pressed="{{ 'true' if folder.deck_tag == tag else 'false' }}">
+                      {{ tag }}
+                    </button>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <div id="tagFilterEmpty" class="text-muted small fst-italic text-center d-none">
+            No tags match this filter.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          {% if folder.deck_tag %}
+            <button type="submit"
+                    class="btn btn-outline-danger btn-sm"
+                    formaction="{{ url_for('views.clear_folder_tag', folder_id=folder.id) }}"
+                    formmethod="post"
+                    data-confirm="Clear the deck tag for this deck?">
+              Clear Tag
+            </button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="ownerModal" tabindex="-1" aria-labelledby="ownerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="ownerModalLabel">Update Deck Owner</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="ownerUpdateForm"
+                method="post"
+                action="{{ url_for('views.set_folder_owner', folder_id=folder.id) }}">
+            <label for="folderOwnerInput" class="form-label small fw-semibold text-uppercase text-muted">Owner</label>
+            <input class="form-control"
+                   id="folderOwnerInput"
+                   name="owner"
+                   value="{{ default_owner_value }}"
+                   placeholder="e.g. Jamie"{% if owner_options %} list="folderOwnerChoices"{% endif %}>
+            {% if owner_options %}
+              <datalist id="folderOwnerChoices">
+                {% for owner_name in owner_options %}
+                  <option value="{{ owner_name }}">
+                {% endfor %}
+              </datalist>
+            {% endif %}
+          </form>
+        </div>
+        <div class="modal-footer flex-wrap gap-2">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <div class="d-flex flex-wrap gap-2 ms-auto">
+            {% if folder.owner %}
+              <form method="post"
+                    action="{{ url_for('views.set_folder_owner', folder_id=folder.id) }}"
+                    class="mb-0"
+                    data-confirm="Clear the owner for this deck?">
+                <input type="hidden" name="owner" value="">
+                <button class="btn btn-outline-danger" type="submit">Clear</button>
+              </form>
+            {% endif %}
+            <button class="btn btn-primary" type="submit" form="ownerUpdateForm">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% set commander_slot_count = folder.commander_name.split('//')|length if folder.commander_name else 0 %}
+  {% set commander_limit_reached = commander_slot_count >= 2 %}
+  <div class="modal fade" id="commanderPickerModal" tabindex="-1" aria-labelledby="commanderPickerLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="commanderPickerLabel">Commander Settings</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <div>
+              <div class="text-uppercase text-muted small fw-semibold">Current Commander</div>
+              <div class="fs-5 fw-semibold">{{ folder.commander_name or 'Not set' }}</div>
+            </div>
+            <div class="ms-auto d-flex flex-wrap gap-2">
+              {% if folder.commander_oracle_id %}
+                <form method="post"
+                      action="{{ url_for('views.clear_folder_commander', folder_id=folder.id) }}"
+                      data-confirm="Clear the commander for this deck?"
+                      hx-boost="false">
+                  <button class="btn btn-outline-danger" type="submit">Clear Commander</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+          <div class="text-muted small mt-3">Up to two commanders can be assigned. Use Add Partner to append a second commander, or Clear to reset.</div>
+
+          <div class="mt-4">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+              <div class="fw-semibold">Legendary creatures in this deck</div>
+              <input id="cmdrFilter"
+                     class="form-control form-control-sm"
+                     placeholder="Filter by name..."
+                     style="max-width:240px;">
+            </div>
+            {% if commander_candidates and commander_candidates|length %}
+              <div id="cmdrList" class="legend-grid">
+                {% for r in commander_candidates %}
+                <div class="legend-card cmdr-item" data-name="{{ (r.name or '')|lower }}">
+                  <div class="legend-thumb-wrap">
+                    {% if r.image %}
+                      <img class="legend-thumb cmdr-thumb"
+                           src="{{ r.image }}"
+                           alt="{{ r.name }} thumbnail"
+                           loading="lazy">
+                    {% else %}
+                      <div class="bg-secondary-subtle rounded" style="width:100%;height:100%;opacity:.35;"></div>
+                    {% endif %}
+                  </div>
+                  <div class="legend-body">
+                    <div class="legend-title" title="{{ r.name }}">{{ r.name }}</div>
+                    <div class="legend-sub text-muted">{{ r.set_code|upper }} #{{ r.collector_number }}{% if r.is_foil %} - Foil{% endif %}</div>
+                    <form method="post"
+                          action="{{ url_for('views.set_folder_commander', folder_id=folder.id) }}"
+                          class="mt-2 d-flex flex-wrap gap-2"
+                          hx-boost="false">
+                      <input type="hidden" name="oracle_id" value="{{ r.oracle_id }}">
+                      <input type="hidden" name="name" value="{{ r.name }}">
+                      <button class="btn btn-sm btn-outline-primary" type="submit" name="mode" value="replace">Set Commander</button>
+                      <button class="btn btn-sm btn-outline-secondary"
+                              type="submit"
+                              name="mode"
+                              value="append"
+                              {% if commander_limit_reached %}disabled title="Already using two commanders."{% endif %}>
+                        Add Partner
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted small">
+                No obvious legendary creatures found in this deck.
+                <a href="{{ cards_link }}">Open deck list</a>
+                to add one, then return here.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if commander_bracket and not folder.is_collection %}
+    <div class="modal fade" id="bracketModal" tabindex="-1" aria-labelledby="bracketModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="bracketModalLabel">
+              Bracket {{ commander_bracket.level }} &mdash; {{ commander_bracket.label }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            {% set label_map = {
+              'game_changers':'Game Changers list cards',
+              'extra_turns':'Extra turn effects',
+              'mass_land':'Mass land denial / lock pieces',
+              'nonland_tutors':'Tutors',
+              'cedh_signatures':'cEDH staple highlights',
+              'instant_win':'Instant-win combo enablers',
+              'spellbook_combos':'Commander Spellbook combos'
+            } %}
+            <div class="row g-3 signals-wrapper bracket-insight">
+              <div class="col-12 col-lg-4">
+                <div class="card h-100">
+                  <div class="card-body">
+                    {% set _methodology = commander_bracket.score_methodology or {} %}
+                    {% set _signals = (_methodology.get('signals') or []) | selectattr('applied') | list %}
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                      <div>
+                        <div class="small text-uppercase text-muted fw-semibold">Bracket score</div>
+                        <div class="display-5 fw-semibold">{{ '%.2f'|format(commander_bracket.score or 0) }}</div>
+                      </div>
+                      <div>
+                        <div class="small text-uppercase text-muted fw-semibold text-end">Rank</div>
+                        <div class="h2 fw-bold text-primary text-end">{{ commander_bracket.rank or '—' }}</div>
+                      </div>
+                    </div>
+                    {% if _signals %}
+                      <div class="small text-muted mb-2">Signals contributing</div>
+                      <div class="d-flex flex-column gap-2">
+                        {% for signal in _signals %}
+                          {% if signal and signal.label %}
+                            <div class="hover-card card-hover-shadow hover-lift p-3">
+                              <div class="d-flex justify-content-between align-items-center gap-2">
+                                <div class="fw-semibold">{{ signal.label }}</div>
+                                <span class="badge bg-primary-subtle text-primary">{{ '%.2f'|format(signal.points or 0) }}</span>
+                              </div>
+                              {% if signal.reason %}
+                                <div class="small text-muted mt-1">{{ signal.reason }}</div>
+                              {% endif %}
+                            </div>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-8">
+                <div class="card h-100">
+                  <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                      <div class="small text-uppercase text-muted fw-semibold">Signals counted</div>
+                    </div>
+                    <div class="row g-3">
+                      {% for key, count in commander_bracket.metrics.items() %}
+                        {% if count and key not in ('land_tutors', 'zero_cmc_mana') %}
+                          {% set names = commander_bracket.summary_cards.get(key) or [] %}
+                          {% set col_class = 'col-12 col-md-6' %}
+                          {% if key == 'spellbook_combos' %}
+                            {% set col_class = 'col-12' %}
+                          {% endif %}
+                          <div class="{{ col_class }}">
+                            <div class="card hover-card h-100 hover-lift card-hover-shadow">
+                              <div class="card-body">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                  <span class="badge text-bg-primary">{{ count }}</span>
+                                  <div class="fw-semibold">{{ label_map.get(key, key.replace('_',' ')|title) }}</div>
+                                </div>
+                                {% if key == 'spellbook_combos' %}
+                                  {% set combos = commander_bracket.spellbook_details or [] %}
+                                  {% set late_combos = commander_bracket.spellbook_late_details or [] %}
+                                  {% set three_card_combos = commander_bracket.spellbook_three_card_details or [] %}
+                                  {% set early_count = combos|length %}
+                                  {% set late_count = late_combos|length %}
+                                  {% set three_count = three_card_combos|length %}
+                                  <div class="mb-3 p-3 rounded border border-primary-subtle bg-primary-subtle bg-opacity-10">
+                                    <div class="small text-uppercase text-muted fw-semibold mb-2">Combo breakdown</div>
+                                    <div class="d-flex flex-wrap gap-3">
+                                      <div>
+                                        <div class="fw-semibold">{{ early_count }}</div>
+                                        <div class="small text-muted text-uppercase">Early</div>
+                                      </div>
+                                      <div>
+                                        <div class="fw-semibold">{{ late_count }}</div>
+                                        <div class="small text-muted text-uppercase">Late</div>
+                                      </div>
+                                      <div>
+                                        <div class="fw-semibold">{{ three_count }}</div>
+                                        <div class="small text-muted text-uppercase">3-card</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {% if combos %}
+                                    <div class="mb-3">
+                                      <div class="small text-uppercase text-muted fw-semibold mb-1">Score-impacting combos</div>
+                                      {{ spellbook_combo_list(combos) }}
+                                    </div>
+                                  {% endif %}
+                                  {% if late_combos %}
+                                    <div class="mb-3">
+                                      <div class="d-flex align-items-center gap-2">
+                                        <div class="fw-semibold">Late Game Combos</div>
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Reference</span>
+                                      </div>
+                                      <div class="text-muted small mb-2">Shown for context; these slower lines do not change the bracket score.</div>
+                                      {{ spellbook_combo_list(late_combos) }}
+                                    </div>
+                                  {% endif %}
+                                  {% if three_card_combos %}
+                                    <div class="mb-3">
+                                      <div class="d-flex align-items-center gap-2">
+                                        <div class="fw-semibold">Three-Card Combos</div>
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Reference</span>
+                                      </div>
+                                      <div class="text-muted small mb-2">Three-piece setups are tracked separately and excluded from scoring.</div>
+                                      {{ spellbook_combo_list(three_card_combos) }}
+                                    </div>
+                                  {% endif %}
+                                  {% if not combos and not late_combos and not three_card_combos %}
+                                    <div class="text-muted small">No combos detected.</div>
+                                  {% endif %}
+                                {% elif names %}
+                                  {% set previews = names[:9] %}
+                                  <div class="card-chip-list">
+                                    {% for card_name in previews %}
+                                      {% set encoded = card_name|urlencode %}
+                                      {% set key_name = card_name|trim|lower %}
+                                      {% set card_id = bracket_card_links.get(key_name) %}
+                                      {% set card_href = card_id and url_for('views.card_detail', card_id=card_id) or url_for('views.scryfall_browser', q=card_name) %}
+                                      {% set card_img = card_id and image_map.get(card_id) %}
+                                      {% set card_large = card_img and card_img|replace('/small/','/large/')|replace('/normal/','/large/') %}
+                                      {% set hover_img = card_large or ('https://api.scryfall.com/cards/named?format=image&amp;version=large&amp;exact=' ~ encoded) %}
+                                      <a href="{{ card_href }}"
+                                         class="deck-name-link card-chip-link"
+                                         title="Open {{ card_name }}"
+                                         data-card-name="{{ card_name|e }}"
+                                         data-hover-src="{{ hover_img }}">
+                                        {{ card_name }}
+                                      </a>
+                                    {% endfor %}
+                                    {% if names|length > previews|length %}
+                                      <span class="small text-muted">&hellip; {{ names|length - previews|length }} more</span>
+                                    {% endif %}
+                                  </div>
+                                {% else %}
+                                  <div class="small text-muted">No specific cards listed.</div>
+                                {% endif %}
+                              </div>
+                            </div>
+                          </div>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                  <div class="card-body d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                    <a class="btn btn-outline-secondary btn-sm"
+                       href="{{ url_for('views.commander_brackets_info', focus=commander_bracket.level) }}#bracket-{{ commander_bracket.level }}"
+                       target="_blank"
+                       rel="noopener">
+                      How We Calculated
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- ===== SUMMARY ===== -->
+  <div class="summary-row mb-3">
+    <div>
+      {% if type_breakdown and type_breakdown|length %}
+        <div class="section-title">Type Breakdown</div>
+        <div class="d-flex flex-wrap justify-content-center gap-2 type-pill-group">
+          {% for t, n in type_breakdown %}
+            <button type="button"
+                    class="pill type-pill"
+                    data-type="{{ t|lower }}"
+                    data-type-label="{{ t }}"
+                    aria-pressed="false">
+              {{ t }} <span class="ms-1 badge text-bg-light">{{ n }}</span>
+            </button>
+          {% endfor %}
+        </div>
+        <div id="typeFilterHint" class="small text-muted text-center mt-2 d-none">
+          Filtering by <strong data-type-name></strong>.
+          <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="typeFilterClear">Clear</button>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="summary-center">
+      {% if mana_pip_dist and mana_pip_dist|length %}
+        <div class="section-title">Color Distribution (from mana costs)</div>
+        <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
+          {% for c, pip, n in mana_pip_dist %}
+            <span class="pill d-inline-flex align-items-center">
+              {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+              <span class="fw-semibold">{{ n }}</span>
+            </span>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if land_mana_sources and land_mana_sources|length %}
+        <div class="section-title">Mana Sources</div>
+        <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
+          {% for c, pip, n in land_mana_sources %}
+            <span class="pill d-inline-flex align-items-center">
+              {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+              <span class="fw-semibold">{{ n }}</span>
+            </span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div>
+      {% if curve_rows and curve_rows|length %}
+        <div class="section-title">Mana Curve</div>
+        <div class="curve-grid">
+          {% for row in curve_rows %}
+            <div class="curve-col" title="{{ row.count }} cards at {{ row.label }} CMC">
+              <button type="button"
+                      class="curve-bar-btn"
+                      data-cmc-bucket="{{ row.label }}"
+                      data-cmc-label="{{ row.label }}"
+                      aria-pressed="false">
+                <div class="curve-bar">
+                  <div class="fill" style="height: {{ row.pct }}%;"></div>
+                  <div class="curve-count">{{ row.count }}</div>
+                </div>
+                <div class="curve-label">{{ row.label }}</div>
+              </button>
+            </div>
+          {% endfor %}
+        </div>
+        <div id="cmcFilterHint" class="small text-muted text-center mt-2 d-none">
+          Filtering by CMC <strong data-cmc-label></strong>.
+          <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="cmcFilterClear">Clear</button>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid mb-3">
+    <div class="stat-card"><div class="label">Unique Cards</div><div class="value">{{ total_rows }}</div></div>
+    <div class="stat-card"><div class="label">Total Quantity</div><div class="value">{{ total_qty }}</div></div>
+    <div class="stat-card"><div class="label">Total Value</div><div class="value">${{ '{:,.2f}'.format(total_value_usd or 0) }}</div></div>
+  </div>
+
+  {# ===== Tokens section ===== #}
+  {% if deck_tokens and deck_tokens|length %}
+    <div class="card token-section mb-4">
+      <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <button id="tokensToggle"
+                  class="btn btn-sm btn-plain tap-toggle collapsed"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="deckTokensCollapse"
+                  title="Expand/Collapse">
+            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
+          </button>
+          <strong class="mb-0">Tokens</strong>
+        </div>
+      </div>
+
+      <div class="collapse" id="deckTokensCollapse">
+        <div class="card-body">
+          <div class="row g-3">
+            {% for t in deck_tokens %}
+              {% set tok_img = t.small or t.normal %}
+              {% set tok_normal = t.normal or (tok_img or '')|replace('/small/','/normal/') %}
+              {% set tok_large = (tok_normal or tok_img or '')|replace('/normal/','/large/') %}
+              {% set srcs = t.sources or [] %}
+              {% set nsrc = srcs|length %}
+              {% set more = nsrc-2 if nsrc>2 else 0 %}
+              {% set collapse_id = 'toksrc-' ~ loop.index0 %}
+              {% set tok_href = (url_for('views.scryfall_print_detail', sid=t.id) if t.id else url_for('views.scryfall_browser', q=t.name, unique='1')) %}
+
+              <div class="col-12 col-md-6 col-lg-4">
+                <div class="token-item h-100">
+                  <div class="d-flex gap-2">
+                    <div class="token-thumb">
+                      <a class="token-tile-link d-inline-block"
+                         href="{{ tok_href }}"
+                         {% if tok_large or tok_normal or tok_img %}
+                           data-hover-src="{{ tok_large or tok_normal or tok_img }}"
+                         {% endif %}>
+                        {% if tok_img %}
+                          <img src="{{ tok_img }}"
+                               alt="{{ t.name or 'Token' }}"
+                               {% if tok_large or tok_normal or tok_img %}
+                                 data-hover-src="{{ tok_large or tok_normal or tok_img }}"
+                               {% endif %}>
+                        {% else %}
+                          <div class="bg-secondary-subtle rounded" style="width:96px;height:96px;opacity:.25;"></div>
+                        {% endif %}
+                      </a>
+                    </div>
+
+                    <div class="flex-fill min-w-0">
+                      <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-secondary btn-sm px-2 py-1 tap-toggle"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#{{ collapse_id }}"
+                                aria-expanded="false"
+                                aria-controls="{{ collapse_id }}"
+                                title="Show token details">
+                          <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
+                        </button>
+                        <div class="fw-semibold text-truncate">
+                          <a class="token-name-link text-decoration-none"
+                             href="{{ tok_href }}"
+                             {% if tok_large or tok_normal or tok_img %}
+                               data-hover-src="{{ tok_large or tok_normal or tok_img }}"
+                             {% endif %}>
+                            {{ t.name or 'Token' }}
+                          </a>
+                        </div>
+                        <span class="badge text-bg-secondary ms-auto">&times;{{ nsrc }}</span>
+                      </div>
+                      <div class="small text-muted text-truncate">{{ t.type_line or '' }}</div>
+
+                      <div class="collapse mt-2" id="{{ collapse_id }}">
+                        <div class="small mb-1 text-muted">Card(s) Generating Token</div>
+                        <div class="token-source-list">
+                          {% for s in srcs %}
+                            {% set src_small = s.img or '' %}
+                            {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
+                            {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
+                            <a class="token-source text-decoration-none"
+                               href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
+                               {% if src_large or src_normal or src_small %}
+                                 data-hover-src="{{ src_large or src_normal or src_small }}"
+                               {% endif %}>
+                              {{ s.name }}
+                            </a>
+                          {% endfor %}
+                          {% if not srcs %}
+                            <div class="text-muted small">No sources listed.</div>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ===== Controls above list ===== #}
+  <div class="row g-2 align-items-center mb-3">
+    <div class="col-12 col-md-6 col-lg-5">
+      <label for="cardNameFilter" class="form-label visually-hidden">Search cards by name</label>
+      <input type="search"
+             class="form-control form-control-sm"
+             id="cardNameFilter"
+             placeholder="Search cards by name">
+    </div>
+    <div class="col-12 col-md-6 col-lg-7 text-md-end">
+      <div class="d-inline-flex flex-wrap gap-2 justify-content-md-end">
+        <button id="copyDeckListBtn" class="btn btn-outline-secondary btn-sm" type="button">Copy to clipboard</button>
+        <div class="btn-group">
+          <button class="btn btn-primary btn-sm export-format" type="button" data-export-format="csv">
+            Export all (CSV)
+          </button>
+          <button class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                  aria-label="Choose export format">
+            <span class="visually-hidden">Choose export format</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <button class="dropdown-item export-format" type="button" data-export-format="manavault">
+                Export for ManaVault
+              </button>
+            </li>
+            <li>
+              <button class="dropdown-item export-format" type="button" data-export-format="dragonshield">
+                Export for Dragon Shield
+              </button>
+            </li>
+          </ul>
+        </div>
+        {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.folder_sharing', folder_id=folder.id) }}">
+            Sharing
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ===== Cards table ===== #}
+  {% set sort = (request.args.get('sort') or '') %}
+  {% set direction = (request.args.get('dir') or 'asc') %}
+  {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
+  {% set ctyp_dir = 'asc' if sort!='ctype' or direction=='desc' else 'desc' %}
+  {% set col_dir  = 'asc' if sort!='colors' or direction=='desc' else 'desc' %}
+  {% set cmc_dir  = 'asc' if sort!='cmc'   or direction=='desc' else 'desc' %}
+  {% set rar_dir  = 'asc' if sort!='rar'  or direction=='desc' else 'desc' %}
+  {% set set_dir  = 'asc' if sort!='set'  or direction=='desc' else 'desc' %}
+  {% set cn_dir   = 'asc' if sort!='cn'   or direction=='desc' else 'desc' %}
+  {% set foil_dir = 'asc' if sort!='foil' or direction=='desc' else 'desc' %}
+  {% set qty_dir  = 'asc' if sort!='qty'  or direction=='desc' else 'desc' %}
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle cards-table" id="folderCardsTable">
+      <thead>
+        <tr>
+          <th class="col-art">Art</th>
+          <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='name',  dir=name_dir) }}">Name</a></th>
+          <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='ctype', dir=ctyp_dir) }}">Type</a></th>
+          <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='colors',dir=col_dir) }}">Colors</a></th>
+          <th class="text-center nowrap col-cmc"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='cmc',   dir=cmc_dir) }}">CMC</a></th>
+          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='rar',   dir=rar_dir) }}">Rarity</a></th>
+          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='set',   dir=set_dir) }}">Set</a></th>
+          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='cn',    dir=cn_dir) }}">#</a></th>
+          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='foil',  dir=foil_dir) }}">Foil</a></th>
+          <th class="text-end nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='qty',   dir=qty_dir) }}">Qty</a></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if deck_cards and deck_cards|length %}
+          {% for c in deck_cards %}
+            {% set tl  = (type_line_map.get(c.id) or c.type_line or '') %}
+            {% set rar = (rarity_map.get(c.id) or c.rarity or '') %}
+            {% set art = image_map.get(c.id) %}
+            {% set hover_art = (art or '')|replace('/small/','/large/') %}
+            {% set card_roles = (synergy_summary.card_roles.get(c.id) or []) if synergy_summary and synergy_summary.card_roles else [] %}
+            <tr class="deck-row"
+                data-card-id="{{ c.id }}"
+                data-name="{{ (display_name_map.get(c.id) or c.name) | e }}"
+                data-type="{{ tl | e }}"
+                data-rarity="{{ (rar|capitalize) | e }}"
+                data-set="{{ (c.set_code or '')|upper }}"
+                data-cn="{{ c.collector_number or '' }}"
+                data-foil="{{ '1' if c.is_foil else '0' }}"
+                data-qty="{{ c.quantity or 1 }}"
+                data-cmc-bucket="{{ cmc_bucket_map.get(c.id) or '' }}"
+                data-roles="{{ (card_roles or []) | join(' ') }}"
+                data-img-small="{{ art or '' }}"
+                data-img-normal="{{ (art or '')|replace('/small/','/normal/') }}"
+                data-img-large="{{ (art or '')|replace('/small/','/large/') }}"
+                data-ignore-hover="true"
+                role="button"
+                aria-label="View {{ display_name_map.get(c.id) or c.name }} details"
+            >
+              <td class="col-art">
+                {% if art %}
+                  <img src="{{ art }}"
+                       class="art-thumb"
+                       alt="art"
+                       data-hover-src="{{ hover_art }}">
+                {% else %}
+                  <div class="bg-secondary-subtle rounded" style="width:48px;height:64px;opacity:.25;"></div>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('views.card_detail', card_id=c.id) }}"
+                   class="deck-name-link"
+                   data-hover-src="{{ hover_art }}">
+                  {{ display_name_map.get(c.id) or c.name }}
+                </a>
+              </td>
+              <td>
+                {% set base_types = ["Artifact","Battle","Creature","Enchantment","Instant","Land","Planeswalker","Sorcery"] %}
+                {% set ns = namespace(list=[]) %}
+                {% for bt in base_types %}{% if bt in tl %}{% set ns.list = ns.list + [bt] %}{% endif %}{% endfor %}
+                {% if ns.list and ns.list|length %}
+                  {% for t in ns.list %}<span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>{% endfor %}
+                {% else %}<span class="text-muted">â€”</span>{% endif %}
+              </td>
+              <td class="col-colors">
+                {% set pips = color_icons_map.get(c.id) or [] %}
+                {% if pips|length %}
+                  <span class="pip-row">
+                    {% for src in pips %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
+                  </span>
+                {% else %}
+                  <span class="pip-row"><img class="pip" src="/static/symbols/C.svg" alt="{C}"></span>
+                {% endif %}
+              </td>
+              {% set cmc_value = cmc_map.get(c.id) %}
+              <td class="text-center nowrap col-cmc" data-cmc="{{ ('%.4f' % cmc_value) if cmc_value is not none else '' }}">
+                {% if cmc_value is not none %}
+                  <span class="cmc-chip">{{ ('%.2f' % cmc_value).rstrip('0').rstrip('.') }}</span>
+                {% else %}
+                  <span class="cmc-chip text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if rar %}
+                  <span class="badge badge-folder badge-folder-{{ rar|lower }}">{{ rar|capitalize }}</span>
+                {% else %}&mdash;{% endif %}
+              </td>
+              <td class="nowrap">{{ (c.set_code or '')|upper }}</td>
+              <td class="nowrap">{{ c.collector_number }}</td>
+              <td class="nowrap">
+                {% if c.is_foil %}
+                  <span class="text-success">&#10003;</span>
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="text-end nowrap">{{ c.quantity or 1 }}</td>
+            </tr>
+          {% endfor %}
+          <tr id="cardFilterEmptyRow" class="d-none">
+            <td colspan="10" class="py-4 text-center text-muted">No cards match that search.</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" class="text-muted">No cards in this folder.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div class="offcanvas offcanvas-end w-500" tabindex="-1" id="cardDrawer" aria-labelledby="cardDrawerLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="cardDrawerLabel">Card Details</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="drawerContent">
+      <div class="text-center small text-muted">Select a card...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (typeof bootstrap === 'undefined') {
+    console.warn('Bootstrap JS not found. Include bootstrap.bundle.min.js in base.html.');
+  }
+
+  const drawerEl   = document.getElementById('cardDrawer');
+  const contentEl  = document.getElementById('drawerContent');
+  let offcanvas, carouselInstance;
+
+  function openDrawer() {
+    if (!drawerEl) return;
+    offcanvas = offcanvas || (typeof bootstrap!=='undefined' && new bootstrap.Offcanvas(drawerEl));
+    offcanvas && offcanvas.show();
+  }
+
+  function esc(s) {
+    return (s ?? '').toString()
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
+
+  async function fetchCardDetail(cardId) {
+    try {
+      const res = await fetch(`/api/card/${cardId}`);
+      if (!res.ok) throw new Error(`Bad response ${res.status}`);
+      return await res.json();
+    } catch (e) { return null; }
+  }
+
+  function imgLabel(img) {
+    if (img && img.label) return img.label;
+    const parts = [
+      (img?.set_code || '').toUpperCase(),
+      img?.collector_number ? `#${img.collector_number}` : null,
+      img?.lang ? (img.lang || '').toUpperCase() : null,
+      img?.is_foil ? 'Foil' : null
+    ].filter(Boolean);
+    return parts.join(' - ');
+  }
+
+  function normalizeImages(payload) {
+    const out = [];
+    const info = payload?.info || {};
+    // faces first so flip works predictably
+    const faces = Array.isArray(info?.card_faces) ? info.card_faces : [];
+    faces.forEach((f, i) => {
+      const iu = f?.image_uris || {};
+      const src = iu.large || iu.normal || iu.small || null;
+      if (src) out.push({ large: iu.large, normal: iu.normal, small: iu.small, label: f?.name || (i ? 'Back' : 'Front'), _isFace: true, _faceIndex: i });
+    });
+
+    // alternates from payload.images
+    if (Array.isArray(payload?.images)) {
+      payload.images.forEach(i => {
+        const large = i?.large || i?.normal || i?.small || null;
+        if (large) out.push({ large, normal: i?.normal, small: i?.small, label: i?.label || '' });
+      });
+    }
+
+    // fallback single
+    if (!out.length && info?.image_uris) {
+      const iu = info.image_uris;
+      out.push({ large: iu.large || iu.normal || iu.small, normal: iu.normal, small: iu.small, label: '' });
+    }
+    return out;
+  }
+
+  function buildCarousel(images, hasFaces) {
+    const slides = (images || []).map((img, idx) => {
+      const src = img.large || img.normal || img.small || '';
+      const label = imgLabel(img);
+      return `
+        <div class="carousel-item ${idx === 0 ? 'active' : ''}" data-index="${idx}" ${img._isFace ? `data-face="${img._faceIndex}"` : ''}>
+          <img class="d-block card-art" src="${src}" alt="${esc(label)}" loading="lazy">
+          ${label ? `<div class="small-muted text-center mt-1">${esc(label)}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    if (!slides.trim()) {
+      return `<div class="text-center small text-muted mb-3">No image available</div>`;
+    }
+
+    return `
+      <div class="carousel-wrap mb-3">
+        <div class="img-action">
+          <button class="btn-icon prev-btn" type="button" title="Previous" aria-label="Previous">â—€</button>
+          <button class="btn-icon next-btn" type="button" title="Next" aria-label="Next">â–¶</button>
+          <button class="btn-icon flip-btn" type="button" title="Flip front/back" aria-label="Flip" ${hasFaces ? '' : 'disabled'}>âŸ²</button>
+        </div>
+        <div id="cardCarousel" class="carousel slide" data-bs-ride="false">
+          <div class="carousel-inner">${slides}</div>
+        </div>
+      </div>`;
+  }
+
+  function renderColorPips(info) {
+    const arr = (info?.color_identity?.length ? info.color_identity : (info?.colors || [])) || [];
+    if (!arr.length) return 'â€”';
+    return `<span class="pip-row">${
+      arr.map(c => {
+        const L = String(c || '').toUpperCase();
+        return `<img class="mana mana-sm" src="/static/symbols/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
+      }).join('')
+    }</span>`;
+  }
+
+  function renderDrawer(payload) {
+    const { card, info } = payload || {};
+    const images = normalizeImages(payload);
+    const faceIdx = [];
+    images.forEach((img, idx) => { if (img._isFace) faceIdx[img._faceIndex] = idx; });
+    const hasFaces = faceIdx.length === 2 && Number.isInteger(faceIdx[0]) && Number.isInteger(faceIdx[1]);
+
+    const title = info?.name || card?.name || 'Card';
+    document.getElementById('cardDrawerLabel').textContent = title;
+
+    const detail = (label, html) =>
+      `<div class="d-flex gap-2 mb-1"><div class="detail-label">${label}</div><div>${html ?? 'â€”'}</div></div>`;
+
+    const commander = info?.commander_legality ?? info?.legalities?.commander ?? null;
+    const commanderBadge = commander
+      ? `<span class="badge text-bg-${
+          commander === 'legal' ? 'success' :
+          commander === 'restricted' ? 'warning' :
+          commander === 'banned' ? 'danger' : 'secondary'
+        }">Commander: ${String(commander).charAt(0).toUpperCase() + String(commander).slice(1)}</span>`
+      : `<span class="small text-muted">â€”</span>`;
+
+    const scryButtons = `
+      <div class="d-flex flex-wrap gap-2 mt-2">
+        ${info?.scryfall_uri ? `<a class="btn btn-sm btn-outline-primary" href="${info.scryfall_uri}" target="_blank" rel="noopener">Open on Scryfall</a>` : ''}
+        ${info?.scryfall_set_uri ? `<a class="btn btn-sm btn-outline-secondary" href="${info.scryfall_set_uri}" target="_blank" rel="noopener">Open Set on Scryfall</a>` : ''}
+      </div>`;
+
+    contentEl.innerHTML = `
+      ${buildCarousel(images, hasFaces)}
+      ${info?.mana_cost_html && info.mana_cost_html !== 'â€”'
+        ? `<div class="mb-2"><div class="fw-semibold">Mana Cost</div><div>${info.mana_cost_html}</div></div>` : ''}
+      ${info?.oracle_text_html && info.oracle_text_html !== 'â€”'
+        ? `<div class="mb-3"><div class="fw-semibold">Card Text</div><div>${info.oracle_text_html}</div></div>` : ''}
+      <div class="mb-3">
+        ${detail('Type', esc(info?.type_line || ''))}
+        ${detail('Colors', renderColorPips(info))}
+        ${detail('CMC', info?.cmc ?? 'â€”')}
+        ${detail('Rarity', (info?.rarity || 'â€”').toString().toUpperCase())}
+        ${detail('Set', `${esc(info?.set_name || 'â€”')} <span class="small-muted">[${esc((info?.set || '').toUpperCase())}]</span>`)}
+        ${detail('Card #', esc(info?.collector_number || ''))}
+        ${detail('Commander', commanderBadge)}
+        ${detail('Folder', esc(card?.folder || 'â€”'))}
+        ${detail('Quantity', String(card?.quantity ?? 1))}
+        ${scryButtons}
+      </div>
+    `;
+
+    const carEl = document.getElementById('cardCarousel');
+    if (carEl && typeof bootstrap !== 'undefined') {
+      if (carouselInstance?.dispose) carouselInstance.dispose();
+      carouselInstance = new bootstrap.Carousel(carEl, {
+        interval: false, ride: false, pause: true, wrap: true, touch: true, keyboard: true
+      });
+
+      const prevBtn = contentEl.querySelector('.prev-btn');
+      const nextBtn = contentEl.querySelector('.next-btn');
+      const flipBtn = contentEl.querySelector('.flip-btn');
+
+      prevBtn?.addEventListener('click', e => { e.preventDefault(); carouselInstance.prev(); });
+      nextBtn?.addEventListener('click', e => { e.preventDefault(); carouselInstance.next(); });
+
+      if (flipBtn && hasFaces) {
+        flipBtn.addEventListener('click', e => {
+          e.preventDefault();
+          const items = Array.from(carEl.querySelectorAll('.carousel-item'));
+          const activeIdx = items.findIndex(el => el.classList.contains('active'));
+          const nextIdx = (activeIdx === faceIdx[0]) ? faceIdx[1] :
+                          (activeIdx === faceIdx[1]) ? faceIdx[0] :
+                          faceIdx[1];
+          carouselInstance.to(nextIdx);
+        });
+
+        // Optional keyboard flip
+        document.addEventListener('keydown', function(e){
+          if (!drawerEl.classList.contains('show')) return;
+          if (e.key.toLowerCase() !== 'f') return;
+          e.preventDefault();
+          flipBtn.click();
+        });
+      }
+    }
+  }
+
+  function renderDrawerFallbackFromRow(row) {
+    const name  = row.getAttribute('data-name') || 'Card';
+    const set   = row.getAttribute('data-set') || '';
+    const cn    = row.getAttribute('data-cn')  || '';
+    const rarity= row.getAttribute('data-rarity') || '';
+    const type  = row.getAttribute('data-type') || '';
+    const qty   = row.getAttribute('data-qty')  || '1';
+    const img   = row.getAttribute('data-img-large')
+                || row.getAttribute('data-img-normal')
+                || row.getAttribute('data-img-small') || '';
+
+    contentEl.innerHTML = `
+      <div class="mb-3">
+        ${img ? `<img class="d-block card-art" src="${esc(img)}" alt="${esc(name)}">`
+               : `<div class="bg-secondary-subtle rounded" style="width:100%;height:420px;opacity:.25;"></div>`}
+      </div>
+      <div class="mb-3">
+        <div class="d-flex gap-2 mb-1"><div class="detail-label">Name</div><div>${esc(name)}</div></div>
+        <div class="d-flex gap-2 mb-1"><div class="detail-label">Type</div><div>${esc(type)}</div></div>
+        <div class="d-flex gap-2 mb-1"><div class="detail-label">Rarity</div><div>${esc(rarity)}</div></div>
+        <div class="d-flex gap-2 mb-1"><div class="detail-label">Set</div><div>${esc(set)} <span class="small-muted">#${esc(cn)}</span></div></div>
+        <div class="d-flex gap-2 mb-1"><div class="detail-label">Quantity</div><div>${esc(qty)}</div></div>
+      </div>`;
+  }
+
+  async function openCardDrawer(cardId, hrefFallback, rowEl) {
+    const data = await fetchCardDetail(cardId);
+    if (data) {
+      try { renderDrawer(data); openDrawer(); return; }
+      catch (e) { /* fall back */ }
+    }
+    if (rowEl) { renderDrawerFallbackFromRow(rowEl); openDrawer(); return; }
+    if (hrefFallback) window.location = hrefFallback;
+  }
+
+  // Row click (avoid navigating when clicking the name link)
+  document.addEventListener('click', function (e) {
+    const row = e.target.closest('tr.deck-row');
+    if (!row) return;
+    const interactive = e.target.closest('a, button, input, select, textarea, label');
+    if (interactive && !interactive.classList.contains('deck-name-link')) return;
+    const id = row.getAttribute('data-card-id');
+    const href = row.querySelector('a.deck-name-link')?.getAttribute('href') || null;
+    if (id) {
+      e.preventDefault();
+      openCardDrawer(id, href, row);
+    }
+  });
+
+  // Keyboard accessibility
+  document.querySelectorAll('tr.deck-row').forEach(tr => {
+    tr.setAttribute('tabindex', '0');
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const id = tr.getAttribute('data-card-id');
+        const href = tr.querySelector('a.deck-name-link')?.getAttribute('href') || null;
+        if (id) openCardDrawer(id, href, tr);
+      }
+    });
+  });
+
+  // Tokens collapse
+  const pane = document.getElementById('deckTokensCollapse');
+  const btn  = document.getElementById('tokensToggle');
+  if (pane && btn && typeof bootstrap !== 'undefined') {
+    const coll = new bootstrap.Collapse(pane, { toggle: false });
+    btn.addEventListener('click', () => {
+      if (pane.classList.contains('show')) { coll.hide(); } else { coll.show(); }
+    });
+    pane.addEventListener('shown.bs.collapse', () => {
+      btn.classList.remove('collapsed');
+      btn.setAttribute('aria-expanded', 'true');
+    });
+    pane.addEventListener('hidden.bs.collapse', () => {
+      btn.classList.add('collapsed');
+      btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  // Export CSV for this folder (supports multiple formats)
+  const exportButtons = document.querySelectorAll('[data-export-format]');
+  if (exportButtons.length) {
+    const baseExportUrl = "{{ url_for('views.export_cards', folder=folder.id) }}";
+    exportButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const format = (btn.getAttribute('data-export-format') || 'csv').toLowerCase();
+        if (format === 'csv') {
+          window.location = baseExportUrl;
+          return;
+        }
+        const sep = baseExportUrl.includes('?') ? '&' : '?';
+        window.location = `${baseExportUrl}${sep}format=${encodeURIComponent(format)}`;
+      });
+    });
+  }
+
+  // Card name filter
+  const rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row'));
+  const emptyRow = document.getElementById('cardFilterEmptyRow');
+  const nameFilterInput = document.getElementById('cardNameFilter');
+  const typePills = Array.from(document.querySelectorAll('.type-pill'));
+  const typeHint = document.getElementById('typeFilterHint');
+  const typeHintLabel = typeHint ? typeHint.querySelector('[data-type-name]') : null;
+  const typeClearBtn = document.getElementById('typeFilterClear');
+  const cmcButtons = Array.from(document.querySelectorAll('.curve-bar-btn'));
+  const cmcHint = document.getElementById('cmcFilterHint');
+  const cmcHintLabel = cmcHint ? cmcHint.querySelector('[data-cmc-label]') : null;
+  const cmcClearBtn = document.getElementById('cmcFilterClear');
+  const roleChips = Array.from(document.querySelectorAll('.synergy-role-chip[data-role-key]'));
+  const roleDetailSections = Array.from(document.querySelectorAll('[data-role-detail]'));
+  const roleDetailPlaceholder = document.getElementById('roleDetailPlaceholder');
+  const copyDeckListBtn = document.getElementById('copyDeckListBtn');
+  let activeType = '';
+  let activeCmc = '';
+  let activeRole = '';
+
+  rows.forEach(row => {
+    const large = row.dataset.imgLarge || row.dataset.imgNormal || row.dataset.imgSmall || '';
+    if (!large) {
+      return;
+    }
+    const nameLink = row.querySelector('a.deck-name-link');
+    if (nameLink && !nameLink.getAttribute('data-hover-src')) {
+      nameLink.setAttribute('data-hover-src', large);
+    }
+    const artImg = row.querySelector('.art-thumb');
+    if (artImg && !artImg.getAttribute('data-hover-src')) {
+      artImg.setAttribute('data-hover-src', large);
+    }
+  });
+
+  if (copyDeckListBtn) {
+    let copyResetTimer = null;
+    const defaultCopyLabel = copyDeckListBtn.textContent.trim();
+
+    const showCopyFeedback = (label, variant) => {
+      copyDeckListBtn.textContent = label;
+      copyDeckListBtn.classList.remove('btn-outline-secondary', 'btn-success', 'btn-danger');
+      copyDeckListBtn.classList.add(`btn-${variant}`);
+      if (copyResetTimer) window.clearTimeout(copyResetTimer);
+      copyResetTimer = window.setTimeout(() => {
+        copyDeckListBtn.textContent = defaultCopyLabel;
+        copyDeckListBtn.classList.remove('btn-success', 'btn-danger');
+        copyDeckListBtn.classList.add('btn-outline-secondary');
+        copyResetTimer = null;
+      }, 2000);
+    };
+
+    const buildDeckList = () => {
+      const lines = [];
+      rows.forEach(row => {
+        if (row.id === 'cardFilterEmptyRow') return;
+        const qty = row.getAttribute('data-qty') || '1';
+        const name = row.getAttribute('data-name') || '';
+        if (!name.trim()) return;
+        lines.push(`${qty} ${name}`);
+      });
+      return lines.join('\n');
+    };
+
+    copyDeckListBtn.addEventListener('click', async () => {
+      const listText = buildDeckList();
+      if (!listText) {
+        showCopyFeedback('Nothing to copy', 'danger');
+        return;
+      }
+      const fallbackCopy = () => {
+        const temp = document.createElement('textarea');
+        temp.value = listText;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(temp);
+        return ok;
+      };
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(listText);
+          showCopyFeedback('Copied!', 'success');
+        } else if (fallbackCopy()) {
+          showCopyFeedback('Copied!', 'success');
+        } else {
+          throw new Error('Clipboard unsupported');
+        }
+      } catch (err) {
+        console.error('Copy failed', err);
+        if (fallbackCopy()) {
+          showCopyFeedback('Copied!', 'success');
+          return;
+        }
+        showCopyFeedback('Copy failed', 'danger');
+      }
+    });
+  }
+
+  function updateTypeUI() {
+    typePills.forEach(btn => {
+      const value = (btn.dataset.type || '').toLowerCase();
+      const isActive = activeType && activeType === value;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    if (typeHint) {
+      const show = !!activeType;
+      typeHint.classList.toggle('d-none', !show);
+      if (show && typeHintLabel) {
+        const pill = typePills.find(btn => (btn.dataset.type || '').toLowerCase() === activeType);
+        typeHintLabel.textContent = pill ? (pill.dataset.typeLabel || pill.textContent || activeType) : activeType;
+      }
+    }
+  }
+
+  function updateCmcUI() {
+    cmcButtons.forEach(btn => {
+      const value = btn.dataset.cmcBucket || '';
+      const isActive = activeCmc && activeCmc === value;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    if (cmcHint) {
+      const show = !!activeCmc;
+      cmcHint.classList.toggle('d-none', !show);
+      if (show && cmcHintLabel) {
+        const btn = cmcButtons.find(el => (el.dataset.cmcBucket || '') === activeCmc);
+        cmcHintLabel.textContent = btn ? (btn.dataset.cmcLabel || btn.dataset.cmcBucket || activeCmc) : activeCmc;
+      }
+    }
+  }
+
+  function updateRoleUI() {
+    roleChips.forEach(chip => {
+      const key = chip.dataset.roleKey || '';
+      const isActive = activeRole && activeRole === key;
+      chip.classList.toggle('active', isActive);
+      chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  function updateRoleDetails() {
+    let shown = false;
+    roleDetailSections.forEach(section => {
+      const key = section.dataset.roleDetail || '';
+      const isActive = activeRole && activeRole === key;
+      section.classList.toggle('d-none', !isActive);
+      if (isActive) {
+        shown = true;
+      }
+    });
+    if (roleDetailPlaceholder) {
+      roleDetailPlaceholder.classList.toggle('d-none', shown);
+    }
+  }
+
+  function applyFilters() {
+    const query = (nameFilterInput?.value || '').trim().toLowerCase();
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      const name = (row.getAttribute('data-name') || '').toLowerCase();
+      const types = (row.getAttribute('data-type') || '').toLowerCase();
+      const cmcBucket = row.getAttribute('data-cmc-bucket') || '';
+      const roles = (row.getAttribute('data-roles') || '').split(/\s+/).filter(Boolean);
+      const nameMatch = !query || name.includes(query);
+      const typeMatch = !activeType || types.includes(activeType);
+      const cmcMatch = !activeCmc || cmcBucket === activeCmc;
+      const roleMatch = !activeRole || roles.includes(activeRole);
+      const match = nameMatch && typeMatch && cmcMatch && roleMatch;
+      row.style.display = match ? '' : 'none';
+      if (match) visibleCount += 1;
+    });
+
+    if (emptyRow) {
+      emptyRow.classList.toggle('d-none', visibleCount > 0);
+    }
+  }
+
+  if (nameFilterInput) {
+    nameFilterInput.addEventListener('input', applyFilters);
+    nameFilterInput.addEventListener('search', applyFilters);
+    nameFilterInput.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape' && nameFilterInput.value) {
+        nameFilterInput.value = '';
+        applyFilters();
+      }
+    });
+  }
+
+  if (typePills.length) {
+    typePills.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const value = (btn.dataset.type || '').toLowerCase();
+        activeType = activeType === value ? '' : value;
+        updateTypeUI();
+        applyFilters();
+      });
+    });
+  }
+
+  if (cmcButtons.length) {
+    cmcButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const value = btn.dataset.cmcBucket || '';
+        activeCmc = activeCmc === value ? '' : value;
+        updateCmcUI();
+        applyFilters();
+      });
+    });
+  }
+
+  if (typeClearBtn) {
+    typeClearBtn.addEventListener('click', () => {
+      if (!activeType) return;
+      activeType = '';
+      updateTypeUI();
+      applyFilters();
+    });
+  }
+
+  if (cmcClearBtn) {
+    cmcClearBtn.addEventListener('click', () => {
+      if (!activeCmc) return;
+      activeCmc = '';
+      updateCmcUI();
+      applyFilters();
+    });
+  }
+
+  if (roleChips.length) {
+    const toggleRole = (chip) => {
+      const key = chip.dataset.roleKey || '';
+      activeRole = activeRole === key ? '' : key;
+      updateRoleUI();
+      updateRoleDetails();
+      applyFilters();
+    };
+    roleChips.forEach(chip => {
+      chip.addEventListener('click', () => toggleRole(chip));
+      chip.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter' || evt.key === ' ') {
+          evt.preventDefault();
+          toggleRole(chip);
+        }
+      });
+    });
+  }
+
+  updateTypeUI();
+  updateCmcUI();
+  updateRoleUI();
+  updateRoleDetails();
+  applyFilters();
+
+})();
+</script>
+
+<script>
+/* Commander picker: client-side name filter + robust image fallback */
+(function(){
+  const inp = document.getElementById('cmdrFilter');
+  const items = Array.from(document.querySelectorAll('#cmdrList .cmdr-item'));
+  const commanderModal = document.getElementById('commanderPickerModal');
+
+  function applyCommanderFilter(value) {
+    const q = (value || '').toLowerCase().trim();
+    items.forEach(el => {
+      const n = el.getAttribute('data-name') || '';
+      el.style.display = (!q || n.includes(q)) ? '' : 'none';
+    });
+  }
+
+  if (inp) {
+    inp.addEventListener('input', () => applyCommanderFilter(inp.value));
+  }
+
+  if (commanderModal) {
+    commanderModal.addEventListener('shown.bs.modal', () => {
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    });
+    commanderModal.addEventListener('hidden.bs.modal', () => {
+      if (inp) {
+        inp.value = '';
+        applyCommanderFilter('');
+      }
+    });
+  }
+
+  // Try small -> normal -> large; then leave placeholder
+  const thumbs = document.querySelectorAll('.cmdr-thumb');
+  thumbs.forEach(img => {
+    let triedNormal = false, triedLarge = false;
+    img.addEventListener('error', function onErr() {
+      const src = img.getAttribute('src') || '';
+      if (!triedNormal && src.includes('/small/')) {
+        triedNormal = true; img.src = src.replace('/small/', '/normal/'); return;
+      }
+      if (!triedLarge && src.includes('/normal/')) {
+        triedLarge = true; img.src = src.replace('/normal/', '/large/'); return;
+      }
+      // give up: hide broken image, show a neutral placeholder via background color
+      img.style.display = 'none';
+      const wrap = img.closest('.legend-thumb-wrap');
+      if (wrap) wrap.innerHTML = '<div class="bg-secondary-subtle rounded" style="width:100%;height:100%;opacity:.35;"></div>';
+      img.removeEventListener('error', onErr);
+    });
+  });
+})();
+</script>
+
+<script>
+/* Deck tag picker: quick filter + reset on close */
+(function(){
+  const modal = document.getElementById('tagPickerModal');
+  if (!modal) return;
+  const filterInput = modal.querySelector('#tagFilter');
+  const tagButtons = Array.from(modal.querySelectorAll('.tag-option'));
+  const categorySections = Array.from(modal.querySelectorAll('.tag-category'));
+  const emptyState = modal.querySelector('#tagFilterEmpty');
+
+  function applyFilter() {
+    const raw = filterInput ? filterInput.value : "";
+    const query = raw.toLowerCase().trim();
+    let visibleCount = 0;
+
+    tagButtons.forEach(btn => {
+      const label = (btn.dataset.label || "").toLowerCase();
+      const category = (btn.dataset.category || "").toLowerCase();
+      const matches = !query || label.includes(query) || category.includes(query);
+      btn.classList.toggle('d-none', !matches);
+      if (matches) {
+        visibleCount += 1;
+      }
+    });
+
+    categorySections.forEach(section => {
+      const hasVisible = !!section.querySelector('.tag-option:not(.d-none)');
+      section.classList.toggle('d-none', !hasVisible);
+    });
+
+    if (emptyState) {
+      emptyState.classList.toggle('d-none', visibleCount > 0);
+    }
+  }
+
+  if (filterInput) {
+    ['input', 'keyup', 'change'].forEach(evt => filterInput.addEventListener(evt, applyFilter));
+  }
+
+  modal.addEventListener('shown.bs.modal', () => {
+    if (filterInput) {
+      filterInput.focus();
+      filterInput.select();
+    }
+    applyFilter();
+  });
+
+  modal.addEventListener('hidden.bs.modal', () => {
+    if (filterInput) {
+      filterInput.value = '';
+    }
+    // reset all buttons
+    tagButtons.forEach(btn => btn.classList.remove('d-none'));
+    categorySections.forEach(section => section.classList.remove('d-none'));
+    if (emptyState) emptyState.classList.add('d-none');
+  });
+
+  applyFilter();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{# Admin dashboard with quick actions for Scryfall cache maintenance and folder categories. #}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="mb-0">Admin</h1>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.manage_api_token') }}">
+        Account &amp; API Token
+      </a>
+      <a class="btn btn-outline-danger btn-sm" href="{{ url_for('views.logout') }}" data-hx-boost="false">
+        Sign out
+      </a>
+      <form method="post" class="d-inline-flex">
+        <input type="hidden" name="action" value="refresh_all">
+        <button class="btn btn-outline-primary btn-sm" type="submit">
+          Refresh All Data
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title mb-3">Create a User</h5>
+      <form method="post" class="row g-3">
+        <input type="hidden" name="action" value="create_user">
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted" for="user_username">Username</label>
+          <input type="text" class="form-control" id="user_username" name="user_username" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted" for="user_email">Email</label>
+          <input type="email" class="form-control" id="user_email" name="user_email" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted" for="user_password">Password</label>
+          <input type="password" class="form-control" id="user_password" name="user_password" required>
+        </div>
+        <div class="col-12">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="user_is_admin" name="user_is_admin">
+            <label class="form-check-label" for="user_is_admin">
+              Administrator privileges
+            </label>
+          </div>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" type="submit">Create User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+      <div>
+        <h5 class="card-title mb-1">Manage Users</h5>
+        <div class="text-muted small mb-0">
+          {{ user_stats.total }} total user{{ '' if user_stats.total == 1 else 's' }},
+          {{ user_stats.admins }} admin{{ '' if user_stats.admins == 1 else 's' }}.
+        </div>
+      </div>
+      <div class="ms-auto">
+        <a class="btn btn-primary" href="{{ url_for('views.admin_manage_users') }}">
+          Open User Manager
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+      <div>
+        <h5 class="card-title mb-1">Bug &amp; Feature Requests</h5>
+        <div class="text-muted small mb-2">
+          {{ request_counts.total }} total in the queue.
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <span class="badge text-bg-secondary">Not started: {{ request_counts.get('not_started', 0) }}</span>
+          <span class="badge text-bg-warning-subtle text-warning">Working: {{ request_counts.get('working', 0) }}</span>
+          <span class="badge text-bg-success-subtle text-success">Completed: {{ request_counts.get('completed', 0) }}</span>
+        </div>
+      </div>
+      <div class="ms-auto">
+        <a class="btn btn-outline-primary" href="{{ url_for('views.admin_requests') }}">
+          Review Requests
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Scryfall Default Cards (prints) -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          {% set prints_stats = stats.prints or {} %}
+          {% set status_badge = 'success' if prints.exists else 'danger' %}
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <h5 class="card-title mb-0">Scryfall Default Cards</h5>
+            <span class="badge text-bg-{{ status_badge }}">{{ 'Loaded' if prints.exists else 'Missing' }}</span>
+            {% if prints.exists %}
+              <span class="badge text-bg-{{ 'warning' if prints.stale else 'secondary' }}">{{ 'Stale' if prints.stale else 'Fresh' }}</span>
+            {% endif %}
+          </div>
+          <div class="small text-muted mb-3">Bulk dataset powering art thumbnails, print lookups, and commander heuristics.</div>
+          <div class="row g-3 small mb-3">
+            <div class="col-12 col-md-6">
+              <div class="border rounded-3 p-3 bg-body-secondary-subtle h-100">
+                <div class="fw-semibold text-uppercase text-muted mb-2">File</div>
+                <div>Path: <code>{{ prints.path }}</code></div>
+                <div>Size: {{ '{:,}'.format(prints.size or 0) }} bytes</div>
+                <div>Updated: {{ prints.mtime or 'N/A' }}</div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="border rounded-3 p-3 bg-body-secondary-subtle h-100">
+                <div class="fw-semibold text-uppercase text-muted mb-2">In-memory cache</div>
+                <div>Records: {{ '{:,}'.format(prints_stats.records or 0) }}</div>
+                <div>Unique oracles: {{ '{:,}'.format(prints_stats.unique_oracles or 0) }}</div>
+                <div>Tracked sets: {{ '{:,}'.format(prints_stats.unique_sets or 0) }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post">
+              <input type="hidden" name="action" value="refresh_default_cards">
+              <button class="btn btn-primary btn-sm" type="submit">Download Latest Bulk File</button>
+            </form>
+            <form method="post">
+              <input type="hidden" name="action" value="reload_default_cache">
+              <button class="btn btn-outline-primary btn-sm" type="submit">Reload In-Memory Cache</button>
+            </form>
+            <form method="post">
+              <input type="hidden" name="action" value="clear_cache">
+              <button class="btn btn-outline-danger btn-sm" type="submit">Clear Cache Files</button>
+            </form>
+          </div>
+          <div class="border rounded-3 bg-body-tertiary-subtle mt-3 p-3 job-monitor"
+               data-job-monitor
+               data-job-scope="scryfall"
+               data-job-dataset="default_cards"
+               data-job-label="Default cards">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                  Queue a refresh to see live status updates as workers download the dataset.
+                </p>
+              </div>
+              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+            </div>
+            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scryfall Rulings -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Scryfall Rulings</h5>
+          <div class="small text-muted mb-2">Bulk rulings by oracle ID.</div>
+          <ul class="list-unstyled small mb-3">
+            <li>Status: {{ 'Present' if rulings.exists else 'Missing' }}</li>
+            <li>Path: <code>{{ rulings.path }}</code></li>
+            <li>Size: {{ rulings.size }} bytes</li>
+            <li>Updated: {{ rulings.mtime or 'N/A' }}</li>
+          </ul>
+          <form method="post" class="d-inline">
+            <input type="hidden" name="action" value="refresh_rulings">
+            <button class="btn btn-primary btn-sm" type="submit">Refresh Rulings</button>
+          </form>
+          <div class="border rounded-3 bg-body-tertiary-subtle mt-3 p-3 job-monitor"
+               data-job-monitor
+               data-job-scope="scryfall"
+               data-job-dataset="rulings"
+               data-job-label="Rulings">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                  When a rulings refresh runs the latest status appears here automatically.
+                </p>
+              </div>
+              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+            </div>
+            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Commander Spellbook -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Commander Spellbook Combos</h5>
+          <div class="small text-muted mb-2">
+            Two-card lines pulled from Commander Spellbook (early <= {{ spellbook.early_threshold }}, late >= {{ spellbook.late_threshold }} total mana).
+          </div>
+          <ul class="list-unstyled small mb-3">
+            <li>Status: {{ 'Present' if spellbook.exists else 'Missing' }}</li>
+            <li>Path: <code>{{ spellbook.path }}</code></li>
+            <li>Size: {{ spellbook.size }} bytes</li>
+            <li>Updated: {{ spellbook.mtime or 'N/A' }}</li>
+            <li>Combos: {{ spellbook.counts.total }} total ({{ spellbook.counts.early }} early, {{ spellbook.counts.late }} late)</li>
+            {% if spellbook.categories %}
+              <li>Tracked categories:
+                <ul class="mb-0">
+                  {% for label, value in spellbook.categories.items() %}
+                    <li>{{ label.replace('_', ' ') }}: {{ value }}</li>
+                  {% endfor %}
+                </ul>
+              </li>
+            {% endif %}
+          </ul>
+          <form method="post" class="d-inline">
+            <input type="hidden" name="action" value="refresh_spellbook_combos">
+            <button class="btn btn-primary btn-sm" type="submit">Refresh Spellbook Combos</button>
+          </form>
+          <div class="border rounded-3 bg-body-tertiary-subtle mt-3 p-3 job-monitor"
+               data-job-monitor
+               data-job-scope="spellbook"
+               data-job-dataset="spellbook"
+               data-job-label="Commander Spellbook">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                <p class="text-muted small mb-0 job-monitor__detail">
+                  When a spellbook refresh runs the latest status appears here automatically.
+                </p>
+              </div>
+              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+            </div>
+            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Symbology -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Scryfall Symbols</h5>
+          <div class="small text-muted mb-2">Mana symbols cache (JSON + SVGs in <code>/static/symbols</code>).</div>
+          {% if symbols_enabled %}
+            <form method="post" class="d-inline">
+              <input type="hidden" name="action" value="refresh_symbols">
+              <button class="btn btn-primary btn-sm" type="submit">Refresh Symbols</button>
+            </form>
+          {% else %}
+            <div class="alert alert-warning small mb-0">
+              Symbols module not available. Make sure <code>services/symbols_cache.py</code> exists and is importable.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- EDHREC Cache -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">EDHREC Synergy Cache</h5>
+          <div class="small text-muted mb-2">Commander and deck tag synergy pulled from edhrec.com.</div>
+          <ul class="list-unstyled small mb-3">
+            <li>Root: <code>{{ edhrec.root }}</code></li>
+            <li>
+              Commanders cached: {{ edhrec.commanders.count }}
+              {% if edhrec.commanders.latest_slug %}
+                <span class="text-muted"> (latest {{ edhrec.commanders.latest_slug }} @ {{ edhrec.commanders.latest_fetched_at or 'N/A' }})</span>
+              {% endif %}
+            </li>
+            <li>
+              Deck tags cached: {{ edhrec.themes.count }}
+              {% if edhrec.themes.latest_slug %}
+                <span class="text-muted"> (latest {{ edhrec.themes.latest_slug }} @ {{ edhrec.themes.latest_fetched_at or 'N/A' }})</span>
+              {% endif %}
+            </li>
+            <li>
+              Decks tracked: {{ edhrec.deck_totals.total }}
+              <span class="text-muted">(commander named: {{ edhrec.deck_totals.with_commander }}, tagged: {{ edhrec.deck_totals.with_tag }})</span>
+            </li>
+          </ul>
+          <form method="post">
+            <input type="hidden" name="action" value="refresh_edhrec">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" value="1" id="forceEdhrec" name="force_refresh">
+              <label class="form-check-label small" for="forceEdhrec">Force refresh (ignore cache age)</label>
+            </div>
+            <button class="btn btn-primary btn-sm" type="submit">Refresh EDHREC Data</button>
+          </form>
+          <p class="text-muted small mb-0 mt-2">Runs one request per unique commander/tag in your decks.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Folder Categories -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Folder Categories</h5>
+          <div class="small text-muted mb-2">
+            Control which folders count as decks versus collection buckets.
+          </div>
+          <ul class="list-unstyled small mb-3">
+            <li>Total folders: {{ folder_counts.total }}</li>
+            <li>Decks: {{ folder_counts.deck }}</li>
+            <li>Collection buckets: {{ folder_counts.collection }}</li>
+          </ul>
+          <a class="btn btn-primary btn-sm" href="{{ url_for('views.admin_folder_categories') }}">
+            Manage Folder Categories
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/job-monitor.js') }}" defer></script>
+{% endblock %}
+
+
+
+
+

@@ -1,0 +1,2651 @@
+<style>
+  .build-card-list .list-group-item.active {
+    background-color: rgba(13, 110, 253, .15);
+    border-color: rgba(13, 110, 253, .35);
+  }
+  .role-chip {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .role-chip.status-needs_attention {
+    background: rgba(255, 193, 7, .2);
+    color: #b58102;
+  }
+  .role-chip.status-healthy {
+    background: rgba(25, 135, 84, .2);
+    color: #1b6d42;
+  }
+  .build-role-card {
+    cursor: pointer;
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: .85rem;
+    box-shadow: none;
+    transition: transform .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft), background-color .18s var(--dv-ease-soft);
+  }
+  .build-role-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(99, 102, 241, 0.16);
+  }
+  .build-role-card.active {
+    border-color: rgba(var(--bs-primary-rgb), .6);
+    background: rgba(var(--bs-primary-rgb), .18);
+    box-shadow: none;
+  }
+  .build-role-card:focus-visible {
+    outline: 2px solid rgba(var(--bs-primary-rgb), .8);
+    outline-offset: 3px;
+  }
+  .build-role-detail-card .list-group-item {
+    padding: .75rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+  .build-role-detail-card .list-group-item:last-child {
+    border-bottom: 0;
+  }
+  .build-role-detail-card .role-card-thumb {
+    width: 48px;
+    height: auto;
+    border-radius: .5rem;
+  }
+  .build-card-row.role-match {
+    background: rgba(13, 110, 253, .08);
+    transition: background 160ms ease;
+  }
+  .theme-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .6rem;
+    border-radius: 999px;
+    background: rgba(108, 117, 125, .15);
+    font-size: .75rem;
+  }
+  .recommendation-card + .recommendation-card {
+    border-top: 1px solid var(--bs-border-color);
+  }
+  .recommendation-card:hover {
+    background: rgba(13, 110, 253, .05);
+  }
+  .mana-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: .15rem;
+  }
+  .mana-inline img.mana {
+    height: 1em;
+    vertical-align: text-bottom;
+  }
+  .deck-synergy-table th {
+    font-size: .75rem;
+    letter-spacing: .08em;
+  }
+  .deck-synergy-table td {
+    vertical-align: middle;
+  }
+  .chart-row + .chart-row {
+    margin-top: .5rem;
+  }
+  .chart-row .progress {
+    height: 6px;
+    background-color: rgba(0, 0, 0, .08);
+  }
+  .chart-row .progress-bar {
+    background: var(--bs-primary);
+  }
+  .chart-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  #buildDeckRoot .card.shadow-sm {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: none;
+    border-radius: 1rem;
+    backdrop-filter: blur(12px);
+  }
+  #buildDeckRoot .card-header {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(99, 102, 241, 0.18));
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-size: .72rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    border-radius: 1rem 1rem 0 0;
+  }
+  #buildDeckRoot .card-header .fw-semibold,
+  #buildDeckRoot .card-header span,
+  #buildDeckRoot .card-header h6 {
+    color: inherit;
+    letter-spacing: inherit;
+    font-weight: 700;
+  }
+
+  #buildDeckRoot .text-uppercase.text-muted.fw-semibold {
+    letter-spacing: .14em;
+    font-size: .72rem;
+    color: rgba(191, 219, 254, 0.82) !important;
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+  }
+  #buildDeckRoot .text-uppercase.text-muted.fw-semibold::after {
+    content: "";
+    display: inline-block;
+    height: 1px;
+    width: 42px;
+    background: currentColor;
+    opacity: .35;
+  }
+
+  .deck-card-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  @media (min-width: 768px) {
+    .deck-card-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1200px) {
+    .deck-card-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .deck-card {
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: .85rem;
+    padding: 1rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    box-shadow: none;
+    transition: transform .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft), background-color .18s var(--dv-ease-soft);
+  }
+  .deck-card:hover {
+    transform: translateY(-4px);
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.4);
+  }
+  .deck-card__image {
+    display: flex;
+    justify-content: center;
+  }
+  .deck-card__image img {
+    width: 100%;
+    max-width: 260px;
+    border-radius: 1rem;
+    box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.35);
+  }
+  .deck-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    text-align: center;
+  }
+  .deck-card__badges,
+  .deck-card__tags,
+  .deck-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .35rem;
+  }
+  .deck-card__actions {
+    margin-top: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    justify-content: center;
+  }
+  .deck-card.role-match {
+    border-color: rgba(var(--bs-primary-rgb), .45);
+    box-shadow: none;
+    background: rgba(var(--bs-primary-rgb), .12);
+  }
+  #buildDeckRoot[data-view-mode="list"] .deck-card.role-match {
+    background-color: rgba(var(--bs-primary-rgb), .12);
+    box-shadow: none;
+  }
+  .build-jump .dropdown-menu {
+    min-width: 280px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .build-jump .search-wrapper {
+    padding: .5rem .75rem .25rem;
+  }
+  .build-jump .dropdown-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .1rem;
+  }
+  .build-jump .dropdown-item .meta {
+    font-size: .8rem;
+    color: var(--bs-secondary-color);
+  }
+  .view-toggle-group .btn.view-mode-active {
+    background: var(--bs-primary);
+    color: #fff;
+    border-color: var(--bs-primary);
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card-grid,
+  #buildDeckRoot[data-view-mode="list"] .deck-card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    width: 100%;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card-grid > *,
+  #buildDeckRoot[data-view-mode="list"] .deck-card-grid > * {
+    width: 100%;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card,
+  #buildDeckRoot[data-view-mode="list"] .deck-card {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    padding: .65rem 1rem;
+    gap: .5rem;
+    border-radius: 0;
+    box-shadow: none;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    background: transparent;
+    transition: background-color .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft);
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card + .edhrec-card,
+  #buildDeckRoot[data-view-mode="list"] .deck-card + .deck-card {
+    border-top: 0;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__image,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__image {
+    display: none;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__image img,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__image img {
+    display: none;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__body,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: .25rem .75rem;
+    align-items: center;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__body > .fw-semibold,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__body > .fw-semibold {
+    grid-column: 1 / -1;
+    justify-content: flex-start !important;
+    gap: .5rem;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__badges,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__badges,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__tags,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__tags,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__body > .mana-inline,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__body > .mana-inline {
+    display: none;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__body > .text-muted.small:not(.deck-card__meta),
+  #buildDeckRoot[data-view-mode="list"] .deck-card__body > .text-muted.small:not(.deck-card__meta) {
+    display: none;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__body > .text-muted.small:first-of-type {
+    display: block;
+    grid-row: 2;
+    grid-column: 1;
+    margin: 0;
+  }
+  #buildDeckRoot[data-view-mode="list"] .deck-card__meta,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__meta {
+    grid-row: 2;
+    grid-column: 1;
+    margin: 0;
+  }
+  #buildDeckRoot[data-view-mode="list"] .deck-card__meta span + span,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__meta span + span {
+    display: none;
+  }
+  #buildDeckRoot[data-view-mode="list"] .deck-card__actions,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__actions {
+    grid-row: 2;
+    grid-column: 2;
+    justify-content: flex-end;
+    gap: .4rem;
+    margin: 0;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__body,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__body {
+    align-items: flex-start;
+    text-align: left;
+    flex: 1;
+    gap: .35rem;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__badges,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__badges,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__tags,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__tags,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__meta {
+    justify-content: flex-start;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__actions,
+  #buildDeckRoot[data-view-mode="list"] .deck-card__actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-top: 0;
+    margin-left: auto;
+    gap: .35rem;
+  }
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card:hover,
+  #buildDeckRoot[data-view-mode="list"] .deck-card:hover {
+    transform: none;
+    background-color: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.25);
+  }
+  #buildDeckRoot[data-view-mode="list"] .deck-card__actions form,
+  #buildDeckRoot[data-view-mode="list"] .edhrec-card__actions form {
+    margin-bottom: 0;
+  }
+  .goldfish-view {
+    display: none;
+  }
+  #buildDeckRoot[data-view-mode="goldfish"] .deck-card-grid,
+  #buildDeckRoot[data-view-mode="goldfish"] .deck-card {
+    display: none !important;
+  }
+  #buildDeckRoot[data-view-mode="goldfish"] .goldfish-view {
+    display: block;
+  }
+  .goldfish-columns {
+    column-width: 360px;
+    column-gap: 1.25rem;
+    width: 100%;
+  }
+  .goldfish-section {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: .85rem;
+    padding: 1rem;
+    box-shadow: 0 .75rem 1.5rem rgba(15, 23, 42, 0.08);
+    display: inline-block;
+    width: 100%;
+    break-inside: avoid;
+    margin-bottom: 1.25rem;
+    max-width: 100%;
+  }
+  @media (max-width: 1200px) {
+    .goldfish-columns {
+      column-width: 320px;
+    }
+  }
+  @media (max-width: 768px) {
+    .goldfish-columns {
+      column-width: 100%;
+    }
+  }
+  .goldfish-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    font-size: .85rem;
+    margin-bottom: .75rem;
+  }
+  .goldfish-table {
+    width: 100%;
+    margin-bottom: 0;
+  }
+  .goldfish-table tbody tr {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  }
+  .goldfish-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .goldfish-table td {
+    padding: .4rem .35rem;
+    vertical-align: middle;
+  }
+  .goldfish-table td:first-child {
+    width: 2.5rem;
+    font-weight: 600;
+    text-align: right;
+  }
+  .goldfish-table td:last-child {
+    width: 5.5rem;
+    text-align: right;
+  }
+  .goldfish-name {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+  }
+  .goldfish-name-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+  }
+  .goldfish-mana {
+    display: inline-flex;
+    align-items: center;
+    gap: .15rem;
+  }
+  .goldfish-mana img {
+    height: 1.05em;
+    vertical-align: text-bottom;
+  }
+  .goldfish-cmc-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    padding: .1rem .45rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    background: rgba(148, 163, 184, 0.25);
+    color: var(--bs-body-color);
+  }
+  .goldfish-type-line {
+    color: var(--bs-secondary-color);
+    font-size: .75rem;
+  }
+  .edhrec-card-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  @media (min-width: 576px) {
+    .edhrec-card-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 992px) {
+    .edhrec-card-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .edhrec-card {
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: .85rem;
+    padding: 1rem;
+    height: 100%;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    transition: transform .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft), background-color .18s var(--dv-ease-soft);
+  }
+  .edhrec-card:hover {
+    transform: translateY(-4px);
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.4);
+  }
+  .edhrec-card__image {
+    display: flex;
+    justify-content: center;
+  }
+  .edhrec-card__image img {
+    width: 100%;
+    max-width: 260px;
+    border-radius: 1rem;
+    box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.35);
+  }
+  .edhrec-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    text-align: center;
+  }
+  .edhrec-card__badges,
+  .edhrec-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .35rem;
+  }
+  .edhrec-card__actions {
+    margin-top: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    justify-content: center;
+  }
+  .deck-table th {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .deck-table tbody tr:hover {
+    background: rgba(13, 110, 253, .05);
+  }
+  details.build-toggle summary {
+    cursor: pointer;
+  }
+  details.build-toggle summary::-webkit-details-marker {
+    display: none;
+  }
+  .collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+  }
+  .collapse-toggle .bi {
+    transition: transform .2s ease;
+  }
+  .collapse-toggle[aria-expanded="false"] .bi {
+    transform: rotate(180deg);
+  }
+</style>
+
+{% from "shared/components/macros.html" import commander_chip %}
+{% macro synergy_card_link(name, hover=None, card_id=None, url=None, classes='', external=False) -%}
+  {%- set href = (card_id and url_for('views.card_detail', card_id=card_id)) or url -%}
+  {%- set target = '_blank' if external and href else None -%}
+  {%- if href -%}
+    <a href="{{ href }}" class="{{ classes }}" {% if target %}target="{{ target }}" rel="noreferrer"{% endif %} {% if hover %}data-hover-src="{{ hover }}"{% endif %}>{{ name }}</a>
+  {%- else -%}
+    <span class="{{ classes }}" {% if hover %}data-hover-src="{{ hover }}"{% endif %}>{{ name }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro render_deck_type_card(extra_classes='mb-4') -%}
+  <div class="card shadow-sm {{ extra_classes }}">
+    <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">Deck Type Distribution</span>
+      <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#deckTypeCollapse"
+              aria-expanded="true"
+              aria-controls="deckTypeCollapse">
+        <i class="bi bi-chevron-up"></i>
+        <span class="visually-hidden">Toggle deck type distribution</span>
+      </button>
+    </div>
+    <div id="deckTypeCollapse" class="collapse show" data-persist-collapse="deck-type">
+      <div class="card-body">
+        <p class="text-muted small">
+          Visual overview of card types within this build.
+        </p>
+        <div class="d-flex flex-column">
+          {% set total_cards = deck_summary.total_cards or 0 %}
+          {% for item in deck_type_chart %}
+            {% set percent = item.percent if item.percent is not none else (item.value * 100 / total_cards) | round(0, 'floor') if total_cards else 0 %}
+            {% set swatch = item.color or '#0d6efd' %}
+            <div class="chart-row">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="chart-swatch" style="background-color: {{ swatch }};"></span>
+                  <span class="fw-semibold">{{ item.label }}</span>
+                </div>
+                <span class="text-muted small">{{ item.value }} cards ({{ percent }}%)</span>
+              </div>
+              <div class="progress">
+                <div class="progress-bar" style="width: {{ percent }}%; background-color: {{ swatch }};"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+{%- endmacro %}
+
+{% macro render_edhrec_type_card(extra_classes='mb-4') -%}
+  {% set edhrec_chart_total = edhrec_chart.content | sum(attribute='value') %}
+  <div class="card shadow-sm {{ extra_classes }}">
+    <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">EDHREC Type Distribution</span>
+      <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#edhrecTypeCollapse"
+              aria-expanded="true"
+              aria-controls="edhrecTypeCollapse">
+        <i class="bi bi-chevron-up"></i>
+        <span class="visually-hidden">Toggle EDHREC type distribution</span>
+      </button>
+    </div>
+    <div id="edhrecTypeCollapse" class="collapse show" data-persist-collapse="edhrec-type">
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Snapshot of recent EDHREC lists for this commander{% if deck_summary.tag_label %} ({{ deck_summary.tag_label }}){% endif %}.
+        </p>
+        <div class="d-flex flex-column">
+          {% for item in edhrec_chart.content %}
+            {% set percent = ((item.value * 100) / edhrec_chart_total) | round(0, 'floor') if edhrec_chart_total else 0 %}
+            {% set swatch = item.color or '#0d6efd' %}
+            <div class="chart-row">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="chart-swatch" style="background-color: {{ swatch }};"></span>
+                  <span class="fw-semibold">{{ item.label }}</span>
+                </div>
+                <span class="text-muted small">{{ item.value }} cards ({{ percent }}%)</span>
+              </div>
+              <div class="progress">
+                <div class="progress-bar" style="width: {{ percent }}%; background-color: {{ swatch }};"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+{%- endmacro %}
+
+{% set hover_lookup = hover_lookup | default({}, true) %}
+
+<div class="page-section" id="buildDeckRoot" data-view-mode="grid" {% if selected_folder %}data-folder-id="{{ selected_folder.id }}"{% endif %}>
+  {% if not selected_folder %}
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+      <div>
+        <h1 class="h3 mb-1">Build-A-Deck</h1>
+        <p class="text-muted mb-0">
+          Manage every brew from one place. Pick an in-progress build to continue or spin up something new.
+        </p>
+      </div>
+      <div class="text-muted small">
+        {{ build_decks|length }} build{{ '' if build_decks|length == 1 else 's' }} in progress
+      </div>
+    </div>
+
+    <div class="row g-4 align-items-start">
+      <div class="col-12 col-xl-7">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-body-secondary fw-semibold">
+            Decks in Progress
+          </div>
+          <div class="card-body">
+            {% if build_decks %}
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div class="text-muted small fw-semibold text-uppercase">Quick jump</div>
+                <div class="dropdown build-jump">
+                  <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" id="buildJumpToggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    Select a build
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="buildJumpToggle">
+                    <div class="search-wrapper">
+                      <input type="search" id="buildJumpSearch" class="form-control form-control-sm" placeholder="Search builds...">
+                    </div>
+                    <div id="buildJumpOptions">
+                      {% for deck in build_decks %}
+                        <button
+                          type="button"
+                          class="dropdown-item build-jump-option"
+                          data-url="{{ url_for('views.build_a_deck', folder_id=deck.id) }}"
+                          data-filter="{{ (deck.name ~ ' ' ~ (deck.commander or ''))|lower }}">
+                          <span class="fw-semibold">{{ deck.name }}</span>
+                          <span class="meta">{{ deck.commander or 'Commander not set' }}</span>
+                        </button>
+                      {% endfor %}
+                    </div>
+                    <div class="text-muted small px-3 py-2 d-none" id="buildJumpEmpty">No builds match your search.</div>
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+            {% if build_decks %}
+              <div class="row row-cols-1 row-cols-md-2 g-3">
+                {% for deck in build_decks %}
+                  <div class="col">
+                    <a class="tile d-block h-100 deck-tile hover-lift card-hover-shadow p-3"
+                       href="{{ url_for('views.build_a_deck', folder_id=deck.id) }}"
+                       {% if deck.commander_hover %}data-hover-src="{{ deck.commander_hover }}"{% endif %}>
+                      <div class="d-flex align-items-center gap-3">
+                        <div class="flex-shrink-0">
+                          {{ commander_chip(deck.commander_card, 72) }}
+                        </div>
+                        <div class="min-w-0">
+                          <div class="deck-name text-truncate" title="{{ deck.name }}">{{ deck.name }}</div>
+                          <div class="small text-muted">
+                            {% if deck.commander_card and deck.commander_card.name %}
+                              Commander: {{ deck.commander_card.name }}
+                            {% elif deck.commander %}
+                              Commander: {{ deck.commander }}
+                            {% else %}
+                              Commander not set
+                            {% endif %}
+                          </div>
+                          <div class="small text-muted mt-1 d-flex align-items-center gap-2 flex-wrap">
+                            <span class="pip-row" aria-label="Color identity">
+                              {{ deck.color_identity_icons | safe }}
+                            </span>
+                            <span>{{ deck.color_identity_name }}</span>
+                          </div>
+                        </div>
+                        <span class="badge text-bg-secondary ms-auto" title="Total cards">{{ '{:,}'.format(deck.qty or 0) }}</span>
+                      </div>
+                    </a>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-center text-muted py-4">
+                No builds yet. Use the form on the right to start your first brew.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-xl-5">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-body-secondary fw-semibold">
+            Start a New Build
+          </div>
+          <div class="card-body">
+            <p class="text-muted small">
+              We will create a dedicated build folder, pull commander data, and queue it here until you promote it.
+            </p>
+            <form method="post" novalidate>
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="newCommander">Commander Name</label>
+                <input id="newCommander"
+                       class="form-control"
+                       name="commander_name"
+                       placeholder="Atraxa, Grand Unifier"
+                       required>
+                <div class="form-text">
+                  Exact names work best; we will resolve the Scryfall entry automatically.
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="newDeckName">Deck Name (optional)</label>
+                <input id="newDeckName"
+                       class="form-control"
+                       name="deck_name"
+                       placeholder="Build: Atraxa Superfriends">
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="newDeckTag">Starting Tag (optional)</label>
+                <select id="newDeckTag"
+                        class="form-select"
+                        name="deck_tag">
+                  <option value="" selected>No starting tag</option>
+                  {% for category, tags in (deck_tag_groups|default({}, true)).items() %}
+                    <optgroup label="{{ category }}">
+                      {% for tag in tags %}
+                        <option value="{{ tag }}">{{ tag }}</option>
+                      {% endfor %}
+                    </optgroup>
+                  {% endfor %}
+                </select>
+                <div class="form-text">You can refine this later with EDHREC theme options.</div>
+              </div>
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="includeCommander" name="include_commander" value="1">
+                <label class="form-check-label" for="includeCommander">Add commander card to deck</label>
+              </div>
+              <div class="d-grid">
+                <button class="btn btn-primary" type="submit">Create Build Deck</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+      <!-- Left side: title, description, and other buttons -->
+      <div class="d-flex flex-column flex-grow-1">
+        <h1 class="h3 mb-1">Build-A-Deck</h1>
+        <p class="text-muted mb-0">
+          Focus mode for {{ selected_folder.name }}. Make edits, test ideas, then promote when it is ready.
+        </p>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+      <!-- Left: everything except view toggles -->
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <a class="btn btn-outline-primary btn-sm"
+          href="{{ url_for('views.build_a_deck') }}">Back to Build Landing</a>
+        <a class="btn btn-outline-primary btn-sm"
+          href="{{ url_for('views.deck_synergy', folder_id=selected_folder.id) }}">Open in Synergy Lab</a>
+        <a class="btn btn-outline-primary btn-sm"
+          href="{{ url_for('views.list_cards', folder=selected_folder.id) }}">View Cards</a>
+        <a class="btn btn-outline-primary btn-sm"
+          href="{{ url_for('views.folder_detail', folder_id=selected_folder.id) }}">Deck Details</a>
+
+        {% if can_load_edhrec %}
+          <form class="mb-0" method="get" action="{{ url_for('views.build_a_deck') }}">
+            <input type="hidden" name="folder_id" value="{{ selected_folder.id }}">
+            <input type="hidden" name="load_edhrec" value="1">
+            <button class="btn btn-sm {% if edhrec_loaded %}btn-outline-primary{% else %}btn-primary{% endif %}"
+                    type="submit">
+              {% if edhrec_loaded %}Reload EDHREC{% else %}Load EDHREC Data{% endif %}
+            </button>
+          </form>
+        {% else %}
+          <span class="text-muted small align-self-center">
+            Set a commander and deck tag to load EDHREC data.
+          </span>
+        {% endif %}
+      </div>
+
+      <!-- Right: only the view mode buttons -->
+      <div class="ms-auto">
+        <div class="btn-group btn-group-sm view-toggle-group" role="group" aria-label="Card display mode">
+          <button type="button" class="btn btn-outline-secondary view-mode-active"
+                  data-view-toggle="grid" aria-pressed="true">
+            <i class="bi bi-grid-3x3-gap-fill me-1" aria-hidden="true"></i> Gallery
+          </button>
+          <button type="button" class="btn btn-outline-secondary" data-view-toggle="list" aria-pressed="false">
+            <i class="bi bi-list-ul me-1" aria-hidden="true"></i> List
+          </button>
+          <button type="button" class="btn btn-outline-secondary" data-view-toggle="goldfish" aria-pressed="false">
+            <i class="bi bi-table me-1" aria-hidden="true"></i> Breakdown
+          </button>
+        </div>
+      </div>
+    </div>
+        {% set deck_name = deck_summary.name or selected_folder.name %}
+        {% set commander_name = deck_summary.commander.name if deck_summary.commander else selected_folder.commander_name %}
+        {% set commander_data = deck_summary.commander if deck_summary and deck_summary.commander else None %}
+        {% set commander_hover = commander_data.hover_image if commander_data and commander_data.hover_image else hover_lookup.get((commander_name or '')|lower) %}
+        {% set commander_card_id = commander_data.card_id if commander_data and commander_data.card_id else None %}
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start">
+              <div>
+                <div class="d-flex align-items-center gap-2">
+                  <h2 class="h4 mb-0">{{ deck_name }}</h2>
+                  {% if selected_folder.category == selected_folder.CATEGORY_BUILD %}
+                    <span class="badge text-bg-warning text-uppercase">In Build Queue</span>
+                  {% else %}
+                    <span class="badge text-bg-success text-uppercase">Promoted</span>
+                  {% endif %}
+                </div>
+                <div class="text-muted small mt-1">
+                  {% if deck_summary.color_identity %}
+                    Color identity: {{ deck_summary.color_identity.label }}
+                    {% if deck_summary.color_identity.html %}
+                      <span class="mana-inline ms-1" aria-label="Color identity">{{ deck_summary.color_identity.html | safe }}</span>
+                    {% endif %}
+                    &middot;
+                  {% endif %}
+                  Total cards: {{ deck_summary.total_cards or 0 }} &middot; Unique: {{ deck_summary.unique_cards or 0 }}
+                </div>
+              </div>
+              <div class="d-flex flex-wrap align-items-start gap-2">
+                <form method="post"
+                      action="{{ url_for('views.build_promote', folder_id=selected_folder.id) }}"
+                      data-preserve-scroll>
+                  <button class="btn btn-outline-success btn-sm" type="submit">Promote to Decks</button>
+                </form>
+                <form method="post"
+                      action="{{ url_for('views.build_delete', folder_id=selected_folder.id) }}"
+                      data-preserve-scroll
+                      data-confirm="Delete this build deck and all of its cards?">
+                  <button class="btn btn-outline-danger btn-sm" type="submit">Delete Build</button>
+                </form>
+                <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#deckSummaryCollapse"
+                        aria-expanded="true"
+                        aria-controls="deckSummaryCollapse">
+                  <i class="bi bi-chevron-up"></i>
+                  <span class="visually-hidden">Toggle deck summary</span>
+                </button>
+              </div>
+            </div>
+
+              <div id="deckSummaryCollapse" class="collapse show mt-3" data-persist-collapse="deck-summary">
+              {% if playground_origin %}
+                <div class="alert alert-info small" role="alert">
+                  Playground clone of
+                  {% if playground_origin %}
+                    <a href="{{ url_for('views.deck_synergy', folder_id=playground_origin.id) }}" class="link-dark">
+                      {{ playground_origin.name }}
+                    </a>
+                  {% endif %}.
+                  Changes here will not modify your original deck.
+                </div>
+              {% endif %}
+
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <div class="border rounded p-3 h-100">
+                    <div class="fw-semibold text-uppercase small text-muted mb-2">Commander</div>
+                    {% if commander_name %}
+                      <div class="d-flex flex-wrap align-items-center gap-2">
+                        {{ synergy_card_link(commander_name, commander_hover, commander_card_id, classes='fw-semibold text-reset text-decoration-none') }}
+                      </div>
+                    {% else %}
+                      <span class="text-muted">Not set</span>
+                    {% endif %}
+                    <div class="mt-3 d-flex flex-wrap align-items-center gap-2">
+                      <button class="btn btn-sm btn-outline-primary"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#updateCommanderForm"
+                              aria-expanded="false"
+                              aria-controls="updateCommanderForm">
+                        Update Commander
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#renameDeckForm"
+                              aria-expanded="false"
+                              aria-controls="renameDeckForm">
+                        Rename Deck
+                      </button>
+                    </div>
+                    <div class="collapse mt-3" id="updateCommanderForm" data-persist-collapse="update-commander">
+                      <form method="post"
+                            action="{{ url_for('views.build_update_commander', folder_id=selected_folder.id) }}"
+                            data-preserve-scroll
+                            novalidate>
+                        <div class="input-group input-group-sm">
+                          <input class="form-control" name="commander_name" placeholder="Exact commander name" required>
+                          <button class="btn btn-outline-primary" type="submit">Apply</button>
+                        </div>
+                        <div class="form-check form-switch mt-2">
+                          <input class="form-check-input" type="checkbox" id="updateCommanderAddCard" name="include_commander" value="1">
+                          <label class="form-check-label small" for="updateCommanderAddCard">Ensure commander card is in the deck</label>
+                        </div>
+                      </form>
+                    </div>
+                    <div class="collapse mt-3" id="renameDeckForm" data-persist-collapse="rename-deck">
+                      <form method="post"
+                            action="{{ url_for('views.build_rename_deck', folder_id=selected_folder.id) }}"
+                            data-preserve-scroll>
+                        <div class="input-group input-group-sm">
+                          <input class="form-control" name="name" value="{{ selected_folder.name }}">
+                          <button class="btn btn-outline-primary" type="submit">Rename</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                <div class="border rounded p-3 h-100">
+                  <div class="fw-semibold text-uppercase small text-muted mb-2">Deck Tag</div>
+                  {% if selected_folder.deck_tag %}
+                    <span class="badge text-bg-info">{{ selected_folder.deck_tag }}</span>
+                  {% else %}
+                    <span class="text-muted">No tag selected</span>
+                  {% endif %}
+                  <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-primary"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#deckTagPicker"
+                            aria-expanded="false"
+                            aria-controls="deckTagPicker">
+                      Set Deck Tag
+                    </button>
+                  </div>
+                  <div id="deckTagPicker" class="collapse mt-3" data-persist-collapse="deck-tag-picker">
+                    <div class="card card-body">
+                      <form method="post"
+                            action="{{ url_for('views.build_set_tag', folder_id=selected_folder.id) }}"
+                            data-preserve-scroll
+                            class="mb-3">
+                        <label class="form-label fw-semibold small" for="deckTagSelect">Choose a deck tag</label>
+                        <select id="deckTagSelect"
+                                class="form-select form-select-sm"
+                                name="tag">
+                          <option value="" {% if not selected_folder.deck_tag %}selected{% endif %}>
+                            Select a deck tag
+                          </option>
+                          {% for category, tags in (deck_tag_groups|default({}, true)).items() %}
+                            <optgroup label="{{ category }}">
+                              {% for tag in tags %}
+                                <option value="{{ tag }}"
+                                        {% if selected_folder.deck_tag == tag %}selected{% endif %}>
+                                  {{ tag }}
+                                </option>
+                              {% endfor %}
+                            </optgroup>
+                          {% endfor %}
+                        </select>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                          <button class="btn btn-sm btn-primary" type="submit">Save Tag</button>
+                          <button class="btn btn-sm btn-outline-secondary"
+                                  type="button"
+                                  data-bs-toggle="collapse"
+                                  data-bs-target="#deckTagPicker">
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                      <form method="post"
+                            action="{{ url_for('views.build_set_tag', folder_id=selected_folder.id) }}"
+                            data-preserve-scroll
+                            data-confirm="Clear the deck tag?">
+                        <input type="hidden" name="tag" value="">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Clear Tag</button>
+                      </form>
+                      {% if theme_options %}
+                        <hr class="my-3">
+                        <div>
+                          <div class="small text-muted mb-2">EDHREC Theme Suggestions</div>
+                          <div class="d-flex flex-wrap gap-2">
+                            {% for option in theme_options %}
+                              <form method="post"
+                                    action="{{ url_for('views.build_set_tag', folder_id=selected_folder.id) }}"
+                                    data-preserve-scroll>
+                                <input type="hidden" name="tag" value="{{ option.label }}">
+                                <button class="btn btn-sm {% if selected_folder.deck_tag and option.label == selected_folder.deck_tag %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                                  {{ option.label }}
+                                </button>
+                              </form>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        {% if analysis_error %}
+          <div class="alert alert-danger">{{ analysis_error }}</div>
+        {% endif %}
+        {% for err in edhrec_errors %}
+          <div class="alert alert-warning">{{ err }}</div>
+        {% endfor %}
+
+        {% if deck_type_chart and edhrec_loaded and edhrec_chart %}
+          {% set edhrec_chart_total = edhrec_chart.content | sum(attribute='value') %}
+          <div class="card shadow-sm mb-4">
+            <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+              <span class="fw-semibold">Type Distribution Comparison</span>
+              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#typeCompareCollapse"
+                      aria-expanded="true"
+                      aria-controls="typeCompareCollapse">
+                <i class="bi bi-chevron-up"></i>
+                <span class="visually-hidden">Toggle type distribution comparison</span>
+              </button>
+            </div>
+            <div id="typeCompareCollapse" class="collapse show" data-persist-collapse="type-compare">
+              <div class="card-body">
+                <p class="text-muted small mb-3">
+                  Compare your deck's type mix against recent EDHREC lists for this commander{% if deck_summary.tag_label %} ({{ deck_summary.tag_label }}){% endif %}.
+                </p>
+                <div class="row g-4">
+                  <div class="col-12 col-lg-6">
+                    <h6 class="text-uppercase small text-muted">Deck Build</h6>
+                    <div class="d-flex flex-column">
+                      {% set total_cards = deck_summary.total_cards or 0 %}
+                      {% for item in deck_type_chart %}
+                        {% set percent = item.percent if item.percent is not none else (item.value * 100 / total_cards) | round(0, 'floor') if total_cards else 0 %}
+                        {% set swatch = item.color or '#0d6efd' %}
+                        <div class="chart-row">
+                          <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="d-flex align-items-center gap-2">
+                              <span class="chart-swatch" style="background-color: {{ swatch }};"></span>
+                              <span class="fw-semibold">{{ item.label }}</span>
+                            </div>
+                            <span class="text-muted small">{{ item.value }} cards ({{ percent }}%)</span>
+                          </div>
+                          <div class="progress">
+                            <div class="progress-bar" style="width: {{ percent }}%; background-color: {{ swatch }};"></div>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <div class="col-12 col-lg-6">
+                    <h6 class="text-uppercase small text-muted">EDHREC Lists</h6>
+                    <div class="d-flex flex-column">
+                      {% for item in edhrec_chart.content %}
+                        {% set percent = ((item.value * 100) / edhrec_chart_total) | round(0, 'floor') if edhrec_chart_total else 0 %}
+                        {% set swatch = item.color or '#0d6efd' %}
+                        <div class="chart-row">
+                          <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="d-flex align-items-center gap-2">
+                              <span class="chart-swatch" style="background-color: {{ swatch }};"></span>
+                              <span class="fw-semibold">{{ item.label }}</span>
+                            </div>
+                            <span class="text-muted small">{{ item.value }} cards ({{ percent }}%)</span>
+                          </div>
+                          <div class="progress">
+                            <div class="progress-bar" style="width: {{ percent }}%; background-color: {{ swatch }};"></div>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          {% set has_deck = deck_type_chart %}
+          {% set has_edhrec = edhrec_loaded and edhrec_chart %}
+          {% if has_deck and has_edhrec %}
+            <div class="row g-4 mb-4">
+              <div class="col-12 col-lg-6 d-flex">
+                {{ render_deck_type_card('h-100 mb-4 mb-xl-0 w-100') }}
+              </div>
+              <div class="col-12 col-lg-6 d-flex">
+                {{ render_edhrec_type_card('h-100 mb-4 mb-xl-0 w-100') }}
+              </div>
+            </div>
+          {% else %}
+            {% if has_deck %}
+              {{ render_deck_type_card() }}
+            {% endif %}
+            {% if has_edhrec %}
+              {{ render_edhrec_type_card() }}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center gap-2">
+            <span class="fw-semibold">Upgrade Plan Workspace</span>
+            <div class="d-flex align-items-center gap-2">
+              {% if upgrade_plan.adds or upgrade_plan.cuts %}
+                <form method="post"
+                      action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                      data-preserve-scroll
+                      class="mb-0">
+                  <input type="hidden" name="action" value="clear">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Clear Plan</button>
+                </form>
+              {% endif %}
+              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#upgradePlanCollapse"
+                      aria-expanded="true"
+                      aria-controls="upgradePlanCollapse">
+                <i class="bi bi-chevron-up"></i>
+                <span class="visually-hidden">Toggle upgrade plan</span>
+              </button>
+            </div>
+          </div>
+          <div id="upgradePlanCollapse" class="collapse show" data-persist-collapse="upgrade-plan">
+            <div class="card-body">
+            <p class="text-muted small mb-3">
+              Mark cards you want to try adding or cutting. This list is stored locally for this playground deck and
+              doesn't change your collection.
+            </p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <h6 class="text-uppercase small text-muted">Potential Additions</h6>
+                {% if upgrade_plan.adds %}
+                  <ul class="list-group list-group-flush">
+                    {% for name in upgrade_plan.adds %}
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {% set hover_src = hover_lookup.get(name|lower) %}
+                        {{ synergy_card_link(name, hover_src) }}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="addition">
+                          <input type="hidden" name="action" value="remove">
+                          <input type="hidden" name="card_name" value="{{ name }}">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-muted small mb-0">Use the buttons below to queue cards for testing.</p>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <h6 class="text-uppercase small text-muted">Consider Cutting</h6>
+                {% if upgrade_plan.cuts %}
+                  <ul class="list-group list-group-flush">
+                    {% for name in upgrade_plan.cuts %}
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {% set hover_src = hover_lookup.get(name|lower) %}
+                        {{ synergy_card_link(name, hover_src) }}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="cut">
+                          <input type="hidden" name="action" value="remove">
+                          <input type="hidden" name="card_name" value="{{ name }}">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+              <p class="text-muted small mb-0">Mark cards from the deck list to revisit here.</p>
+            {% endif %}
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Core Roles</span>
+            <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#coreRolesCollapse"
+                    aria-expanded="true"
+                    aria-controls="coreRolesCollapse">
+              <i class="bi bi-chevron-up"></i>
+              <span class="visually-hidden">Toggle core roles</span>
+            </button>
+          </div>
+          <div id="coreRolesCollapse" class="collapse show" data-persist-collapse="core-roles">
+            <div class="card-body">
+            {% if role_summaries %}
+              <div class="row g-3 build-role-grid">
+                {% for role in role_summaries %}
+                  {% set role_key_attr = role.normalized_key or role.key or ('role-' ~ loop.index0) %}
+                  <div class="col-md-6 col-lg-3">
+                    <div class="border rounded p-3 h-100 build-role-card hover-lift card-hover-shadow"
+                         data-role-key="{{ role_key_attr }}"
+                         data-role-label="{{ role.label }}"
+                         role="button"
+                         tabindex="0"
+                         aria-pressed="false">
+                      <div class="text-muted small text-uppercase mb-1">{{ role.label }}</div>
+                      <div class="display-6 fw-semibold mb-1">{{ role.current }}</div>
+                        <div class="text-muted small mb-2">
+                          cards tagged
+                        </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="card mt-3 build-role-detail-card">
+                <div class="card-body">
+                  <div id="buildRolePlaceholder" class="text-muted small">
+                    Select a role to see the cards contributing to it.
+                  </div>
+                  {% for role in role_summaries %}
+                    {% set role_key_attr = role.normalized_key or role.key or ('role-' ~ loop.index0) %}
+                    <div class="build-role-detail d-none" data-role-detail="{{ role_key_attr }}">
+                      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <h6 class="mb-0">{{ role.label }}</h6>
+                        <span class="badge text-bg-secondary">{{ role.current }} cards</span>
+                      </div>
+                      {% if role.cards %}
+                        <div class="edhrec-card-grid" data-card-collection>
+                          {% for card in role.cards %}
+                            {% set hover_src = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
+                            {% set image_src = hover_src or url_for('static', filename='img/card-placeholder.svg') %}
+                            {% set card_id = card.card_id %}
+                            {% set quantity = card.quantity or 1 %}
+                            {% set synergy = card.best_synergy_percent %}
+                            {% set type_line = card.type_line if card.type_line is defined and card.type_line else (
+                              card.card_type if card.card_type is defined and card.card_type else (
+                                card.type if card.type is defined else none
+                              )
+                            ) %}
+                            {% set tag_tokens = [] %}
+                            {% if card.role_labels %}
+                              {% for label in card.role_labels %}
+                                {% if label and label not in tag_tokens %}
+                                  {% set _ = tag_tokens.append(label) %}
+                                {% endif %}
+                              {% endfor %}
+                            {% endif %}
+                            {% if card.theme_labels %}
+                              {% for label in card.theme_labels %}
+                                {% if label and label not in tag_tokens %}
+                                  {% set _ = tag_tokens.append(label) %}
+                                {% endif %}
+                              {% endfor %}
+                            {% endif %}
+                            {% if not tag_tokens and card.categories %}
+                              {% for label in card.categories %}
+                                {% if label and label not in tag_tokens %}
+                                  {% set _ = tag_tokens.append(label) %}
+                                {% endif %}
+                              {% endfor %}
+                            {% endif %}
+                            <div class="edhrec-card"
+                                 {% if card_id %}data-card-id="{{ card_id }}"{% endif %}
+                                 {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}
+                                 {% if card_id %}data-card-url="{{ url_for('views.card_detail', card_id=card_id) }}"{% endif %}>
+                              <div class="edhrec-card__image">
+                                <img src="{{ image_src }}" alt="{{ card.name }}">
+                              </div>
+                              <div class="edhrec-card__body">
+                                <div class="fw-semibold">
+                                  {{ synergy_card_link(card.name, hover_src, card_id, classes='text-reset text-decoration-none') }}
+                                </div>
+                                <div class="edhrec-card__badges">
+                                  <span class="badge text-bg-secondary">x{{ quantity }}</span>
+                                  {% if synergy is not none %}
+                                    <span class="badge text-bg-primary">{{ '%+d%%' % synergy }} synergy</span>
+                                  {% endif %}
+                                </div>
+                                {% if type_line %}
+                                  <div class="text-muted small">{{ type_line }}</div>
+                                {% endif %}
+                                {% if card.price_text %}
+                                  <div class="text-muted small">Price: {{ card.price_text }}</div>
+                                {% endif %}
+                                {% if tag_tokens %}
+                                  <div class="edhrec-card__tags">
+                                    {% for token in tag_tokens %}
+                                      <span class="theme-pill">{{ token }}</span>
+                                    {% endfor %}
+                                  </div>
+                                {% endif %}
+                              </div>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="text-muted small">No cards tagged for this role yet.</div>
+                      {% endif %}
+                      {% set role_recs = role.recommendations or role.edhrec_recommendations or [] %}
+                      {% if role_recs %}
+                        <div class="mt-4">
+                          <h6 class="small text-uppercase text-muted mb-2">Recommended additions</h6>
+                          <div class="edhrec-card-grid" data-card-collection>
+                            {% for rec in role_recs %}
+                              {% set hover_src = rec.hover_image or hover_lookup.get(rec.name|default('', true)|lower) %}
+                              {% set image_src = hover_src or url_for('static', filename='img/card-placeholder.svg') %}
+                              {% if rec is mapping %}
+                                {% set type_line = rec.get('type_line') or rec.get('card_type') or rec.get('type_label') or rec.get('type') %}
+                                {% set color_identity_html = rec.get('color_identity_html') %}
+                                {% set color_identity = rec.get('color_identity') %}
+                                {% set reason_text = rec.get('notes') or rec.get('reason') %}
+                              {% else %}
+                                {% set type_line = rec.type_line if rec.type_line is defined and rec.type_line else (
+                                  rec.card_type if rec.card_type is defined and rec.card_type else (
+                                    rec.type if rec.type is defined else none
+                                  )
+                                ) %}
+                                {% set color_identity_html = rec.color_identity_html if rec.color_identity_html is defined else None %}
+                                {% set color_identity = rec.color_identity if rec.color_identity is defined else None %}
+                                {% set reason_text = rec.notes if rec.notes is defined else (rec.reason if rec.reason is defined else None) %}
+                              {% endif %}
+                              {% set synergy = rec.synergy_percent if rec.synergy_percent is defined and rec.synergy_percent is not none else None %}
+                              {% set in_deck = rec.already_in_deck if rec.already_in_deck is defined else False %}
+                              {% set owned = rec.owned if rec.owned is defined else False %}
+                              {% set matches_colors = rec.matches_deck_colors if rec.matches_deck_colors is defined else None %}
+                              <div class="edhrec-card"
+                                   {% if rec.card_id %}data-card-id="{{ rec.card_id }}"{% endif %}
+                                   {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}
+                                   {% if rec.card_id %}data-card-url="{{ url_for('views.card_detail', card_id=rec.card_id) }}"{% endif %}>
+                                <div class="edhrec-card__image">
+                                  <img src="{{ image_src }}" alt="{{ rec.name }}">
+                                </div>
+                                <div class="edhrec-card__body">
+                                  <div class="fw-semibold">
+                                    {{ synergy_card_link(rec.name, hover_src, rec.card_id, classes='text-reset text-decoration-none') }}
+                                  </div>
+                                  {% if synergy is not none or in_deck or owned %}
+                                    <div class="edhrec-card__badges">
+                                      {% if synergy is not none %}
+                                        <span class="badge text-bg-primary">Synergy {{ synergy }}%</span>
+                                      {% endif %}
+                                      {% if in_deck %}
+                                        <span class="badge text-bg-success">In Deck</span>
+                                      {% endif %}
+                                      {% if owned and not in_deck %}
+                                        <span class="badge text-bg-info text-dark">Owned</span>
+                                      {% endif %}
+                                    </div>
+                                  {% endif %}
+                                  {% if matches_colors is not none %}
+                                    <div class="text-muted small">
+                                      {{ 'Matches colors' if matches_colors else 'Off-color' }}
+                                    </div>
+                                  {% endif %}
+                                  {% if color_identity_html %}
+                                    <div class="text-muted small mana-inline justify-content-center" aria-label="Color identity">
+                                      {{ color_identity_html | safe }}
+                                    </div>
+                                  {% endif %}
+                                  {% if type_line %}
+                                    <div class="text-muted small">{{ type_line }}</div>
+                                  {% endif %}
+                                  {% if rec.price_text %}
+                                    <div class="text-muted small">Price: {{ rec.price_text }}</div>
+                                  {% endif %}
+                                  {% if rec.role_labels %}
+                                    <div class="edhrec-card__tags">
+                                      {% for label in rec.role_labels %}
+                                        <span class="theme-pill">{{ label }}</span>
+                                      {% endfor %}
+                                    </div>
+                                  {% endif %}
+                                  {% if reason_text %}
+                                    <div class="text-muted small">{{ reason_text }}</div>
+                                  {% endif %}
+                                  <div class="edhrec-card__actions">
+                                    {% if not in_deck %}
+                                      <form method="post"
+                                            action="{{ url_for('views.build_add_card', folder_id=selected_folder.id) }}"
+                                            data-preserve-scroll
+                                            data-build-add="queue"
+                                            class="mb-0">
+                                        <input type="hidden" name="card_name" value="{{ rec.name }}">
+                                        <button class="btn btn-outline-primary btn-sm" type="submit">Queue Add</button>
+                                      </form>
+                                    {% endif %}
+                                    <form method="post"
+                                          action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                                          data-preserve-scroll
+                                          class="mb-0">
+                                      <input type="hidden" name="mode" value="addition">
+                                      <input type="hidden" name="action" value="add">
+                                      <input type="hidden" name="card_name" value="{{ rec.name }}">
+                                      <button class="btn btn-outline-secondary btn-sm"
+                                              type="submit"
+                                              {% if rec.name in upgrade_plan.adds %}disabled{% endif %}>
+                                        Queue Upgrade
+                                      </button>
+                                    </form>
+                                    {% if rec.name in upgrade_plan.adds %}
+                                      <span class="badge text-bg-success">Queued</span>
+                                    {% endif %}
+                                  </div>
+                                </div>
+                              </div>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <p class="text-muted mb-0">Add cards to see role coverage recommendations.</p>
+            {% endif %}
+            </div>
+          </div>
+        </div>
+
+{% if edhrec_loaded and edhrec_category_rows %}
+  {% set explorer_id = 'edhrecExplorerCollapse' %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">EDHREC Explorer</span>
+      <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#{{ explorer_id }}"
+              aria-expanded="true"
+              aria-controls="{{ explorer_id }}">
+        <i class="bi bi-chevron-up"></i>
+        <span class="visually-hidden">Toggle EDHREC Explorer</span>
+      </button>
+    </div>
+    <div id="{{ explorer_id }}" class="collapse show" data-persist-collapse="edhrec-explorer">
+      <div class="card-body">
+              <p class="text-muted small">
+                Open a category to browse EDHREC recommendations. Cards already in your deck are marked, and you can add new ones with a single click.
+              </p>
+              <div class="edhrec-category-stack d-flex flex-column gap-3">
+                {% for category, cards in edhrec_category_rows %}
+                  <details class="build-toggle"
+                           data-edhrec-category="{{ category|e }}"
+                           {% if loop.index <= 3 %}open{% endif %}>
+                    <summary class="d-flex align-items-center gap-2 fw-semibold">
+                      <span>{{ category }}</span>
+                      <span class="badge text-bg-secondary">{{ cards|length }}</span>
+                    </summary>
+                    {% if cards %}
+                      {% set addable_cards = cards | rejectattr('already_in_deck', 'equalto', True) | map(attribute='name') | list %}
+                      {% if category in ("High Synergy Cards", "Top Cards") and addable_cards %}
+                        <div class="mt-2">
+                          <form method="post"
+                                action="{{ url_for('views.build_bulk_add_cards', folder_id=selected_folder.id) }}"
+                                class="d-inline-flex"
+                                data-preserve-scroll>
+                            <textarea name="bulk_cards" class="d-none">{{ addable_cards | join('\n') }}</textarea>
+                            <button class="btn btn-sm btn-outline-primary" type="submit">
+                              Add all {{ category }}
+                            </button>
+                          </form>
+                        </div>
+                      {% endif %}
+                      <div class="edhrec-card-grid mt-2" data-card-collection>
+                        {% for card in cards %}
+                          {% set hover_src = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
+                          {% set image_src = hover_src or url_for('static', filename='img/card-placeholder.svg') %}
+                          {% if card is mapping %}
+                            {% set type_line = card.get('type_line') or card.get('card_type') or card.get('type_label') or card.get('type') %}
+                            {% set color_identity_html = card.get('color_identity_html') %}
+                            {% set color_identity = card.get('color_identity') %}
+                          {% else %}
+                            {% set type_line = card.type_line if card.type_line is defined and card.type_line else (
+                              card.card_type if card.card_type is defined and card.card_type else (
+                                card.type if card.type is defined else none
+                              )
+                            ) %}
+                            {% set color_identity_html = card.color_identity_html if card.color_identity_html is defined else None %}
+                            {% set color_identity = card.color_identity if card.color_identity is defined else None %}
+                          {% endif %}
+                          {% set synergy = card.synergy_percent if card.synergy_percent is defined and card.synergy_percent is not none else None %}
+                          {% set in_deck = card.already_in_deck if card.already_in_deck is defined else False %}
+                          {% set owned = card.owned if card.owned is defined else False %}
+                          {% set matches_colors = card.matches_deck_colors if card.matches_deck_colors is defined else None %}
+                          <div class="edhrec-card"
+                               {% if card.card_id %}data-card-id="{{ card.card_id }}"{% endif %}
+                               {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}
+                               {% if card.card_id %}data-card-url="{{ url_for('views.card_detail', card_id=card.card_id) }}"{% endif %}>
+                            <div class="edhrec-card__image">
+                              <img src="{{ image_src }}" alt="{{ card.name }}">
+                            </div>
+                            <div class="edhrec-card__body">
+                              <div class="fw-semibold">
+                                {{ synergy_card_link(card.name, hover_src, card.card_id, classes='text-reset text-decoration-none') }}
+                              </div>
+                              {% if synergy is not none or in_deck or owned %}
+                                <div class="edhrec-card__badges">
+                                  {% if synergy is not none %}
+                                    <span class="badge text-bg-primary">Synergy {{ synergy }}%</span>
+                                  {% endif %}
+                                  {% if in_deck %}
+                                    <span class="badge text-bg-success">In Deck</span>
+                                  {% endif %}
+                                  {% if owned and not in_deck %}
+                                    <span class="badge text-bg-info text-dark">Owned</span>
+                                  {% endif %}
+                                </div>
+                              {% endif %}
+                              {% if card.category or matches_colors is not none %}
+                                <div class="text-muted small">
+                                  {{ card.category }}
+                                  {% if card.category and matches_colors is not none %}
+                                    &middot;
+                                  {% endif %}
+                                  {% if matches_colors is not none %}
+                                    {{ 'Matches colors' if matches_colors else 'Off-color' }}
+                                  {% endif %}
+                                </div>
+                              {% endif %}
+                              {% if color_identity_html %}
+                                <div class="text-muted small mana-inline justify-content-center" aria-label="Color identity">
+                                  {{ color_identity_html | safe }}
+                                </div>
+                              {% endif %}
+                              {% if type_line %}
+                                <div class="text-muted small">{{ type_line }}</div>
+                              {% endif %}
+                              {% if card.price_text %}
+                                <div class="text-muted small">Price: {{ card.price_text }}</div>
+                              {% endif %}
+                              {% if card.price_text %}
+                                <div class="text-muted small">Price: {{ card.price_text }}</div>
+                              {% endif %}
+                              {% if card.role_labels %}
+                                <div class="edhrec-card__tags">
+                                  {% for role_label in card.role_labels %}
+                                    <span class="theme-pill">{{ role_label }}</span>
+                                  {% endfor %}
+                                </div>
+                              {% endif %}
+                              <div class="edhrec-card__actions">
+                                {% if not in_deck %}
+                                  <form method="post"
+                                        action="{{ url_for('views.build_add_card', folder_id=selected_folder.id) }}"
+                                        data-preserve-scroll
+                                        data-build-add="queue"
+                                        class="mb-0">
+                                    <input type="hidden" name="card_name" value="{{ card.name }}">
+                                    <button class="btn btn-outline-primary btn-sm" type="submit">Queue Add</button>
+                                  </form>
+                                {% endif %}
+                                <form method="post"
+                                      action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                                      data-preserve-scroll
+                                      class="mb-0">
+                                  <input type="hidden" name="mode" value="addition">
+                                  <input type="hidden" name="action" value="add">
+                                  <input type="hidden" name="card_name" value="{{ card.name }}">
+                                  <button class="btn btn-outline-secondary btn-sm"
+                                          type="submit"
+                                          {% if card.name in upgrade_plan.adds %}disabled{% endif %}>
+                                    Queue Upgrade
+                                  </button>
+                                </form>
+                                {% if card.name in upgrade_plan.adds %}
+                                  <span class="badge text-bg-success">Queued</span>
+                                {% endif %}
+                              </div>
+                            </div>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <p class="text-muted small mt-2 mb-0">No cards found in this category.</p>
+                    {% endif %}
+                  </details>
+                {% endfor %}
+              </div>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+        <div class="card shadow-sm">
+          <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center gap-2">
+            <span class="fw-semibold">Deck List</span>
+            <div class="d-flex align-items-center gap-2">
+              {% if deck_card_rows %}
+                <form method="post"
+                      action="{{ url_for('views.list_checker') }}"
+                      class="mb-0">
+                  <textarea name="card_list" class="d-none">{{- deck_list_text | e -}}</textarea>
+                  <button class="btn btn-outline-secondary btn-sm" type="submit">Send to List Checker</button>
+                </form>
+              {% endif %}
+              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#deckListCollapse"
+                      aria-expanded="true"
+                      aria-controls="deckListCollapse">
+                <i class="bi bi-chevron-up"></i>
+                <span class="visually-hidden">Toggle deck list</span>
+              </button>
+            </div>
+          </div>
+          <div id="deckListCollapse" class="collapse show" data-persist-collapse="deck-list">
+            <div class="card-body">
+            {% set deck_tag_label = deck_summary.tag_label or deck_summary.tag or 'Deck Tag' %}
+            {% if deck_card_rows %}
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+                <div class="text-muted small fw-semibold text-uppercase">Card Display</div>
+                <div class="btn-group btn-group-sm view-toggle-group" role="group" aria-label="Card display mode">
+                  <button type="button" class="btn btn-outline-secondary view-mode-active" data-view-toggle="grid" aria-pressed="true">
+                    <i class="bi bi-grid-3x3-gap-fill me-1" aria-hidden="true"></i> Gallery
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" data-view-toggle="list" aria-pressed="false">
+                    <i class="bi bi-list-ul me-1" aria-hidden="true"></i> List
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" data-view-toggle="goldfish" aria-pressed="false">
+                    <i class="bi bi-table me-1" aria-hidden="true"></i> Breakdown
+                  </button>
+                </div>
+              </div>
+
+              <div class="row g-2 align-items-end mb-3">
+                <div class="col-sm-6 col-lg-4">
+                  <label for="deckCardFilterInput" class="form-label small text-uppercase text-muted mb-1">Filter cards</label>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="search"
+                           id="deckCardFilterInput"
+                           class="form-control"
+                           placeholder="Search name, role, or type"
+                           data-deck-filter-input>
+                    <button class="btn btn-outline-secondary"
+                            type="button"
+                            data-deck-filter-clear
+                           disabled>
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div id="buildRoleFilterHint" class="alert alert-primary d-flex align-items-center justify-content-between gap-3 py-2 px-3 small d-none">
+                <div class="mb-0">
+                  Filtering deck list to <span class="fw-semibold" data-role-label>Role</span> cards.
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="buildRoleFilterClear">
+                  Clear filter
+                </button>
+              </div>
+              <div class="deck-card-grid" data-card-collection>
+                {% for card in deck_card_rows %}
+                  {% set card_id = card.card_id %}
+                  {% set card_hover = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
+                  {% set image_src = card_hover or url_for('static', filename='img/card-placeholder.svg') %}
+                  {% set commander_source = card.commander_source %}
+                  {% set commander_synergy = commander_source.synergy_percent if commander_source else None %}
+                  {% set theme_source = card.theme_source %}
+                  {% set theme_synergy = theme_source.synergy_percent if theme_source else None %}
+                  {% set deck_role_keys = card.normalized_roles if card.normalized_roles is defined else (card.roles or []) %}
+                  {% set type_line = card.type_line if card.type_line is defined and card.type_line else (
+                    card.card_type if card.card_type is defined and card.card_type else (
+                      card.type if card.type is defined else none
+                    )
+                  ) %}
+                  {% set color_identity_html = card.color_identity_html if card.color_identity_html is defined else None %}
+                  {% set color_identity = card.color_identity if card.color_identity is defined else None %}
+                  {% set available_copies = (
+                    card.available_in_collection if card.available_in_collection is defined and card.available_in_collection else
+                    (card.collection_available if card.collection_available is defined and card.collection_available else
+                    (card.available if card.available is defined and card.available else 0))
+                  ) | int %}
+                  {% set search_tokens = [card.name] %}
+                  {% if type_line %}{% set _ = search_tokens.append(type_line) %}{% endif %}
+                  {% if card.primary_type %}{% set _ = search_tokens.append(card.primary_type) %}{% endif %}
+                  {% if card.color_identity_label %}{% set _ = search_tokens.append(card.color_identity_label) %}{% endif %}
+                  {% if color_identity %}{% set _ = search_tokens.append(color_identity | join(' ')) %}{% endif %}
+                  {% if card.notes %}{% set _ = search_tokens.append(card.notes) %}{% endif %}
+                  {% for role_key in deck_role_keys or [] %}
+                    {% if role_key %}{% set _ = search_tokens.append(role_key) %}{% endif %}
+                  {% endfor %}
+                  <div class="deck-card"
+                        data-deck-card
+                        data-role-keys="{{ (deck_role_keys or []) | join(' ') }}"
+                        data-card-name="{{ card.name|e }}"
+                        data-card-search="{{ search_tokens|join(' ')|lower }}"
+                        {% if card_id %}data-card-id="{{ card_id }}"{% endif %}
+                        {% if card_hover %}data-hover-src="{{ card_hover }}"{% endif %}
+                        {% if card_id %}data-card-url="{{ url_for('views.card_detail', card_id=card_id) }}"{% endif %}>
+                     <div class="deck-card__image">
+                       <img src="{{ image_src }}" alt="{{ card.name }}">
+                    </div>
+                    <div class="deck-card__body">
+                      <div class="fw-semibold d-flex flex-wrap justify-content-center gap-2">
+                        {{ synergy_card_link(card.name, card_hover, card_id, classes='text-reset text-decoration-none') }}
+                        {% if card.quantity and card.quantity > 1 %}
+                          <span class="badge rounded-pill bg-secondary-subtle text-secondary">x{{ card.quantity }}</span>
+                        {% endif %}
+                        {% if card.name in upgrade_plan.cuts %}
+                          <span class="badge text-bg-warning text-dark">Marked for Cut</span>
+                        {% endif %}
+                      </div>
+                      {% if commander_synergy is not none or theme_synergy is not none or available_copies %}
+                        <div class="deck-card__badges">
+                          {% if commander_synergy is not none %}
+                            <span class="badge text-bg-primary">Commander {{ '+' if commander_synergy >= 0 else '' }}{{ commander_synergy }}%</span>
+                          {% endif %}
+                          {% if theme_synergy is not none %}
+                            <span class="badge text-bg-primary">{{ deck_tag_label }} {{ '+' if theme_synergy >= 0 else '' }}{{ theme_synergy }}%</span>
+                          {% endif %}
+                          {% if available_copies %}
+                            <span class="badge text-bg-info text-dark">Available{% if available_copies > 1 %} x{{ available_copies }}{% endif %}</span>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+                      {% if color_identity_html %}
+                        <div class="text-muted small mana-inline justify-content-center" aria-label="Color identity">
+                          {{ color_identity_html | safe }}
+                        </div>
+                      {% endif %}
+                      {% if type_line %}
+                        <div class="deck-card__meta text-muted small">
+                          <span>{{ type_line }}</span>
+                        </div>
+                      {% endif %}
+                      {% if card.price_text %}
+                        <div class="text-muted small">Price: {{ card.price_text }}</div>
+                      {% endif %}
+                      {% set tag_tokens = [] %}
+                      {% if card.role_labels %}
+                        {% for label in card.role_labels %}
+                          {% if label %}
+                            {% set _ = tag_tokens.append(label) %}
+                            {% set _ = search_tokens.append(label) %}
+                          {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                      {% if card.theme_labels %}
+                        {% for label in card.theme_labels %}
+                          {% if label %}
+                            {% set _ = tag_tokens.append(label) %}
+                            {% set _ = search_tokens.append(label) %}
+                          {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                      {% if not card.role_labels and not card.theme_labels and card.categories %}
+                        {% for label in card.categories %}
+                          {% if label %}
+                            {% set _ = tag_tokens.append(label) %}
+                            {% set _ = search_tokens.append(label) %}
+                          {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                      {% if card.tag_labels %}
+                        {% for label in card.tag_labels %}
+                          {% if label %}
+                            {% set _ = search_tokens.append(label) %}
+                          {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                      {% if tag_tokens %}
+                        <div class="deck-card__tags">
+                          {% for token in tag_tokens %}
+                            <span class="theme-pill">{{ token }}</span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                      <div class="deck-card__actions">
+                        {% if card_id %}
+                          <form method="post"
+                                action="{{ url_for('views.build_remove_card', folder_id=selected_folder.id) }}"
+                                data-preserve-scroll
+                                class="mb-0">
+                            <input type="hidden" name="card_id" value="{{ card_id }}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">-1</button>
+                          </form>
+                          <form method="post"
+                                action="{{ url_for('views.build_remove_card', folder_id=selected_folder.id) }}"
+                                data-preserve-scroll
+                                class="mb-0"
+                                data-confirm="Remove all copies of {{ card.name }}?">
+                            <input type="hidden" name="card_id" value="{{ card_id }}">
+                            <input type="hidden" name="mode" value="remove_all">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                          </form>
+                        {% endif %}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="cut">
+                          <input type="hidden" name="action" value="add">
+                          <input type="hidden" name="card_name" value="{{ card.name }}">
+                          <button class="btn btn-sm btn-outline-warning"
+                                  type="submit"
+                                  {% if card.name in upgrade_plan.cuts %}disabled{% endif %}>
+                            Mark Cut
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="goldfish-view">
+                {% set breakdown_groups = deck_goldfish_groups | default([], true) %}
+                {% if breakdown_groups %}
+                  <div class="goldfish-columns">
+                    {% for section in breakdown_groups %}
+                      <section class="goldfish-section">
+                        <div class="goldfish-section-title">
+                          <span>{{ section.label }}</span>
+                          <span class="text-muted">{{ section.total }}</span>
+                        </div>
+                        <table class="goldfish-table">
+                          <tbody>
+                            {% for card in section.cards %}
+                              {% set card_id = card.card_id %}
+                              {% set card_hover = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
+                              {% set role_keys = card.normalized_roles if card.normalized_roles is defined else (card.roles or []) %}
+                              {% set search_tokens = [card.name] %}
+                              {% if card.type_line %}{% set _ = search_tokens.append(card.type_line) %}{% endif %}
+                              {% if card.primary_type %}{% set _ = search_tokens.append(card.primary_type) %}{% endif %}
+                              {% if card.color_identity_label is defined and card.color_identity_label %}{% set _ = search_tokens.append(card.color_identity_label) %}{% endif %}
+                              {% if card.notes %}{% set _ = search_tokens.append(card.notes) %}{% endif %}
+                              {% for label in role_keys %}
+                                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+                              {% endfor %}
+                              {% for label in card.theme_labels|default([], true) %}
+                                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+                              {% endfor %}
+                              {% for label in card.categories|default([], true) %}
+                                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+                              {% endfor %}
+                                {% for label in card.tag_labels|default([], true) %}
+                                  {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+                                {% endfor %}
+                              {% set mana_value = card.mana_value %}
+                              {% if mana_value is string %}
+                                {% set mana_value = mana_value|float %}
+                              {% endif %}
+                              {% set mana_display = card.mana_cost_html %}
+                              {% if not mana_display and card.color_identity_html %}
+                                {% set mana_display = card.color_identity_html %}
+                              {% endif %}
+                              <tr class="goldfish-card-row"
+                                  data-deck-card
+                                  data-role-keys="{{ (role_keys or []) | join(' ') }}"
+                                  data-card-name="{{ (card.name or '')|lower }}"
+                                  data-card-search="{{ search_tokens|join(' ')|lower }}">
+                                <td class="align-middle">
+                                  {% set qty = card.quantity|default(1, true) %}
+                                  {% set qty = qty|int %}
+                                  {% if qty <= 0 %}{% set qty = 1 %}{% endif %}
+                                  {{ qty }}
+                                </td>
+                                <td class="align-middle">
+                                  <div class="goldfish-name">
+                                    <div class="goldfish-name-primary">
+                                      {{ synergy_card_link(card.name, card_hover, card_id, classes='text-reset text-decoration-none fw-semibold') }}
+                                      {% if mana_display %}
+                                        <span class="goldfish-mana" aria-label="Mana identity">{{ mana_display|safe }}</span>
+                                      {% endif %}
+                                      {% if mana_value is not none %}
+                                        {% set mana_value_str = "{:g}".format(mana_value|float) %}
+                                        {% if mana_value_str != '0' or card.mana_cost_html %}
+                                          <span class="goldfish-cmc-badge" aria-label="Mana value">{{ mana_value_str }}</span>
+                                        {% endif %}
+                                      {% endif %}
+                                    </div>
+                                    {% if card.type_line %}
+                                      <div class="goldfish-type-line">{{ card.type_line }}</div>
+                                    {% endif %}
+                                  </div>
+                                </td>
+                                <td class="align-middle text-end">
+                                  {% set price_usd = card.prices.usd if card.prices else None %}
+                                  {% if price_usd %}
+                                    {% set price_value = price_usd %}
+                                    {% if price_value is string %}
+                                      {% set price_value = price_value|float %}
+                                    {% endif %}
+                                    ${{ "%.2f"|format(price_value|float) }}
+                                  {% elif card.price_text %}
+                                    {{ card.price_text }}
+                                  {% else %}
+                                    &mdash;
+                                  {% endif %}
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </section>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <p class="text-muted small mb-0">No cards added yet. Use the suggestions above or add cards manually to start shaping the list.</p>
+                {% endif %}
+              </div>
+              <div id="deckCardEmpty" class="text-muted small text-center py-4 d-none">
+                No cards match the current filters.
+              </div>
+            {% else %}
+              <p class="text-muted mb-0">No cards added yet. Use the suggestions above or add cards manually to start shaping the list.</p>
+            {% endif %}
+          </div>
+        </div>
+        </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  const buildDeckState = window.__buildDeckState || (window.__buildDeckState = {});
+  if (typeof buildDeckState.preserveNextNavigation !== 'boolean') {
+    buildDeckState.preserveNextNavigation = false;
+  }
+  if (typeof buildDeckState.deckFilterValue !== 'string') {
+    buildDeckState.deckFilterValue = '';
+  }
+
+  const initBuildDeck = () => {
+    const SCROLL_KEY = 'build-a-deck.scrollY';
+    const DETAILS_KEY = 'build-a-deck.details';
+    const COLLAPSE_KEY = 'build-a-deck.collapse';
+    const dvScroll = (window.DV && window.DV.scroll) || null;
+    const buildRoot = document.getElementById('buildDeckRoot');
+    if (!buildRoot) {
+      return;
+    }
+    buildDeckState.preserveNextNavigation = false;
+
+    const readDetailsState = () => {
+      try {
+        const raw = localStorage.getItem(DETAILS_KEY) || sessionStorage.getItem(DETAILS_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+      } catch (err) {
+        return {};
+      }
+    };
+
+    const detailState = readDetailsState();
+
+    const persistDetailsState = () => {
+      try {
+        localStorage.setItem(DETAILS_KEY, JSON.stringify(detailState));
+        sessionStorage.removeItem(DETAILS_KEY);
+      } catch (err) {
+        /* ignore */
+      }
+    };
+
+    buildRoot.querySelectorAll('details[data-edhrec-category]').forEach((detailsEl) => {
+      const key = detailsEl.dataset.edhrecCategory;
+      if (!key) return;
+      if (detailsEl.dataset.edhrecBound === '1') return;
+      detailsEl.dataset.edhrecBound = '1';
+      if (detailState[key] === true || detailState[key] === 'open') {
+        detailsEl.open = true;
+      } else if (detailState[key] === false || detailState[key] === 'closed') {
+        detailsEl.open = false;
+      }
+      detailsEl.addEventListener('toggle', () => {
+        detailState[key] = detailsEl.open;
+        persistDetailsState();
+      });
+    });
+
+    const readCollapseState = () => {
+      try {
+        const raw = localStorage.getItem(COLLAPSE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+      } catch (err) {
+        return {};
+      }
+    };
+
+    const collapseState = readCollapseState();
+
+    const persistCollapseState = () => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapseState));
+      } catch (err) {
+        /* ignore */
+      }
+    };
+
+    const escapeSelector = (value) => {
+      if (window.CSS && typeof CSS.escape === 'function') {
+        return CSS.escape(value);
+      }
+      return value.replace(/([ #;?%&,.+*~':"^$[\]()=>|\/@])/g, '\\$1');
+    };
+
+    const collapseSections = Array.from(buildRoot.querySelectorAll('[data-persist-collapse]'));
+
+    collapseSections.forEach((section) => {
+      const stateId = section.getAttribute('data-persist-collapse') || section.id || '';
+      if (!stateId) return;
+      if (section.dataset.collapseBound === '1') return;
+      section.dataset.collapseBound = '1';
+      const stored = collapseState[stateId];
+      const initialIsShown = section.classList.contains('show');
+      const shouldShow = stored === 'hidden' ? false : (stored === 'shown' ? true : initialIsShown);
+
+      section.classList.toggle('show', shouldShow);
+      if (!section.classList.contains('collapse')) {
+        section.classList.add('collapse');
+      }
+
+      const selector = section.id ? `[data-bs-target="#${escapeSelector(section.id)}"]` : '';
+      if (selector) {
+        document.querySelectorAll(selector).forEach((btn) => {
+          btn.setAttribute('aria-expanded', shouldShow ? 'true' : 'false');
+        });
+      }
+
+      section.addEventListener('shown.bs.collapse', () => {
+        collapseState[stateId] = 'shown';
+        persistCollapseState();
+        if (selector) {
+          document.querySelectorAll(selector).forEach((btn) => btn.setAttribute('aria-expanded', 'true'));
+        }
+      });
+
+      section.addEventListener('hidden.bs.collapse', () => {
+        collapseState[stateId] = 'hidden';
+        persistCollapseState();
+        if (selector) {
+          document.querySelectorAll(selector).forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+        }
+      });
+    });
+
+    const restoreScroll = () => {
+      let stored = null;
+      try {
+        stored = sessionStorage.getItem(SCROLL_KEY);
+      } catch (err) {
+        stored = null;
+      }
+      if (stored !== null) {
+        const target = parseInt(stored, 10);
+        if (!Number.isNaN(target)) {
+          window.scrollTo(0, target);
+        }
+        try {
+          sessionStorage.removeItem(SCROLL_KEY);
+        } catch (err) {
+          /* ignore */
+        }
+        if (dvScroll && typeof dvScroll.clear === 'function') {
+          dvScroll.clear();
+        }
+      } else {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    if (!window.__buildDeckRestoreBound) {
+      window.addEventListener('load', restoreScroll);
+      window.__buildDeckRestoreBound = true;
+    }
+
+    const rememberScroll = () => {
+      try {
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+      } catch (err) {
+        /* ignore */
+      }
+      if (dvScroll && typeof dvScroll.mark === 'function') {
+        dvScroll.mark();
+      }
+    };
+
+    buildRoot.querySelectorAll('form[data-preserve-scroll]').forEach((form) => {
+      if (form.dataset.buildScrollBound === '1') return;
+      form.dataset.buildScrollBound = '1';
+      form.addEventListener('submit', () => {
+        buildDeckState.preserveNextNavigation = true;
+        rememberScroll();
+        persistDetailsState();
+      });
+    });
+
+    const resetScrollMarkers = () => {
+      if (dvScroll && typeof dvScroll.clear === 'function') {
+        dvScroll.clear();
+      }
+    };
+
+    buildRoot.querySelectorAll('a[href]').forEach((link) => {
+      if (link.dataset.buildScrollBound === '1') return;
+      link.dataset.buildScrollBound = '1';
+      link.addEventListener('click', () => {
+        buildDeckState.preserveNextNavigation = false;
+        try {
+          sessionStorage.removeItem(SCROLL_KEY);
+        } catch (err) {
+          /* ignore */
+        }
+        resetScrollMarkers();
+      });
+
+      link.addEventListener('mousedown', rememberScroll);
+      link.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter' || evt.key === ' ') {
+          rememberScroll();
+        }
+      });
+    });
+
+    if (!window.__buildDeckBeforeUnloadBound) {
+      window.addEventListener('beforeunload', () => {
+        rememberScroll();
+        if (!buildDeckState.preserveNextNavigation) {
+          resetScrollMarkers();
+        }
+        buildDeckState.preserveNextNavigation = false;
+      });
+      window.__buildDeckBeforeUnloadBound = true;
+    }
+    const buildRoleCards = Array.from(buildRoot.querySelectorAll('.build-role-card[data-role-key]'));
+    const buildRoleDetails = Array.from(buildRoot.querySelectorAll('.build-role-detail[data-role-detail]'));
+    const buildRolePlaceholder = buildRoot.querySelector('#buildRolePlaceholder');
+    const deckCards = Array.from(buildRoot.querySelectorAll('[data-deck-card][data-role-keys]'));
+    const deckEmptyState = buildRoot.querySelector('#deckCardEmpty');
+    const deckFilterInput = buildRoot.querySelector('[data-deck-filter-input]');
+    const deckFilterClear = buildRoot.querySelector('[data-deck-filter-clear]');
+    let deckFilterValue = buildDeckState.deckFilterValue || '';
+    if (deckFilterInput && deckFilterInput.value !== deckFilterValue) {
+      deckFilterInput.value = deckFilterValue;
+    }
+    if (!deckCards.length && deckFilterValue) {
+      deckFilterValue = '';
+      buildDeckState.deckFilterValue = '';
+      if (deckFilterInput) {
+        deckFilterInput.value = '';
+      }
+    }
+    const buildRoleHint = buildRoot.querySelector('#buildRoleFilterHint');
+    const buildRoleHintLabel = buildRoleHint ? buildRoleHint.querySelector('[data-role-label]') : null;
+    const buildRoleClearBtn = buildRoot.querySelector('#buildRoleFilterClear');
+    let activeRoleKey = '';
+
+    const applyDeckFilters = () => {
+      const query = (deckFilterValue || '').trim().toLowerCase();
+      let visible = 0;
+      deckCards.forEach((card) => {
+        const roles = (card.dataset.roleKeys || '').split(/\s+/).filter(Boolean);
+        const matchRole = !activeRoleKey || roles.includes(activeRoleKey);
+        const haystack = card.dataset.cardSearch || '';
+        const matchSearch = !query || haystack.includes(query);
+        const isVisible = matchRole && matchSearch;
+        card.classList.toggle('d-none', !isVisible);
+        card.classList.toggle('role-match', !!activeRoleKey && isVisible);
+        if (isVisible) {
+          visible += 1;
+        }
+      });
+      if (deckEmptyState) {
+        deckEmptyState.classList.toggle('d-none', visible !== 0);
+      }
+      if (deckFilterClear) {
+        deckFilterClear.disabled = !query;
+      }
+    };
+
+    if (deckFilterInput && deckFilterInput.dataset.deckFilterHandlerBound !== '1') {
+      deckFilterInput.dataset.deckFilterHandlerBound = '1';
+      deckFilterInput.addEventListener('input', (evt) => {
+        deckFilterValue = evt.target.value || '';
+        buildDeckState.deckFilterValue = deckFilterValue;
+        applyDeckFilters();
+      });
+    }
+    if (deckFilterClear && deckFilterClear.dataset.deckFilterClearBound !== '1') {
+      deckFilterClear.dataset.deckFilterClearBound = '1';
+      deckFilterClear.addEventListener('click', () => {
+        if (deckFilterInput) {
+          deckFilterInput.value = '';
+        }
+        deckFilterValue = '';
+        buildDeckState.deckFilterValue = '';
+        applyDeckFilters();
+        if (deckFilterInput) {
+          deckFilterInput.focus();
+        }
+      });
+    }
+
+    const viewButtons = Array.from(buildRoot.querySelectorAll('[data-view-toggle]'));
+    const VIEW_MODE_KEY = 'dv:build-view-mode';
+    const allowedViewModes = new Set(['grid', 'list', 'goldfish']);
+
+    const setViewMode = (mode, { store = true } = {}) => {
+      const targetMode = allowedViewModes.has(mode) ? mode : 'grid';
+      if (buildRoot) {
+        buildRoot.dataset.viewMode = targetMode;
+      }
+      viewButtons.forEach((btn) => {
+        const isActive = (btn.dataset.viewToggle || 'grid') === targetMode;
+        btn.classList.toggle('view-mode-active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+      if (store) {
+        try {
+          localStorage.setItem(VIEW_MODE_KEY, targetMode);
+        } catch (err) {
+          /* ignore storage persistence issues */
+        }
+      }
+      applyDeckFilters();
+    };
+
+    const readStoredViewMode = () => {
+      try {
+        const stored = localStorage.getItem(VIEW_MODE_KEY);
+        if (stored && allowedViewModes.has(stored)) {
+          return stored;
+        }
+      } catch (err) {
+        /* ignore */
+      }
+      return 'grid';
+    };
+
+    if (buildRoot) {
+      setViewMode(readStoredViewMode(), { store: false });
+    }
+
+    buildDeckState.viewButtonHandlers = buildDeckState.viewButtonHandlers || new Map();
+    buildDeckState.viewButtonHandlers.forEach((handler, btn) => {
+      btn.removeEventListener('click', handler);
+    });
+    buildDeckState.viewButtonHandlers.clear();
+
+    viewButtons.forEach((btn) => {
+      const handler = () => {
+        setViewMode(btn.dataset.viewToggle || 'grid');
+      };
+      btn.addEventListener('click', handler);
+      buildDeckState.viewButtonHandlers.set(btn, handler);
+    });
+
+    const updateRoleDetails = () => {
+      let anyVisible = false;
+      buildRoleDetails.forEach((detail) => {
+        const key = detail.dataset.roleDetail || '';
+        const isActive = key && key === activeRoleKey;
+        detail.classList.toggle('d-none', !isActive);
+        if (isActive) {
+          anyVisible = true;
+        }
+      });
+      if (buildRolePlaceholder) {
+        buildRolePlaceholder.classList.toggle('d-none', anyVisible);
+      }
+    };
+
+    const resolveRoleLabel = (key) => {
+      if (!key) return '';
+      const card = buildRoleCards.find((entry) => (entry.dataset.roleKey || '') === key);
+      return (card && card.dataset.roleLabel) ? card.dataset.roleLabel.trim() : key;
+    };
+
+    const setActiveRole = (key) => {
+      activeRoleKey = key;
+      buildRoleCards.forEach((card) => {
+        const cardKey = card.dataset.roleKey || '';
+        const isActive = cardKey && cardKey === activeRoleKey;
+        card.classList.toggle('active', isActive);
+        card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+      if (buildRoleHint) {
+        const label = activeRoleKey ? resolveRoleLabel(activeRoleKey) : '';
+        if (buildRoleHintLabel) {
+          buildRoleHintLabel.textContent = label || '';
+        }
+        buildRoleHint.classList.toggle('d-none', !label);
+      }
+      updateRoleDetails();
+      applyDeckFilters();
+    };
+
+    const toggleRoleCard = (card) => {
+      if (!card) return;
+      const key = card.dataset.roleKey || '';
+      if (!key) return;
+      setActiveRole(activeRoleKey === key ? '' : key);
+    };
+
+    if (buildDeckState.roleClickHandler) {
+      buildDeckState.roleClickTarget?.removeEventListener('click', buildDeckState.roleClickHandler);
+    }
+    if (buildDeckState.roleKeyHandler) {
+      buildDeckState.roleKeyTarget?.removeEventListener('keydown', buildDeckState.roleKeyHandler);
+    }
+
+    const roleClickHandler = (evt) => {
+      const card = evt.target.closest('.build-role-card[data-role-key]');
+      if (card) {
+        evt.preventDefault();
+        toggleRoleCard(card);
+        return;
+      }
+      const deckCard = evt.target.closest('[data-deck-card][data-role-keys]');
+      if (!deckCard || !activeRoleKey) {
+        return;
+      }
+      const roleKeys = (deckCard.dataset.roleKeys || '').split(/\s+/).filter(Boolean);
+      if (roleKeys.length && !roleKeys.includes(activeRoleKey)) {
+        setActiveRole('');
+      }
+    };
+
+    const roleKeyHandler = (evt) => {
+      const card = evt.target.closest('.build-role-card[data-role-key]');
+      if (!card) return;
+      if (evt.key !== 'Enter' && evt.key !== ' ') return;
+      evt.preventDefault();
+      toggleRoleCard(card);
+    };
+
+    buildRoot.addEventListener('click', roleClickHandler);
+    buildRoot.addEventListener('keydown', roleKeyHandler);
+    buildDeckState.roleClickHandler = roleClickHandler;
+    buildDeckState.roleKeyHandler = roleKeyHandler;
+    buildDeckState.roleClickTarget = buildRoot;
+    buildDeckState.roleKeyTarget = buildRoot;
+
+    if (buildRoleClearBtn && buildRoleClearBtn.dataset.roleHandlerBound !== '1') {
+      buildRoleClearBtn.dataset.roleHandlerBound = '1';
+      buildRoleClearBtn.addEventListener('click', () => setActiveRole(''));
+    }
+
+    applyDeckFilters();
+
+    const queuePanel = buildRoot.querySelector('[data-build-add-queue]');
+    const folderId = buildRoot.dataset.folderId || '';
+
+    if (queuePanel && folderId && queuePanel.dataset.queueInit !== '1') {
+      queuePanel.dataset.queueInit = '1';
+      const queueList = queuePanel.querySelector('[data-queue-list]');
+      const queueCount = queuePanel.querySelector('[data-queue-count]');
+      const submitBtn = queuePanel.querySelector('[data-queue-submit]');
+      const clearBtn = queuePanel.querySelector('[data-queue-clear]');
+      const spinnerEl = queuePanel.querySelector('[data-queue-spinner]');
+      const submitLabel = queuePanel.querySelector('[data-queue-submit-label]');
+      const messageEl = queuePanel.querySelector('[data-queue-message]');
+      const errorEl = queuePanel.querySelector('[data-queue-error]');
+      const emptyState = queuePanel.querySelector('[data-empty-state]');
+      const queueEntries = new Map();
+      let submitting = false;
+
+      const renderQueue = () => {
+        const items = Array.from(queueEntries.values());
+        const total = items.reduce((sum, entry) => sum + entry.quantity, 0);
+        const existingEntries = queueList ? queueList.querySelectorAll('[data-queue-entry]') : [];
+        existingEntries.forEach((node) => node.remove());
+
+        if (emptyState) {
+          emptyState.classList.toggle('d-none', items.length > 0);
+        }
+
+        if (queueList && items.length) {
+          items
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach((entry) => {
+              const li = document.createElement('li');
+              li.className = 'list-group-item d-flex align-items-center justify-content-between gap-2';
+              li.dataset.queueEntry = entry.key;
+              li.innerHTML = `
+                <span class="fw-semibold text-truncate">${entry.name}</span>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                  <span class="badge text-bg-secondary">x${entry.quantity}</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" data-remove-entry="${entry.key}">
+                    Remove
+                  </button>
+                </div>
+              `;
+              queueList.appendChild(li);
+            });
+        }
+
+        if (queueCount) {
+          queueCount.textContent = total;
+        }
+
+        const disabled = submitting || items.length === 0;
+        if (submitBtn) submitBtn.disabled = disabled;
+        if (spinnerEl) spinnerEl.classList.toggle('d-none', !submitting);
+        if (submitLabel) submitLabel.classList.toggle('opacity-50', submitting);
+        if (clearBtn) clearBtn.disabled = disabled;
+      };
+
+      const showMessage = (text) => {
+        if (messageEl) {
+          messageEl.textContent = text;
+          messageEl.classList.remove('d-none');
+        }
+        if (errorEl) {
+          errorEl.classList.add('d-none');
+        }
+      };
+
+      const showError = (text) => {
+        if (errorEl) {
+          errorEl.textContent = text;
+          errorEl.classList.remove('d-none');
+        }
+        if (messageEl) {
+          messageEl.classList.add('d-none');
+        }
+      };
+
+      const addToQueue = (name, quantity) => {
+        const key = name.toLowerCase();
+        const existing = queueEntries.get(key);
+        if (existing) {
+          existing.quantity += quantity;
+        } else {
+          queueEntries.set(key, { key, name, quantity: quantity || 1 });
+        }
+        renderQueue();
+        showMessage(`Queued ${name} (x${quantity}).`);
+      };
+
+      const clearQueue = () => {
+        queueEntries.clear();
+        renderQueue();
+        showMessage('Queue cleared.');
+      };
+
+      if (clearBtn && clearBtn.dataset.queueHandlersBound !== '1') {
+        clearBtn.dataset.queueHandlersBound = '1';
+        clearBtn.addEventListener('click', () => {
+          if (!queueEntries.size) return;
+          clearQueue();
+        });
+      }
+
+      if (queueList && queueList.dataset.queueHandlersBound !== '1') {
+        queueList.dataset.queueHandlersBound = '1';
+        queueList.addEventListener('click', (evt) => {
+          const removeBtn = evt.target.closest('[data-remove-entry]');
+          if (!removeBtn) return;
+          const key = removeBtn.getAttribute('data-remove-entry');
+          if (key && queueEntries.has(key)) {
+            queueEntries.delete(key);
+            renderQueue();
+            showMessage('Removed card from queue.');
+          }
+        });
+      }
+
+      const collectForms = () => Array.from(buildRoot.querySelectorAll('form[data-build-add="queue"]'));
+
+      collectForms().forEach((form) => {
+        if (form.dataset.queueHandlersBound === '1') return;
+        form.dataset.queueHandlersBound = '1';
+        form.addEventListener('submit', (evt) => {
+          if (!queuePanel) return;
+          evt.preventDefault();
+          const formData = new FormData(form);
+          const rawName = formData.get('card_name');
+          const cardName = rawName ? String(rawName).trim() : '';
+          if (!cardName) {
+            showError('Card name is required.');
+            return;
+          }
+          const qtyValue = formData.get('quantity');
+          let quantity = parseInt(qtyValue ? String(qtyValue) : '1', 10);
+          if (!Number.isFinite(quantity) || quantity < 1) {
+            quantity = 1;
+          }
+          addToQueue(cardName, quantity);
+          if (form.dataset.buildAddManual === '1') {
+            const cardInput = form.querySelector('[name="card_name"]');
+            if (cardInput) cardInput.value = '';
+            const qtyInput = form.querySelector('[name="quantity"]');
+            if (qtyInput) qtyInput.value = '1';
+            if (cardInput) cardInput.focus();
+          }
+        });
+      });
+
+      const submitQueue = async () => {
+        if (!queueEntries.size || submitting) return;
+        submitting = true;
+        renderQueue();
+        try {
+          const cards = Array.from(queueEntries.values()).map((entry) => ({
+            card_name: entry.name,
+            quantity: entry.quantity,
+          }));
+          const response = await fetch(`/build-a-deck/${folderId}/queue-add`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ cards }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.success) {
+            showError(data.message || 'Unable to add queued cards right now.');
+            return;
+          }
+          showMessage(data.message || 'Cards added.');
+          queueEntries.clear();
+          renderQueue();
+          rememberScroll();
+          persistDetailsState();
+          setTimeout(() => window.location.reload(), 350);
+        } catch (err) {
+          showError('Network error while adding cards.');
+        } finally {
+          submitting = false;
+          renderQueue();
+        }
+      };
+
+      if (submitBtn && submitBtn.dataset.queueHandlersBound !== '1') {
+        submitBtn.dataset.queueHandlersBound = '1';
+        submitBtn.addEventListener('click', submitQueue);
+      }
+
+      renderQueue();
+    }
+
+    setActiveRole('');
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBuildDeck);
+  } else {
+    initBuildDeck();
+  }
+
+  (function initBuildJump(){
+    const searchInput = document.getElementById('buildJumpSearch');
+    const options = Array.from(document.querySelectorAll('.build-jump-option'));
+    const emptyState = document.getElementById('buildJumpEmpty');
+
+    function applyFilter(){
+      const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
+      let visible = 0;
+      options.forEach((opt) => {
+        const match = !q || (opt.dataset.filter || '').includes(q);
+        opt.classList.toggle('d-none', !match);
+        if (match) visible += 1;
+      });
+      if (emptyState) {
+        emptyState.classList.toggle('d-none', visible > 0);
+      }
+    }
+
+    options.forEach((opt) => {
+      opt.addEventListener('click', () => {
+        const url = opt.dataset.url;
+        if (url) {
+          window.location.href = url;
+        }
+      });
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilter);
+    }
+  })();
+
+  document.addEventListener('htmx:afterSwap', () => {
+    initBuildDeck();
+  });
+</script>

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Contact Us - DragonsVault{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-3">Contact Us</h1>
+  <p>
+    Use the forms below to reach the DragonsVault team. We respond to most inquiries within 2-3 business days.
+  </p>
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 shadow-sm h-100">
+        <form method="post" class="card-body d-flex flex-column gap-3">
+          <div>
+            <h2 class="h5 mb-1">General questions</h2>
+            <p class="text-muted small mb-0">Send a note about purchases, decks, or anything on your mind.</p>
+          </div>
+          <input type="hidden" name="form_kind" value="contact_message">
+          <div>
+            <label class="form-label" for="contact-name">Name</label>
+            <input type="text" class="form-control" id="contact-name" name="name" required>
+          </div>
+          <div>
+            <label class="form-label" for="contact-email">Email</label>
+            <input type="email" class="form-control" id="contact-email" name="email" required>
+          </div>
+          <div>
+            <label class="form-label" for="contact-message">Message</label>
+            <textarea class="form-control" id="contact-message" name="message" rows="5" required></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Send Message</button>
+        </form>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 shadow-sm h-100">
+        <form method="post" class="card-body d-flex flex-column gap-3">
+          <div>
+            <h2 class="h5 mb-1">Bug or feature request</h2>
+            <p class="text-muted small mb-0">Share issues or ideas the admin team can track and mark as they work.</p>
+          </div>
+          <input type="hidden" name="form_kind" value="site_request">
+          <div>
+            <label class="form-label" for="request-type">Type</label>
+            <select class="form-select" id="request-type" name="request_type">
+              <option value="bug">Bug</option>
+              <option value="feature">Feature</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="request-title">Title</label>
+            <input type="text" class="form-control" id="request-title" name="request_title" placeholder="Short summary" required>
+          </div>
+          <div>
+            <label class="form-label" for="request-details">Details</label>
+            <textarea class="form-control" id="request-details" name="request_details" rows="5" placeholder="What happened or what should we build?" required></textarea>
+          </div>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="requester-name">Your name (optional)</label>
+              <input type="text" class="form-control" id="requester-name" name="requester_name" placeholder="How should we address you?">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="requester-email">Email for updates</label>
+              <input type="email" class="form-control" id="requester-email" name="requester_email" required>
+            </div>
+          </div>
+          <button class="btn btn-outline-primary" type="submit">Submit Request</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <p class="text-muted small mt-3 mb-0">
+    Prefer email? Reach us directly at <a href="mailto:support@dragonsvault.example">support@dragonsvault.example</a>.
+  </p>
+</div>
+{% endblock %}

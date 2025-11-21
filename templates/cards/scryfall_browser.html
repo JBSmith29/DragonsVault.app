@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+{% from "shared/components/pagination.html" import render_pagination %}
+{% block title %}Scryfall Cards - DragonsVault{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <h1 class="mb-3">Scryfall Cards</h1>
+
+  <style>
+    .sfb-table .col-art { width:72px; min-width:72px; }
+    .sfb-art-thumb { width:56px; height:auto; border-radius:.5rem; display:block; }
+    .sfb-row:hover { cursor:pointer; }
+    .sfb-row:focus-visible { outline:0; box-shadow:0 0 0 .25rem rgba(var(--bs-primary-rgb), .25); }
+    .badge-type { background:#475569; color:#fff; margin-right:.25rem; margin-bottom:.2rem; display:inline-block; }
+    .badge-type-artifact     { background:#94A3B8; color:#fff; }
+    .badge-type-battle       { background:#F97316; color:#fff; }
+    .badge-type-creature     { background:#198754; color:#fff; }
+    .badge-type-enchantment  { background:#8B5CF6; color:#fff; }
+    .badge-type-instant      { background:#0EA5E9; color:#fff; }
+    .badge-type-land         { background:#8B5E3C; color:#fff; }
+    .badge-type-planeswalker { background:#EAB308; color:#fff; }
+    .badge-type-sorcery      { background:#EF4444; color:#fff; }
+    .price-cell { min-width:150px; }
+    .sfb-table .mana-cost { display:inline-flex; align-items:center; gap:.2rem; white-space:nowrap; }
+    .sfb-table .mana-cost .mana { display:block; }
+    .offcanvas-end.w-500 { width:500px; }
+    .offcanvas .card-art { width:100%; height:auto; border-radius:.5rem; display:block; margin:0 auto; background:#111; }
+    .detail-label { font-weight:600; color:#6c757d; width:130px; }
+    .sort-link { color:inherit; text-decoration:none; font-weight:600; display:inline-flex; align-items:center; gap:.2rem; }
+    .sort-link:hover { color:var(--bs-primary); text-decoration:underline; }
+    .sort-indicator { font-size:.75rem; opacity:.65; }
+  </style>
+
+  {% set sort_field = sort_field or 'name' %}
+  {% set sort_direction = sort_direction or 'asc' %}
+  {% set per_value = per or 25 %}
+
+  {% macro sort_header(label, field) -%}
+    {%- set next_dir = 'asc' if sort_field != field or sort_direction == 'desc' else 'desc' -%}
+    <a class="sort-link" href="{{ sort_url(field, next_dir) }}">
+      {{ label }}
+      {% if sort_field == field %}<span class="sort-indicator">{{ '▲' if sort_direction == 'asc' else '▼' }}</span>{% endif %}
+    </a>
+  {%- endmacro %}
+
+  {% macro rarity_badge(value, label) -%}
+    {% if value %}
+      {% set cls = 'secondary' %}
+      {% set lv = value.lower() %}
+      {% if lv == 'uncommon' %}
+        {% set cls = 'success' %}
+      {% elif lv == 'rare' %}
+        {% set cls = 'warning' %}
+      {% elif lv in ['mythic', 'mythic rare'] %}
+        {% set cls = 'danger' %}
+      {% endif %}
+      <span class="badge text-bg-{{ cls }}">{{ label }}</span>
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  {%- endmacro %}
+
+  {% macro type_badges(type_line) -%}
+    {% if not type_line %}
+      <span class="text-muted">-</span>
+    {% else %}
+      {% set base_types = ["Artifact","Battle","Creature","Enchantment","Instant","Land","Planeswalker","Sorcery"] %}
+      {% set shown = namespace(count=0) %}
+      <div class="d-inline-flex flex-wrap gap-1">
+        {% for t in base_types %}
+          {% if t in type_line %}
+            {% set shown.count = shown.count + 1 %}
+            <span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% if shown.count == 0 %}
+        <span class="text-muted">-</span>
+      {% endif %}
+    {% endif %}
+  {%- endmacro %}
+
+  {% macro price_block(prices) -%}
+    {% set ns = namespace(found=false) %}
+    <div class="d-flex flex-column gap-1 small">
+      {% if prices %}
+        {% if prices.usd %}
+          {% set ns.found = true %}
+          <span>USD {{ prices.usd }}</span>
+        {% endif %}
+        {% if prices.usd_foil %}
+          {% set ns.found = true %}
+          <span>USD Foil {{ prices.usd_foil }}</span>
+        {% endif %}
+        {% if prices.usd_etched %}
+          {% set ns.found = true %}
+          <span>USD Etched {{ prices.usd_etched }}</span>
+        {% endif %}
+      {% endif %}
+      {% if not ns.found %}
+        <span class="text-muted">-</span>
+      {% endif %}
+    </div>
+  {%- endmacro %}
+
+  {% set _unique = request.args.get('unique') %}
+  {% set _commander = request.args.get('commander') %}
+  {% set unique_checked = (_unique != '0') %}
+  {% set commander_checked = (_commander == 'legal') or (not _commander) %}
+  {% set sfb_set_label = namespace(text='All sets') %}
+  {% if set_code %}
+    {% for option in set_options or [] %}
+      {% if option.code == set_code %}
+        {% set sfb_set_label.text = option.label %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+  <form class="mb-3" method="get" action="{{ url_for('views.scryfall_browser') }}" id="sfbForm">
+    <div class="filter-wrap">
+      <div class="filter-row row g-2 align-items-end">
+        <div class="col-12 col-xl-4">
+          <label class="form-label visually-hidden" for="sfbName">Search by card name</label>
+          <input id="sfbName"
+                 class="form-control"
+                 name="q"
+                 type="text"
+                 placeholder="Search by name..."
+                 value="{{ query or '' }}">
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+          <label class="form-label visually-hidden" for="sfbSet">Set</label>
+          <div class="dropdown dv-select w-100" data-dv-select="sfb-set">
+            <input type="hidden"
+                   id="sfbSet"
+                   name="set"
+                   value="{{ set_code or '' }}"
+                   data-dv-select-input>
+            <button class="btn dv-select-toggle w-100 justify-content-between"
+                    type="button"
+                    id="sfbSetToggle"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+              <span data-dv-select-label>{{ sfb_set_label.text }}</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="sfbSetToggle">
+              <li class="dv-select-search-wrapper">
+                <input type="text"
+                       class="form-control form-control-sm dv-select-search"
+                       placeholder="Search sets"
+                       autocomplete="off"
+                       data-dv-select-search>
+              </li>
+              <li>
+                <button class="dropdown-item {% if not set_code %}active{% endif %}"
+                        type="button"
+                        data-dv-select-option
+                        data-value=""
+                        data-label="All sets">
+                  All sets
+                </button>
+              </li>
+              {% for option in set_options or [] %}
+                <li>
+                  <button class="dropdown-item {% if set_code == option.code %}active{% endif %}"
+                          type="button"
+                          data-dv-select-option
+                          data-value="{{ option.code }}"
+                          data-label="{{ option.label }}">
+                    {{ option.label }}
+                  </button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+          <label class="form-label visually-hidden" for="sfbRarity">Rarity</label>
+          <div class="dropdown dv-select w-100" data-dv-select="sfb-rarity">
+            <input type="hidden"
+                   id="sfbRarity"
+                   name="rarity"
+                   value="{{ rarity_value or '' }}"
+                   data-dv-select-input>
+            <button class="btn dv-select-toggle w-100 justify-content-between"
+                    type="button"
+                    id="sfbRarityToggle"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+              <span data-dv-select-label>{{ sfb_rarity_label }}</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="sfbRarityToggle">
+              <li class="dv-select-search-wrapper">
+                <input type="text"
+                       class="form-control form-control-sm dv-select-search"
+                       placeholder="Search rarity"
+                       autocomplete="off"
+                       data-dv-select-search>
+              </li>
+              <li>
+                <button class="dropdown-item {% if not rarity_value %}active{% endif %}"
+                        type="button"
+                        data-dv-select-option
+                        data-value=""
+                        data-label="Any rarity">
+                  Any rarity
+                </button>
+              </li>
+              {% for option in rarity_choices %}
+                <li>
+                  <button class="dropdown-item {% if rarity_value == option.value %}active{% endif %}"
+                          type="button"
+                          data-dv-select-option
+                          data-value="{{ option.value }}"
+                          data-label="{{ option.label }}">
+                    {{ option.label }}
+                  </button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6 col-xl-4">
+          <label class="form-label visually-hidden" for="sfbTypal">Typal or tribe</label>
+          <input id="sfbTypal"
+                 class="form-control"
+                 name="typal"
+                 type="text"
+                 placeholder="Typal (e.g. Merfolk)"
+                 value="{{ typal or '' }}">
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+          <div class="small text-muted me-2">Types:</div>
+          {% set all_types = ["Artifact","Battle","Creature","Enchantment","Instant","Land","Planeswalker","Sorcery"] %}
+          {% set st = selected_types or [] %}
+          {% for t in all_types %}
+            {% set key = t.lower() %}
+            {% set checked = (key in st) %}
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="t_{{ t }}" name="type" value="{{ key }}" {% if checked %}checked{% endif %}>
+              <label class="form-check-label" for="t_{{ t }}">{{ t }}</label>
+            </div>
+          {% endfor %}
+          {% if st and st|length %}
+            <a class="small ms-2" href="{{ url_for('views.scryfall_browser', q=query, set=set_code, color=selected_colors, color_mode=color_mode, unique=_unique or '1', commander=_commander or 'legal', per=per, typal=typal, rarity=rarity_value) }}">Clear types</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <div class="d-flex align-items-center flex-wrap gap-3">
+          <div class="small text-muted">Colors:</div>
+          {% set COLORS = ['w','u','b','r','g','c'] %}
+          {% set sc = selected_colors or [] %}
+          {% for C in COLORS %}
+            {% set up = C|upper %}
+            {% set checked = (up in sc) %}
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="c_{{ C }}" name="color" value="{{ C }}" {% if checked %}checked{% endif %}>
+              <label class="form-check-label" for="c_{{ C }}">
+                <img class="mana mana-sm" src="/static/symbols/{{ up }}.svg" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
+                <span class="visually-hidden">{{ up }}</span>
+              </label>
+            </div>
+          {% endfor %}
+          <div class="vr"></div>
+          <div class="btn-group btn-group-sm" role="group">
+            <input type="radio" class="btn-check" name="color_mode" id="mode_contains" value="contains" {% if color_mode == 'contains' %}checked{% endif %}>
+            <label class="btn btn-outline-secondary" for="mode_contains">Contains</label>
+            <input type="radio" class="btn-check" name="color_mode" id="mode_exact" value="exact" {% if color_mode == 'exact' %}checked{% endif %}>
+            <label class="btn btn-outline-secondary" for="mode_exact">Exactly</label>
+          </div>
+          {% if sc and sc|length %}
+            <a class="small ms-1" href="{{ url_for('views.scryfall_browser', q=query, set=set_code, type=selected_types, unique=_unique or '1', commander=_commander or 'legal', per=per, typal=typal) }}">Clear colors</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="uniqueSwitch" name="unique" value="1" {% if unique_checked %}checked{% endif %}>
+            <label class="form-check-label" for="uniqueSwitch">Unique prints</label>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="commanderSwitch" name="commander" value="legal" {% if commander_checked %}checked{% endif %}>
+            <label class="form-check-label" for="commanderSwitch">Commander legal</label>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-actions d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="small text-muted">{{ '{:,}'.format(total or 0) }} matching prints</div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">Apply filters</button>
+          <a class="btn btn-outline-secondary" id="sfbReset" href="{{ url_for('views.scryfall_browser') }}">Reset</a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if results %}
+    {% set args = request.args.to_dict() %}
+    {% if not args.get('unique') %}{% set _ = args.update({'unique':'1'}) %}{% endif %}
+    {% if not args.get('commander') %}{% set _ = args.update({'commander':'legal'}) %}{% endif %}
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+      <div class="small text-muted">Showing {{ results|length }} of {{ '{:,}'.format(total or 0) }} cards</div>
+    </div>
+
+    <div class="table-responsive mb-3">
+      <table class="table table-sm align-middle cards-table sfb-table">
+        <thead>
+          <tr>
+            <th class="col-art">Art</th>
+            <th>{{ sort_header('Name', 'name') }}</th>
+            <th>Mana Cost</th>
+            <th class="text-center">{{ sort_header('CMC', 'cmc') }}</th>
+            <th>Type</th>
+            <th>{{ sort_header('Rarity', 'rarity') }}</th>
+            <th class="price-cell">Prices</th>
+            <th>{{ sort_header('Card #', 'collector') }}</th>
+            <th>{{ sort_header('Set', 'set') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in results %}
+            <tr class="card-row sfb-row" data-scryfall-id="{{ it.id }}" data-prints-uri="{{ it.prints_uri or '' }}" data-ignore-hover="true">
+              <td class="col-art">
+                {% if it.thumb %}
+                  <img class="sfb-art-thumb" src="{{ it.thumb }}" alt="{{ it.name }}" loading="lazy" data-hover-src="{{ it.image_large or it.thumb }}">
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td>
+                <a class="card-link fw-semibold" data-row-link href="{{ url_for('views.scryfall_print_detail', sid=it.id, return_to=request.full_path) }}">{{ it.name }}</a>
+                <div class="small text-muted">
+                  {% if it.set_name %}{{ it.set_name }}{% endif %}
+                  {% if it.lang %}{% if it.set_name %} &middot; {% endif %}{{ it.lang }}{% endif %}
+                  {% if it.owned_total %} &middot; Owned {{ it.owned_total }}{% endif %}
+                </div>
+              </td>
+              <td class="text-nowrap">
+                {% if it.mana_cost_html and it.mana_cost_html != '-' %}
+                  <span class="mana-cost">{{ it.mana_cost_html | safe }}</span>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td class="text-center">{{ it.cmc_display }}</td>
+              <td>{{ type_badges(it.type_line) }}</td>
+              <td>{{ rarity_badge(it.rarity_value, it.rarity_label or '-') }}</td>
+              <td class="price-cell">{{ price_block(it.prices) }}</td>
+              <td>{{ it.collector_number or '-' }}</td>
+              <td>{{ it.set }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-end align-items-center flex-wrap gap-3 mt-3">
+      <form method="get" action="{{ url_for('views.scryfall_browser') }}" class="d-flex align-items-center gap-2" id="sfbPerForm">
+        {% for key, value in request.args.items() %}
+          {% if key not in ['per', 'page'] %}
+            <input type="hidden" name="{{ key }}" value="{{ value }}">
+          {% endif %}
+        {% endfor %}
+        {% if not request.args.get('unique') %}<input type="hidden" name="unique" value="1">{% endif %}
+        {% if not request.args.get('commander') %}<input type="hidden" name="commander" value="legal">{% endif %}
+        <label class="me-1 small text-muted" for="sfbPerToggle">/ page</label>
+        <div class="dropdown dv-select dv-select-sm d-inline-block" data-dv-select="sfb-per" id="sfbPerSelect">
+          <input type="hidden" name="per" data-dv-select-input value="{{ per_value }}">
+          <button class="btn dv-select-toggle btn-sm d-inline-flex align-items-center gap-2" type="button" id="sfbPerToggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-dv-select-label>{{ per_value }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu dropdown-menu-end" aria-labelledby="sfbPerToggle">
+            {% for n in [25, 50, 100, 150, 200] %}
+              <li>
+                <button class="dropdown-item {% if per_value == n %}active{% endif %}" type="button" data-dv-select-option data-value="{{ n }}" data-label="{{ n }}">
+                  {{ n }}
+                </button>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </form>
+
+      <nav aria-label="Scryfall pages">
+        {% call(page_number) render_pagination(page=page, pages=pages, window=2, classes="pagination pagination-sm mb-0") %}
+          {% set a = args.copy() %}
+          {% set _ = a.update({'page': page_number}) %}
+          {{ url_for('views.scryfall_browser', **a) }}
+        {% endcall %}
+      </nav>
+    </div>
+
+  {% else %}
+    <div class="alert alert-secondary">No cards matched these filters. Try broadening your search.</div>
+  {% endif %}
+</div>
+
+<div class="offcanvas offcanvas-end w-500" tabindex="-1" id="sfbDrawer" aria-labelledby="sfbDrawerLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="sfbDrawerLabel">Card Details</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body" id="sfbDrawerBody">
+    <div class="text-center small text-muted">Select a card to see details.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const drawerEl = document.getElementById('sfbDrawer');
+  if (!drawerEl || !window.bootstrap) return;
+  const drawer = new bootstrap.Offcanvas(drawerEl, { backdrop: true });
+  const titleEl = document.getElementById('sfbDrawerLabel');
+  const bodyEl = document.getElementById('sfbDrawerBody');
+
+  function openDrawer(){ drawer.show(); }
+
+  function detailRow(label, value){
+    return `<div class="d-flex gap-2 mb-1"><div class="detail-label">${label}</div><div>${value || '-'}</div></div>`;
+  }
+
+  function renderPrices(prices){
+    const out = [];
+    if (prices?.usd) out.push(`USD ${prices.usd}`);
+    if (prices?.usd_foil) out.push(`USD Foil ${prices.usd_foil}`);
+    if (prices?.usd_etched) out.push(`USD Etched ${prices.usd_etched}`);
+    if (!out.length) return '<span class="text-muted">-</span>';
+    return `<div class="d-flex flex-column gap-1 small">${out.map(v => `<span>${v}</span>`).join('')}</div>`;
+  }
+
+  function renderDrawer(payload){
+    const info = payload?.info || {};
+    const prices = payload?.prices || {};
+    const image = payload?.image || {};
+    const images = Array.isArray(payload?.images) ? payload.images : [];
+
+    titleEl.textContent = info.name || 'Card Details';
+
+    const artSrc = image.large || image.normal;
+    const imageHtml = artSrc
+      ? `<img class="card-art mb-3" src="${artSrc}" alt="${info.name || 'Card'}">`
+      : '<div class="card-art mb-3" style="height:320px;background:rgba(255,255,255,.05);"></div>';
+
+    let gallery = '';
+    if (images.length > 1) {
+      gallery = `<div class="mb-3"><div class="fw-semibold">Other prints</div><div class="d-flex flex-wrap gap-2 mt-2">${images.slice(0,8).map(img => {
+        const label = img.label || '';
+        const src = img.large || img.normal || img.small;
+        if (!src) return '';
+        return `<button type="button" class="btn btn-outline-secondary btn-sm sfb-gallery" data-img="${src}">${label || 'Print'}</button>`;
+      }).join('')}</div></div>`;
+    }
+
+    bodyEl.innerHTML = `
+      ${imageHtml}
+      <div class="mb-3">
+        ${detailRow('Type', (info.type_line || '-').replace(/</g, '&lt;'))}
+        ${detailRow('Rarity', (info.rarity_label || info.rarity || '-').toString().toUpperCase())}
+        ${detailRow('Set', `${info.set_name || '-'} <span class="small text-muted">[${(info.set || '').toUpperCase()}]</span>`)}
+        ${detailRow('Card #', info.collector_number || '-')}
+        ${detailRow('Mana Cost', info.mana_cost_html || '-')}
+        ${detailRow('CMC', info.cmc != null ? info.cmc : '-')}
+      </div>
+      <div class="mb-3">
+        <div class="fw-semibold mb-1">Oracle Text</div>
+        <div class="small">${info.oracle_text_html || '-'}</div>
+      </div>
+      <div class="mb-3">
+        <div class="fw-semibold mb-1">Prices</div>
+        ${renderPrices(prices)}
+      </div>
+      ${gallery}
+      <div class="d-flex gap-2">
+        <a class="btn btn-primary btn-sm" href="${info.scryfall_uri || '#'}" target="_blank" rel="noopener">Open on Scryfall</a>
+        ${info.tcgplayer_url ? `<a class="btn btn-outline-secondary btn-sm" href="${info.tcgplayer_url}" target="_blank" rel="noopener">TCGplayer</a>` : ''}
+      </div>
+    `;
+
+    bodyEl.querySelectorAll('.sfb-gallery').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.img;
+        if (!target) return;
+        const imgEl = bodyEl.querySelector('.card-art');
+        if (imgEl) imgEl.setAttribute('src', target);
+      });
+    });
+  }
+
+  async function loadPrint(sid){
+    if (!sid) return;
+    titleEl.textContent = 'Loading...';
+    bodyEl.innerHTML = '<div class="text-center small text-muted">Loading...</div>';
+    openDrawer();
+    try {
+      const res = await fetch(`/api/scryfall/print/${encodeURIComponent(sid)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      renderDrawer(payload);
+    } catch (err) {
+      console.warn('[sfb drawer] load failed', err);
+      bodyEl.innerHTML = '<div class="text-danger">Failed to load card details.</div>';
+    }
+  }
+
+  document.addEventListener('click', (ev) => {
+    const link = ev.target.closest('a[data-row-link]');
+    if (link) return;
+    const row = ev.target.closest('.sfb-row');
+    if (!row) return;
+    if (window.getSelection && window.getSelection().toString()) return;
+    const sid = row.getAttribute('data-scryfall-id');
+    if (sid) loadPrint(sid);
+  });
+
+  document.querySelectorAll('.sfb-row').forEach(row => {
+    row.setAttribute('tabindex', '0');
+    row.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        const sid = row.getAttribute('data-scryfall-id');
+        if (sid) loadPrint(sid);
+      }
+    });
+  });
+})();
+</script>
+
+<script>
+(function(){
+  const KEY_URL = 'sfb:lastURL';
+  const KEY_SCROLL = 'sfb:scrollY';
+  const pathRoot = "{{ url_for('views.scryfall_browser') }}";
+  const current = location.pathname + location.search;
+  const hasQuery = !!(location.search && location.search.length > 1);
+
+  if (!hasQuery) {
+    const saved = localStorage.getItem(KEY_URL);
+    if (saved && saved.startsWith(pathRoot) && saved !== current) {
+      location.replace(saved);
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set('unique','1');
+    params.set('commander','legal');
+    location.replace(pathRoot + '?' + params.toString());
+    return;
+  }
+
+  localStorage.setItem(KEY_URL, current);
+
+  const y = sessionStorage.getItem(KEY_SCROLL);
+  if (y) {
+    const yy = parseInt(y, 10);
+    if (!Number.isNaN(yy)) window.scrollTo(0, yy);
+  }
+
+  window.addEventListener('beforeunload', () => {
+    sessionStorage.setItem(KEY_SCROLL, String(window.scrollY || 0));
+  });
+
+  document.getElementById('sfbReset')?.addEventListener('click', () => {
+    localStorage.removeItem(KEY_URL);
+    sessionStorage.removeItem(KEY_SCROLL);
+  });
+
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.pagination a, a.page-link');
+  if (a && a.href) {
+    sessionStorage.setItem(KEY_SCROLL, String(window.scrollY || 0));
+  }
+});
+})();
+</script>
+
+<script>
+(function(){
+  const perForm = document.getElementById('sfbPerForm');
+  const perSelect = document.getElementById('sfbPerSelect');
+  if (!perForm || !perSelect) return;
+  perSelect.addEventListener('dv-select:change', () => {
+    perForm.submit();
+  });
+})();
+</script>
+
+<script>
+(function(){
+  const form = document.getElementById('sfbForm');
+  if (!form || !window.localStorage) return;
+
+  const STORAGE_KEY = 'dv-sfb-filters';
+  const params = new URLSearchParams(window.location.search || '');
+
+  function readStored() {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function collectState() {
+    const state = {};
+    const getVal = (name) => {
+      const field = form.elements.namedItem(name);
+      return field && typeof field.value === 'string' ? field.value : '';
+    };
+
+    state.q = getVal('q');
+    state.set = getVal('set');
+    state.rarity = getVal('rarity');
+    state.typal = getVal('typal');
+
+    state.types = Array.from(form.querySelectorAll('input[name="type"]'))
+      .filter((el) => el.checked)
+      .map((el) => el.value);
+
+    state.colors = Array.from(form.querySelectorAll('input[name="color"]'))
+      .filter((el) => el.checked)
+      .map((el) => el.value);
+
+    const colorMode = form.querySelector('input[name="color_mode"]:checked');
+    state.color_mode = colorMode ? colorMode.value : 'contains';
+
+    const unique = form.querySelector('input[name="unique"]');
+    state.unique = unique ? !!unique.checked : true;
+
+    const commander = form.querySelector('input[name="commander"]');
+    state.commander = commander ? !!commander.checked : true;
+
+    return state;
+  }
+
+  function shouldApply(field) {
+    return !params.has(field);
+  }
+
+  function applyStored(state) {
+    if (!state) return;
+
+    if (shouldApply('q') && typeof state.q === 'string') {
+      const input = form.elements.namedItem('q');
+      if (input) input.value = state.q;
+    }
+    if (shouldApply('set') && typeof state.set === 'string') {
+      const input = form.elements.namedItem('set');
+      if (input) input.value = state.set;
+    }
+    if (shouldApply('rarity') && typeof state.rarity === 'string') {
+      const input = form.elements.namedItem('rarity');
+      if (input) input.value = state.rarity;
+    }
+    if (shouldApply('typal') && typeof state.typal === 'string') {
+      const input = form.elements.namedItem('typal');
+      if (input) input.value = state.typal;
+    }
+
+    if (Array.isArray(state.types) && shouldApply('type')) {
+      const types = new Set(state.types);
+      form.querySelectorAll('input[name="type"]').forEach((el) => {
+        el.checked = types.has(el.value);
+      });
+    }
+
+    if (Array.isArray(state.colors) && shouldApply('color')) {
+      const colors = new Set(state.colors);
+      form.querySelectorAll('input[name="color"]').forEach((el) => {
+        el.checked = colors.has(el.value);
+      });
+    }
+
+    if (typeof state.color_mode === 'string' && shouldApply('color_mode')) {
+      const radio = form.querySelector(`input[name="color_mode"][value="${state.color_mode}"]`);
+      if (radio) radio.checked = true;
+    }
+
+    if (typeof state.unique === 'boolean' && shouldApply('unique')) {
+      const unique = form.querySelector('input[name="unique"]');
+      if (unique) unique.checked = state.unique;
+    }
+
+    if (typeof state.commander === 'boolean' && shouldApply('commander')) {
+      const commander = form.querySelector('input[name="commander"]');
+      if (commander) commander.checked = state.commander;
+    }
+  }
+
+  applyStored(readStored());
+
+  form.addEventListener('submit', () => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(collectState()));
+    } catch (_err) {
+      /* ignore quota failures */
+    }
+  });
+
+  const resetLink = document.getElementById('sfbReset');
+  if (resetLink) {
+    resetLink.addEventListener('click', () => {
+      window.localStorage.removeItem(STORAGE_KEY);
+    });
+  }
+
+  let autoFilterTimer = null;
+  function triggerAutoFilter() {
+    if (autoFilterTimer) {
+      clearTimeout(autoFilterTimer);
+    }
+    autoFilterTimer = setTimeout(() => {
+      autoFilterTimer = null;
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    }, 150);
+  }
+
+  form.querySelectorAll('input[name="type"], input[name="color"], input[name="color_mode"]').forEach((input) => {
+    input.addEventListener('change', triggerAutoFilter);
+  });
+})();
+</script>
+{% endblock %}
+  {% set sfb_rarity_label = rarity_label or 'Any rarity' %}

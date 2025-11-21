@@ -1,0 +1,54 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+
+  web:
+    build: .
+    command: flask --app app:create_app --debug run --host=0.0.0.0 --port=5000
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      FLASK_RUN_HOST: 0.0.0.0
+      FLASK_RUN_PORT: "5000"
+      INSTANCE_DIR: /app/instance
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_HOST: redis
+      CACHE_REDIS_PORT: "6379"
+      CACHE_DEFAULT_TIMEOUT: "600"
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      SCRYFALL_REFRESH_INLINE: "1"
+      IMPORT_RUN_INLINE: "1"
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    init: true
+
+  worker:
+    build: .
+    command: rq worker default
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      INSTANCE_DIR: /app/instance
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    init: true
+
+volumes:
+  redis-data:
+

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Welcome to DragonsVault{% endblock %}
+
+{% block content %}
+<section class="py-5">
+  <div class="container py-4">
+    <div class="row align-items-center g-5">
+      <div class="col-12 col-lg-6">
+        <h1 class="display-5 fw-bold mb-4">Meet DragonsVault</h1>
+        <p class="lead text-muted">
+          DragonsVault helps Commander players track collections, evaluate decks, and keep every card
+          at their fingertips. Import lists from DragonShield or MTGGoldfish, refresh Scryfall data
+          with one click, and explore powerful filters designed for paper collections.
+        </p>
+        <ul class="list-unstyled text-muted mb-4">
+          <li class="mb-2">• Organize decks and collection folders with commander insights.</li>
+          <li class="mb-2">• Import CSVs or binders to keep quantities in sync.</li>
+          <li class="mb-2">• Generate analytics: colors, mana curve, combo hints, and more.</li>
+        </ul>
+        <div class="d-flex flex-wrap gap-3">
+          <a href="{{ url_for('views.login') }}" class="btn btn-primary btn-lg">Sign in</a>
+          <a href="{{ url_for('views.register') }}" class="btn btn-outline-light btn-lg">Create an account</a>
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="card shadow-lg border-0 bg-dark text-light bg-opacity-75">
+          <div class="card-body p-4">
+            <h2 class="h5 text-uppercase text-info fw-semibold mb-3">Why DragonsVault?</h2>
+            <p class="mb-3 text-light">
+              Built by Commander players for Commander players, DragonsVault centralizes deckbuilding,
+              wishlists, Scryfall lookups, and powerful bulk data tools in a single dashboard.
+            </p>
+            <p class="text-light mb-0">
+              Ready to get started? Sign in to continue to your dashboard or create a free account now.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.gallery-card {
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    border-radius: .75rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .gallery-card img {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #111;
+  }
+  .gallery-card .card-body {
+    padding: .85rem .9rem;
+  }
+  .gallery-card .rarity {
+    font-size: .8rem;
+    color: var(--bs-secondary-color);
+    text-transform: capitalize;
+  }
+</style>
+
+<div class="page-section">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h3 mb-1">{{ set_name }} <span class="text-muted">({{ set_code|upper }})</span></h1>
+      <div class="text-muted small">
+        {% if release_date %}First released {{ release_date }} · {% endif %}
+        {{ total_prints }} print{{ 's' if total_prints != 1 else '' }}
+        {% if owned_total %} · {{ owned_total }} owned in your collection{% endif %}
+        · Showing {{ filtered_count }} card{{ 's' if filtered_count != 1 else '' }}
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.sets_overview') }}">Back to Sets</a>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('views.list_cards', set=set_code) }}">View My Cards</a>
+    </div>
+  </div>
+
+  <form class="row g-2 align-items-end mb-4" method="get">
+    <div class="col-sm-6 col-lg-4">
+      <label for="setGalleryNameFilter" class="form-label small text-muted">Search name</label>
+      <input type="search"
+             id="setGalleryNameFilter"
+             name="q"
+             value="{{ name_query }}"
+             class="form-control"
+             placeholder="e.g. Lightning Bolt">
+    </div>
+    <div class="col-sm-4 col-lg-3">
+      <label for="setGalleryRarityFilter" class="form-label small text-muted">Rarity</label>
+      <select id="setGalleryRarityFilter" name="rarity" class="form-select">
+        <option value="">All rarities</option>
+        {% for rarity in rarity_options %}
+          <option value="{{ rarity }}" {% if rarity_filter == rarity %}selected{% endif %}>
+            {{ rarity.replace('_', ' ')|title }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-2 col-lg-2 d-grid">
+      <button class="btn btn-primary">Apply</button>
+    </div>
+    {% if name_query or rarity_filter %}
+      <div class="col-sm-12 col-lg-auto">
+        <a class="btn btn-outline-secondary" href="{{ url_for('views.set_gallery', set_code=set_code) }}">Reset</a>
+      </div>
+    {% endif %}
+  </form>
+
+  {% if cards %}
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xxl-5 g-4">
+      {% for card in cards %}
+        <div class="col">
+          <div class="gallery-card shadow-sm">
+            {% set img_src = card.normal or card.thumb %}
+            {% set detail_href = card.card_id and url_for('views.card_detail', card_id=card.card_id) or url_for('views.scryfall_print_detail', sid=card.id) %}
+            {% if img_src %}
+              <a href="{{ detail_href }}">
+                <img src="{{ img_src }}" alt="{{ card.name }} ({{ card.collector_number or '—' }})">
+              </a>
+            {% else %}
+              <div class="ratio ratio-3x4 bg-secondary-subtle"></div>
+            {% endif %}
+            <div class="card-body">
+              <div class="fw-semibold text-truncate" title="{{ card.name }} (#{{ card.collector_number }})">
+                {{ card.collector_number or '—' }} · {{ card.name }}
+              </div>
+              <div class="rarity">{{ card.rarity.replace('_', ' ')|title }}</div>
+              {% if card.owned_qty %}
+                <div class="mt-2">
+                  <span class="badge bg-success">Owned ×{{ card.owned_qty }}</span>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-secondary">
+      {% if name_query or rarity_filter %}
+        No cards match the current filters.
+      {% else %}
+        No prints for this set were found in the local cache. Refresh the Scryfall cache and try again.
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

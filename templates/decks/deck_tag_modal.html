@@ -1,0 +1,49 @@
+<div class="modal fade tag-picker-modal" id="deckTagModal" tabindex="-1" aria-labelledby="deckTagModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deckTagModalLabel">Select a Deck Tag</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+          <div class="text-muted small">Choose a tag to classify <span id="deckTagModalName">this deck</span>.</div>
+          <input id="deckTagFilter"
+                 class="form-control form-control-sm"
+                 placeholder="Filter tags..."
+                 autocomplete="off"
+                 style="max-width: 220px;">
+        </div>
+        <div id="deckTagCurrent" class="alert alert-info border-info-subtle small py-2 px-3 mb-3 d-none"></div>
+        <div class="tag-group-stack d-flex flex-column gap-3">
+          {% for category, tags in deck_tag_groups.items() %}
+            <div class="tag-category" data-category="{{ category|lower }}">
+              <div class="small text-uppercase text-muted fw-semibold mb-2">{{ category }}</div>
+              <div class="d-flex flex-wrap gap-2">
+                {% for tag in tags %}
+                  <button type="button"
+                          class="type-pill tag-option"
+                          data-label="{{ tag|lower }}"
+                          data-category="{{ category|lower }}"
+                          data-tag="{{ tag }}"
+                          data-ripple="true"
+                          aria-pressed="false">
+                    {{ tag }}
+                  </button>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        <div id="deckTagEmpty" class="text-muted small fst-italic text-center d-none mt-3">No tags match this filter.</div>
+      </div>
+      <div class="modal-footer">
+        <div class="text-muted small me-auto" id="deckTagStatus"></div>
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-outline-danger btn-sm d-none" id="deckTagClearBtn">Clear Tag</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

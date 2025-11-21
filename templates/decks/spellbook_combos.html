@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% from "shared/components/pagination.html" import render_pagination %}
+{% block content %}
+
+<style>
+  .spellbook-combos-page .spellbook-section .card {
+    background: transparent;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .85rem;
+  }
+  .spellbook-combos-page .spellbook-section .card-body {
+    background: transparent;
+  }
+  .spellbook-combos-page .spellbook-table {
+    background: transparent;
+  }
+  .spellbook-combos-page .spellbook-table tbody td {
+    vertical-align: top;
+    padding-top: .85rem;
+    padding-bottom: .85rem;
+  }
+  .spellbook-combos-page .spellbook-table td.combo-col {
+    min-width: 260px;
+  }
+  .spellbook-combos-page .spellbook-table td.results-col {
+    min-width: 220px;
+  }
+  .spellbook-combos-page .spellbook-table td.stage-col {
+    min-width: 120px;
+  }
+  .spellbook-combos-page .spellbook-table td.mana-col {
+    min-width: 160px;
+  }
+  .spellbook-combos-page .spellbook-table td.categories-col {
+    min-width: 200px;
+  }
+  .spellbook-combos-page .spellbook-table td.link-col {
+    min-width: 110px;
+  }
+  .spellbook-combos-page .spellbook-table thead th {
+    border-bottom: 1px solid var(--bs-border-color);
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+  .spellbook-combos-page .spellbook-table tbody tr:hover {
+    background: rgba(255,255,255,.05);
+  }
+  .spellbook-combos-page .combo-card-stack {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: .75rem;
+  }
+  .spellbook-combos-page .combo-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .35rem;
+    text-align: center;
+    max-width: 90px;
+  }
+  .spellbook-combos-page .combo-card-thumb {
+    width: 72px;
+    height: auto;
+    border-radius: .65rem;
+    box-shadow: 0 .45rem 1.2rem rgba(0,0,0,.35);
+    background: rgba(255,255,255,.05);
+  }
+  .spellbook-combos-page .combo-card-name {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+  .spellbook-combos-page .combo-card-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .spellbook-combos-page .combo-card-link:hover .combo-card-name {
+    color: var(--bs-primary);
+    text-decoration: underline;
+  }
+  .spellbook-combos-page .combo-card-thumb {
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .spellbook-combos-page .combo-card-thumb:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 .6rem 1.4rem rgba(0,0,0,.45);
+  }
+  .spellbook-combos-page .combo-plus {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--bs-secondary-color);
+  }
+  .spellbook-combos-page img.mana {
+    height: 1.15em;
+    width: auto;
+    display: inline-block;
+    vertical-align: text-bottom;
+    margin-right: 2px;
+  }
+  .spellbook-combos-page .results-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+  }
+  .spellbook-combos-page .category-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+  }
+  .spellbook-combos-page .mana-cost {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+  }
+  .spellbook-combos-page .mana-cost-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    flex-wrap: wrap;
+  }
+  .spellbook-combos-page .mana-cost-note {
+    white-space: normal;
+  }
+  .spellbook-combos-page .table-sort-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    text-decoration: none;
+    color: inherit;
+    font-weight: inherit;
+  }
+  .spellbook-combos-page .table-sort-link:hover {
+    text-decoration: underline;
+  }
+  .spellbook-combos-page .sort-indicator {
+    font-size: .75rem;
+    opacity: .8;
+  }
+  .spellbook-combos-page .filter-wrap {
+    padding: 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .85rem;
+    background: rgba(0,0,0,.03);
+  }
+  .spellbook-combos-page .filter-row + .filter-row {
+    margin-top: .75rem;
+  }
+  .spellbook-combos-page .filter-actions {
+    border-top: 1px dashed var(--bs-border-color);
+    margin-top: .85rem;
+    padding-top: .85rem;
+  }
+  .spellbook-combos-page .filter-row .form-check-inline {
+    margin-right: .35rem;
+  }
+  .spellbook-combos-page .filter-row .form-check-inline:last-child {
+    margin-right: 0;
+  }
+  .spellbook-combos-page .filter-row .form-check-label img.mana {
+    height: 1.05em;
+    width: auto;
+    vertical-align: text-bottom;
+  }
+  .spellbook-combos-page .filter-row .form-check-label .count {
+    font-size: .8rem;
+    color: var(--bs-secondary-color);
+    margin-left: .25rem;
+  }
+</style>
+
+{% macro sort_link(label, column) -%}
+  {%- set is_active = (sort == column) -%}
+  {%- set next_dir = "desc" if is_active and direction == "asc" else "asc" -%}
+  <a href="{{ build_url(sort=column, direction=next_dir, page=1) }}" class="table-sort-link">
+    {{ label }}
+    {% if is_active %}
+      <span class="sort-indicator">{% if direction == 'asc' %}&#9650;{% else %}&#9660;{% endif %}</span>
+    {% endif %}
+  </a>
+{%- endmacro %}
+
+
+{% macro sort_link(label, column) -%}
+  {%- set is_active = (sort == column) -%}
+  {%- set next_dir = 'desc' if is_active and direction == 'asc' else 'asc' -%}
+  <a href="{{ build_url(sort=column, direction=next_dir, page=1) }}" class="table-sort-link">
+    {{ label }}
+    {% if is_active %}
+      <span class="sort-indicator">{{ '▲' if direction == 'asc' else '▼' }}</span>
+    {% endif %}
+  </a>
+{%- endmacro %}
+
+<div class="page-section spellbook-combos-page">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Commander Spellbook Combos</h1>
+      <p class="text-muted mb-0">
+        Two-card lines synced from
+        <a href="https://commanderspellbook.com" target="_blank" rel="noopener">Commander Spellbook</a>.
+        Early combos require at most {{ thresholds.early }} total mana; late-game combos need {{ thresholds.late }} or more.
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.commander_brackets_info') }}">
+      Back to Bracket Reference
+    </a>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" class="spellbook-filter">
+        <div class="filter-wrap">
+          <div class="filter-row row g-3 align-items-end">
+            <div class="col-lg-6">
+              <label for="comboSearch" class="form-label small text-muted text-uppercase fw-semibold">Search</label>
+              <input id="comboSearch"
+                     type="search"
+                     class="form-control"
+                     name="q"
+                     placeholder="Card name, result, or text..."
+                     value="{{ search_query or '' }}">
+            </div>
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+              <label for="comboStage" class="form-label small text-muted text-uppercase fw-semibold">Game Stage</label>
+              <select id="comboStage" name="stage" class="form-select">
+                <option value="" {% if not selected_stage %}selected{% endif %}>All stages</option>
+                <option value="early" {% if selected_stage == 'early' %}selected{% endif %}>Early Game</option>
+                <option value="late" {% if selected_stage == 'late' %}selected{% endif %}>Late Game</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              <div class="small text-muted text-uppercase fw-semibold me-2">Colors</div>
+              {% set color_order = ['w','u','b','r','g','c'] %}
+              {% for color in color_order %}
+                {% set up = color|upper %}
+                {% set checked = (color in selected_colors) %}
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="color" value="{{ color }}" id="sb_color_{{ color }}" {% if checked %}checked{% endif %}>
+                  <label class="form-check-label" for="sb_color_{{ color }}">
+                    <img class="mana mana-sm" src="/static/symbols/{{ up }}.svg" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
+                    <span class="visually-hidden">{{ up }}</span>
+                  </label>
+                </div>
+              {% endfor %}
+              <span class="vr d-none d-lg-inline mx-2"></span>
+              <div class="btn-group btn-group-sm" role="group" aria-label="Color match mode">
+                <input type="radio" class="btn-check" name="color_mode" id="sb_cm_contains" value="contains" {% if color_mode != 'exact' %}checked{% endif %}>
+                <label class="btn btn-outline-secondary" for="sb_cm_contains">Contains</label>
+                <input type="radio" class="btn-check" name="color_mode" id="sb_cm_exact" value="exact" {% if color_mode == 'exact' %}checked{% endif %}>
+                <label class="btn btn-outline-secondary" for="sb_cm_exact">Exactly</label>
+              </div>
+              {% if selected_colors and selected_colors|length %}
+                <a class="small ms-1" href="{{ build_url(color=None, color_mode=None, page=1) }}">Clear colors</a>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              <div class="small text-muted text-uppercase fw-semibold me-2">Results</div>
+              {% for row in categories %}
+                {% set label = row.label or row.key.replace('_', ' ') %}
+                {% set checked = row.key in selected_categories %}
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="category" value="{{ row.key }}" id="sb_cat_{{ row.key }}" {% if checked %}checked{% endif %}>
+                  <label class="form-check-label" for="sb_cat_{{ row.key }}">
+                    {{ label }} <span class="count">({{ row.count }})</span>
+                  </label>
+                </div>
+              {% endfor %}
+              {% if selected_categories and selected_categories|length %}
+                <a class="small ms-1" href="{{ build_url(category=None, page=1) }}">Clear results</a>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="filter-actions d-flex align-items-center gap-2 flex-wrap">
+            <button class="btn btn-primary" type="submit">Apply Filters</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('views.commander_spellbook_combos') }}">Reset</a>
+          </div>
+        </div>
+        <input type="hidden" name="per" value="{{ per }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="direction" value="{{ direction }}">
+      </form>
+    </div>
+  </div>
+
+  <div class="spellbook-section mb-5">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <h2 class="h5 mb-0">All Combos</h2>
+      <div class="small text-muted">
+        {% if filtered_totals.total %}
+          Showing {{ page_start }}&ndash;{{ page_end }} of {{ filtered_totals.total }} combos
+        {% else %}
+          Showing 0 combos
+        {% endif %}
+        ({{ filtered_totals.early }} early, {{ filtered_totals.late }} late)
+        {% if filtered_totals.total != totals.total %}
+          • {{ totals.total }} total available
+        {% endif %}
+      </div>
+    </div>
+    {% if combos %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle spellbook-table">
+              <thead>
+                <tr>
+                  <th scope="col">Combo</th>
+                  <th scope="col">{{ sort_link('Results', 'results') }}</th>
+                  <th scope="col" class="text-nowrap">{{ sort_link('Game Stage', 'stage') }}</th>
+                  <th scope="col">{{ sort_link('Mana Needed', 'mana') }}</th>
+                  <th scope="col">Categories</th>
+                  <th scope="col">Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for combo in combos %}
+                  <tr class="combo-row"
+                      data-categories="{{ combo.categories|join(' ') }}"
+                      data-stage="{{ combo.stage_key }}">
+                    <td class="combo-col">
+                      <div class="combo-card-stack">
+                        {% for card in combo.cards %}
+                          <div class="combo-card">
+                            <a href="{{ card.search_url }}" class="combo-card-link" target="_blank" rel="noopener">
+                              <img src="{{ card.thumb }}" data-hover-src="{{ card.hover }}" data-img="{{ card.hover }}" alt="{{ card.name }}" loading="lazy" class="combo-card-thumb">
+                              <div class="combo-card-name">{{ card.name }}{% if card.quantity > 1 %} &times;{{ card.quantity }}{% endif %}</div>
+                            </a>
+                          </div>
+                          {% if not loop.last %}
+                            <div class="combo-plus">+</div>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    </td>
+                    <td class="results-col">
+                      {% if combo.results %}
+                        <ul class="results-list small">
+                          {% for result in combo.results %}
+                            <li>{{ result }}</li>
+                          {% endfor %}
+                        </ul>
+                      {% else %}
+                        <span class="text-muted">&mdash;</span>
+                      {% endif %}
+                    </td>
+                    <td class="stage-col text-nowrap">
+                      {% if combo.stage_key == 'early' %}
+                        <span class="badge text-bg-success fw-semibold">Early Game</span>
+                      {% else %}
+                        <span class="badge text-bg-danger fw-semibold">Late Game</span>
+                      {% endif %}
+                    </td>
+                    <td class="mana-col">
+                      {% if combo.mana_icons_html or combo.mana_needed %}
+                        <div class="mana-cost">
+                          {% if combo.mana_icons_html %}
+                            <div class="mana-cost-icons">{{ combo.mana_icons_html|safe }}</div>
+                          {% endif %}
+                          {% if combo.mana_note %}
+                            <div class="mana-cost-note small text-muted">{{ combo.mana_note | replace('\n', '<br>') | safe }}</div>
+                          {% elif combo.mana_icons_html is none and combo.mana_needed %}
+                            <div class="mana-cost-note small text-muted">{{ combo.mana_needed | replace('\n', '<br>') | safe }}</div>
+                          {% endif %}
+                        </div>
+                      {% else %}
+                        <span class="text-muted">&mdash;</span>
+                      {% endif %}
+                    </td>
+                    <td class="categories-col">
+                      {% if combo.result_labels %}
+                        <div class="category-badges">
+                          {% for label in combo.result_labels %}
+                            <span class="badge text-bg-secondary">{{ label }}</span>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <span class="text-muted">&mdash;</span>
+                      {% endif %}
+                    </td>
+                    <td class="link-col">
+                      {% if combo.url %}
+                        <a class="btn btn-outline-primary btn-sm" href="{{ combo.url }}" target="_blank" rel="noopener">View</a>
+                      {% else %}
+                        <span class="text-muted">&mdash;</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-3">
+        <div class="text-muted small">Page {{ page }} of {{ pages }}</div>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+          <form method="get" class="d-inline-flex align-items-center gap-2">
+            {% for k, v in request.args.items() if k not in ['per','per_page','page','page_size','category'] %}
+              <input type="hidden" name="{{ k }}" value="{{ v }}">
+            {% endfor %}
+            <label class="small text-muted mb-0" for="combosPerSelect">Rows per page</label>
+            <select id="combosPerSelect" name="per" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+              {% for option in [25, 50, 100, 200] %}
+                <option value="{{ option }}" {{ 'selected' if per == option else '' }}>{{ option }}</option>
+              {% endfor %}
+            </select>
+            <input type="hidden" name="page" value="{{ page }}">
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="direction" value="{{ direction }}">
+            {% if selected_stage %}<input type="hidden" name="stage" value="{{ selected_stage }}">{% endif %}
+            {% if search_query %}<input type="hidden" name="q" value="{{ search_query }}">{% endif %}
+            {% for cat in selected_categories %}
+              <input type="hidden" name="category" value="{{ cat }}">
+            {% endfor %}
+          </form>
+          <nav aria-label="Spellbook pagination">
+            {% call(page_number) render_pagination(page=page, pages=pages, window=2, classes="pagination pagination-sm mb-0 flex-wrap") %}
+              {{ build_url(page=page_number) }}
+            {% endcall %}
+          </nav>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-secondary mb-0">No combos are currently synced.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

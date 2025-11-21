@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Accessibility Statement - DragonsVault{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-3">Accessibility Statement</h1>
+  <p class="text-muted">Last updated: {{ last_updated }}</p>
+  <p>
+    DragonsVault is committed to providing a website that is accessible to the widest possible audience,
+    regardless of technology or ability. We strive to conform with Section 508 and WCAG 2.1 AA guidance.
+  </p>
+  <h2 class="h5 mt-4">Accessibility Features</h2>
+  <ul>
+    <li>Semantic markup and ARIA attributes on interactive controls.</li>
+    <li>Keyboard-friendly navigation and focus management.</li>
+    <li>High-contrast themes and text alternatives for meaningful images.</li>
+  </ul>
+  <h2 class="h5 mt-4">Ongoing Improvements</h2>
+  <p>
+    We perform periodic audits and welcome feedback that can help us improve accessibility.
+    If you encounter an accessibility barrier, please let us know and we will address it as quickly as possible.
+  </p>
+  <h2 class="h5 mt-4">Contact</h2>
+  <p>
+    Email the site administrator with “Accessibility Feedback” in the subject line and include a description
+    of the issue as well as your contact information.
+  </p>
+</div>
+{% endblock %}

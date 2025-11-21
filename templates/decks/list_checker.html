@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+{% from "shared/components/macros.html" import slug, folder_badge %}
+{% block title %}List Checker - DragonsVault{% endblock %}
+{% block content %}
+
+<h1 class="mb-3">List Checker</h1>
+
+<form
+  method="post"
+  action="{{ url_for('views.list_checker') }}"
+  hx-post="{{ url_for('views.list_checker') }}"
+  hx-target="#checker-results"
+  hx-select="#checker-results"
+  hx-swap="innerHTML"
+  hx-indicator="#global-indicator"
+  class="mb-4"
+  id="checker-form"
+>
+  <label for="card_list" class="form-label">Paste cards (one per line; "2x Name" or "2 Name" ok)</label>
+  <textarea id="card_list" name="card_list" class="form-control" rows="8" placeholder="Abhorrent Oculus
+1x Abhorrent Oculus
+2 Abhorrent Oculus">{{ pasted }}</textarea>
+  <div class="d-flex gap-2 mt-2">
+    <button type="submit" class="btn btn-primary">Check</button>
+    <a href="{{ url_for('views.list_checker') }}" class="btn btn-secondary">Clear</a>
+    <button type="button" class="btn btn-outline-danger" id="start-over-btn">Start Over</button>
+  </div>
+</form>
+
+{# lets the restore script know if server already rendered results #}
+<div id="checker-results" data-has-results="{{ 1 if results is not none else 0 }}">
+  {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+  {% endif %}
+
+  {% if results is not none %}
+    {# Build payload for wishlist button and count missing rows #}
+    {% set wish = namespace(rows=[]) %}
+    {% for r in results %}
+      {% if r.missing_qty and r.missing_qty > 0 %}
+        {% set requested_qty = (r.requested or r.missing_qty)|int %}
+        {% set _ = wish.rows.append({
+          'name': r.name,
+          'requested_qty': requested_qty,
+          'missing_qty': r.missing_qty|int,
+          'card_id': r.card_id if r.card_id else None,
+          'scryfall_id': r.scry_id if r.scry_id else None,
+          'oracle_id': r.oracle_id if r.oracle_id else None
+        }) %}
+      {% endif %}
+    {% endfor %}
+    {% set missing_count = wish.rows | length %}
+
+    {% set fetch = namespace(rows=[]) %}
+    {% for r in results %}
+      {% if r.available_in_collection and r.available_in_collection > 0 %}
+        {% set fetch_qty = r.available_in_collection if r.available_in_collection < r.requested else r.requested %}
+        {% if fetch_qty > 0 %}
+          {% set folder_ns = namespace(items=[]) %}
+          {% for fname, cnt in (r.available_folders or []) %}
+            {% set _ = folder_ns.items.append({'name': fname, 'qty': cnt}) %}
+          {% endfor %}
+          {% if not folder_ns.items %}
+            {% for fname, cnt in r.folders %}
+              {% set _ = folder_ns.items.append({'name': fname, 'qty': cnt}) %}
+            {% endfor %}
+          {% endif %}
+          {% set _ = fetch.rows.append({
+            'name': r.name,
+            'requested_qty': fetch_qty,
+            'missing_qty': fetch_qty,
+            'status': 'to_fetch',
+            'card_id': r.card_id if r.card_id else None,
+            'scryfall_id': r.scry_id if r.scry_id else None,
+            'oracle_id': r.oracle_id if r.oracle_id else None,
+            'source_folders': folder_ns.items
+          }) %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {% set fetch_count = fetch.rows | length %}
+
+    <!-- Summary bar -->
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="d-flex gap-3 flex-wrap">
+        <span class="badge text-bg-success">Have all: {{ summary.have_all }}</span>
+        <span class="badge text-bg-warning">Partial: {{ summary.partial }}</span>
+        <span class="badge text-bg-danger">Missing: {{ summary.missing }}</span>
+        <span class="badge text-bg-secondary">Total: {{ summary.total_rows }}</span>
+      </div>
+
+      <div class="d-flex align-items-center gap-2">
+        <!-- Export CSV (normal POST so browser downloads) -->
+        <form method="post"
+              action="{{ url_for('views.list_checker_export_csv') }}"
+              hx-boost="false"
+              class="d-inline">
+          <textarea name="card_list" hidden>{{ pasted }}</textarea>
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            Export CSV
+          </button>
+        </form>
+
+        <!-- Classic form POST to wishlist (server redirects to /wishlist) -->
+        <form method="post"
+              action="{{ url_for('views.wishlist_add_form') }}"
+              class="d-inline"
+              hx-boost="false">
+          <textarea name="rows" hidden>{{ wish.rows | tojson }}</textarea>
+          <button type="submit" class="btn btn-success btn-sm" {% if missing_count == 0 %}disabled{% endif %}>
+            Add Missing to Wishlist
+          </button>
+        </form>
+
+        <form method="post"
+              action="{{ url_for('views.wishlist_add_form') }}"
+              class="d-inline"
+              hx-boost="false">
+          <textarea name="rows" hidden>{{ fetch.rows | tojson }}</textarea>
+          <button type="submit" class="btn btn-warning btn-sm" {% if fetch_count == 0 %}disabled{% endif %}>
+            Add To-Fetch to Wishlist
+          </button>
+        </form>
+
+        <a href="{{ url_for('views.wishlist') }}" class="btn btn-outline-secondary btn-sm">Open Wishlist</a>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="table-responsive">
+      <table class="table table-sm align-middle table-hover cards-table">
+        <thead>
+          <tr>
+            <th style="min-width: 220px;">Card</th>
+            <th class="col-num text-center">Requested</th>
+            <th class="col-num text-center">Available</th>
+            <th class="col-num text-center">Missing</th>
+            <th>Folders (owned breakdown)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in results %}
+            {% set row_cls = 'row-missing' if r.status=='missing' else ('row-partial' if r.status=='partial' else 'row-have') %}
+            <tr class="{{ row_cls }}">
+              <td>
+                {% set back_to = request.full_path %}
+                {% if r.card_id %}
+                  <a
+                    href="{{ url_for('views.card_detail', card_id=r.card_id, return_to=back_to) }}"
+                    class="link-primary text-decoration-underline checker-card-link"
+                    data-card-id="{{ r.card_id }}"
+                    data-img=""
+                  >
+                    {{ r.name }}
+                  </a>
+                {% elif r.scry_id %}
+                  <a
+                    href="{{ url_for('views.scryfall_print_detail', sid=r.scry_id, return_to=back_to) }}"
+                    class="link-primary text-decoration-underline checker-card-link"
+                    data-scry-id="{{ r.scry_id }}"
+                    data-img=""
+                  >
+                    {{ r.name }}
+                  </a>
+                {% else %}
+                  {{ r.name }}
+                {% endif %}
+              </td>
+              <td class="text-center">{{ r.requested }}</td>
+              <td class="text-center">{{ r.available_in_collection }}</td>
+              <td class="text-center">
+                {% if r.missing_qty|int > 0 %}
+                  <span class="badge rounded-pill text-bg-danger">x{{ r.missing_qty }}</span>
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% set collection = r.collection_folders or r.folders %}
+                {% if collection %}
+                  <div class="mb-1 d-flex flex-wrap gap-1">
+                    {% for fname, cnt in collection %}
+                      {{ folder_badge(fname, 'x' ~ cnt) }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if r.deck_folders %}
+                  <div class="d-flex flex-wrap gap-1">
+                    {% for fname, cnt in r.deck_folders %}
+                      {{ folder_badge(fname, 'x' ~ cnt) }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if not collection and not r.deck_folders %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+
+<style>
+  .col-num { width: 130px; min-width: 110px; white-space: nowrap; }
+  .small-muted { color: #6c757d; }
+  .row-have    { background: var(--bs-success-bg-subtle); }
+  .row-partial { background: var(--bs-warning-bg-subtle); }
+  .row-missing { background: var(--bs-danger-bg-subtle); }
+  .table-hover tbody tr:hover { filter: brightness(0.985); }
+  .checker-card-thumb img { object-fit: cover; width: 100%; height: 100%; }
+</style>
+
+<script>
+(function () {
+  // --- Persistence keys ---
+  const KEY_TEXT = 'dv_list_checker_text';
+  const KEY_HTML = 'dv_list_checker_results_html';
+
+  const ta = document.getElementById('card_list');
+  const res = document.getElementById('checker-results');
+  const startOverBtn = document.getElementById('start-over-btn');
+
+  // Restore textarea on load if empty
+  if (ta && (!ta.value || !ta.value.trim())) {
+    const saved = localStorage.getItem(KEY_TEXT);
+    if (saved) ta.value = saved;
+  }
+
+  // Restore results HTML if server didn't render any this load
+  if (res && String(res.dataset.hasResults) !== '1') {
+    const savedHTML = localStorage.getItem(KEY_HTML);
+    if (savedHTML) {
+      res.innerHTML = savedHTML;
+      res.dataset.hasResults = '1';
+      if (window.dvAttachCheckerHover) window.dvAttachCheckerHover(res);
+    }
+  }
+
+  // Save textarea on input (debounced)
+  let tId = null;
+  if (ta) {
+    ta.addEventListener('input', () => {
+      clearTimeout(tId);
+      tId = setTimeout(() => {
+        localStorage.setItem(KEY_TEXT, ta.value || '');
+      }, 200);
+    });
+  }
+
+  // After HTMX swaps results, persist both text and HTML
+  document.addEventListener('htmx:afterSwap', (evt) => {
+    if (evt.target && evt.target.id === 'checker-results') {
+      try {
+        localStorage.setItem(KEY_TEXT, ta ? (ta.value || '') : '');
+        localStorage.setItem(KEY_HTML, evt.target.innerHTML || '');
+        evt.target.dataset.hasResults = '1';
+      } catch (_) {}
+      if (window.dvAttachCheckerHover) window.dvAttachCheckerHover(evt.target);
+      if (window.dvHydrateCheckerThumbs) window.dvHydrateCheckerThumbs(evt.target);
+    }
+  });
+
+  // Start Over: clear UI + storage without reload
+  if (startOverBtn) {
+    startOverBtn.addEventListener('click', () => {
+      try {
+        localStorage.removeItem(KEY_TEXT);
+        localStorage.removeItem(KEY_HTML);
+      } catch (_) {}
+      if (ta) ta.value = '';
+      if (res) { res.innerHTML = ''; res.dataset.hasResults = '0'; }
+      if (history && history.replaceState) {
+        history.replaceState({}, document.title, '{{ url_for("views.list_checker") }}');
+      }
+    });
+  }
+
+  // ===== Image hydration + hover preview =====
+  (function () {
+    const FALLBACK_IMG = "{{ url_for('static', filename='img/card-back-placeholder.png') }}";
+    const cacheByCardId = new Map();
+    const cacheByScryId = new Map();
+
+    async function fetchImageForCardId(cardId) {
+      if (cacheByCardId.has(cardId)) return cacheByCardId.get(cardId);
+      try {
+        const r = await fetch('/api/card/' + cardId);
+        if (!r.ok) throw 0;
+        const data = await r.json();
+        const imgs = data?.images || [];
+        const src = (imgs[0]?.large || imgs[0]?.normal || imgs[0]?.small) || null;
+        cacheByCardId.set(cardId, src);
+        return src;
+      } catch {
+        cacheByCardId.set(cardId, null);
+        return null;
+      }
+    }
+
+    async function fetchImageForScryId(sid) {
+      if (cacheByScryId.has(sid)) return cacheByScryId.get(sid);
+      try {
+        const r = await fetch('https://api.scryfall.com/cards/' + sid);
+        if (!r.ok) throw 0;
+        const data = await r.json();
+        let src = null;
+        if (data?.image_uris) {
+          src = data.image_uris.large || data.image_uris.normal || data.image_uris.small || null;
+        } else if (Array.isArray(data?.card_faces) && data.card_faces.length) {
+          const f = data.card_faces[0];
+          src = f?.image_uris?.large || f?.image_uris?.normal || f?.image_uris?.small || null;
+        }
+        cacheByScryId.set(sid, src);
+        return src;
+      } catch {
+        cacheByScryId.set(sid, null);
+        return null;
+      }
+    }
+
+    async function ensureHoverSource(el, triggerEvent) {
+      let src = el.getAttribute('data-hover-src') || el.dataset.img || '';
+      if (src && window.dvHoverPreview && el.matches(':hover')) {
+        window.dvHoverPreview.show(el, src, triggerEvent);
+      }
+      if (el.dataset.hoverFetched === '1') {
+        return src || null;
+      }
+      if (el.dataset.previewLoading === '1') {
+        return src || null;
+      }
+      el.dataset.previewLoading = '1';
+      try {
+        const cardId = el.dataset.cardId;
+        const scryId = el.dataset.scryId;
+        if (cardId) {
+          src = await fetchImageForCardId(cardId);
+        } else if (scryId) {
+          src = await fetchImageForScryId(scryId);
+        }
+        if (src) {
+          el.dataset.img = src;
+          el.setAttribute('data-hover-src', src);
+          if (window.dvHoverPreview && el.matches(':hover')) {
+            window.dvHoverPreview.show(el, src, triggerEvent);
+          }
+        } else if (!el.getAttribute('data-hover-src')) {
+          el.setAttribute('data-hover-src', '');
+        }
+        el.dataset.hoverFetched = '1';
+      } finally {
+        el.dataset.previewLoading = '';
+      }
+      return src || null;
+    }
+
+    function attachHoverPreviews(root) {
+      const scope = root || document;
+      scope.querySelectorAll('a.checker-card-link').forEach(el => {
+        if (el.dataset.hoverBound === '1') return;
+        el.dataset.hoverBound = '1';
+        el.addEventListener('mouseenter', (ev) => {
+          ensureHoverSource(el, ev);
+        }, { passive: true });
+        el.addEventListener('focus', (ev) => {
+          ensureHoverSource(el, ev);
+        });
+        el.addEventListener('blur', () => {
+          if (window.dvHoverPreview) window.dvHoverPreview.hide(el);
+        });
+      });
+    }
+
+    async function hydrateThumb(img) {
+      if (!img) return;
+      try {
+        const cid = img.dataset.cardId;
+        const sid = img.dataset.scryId;
+        let src = '';
+        if (cid) {
+          src = await fetchImageForCardId(cid);
+        } else if (sid) {
+          src = await fetchImageForScryId(sid);
+        }
+        img.src = src || FALLBACK_IMG;
+      } catch (err) {
+        img.src = FALLBACK_IMG;
+      }
+    }
+
+    function hydrateThumbs(root) {
+      const scope = root || document;
+      scope.querySelectorAll('.checker-thumb-img').forEach((img) => {
+        if (img.dataset.hydrated === '1') return;
+        img.dataset.hydrated = '1';
+        hydrateThumb(img);
+      });
+    }
+
+    attachHoverPreviews(document);
+    hydrateThumbs(document);
+    window.dvAttachCheckerHover = attachHoverPreviews;
+    window.dvHydrateCheckerThumbs = hydrateThumbs;
+  })();
+
+})();
+</script>
+
+{% endblock %}

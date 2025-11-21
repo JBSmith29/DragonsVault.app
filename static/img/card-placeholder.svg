@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="672" viewBox="0 0 480 672" fill="none">
+  <rect x="12" y="12" width="456" height="648" rx="28" fill="#1f2937" stroke="#9ca3af" stroke-width="24"/>
+  <rect x="72" y="96" width="336" height="480" rx="16" fill="#374151" stroke="#9ca3af" stroke-width="12" stroke-dasharray="12 20"/>
+  <g fill="#9ca3af" font-family="Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif" font-weight="600">
+    <text x="50%" y="46%" font-size="54" text-anchor="middle" letter-spacing=".12em">NO ART</text>
+    <text x="50%" y="58%" font-size="32" text-anchor="middle" letter-spacing=".32em">AVAILABLE</text>
+  </g>
+</svg>

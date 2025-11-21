@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Cookie Policy - DragonsVault{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-3">Cookie Policy</h1>
+  <p class="text-muted">Last updated: {{ last_updated }}</p>
+  <p>
+    DragonsVault uses cookies and similar technologies to operate the site, remember your preferences,
+    and measure performance. This policy explains what cookies are, how we use them, and how you can manage your choices.
+  </p>
+  <h2 class="h5 mt-4">What Are Cookies?</h2>
+  <p>
+    Cookies are small text files stored on your device. They allow us to recognize your browser and remember information
+    such as login state, language preferences, or items in progress.
+  </p>
+  <h2 class="h5 mt-4">Types of Cookies We Use</h2>
+  <ul>
+    <li><strong>Strictly necessary cookies</strong> – required for authentication and core security.</li>
+    <li><strong>Preference cookies</strong> – remember display choices such as theme or pagination settings.</li>
+    <li><strong>Analytics cookies</strong> – help us understand how the site is used so we can improve it.</li>
+  </ul>
+  <h2 class="h5 mt-4">Third-Party Services</h2>
+  <p>
+    We may use trusted third-party services (e.g., analytics providers) that set their own cookies.
+    These parties are contractually required to safeguard your information and use it only for the contracted purpose.
+  </p>
+  <h2 class="h5 mt-4">Managing Cookies</h2>
+  <p>
+    You can accept or decline optional cookies using the controls presented in the cookie banner, and you may also disable
+    cookies through your browser settings. Blocking cookies may impact certain features, such as staying signed in.
+  </p>
+  <h2 class="h5 mt-4">Do Not Sell / Share</h2>
+  <p>
+    California residents can exercise their rights via the <a href="{{ url_for('views.do_not_sell') }}">Do Not Sell</a>
+    and <a href="{{ url_for('views.do_not_share') }}">Do Not Share</a> pages.
+  </p>
+</div>
+{% endblock %}

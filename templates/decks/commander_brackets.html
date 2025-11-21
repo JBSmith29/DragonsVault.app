@@ -1,0 +1,566 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-section commander-brackets-page">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Commander Bracket Reference</h1>
+      <p class="text-muted mb-0">
+        Wizards of the Coast&rsquo;s
+        <a href="{{ source_url }}" target="_blank" rel="noopener">October 2025 Commander Brackets update</a>
+        emphasizes table expectations and turn benchmarks. We mirror that guidance here so every pod can start from the same page&mdash;
+        just remember to keep Rule 0 conversations front and center.
+      </p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <a class="btn btn-outline-secondary btn-sm"
+         href="{{ source_url }}"
+         target="_blank"
+         rel="noopener">
+        Read the official update
+      </a>
+        </div>
+      </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <h2 class="h6 text-uppercase text-muted mb-3">Quick Jump</h2>
+      <div class="d-flex flex-wrap gap-2">
+        {% for bracket in brackets %}
+          <a class="btn btn-sm {% if focus_level == bracket.level %}btn-primary{% else %}btn-outline-primary{% endif %}"
+             href="#bracket-{{ bracket.level }}"
+             data-bracket-target="bracket-collapse-{{ bracket.level }}">
+            {{ bracket.name }}
+          </a>
+        {% endfor %}
+      </div>
+      <div class="small text-muted mt-2">
+        {{ brackets|length }} brackets cover play styles from relaxed exhibition games to competitive cEDH pods.
+        The heuristics in DragonsVault help classify decks, but the best experience still comes from a quick pre-game discussion.
+      </div>
+    </div>
+  </div>
+
+  {% set back_to = request.full_path %}
+  {% if back_to and back_to.endswith('?') %}{% set back_to = back_to[:-1] %}{% endif %}
+
+  <style>
+    .calc-card-grid .calc-card {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      text-decoration: none;
+      padding: .5rem;
+      border: 1px solid var(--bs-border-color);
+      border-radius: .75rem;
+      background: var(--bs-body-bg);
+      transition: transform .12s ease, box-shadow .12s ease;
+      min-height: 80px;
+    }
+    .calc-card-grid .calc-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 .45rem 1.2rem rgba(0,0,0,.25);
+    }
+    .calc-card-thumb {
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .calc-card-thumb img {
+      width: 100%;
+      border-radius: .6rem;
+      box-shadow: 0 .35rem .85rem rgba(0,0,0,.4);
+    }
+    .calc-card-thumb-placeholder {
+      width: 60px;
+      height: 84px;
+      border-radius: .6rem;
+      background: rgba(255,255,255,.05);
+      border: 1px dashed rgba(255,255,255,.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      color: rgba(255,255,255,.35);
+    }
+    .calc-card-meta .calc-card-name {
+      font-weight: 600;
+    }
+    .accordion-button.bracket-pill-toggle {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0.35rem 0;
+      gap: 0.5rem;
+      color: inherit;
+      display: inline-flex;
+      width: auto;
+    }
+    .accordion-button.bracket-pill-toggle::after {
+      display: none;
+    }
+    .accordion-button.bracket-pill-toggle:focus {
+      box-shadow: none;
+    }
+    .accordion-button.bracket-pill-toggle:not(.collapsed) {
+      background: transparent;
+      color: inherit;
+    }
+    .bracket-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(var(--bs-primary-rgb, 13,110,253), 0.16);
+      color: var(--bs-primary);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+    .bracket-pill-toggle .chevron {
+      transition: transform .2s ease;
+      color: var(--bs-secondary-color);
+      transform: rotate(90deg);
+    }
+    .accordion-button.bracket-pill-toggle.collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+    .accordion-item.bracket-section {
+      border: none;
+      border-bottom: 1px solid var(--bs-border-color);
+      background: transparent;
+    }
+    .accordion-header.bracket-pill-header {
+      display: flex;
+      align-items: center;
+      padding: 0.35rem 0;
+    }
+    .accordion-item.bracket-section:last-child {
+      border-bottom: none;
+    }
+    .bracket-section.is-focused .bracket-pill {
+      background: rgba(var(--bs-primary-rgb, 13,110,253), 0.28);
+      box-shadow: 0 8px 24px rgba(var(--bs-primary-rgb, 13,110,253), 0.18);
+    }
+    .bracket-header-title {
+      font-weight: 600;
+    }
+    .commander-brackets-page .card {
+      border-radius: 1rem;
+    }
+    .commander-brackets-page .card-body {
+      padding: 1.5rem;
+    }
+    .commander-brackets-page .accordion-body {
+      padding: 0 0 1.5rem 0;
+    }
+  </style>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">How We Calculate Brackets</h2>
+      <p class="mb-3">
+        Wizards&rsquo; October 2025 update frames each bracket around Theme, Staples, Speed, and Metagame expectations. DragonsVault mirrors those qualitative guardrails and layers in quantitative signals so we can tag a deck automatically.
+      </p>
+      <p class="mb-3">
+        We evaluate the pressure points the Commander Format Panel highlights: mass land denial, extra turns, fast mana, tutor density, Game Changers, and Commander Spellbook combos. Expand each section below to see how we enforce the latest restrictions.
+      </p>
+
+      <div class="accordion" id="calcAccordion">
+        <div class="accordion-item">
+          <h3 class="accordion-header" id="calc-heading-mld">
+            <button class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#calc-collapse-mld"
+                    aria-expanded="false"
+                    aria-controls="calc-collapse-mld">
+              Mass Land Denial
+            </button>
+          </h3>
+          <div id="calc-collapse-mld"
+               class="accordion-collapse collapse"
+               aria-labelledby="calc-heading-mld"
+               data-bs-parent="#calcAccordion">
+            <div class="accordion-body">
+              <p class="small text-muted mb-2">
+                Wizards defines MLD as cards that "destroy, exile, or bounce other lands, keep lands tapped, or change what mana is produced by four or more lands per player without replacing them."
+              </p>
+              <p class="small text-muted mb-2">
+                Brackets 1 through 3 ban these outright—any detected MLD lifts a deck to Optimized (Bracket 4).
+              </p>
+              <p class="small text-muted mb-2">We flag cards that:</p>
+              <ul class="small mb-3">
+                <li>Destroy all lands or all lands of a specific type.</li>
+                <li>Keep multiple lands tapped or prevent them from untapping.</li>
+                <li>Overwrite the text on several lands (e.g., Blood Moon effects).</li>
+                <li>Increase the cost of all spells or all creature/noncreature spells.</li>
+              </ul>
+              <p class="small text-muted mb-3">
+                Global tax effects are not explicitly mentioned in the article, but they effectively lock players out of mana in the same way. We currently treat them as MLD for Brackets 1-3 and will revisit this if Wizards changes the guidance.
+              </p>
+              <p class="small text-muted mb-2">Some corner cases slip past text matching, so we maintain a curated list:</p>
+              {% if mass_land_cards %}
+                <div class="calc-card-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+                  {% for card in mass_land_cards %}
+                    {% set card_href = card.scryfall_id and url_for('views.scryfall_print_detail', sid=card.scryfall_id, return_to=back_to) or card.scryfall_uri or '#' %}
+                    {% set hover_img = card.hover or card.thumb %}
+                    <div class="col">
+                      <a href="{{ card_href }}"
+                         class="calc-card gc-card-link"
+                         data-name="{{ card.name }}"
+                         {% if card.scryfall_id %}data-sid="{{ card.scryfall_id }}"{% endif %}
+                         {% if hover_img %}data-img="{{ hover_img }}"{% endif %}
+                         {% if hover_img %}data-hover-src="{{ hover_img }}"{% endif %}
+                         {% if not card.scryfall_id %}target="_blank" rel="noopener"{% endif %}>
+                        <div class="calc-card-thumb">
+                          {% if card.thumb %}
+                            <img src="{{ card.thumb }}" alt="{{ card.name }}" loading="lazy">
+                          {% else %}
+                            <div class="calc-card-thumb-placeholder">?</div>
+                          {% endif %}
+                        </div>
+                        <div class="calc-card-meta">
+                          <div class="calc-card-name small text-truncate">{{ card.name }}</div>
+                          <div class="text-muted small text-truncate">
+                            {% set parts = [] %}
+                            {% if card.set_name %}{% set parts = parts + [card.set_name] %}{% endif %}
+                            {% if card.set %}{% set parts = parts + ['(' ~ card.set|upper ~ ')'] %}{% endif %}
+                            {% if card.collector_number %}{% set parts = parts + ['#' ~ card.collector_number] %}{% endif %}
+                            {{ parts|join(' · ') }}
+                          </div>
+                        </div>
+                      </a>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="alert alert-secondary small mb-0">
+                  Unable to load the curated list right now. Try refreshing after the Scryfall cache is ready.
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header" id="calc-heading-extra">
+            <button class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#calc-collapse-extra"
+                    aria-expanded="false"
+                    aria-controls="calc-collapse-extra">
+              Extra Turns
+            </button>
+          </h3>
+          <div id="calc-collapse-extra"
+               class="accordion-collapse collapse"
+               aria-labelledby="calc-heading-extra"
+               data-bs-parent="#calcAccordion">
+            <div class="accordion-body">
+              <p class="small text-muted mb-2">
+                Any card that grants an additional turn is tracked. Exhibition games forbid them entirely; Core tables move to Upgraded the moment we detect a single time-walk effect. To keep Upgraded pods from chaining turns, we monitor:
+              </p>
+              <ul class="small mb-3">
+                <li>Density &mdash; multiple extra-turn cards signal a potential loop.</li>
+                <li>Recursion &mdash; pieces that replay or rebuy extra-turn spells.</li>
+                <li>Repeatability &mdash; permanents that naturally take more than one extra turn.</li>
+              </ul>
+              <p class="small text-muted mb-2">The following cards are notorious for chaining and are banned below Bracket 4:</p>
+              {% if extra_turn_cards %}
+                <div class="calc-card-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+                  {% for card in extra_turn_cards %}
+                    {% set card_href = card.scryfall_id and url_for('views.scryfall_print_detail', sid=card.scryfall_id, return_to=back_to) or card.scryfall_uri or '#' %}
+                    {% set hover_img = card.hover or card.thumb %}
+                    <div class="col">
+                      <a href="{{ card_href }}"
+                         class="calc-card gc-card-link"
+                         data-name="{{ card.name }}"
+                         {% if card.scryfall_id %}data-sid="{{ card.scryfall_id }}"{% endif %}
+                         {% if hover_img %}data-img="{{ hover_img }}"{% endif %}
+                         {% if hover_img %}data-hover-src="{{ hover_img }}"{% endif %}
+                         {% if not card.scryfall_id %}target="_blank" rel="noopener"{% endif %}>
+                        <div class="calc-card-thumb">
+                          {% if card.thumb %}
+                            <img src="{{ card.thumb }}" alt="{{ card.name }}" loading="lazy">
+                          {% else %}
+                            <div class="calc-card-thumb-placeholder">?</div>
+                          {% endif %}
+                        </div>
+                        <div class="calc-card-meta">
+                          <div class="calc-card-name small text-truncate">{{ card.name }}</div>
+                          <div class="text-muted small text-truncate">
+                            {% set parts = [] %}
+                            {% if card.set_name %}{% set parts = parts + [card.set_name] %}{% endif %}
+                            {% if card.set %}{% set parts = parts + ['(' ~ card.set|upper ~ ')'] %}{% endif %}
+                            {% if card.collector_number %}{% set parts = parts + ['#' ~ card.collector_number] %}{% endif %}
+                            {{ parts|join(' · ') }}
+                          </div>
+                        </div>
+                      </a>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="alert alert-secondary small mb-0">
+                  Unable to load the curated list right now. Try refreshing after the Scryfall cache is ready.
+                </div>
+              {% endif %}
+              <p class="small text-muted mb-0">
+                When those signals appear, the deck moves into Optimized territory or higher.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header" id="calc-heading-tutors">
+            <button class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#calc-collapse-tutors"
+                    aria-expanded="false"
+                    aria-controls="calc-collapse-tutors">
+              Tutors
+            </button>
+          </h3>
+          <div id="calc-collapse-tutors"
+               class="accordion-collapse collapse"
+               aria-labelledby="calc-heading-tutors"
+               data-bs-parent="#calcAccordion">
+            <div class="accordion-body">
+              <p class="small text-muted mb-2">
+                The October update still warns that Exhibition and Core decks should keep nonland tutors sparse. DragonsVault flags any card that searches for a nonland card or a specific nonland card type (creature, artifact, enchantment, aura, equipment, planeswalker, instant, sorcery, permanent, or a particular creature tribe).
+              </p>
+              <p class="small text-muted mb-0">
+                Land-only ramp (including fetchlands) and creature-body tutors such as Imperial Recruiter stay unflagged. Up to two nonland tutors keep a list in the first two brackets; hitting three or more promotes the deck to Upgraded.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header" id="calc-heading-gc">
+            <button class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#calc-collapse-gc"
+                    aria-expanded="false"
+                    aria-controls="calc-collapse-gc">
+              Game Changers
+            </button>
+          </h3>
+          <div id="calc-collapse-gc"
+               class="accordion-collapse collapse"
+               aria-labelledby="calc-heading-gc"
+               data-bs-parent="#calcAccordion">
+            <div class="accordion-body">
+              <p class="small text-muted mb-2">
+                Wizards maintains the Game Changers list alongside Commander Brackets. None are allowed in Bracket 1 or 2, up to three are expected in Bracket 3, and there is no cap above that. DragonsVault keeps this list synced with the official source.
+              </p>
+              {% if game_changers %}
+                <div class="calc-card-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+                  {% for card in game_changers %}
+                    {% set card_href = card.scryfall_id and url_for('views.scryfall_print_detail', sid=card.scryfall_id, return_to=back_to) or card.scryfall_uri or '#' %}
+                    {% set hover_img = card.hover or card.thumb %}
+                    <div class="col">
+                      <a href="{{ card_href }}"
+                         class="calc-card gc-card-link"
+                         data-name="{{ card.name }}"
+                         {% if card.scryfall_id %}data-sid="{{ card.scryfall_id }}"{% endif %}
+                         {% if hover_img %}data-img="{{ hover_img }}"{% endif %}
+                         {% if hover_img %}data-hover-src="{{ hover_img }}"{% endif %}
+                         {% if not card.scryfall_id %}target="_blank" rel="noopener"{% endif %}>
+                        <div class="calc-card-thumb">
+                          {% if card.thumb %}
+                            <img src="{{ card.thumb }}" alt="{{ card.name }}" loading="lazy">
+                          {% else %}
+                            <div class="calc-card-thumb-placeholder">?</div>
+                          {% endif %}
+                        </div>
+                        <div class="calc-card-meta">
+                          <div class="calc-card-name small text-truncate">{{ card.name }}</div>
+                          <div class="text-muted small text-truncate">
+                            {% set parts = [] %}
+                            {% if card.set_name %}{% set parts = parts + [card.set_name] %}{% endif %}
+                            {% if card.set %}{% set parts = parts + ['(' ~ card.set|upper ~ ')'] %}{% endif %}
+                            {% if card.collector_number %}{% set parts = parts + ['#' ~ card.collector_number] %}{% endif %}
+                            {{ parts|join(' · ') }}
+                          </div>
+                        </div>
+                      </a>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="alert alert-secondary small mb-0">
+                  Unable to load the Game Changers list right now. Try refreshing after the Scryfall cache is ready.
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header" id="calc-heading-combos">
+            <button class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#calc-collapse-combos"
+                    aria-expanded="false"
+                    aria-controls="calc-collapse-combos">
+              2-Card Infinite Combos
+            </button>
+          </h3>
+          <div id="calc-collapse-combos"
+               class="accordion-collapse collapse"
+               aria-labelledby="calc-heading-combos"
+               data-bs-parent="#calcAccordion">
+            <div class="accordion-body">
+              <p class="small text-muted mb-2">
+                We integrate Commander Spellbook data to spot two-card combos that win outright or go infinite on mana, life, damage, card draw, tokens, or turns. Lines needing six or fewer total mana are treated as early-game; totals of ten or more are tagged late-game.
+              </p>
+              <p class="small text-muted mb-0">
+                Brackets 1 and 2 forbid these entirely. Upgraded pods tolerate only late-game lines, so any early combo pushes a deck into Optimized alongside faster shells.
+              </p>
+              <div class="mt-3">
+                <a class="btn btn-outline-primary btn-sm"
+                   href="{{ url_for('views.commander_spellbook_combos') }}">
+                  Browse synced Spellbook combos
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="small text-muted mt-3 mb-0">
+    Brackets are still guidelines. If a deck dodges these requirements yet plays like a Bracket 4 list, Rule 0 should move the table upward.
+  </p>
+
+  <div class="accordion mb-4" id="bracketAccordion">
+    {% for bracket in brackets %}
+      {% set collapse_id = "bracket-collapse-" ~ bracket.level %}
+      {% set heading_id = "bracket-heading-" ~ bracket.level %}
+      <div id="bracket-{{ bracket.level }}" class="accordion-item bracket-section {% if focus_level == bracket.level %}is-focused{% endif %}">
+        <h2 class="accordion-header bracket-pill-header" id="{{ heading_id }}">
+          <button class="accordion-button bracket-pill-toggle {% if not focus_level or focus_level != bracket.level %}collapsed{% endif %}"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#{{ collapse_id }}"
+                  aria-expanded="{{ 'true' if focus_level == bracket.level else 'false' }}"
+                  aria-controls="{{ collapse_id }}"
+                  aria-label="Toggle {{ bracket.name }} bracket details">
+            <span class="bracket-pill" aria-hidden="true">Bracket {{ bracket.level }}</span>
+            <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+          </button>
+        </h2>
+      <div id="{{ collapse_id }}"
+           class="accordion-collapse collapse {% if focus_level == bracket.level %}show{% endif %}"
+           aria-labelledby="{{ heading_id }}"
+           data-bs-parent="#bracketAccordion">
+        <div class="accordion-body">
+            <h3 class="h5 bracket-header-title mb-3">Bracket {{ bracket.level }} &mdash; {{ bracket.name }}</h3>
+            <p class="text-muted mb-3">{{ bracket.subtitle }}</p>
+            <p class="mb-3">{{ bracket.experience }}</p>
+            <div class="row g-4">
+              <div class="col-12 col-md-6">
+                <h3 class="h6 text-uppercase text-muted">Players Expect</h3>
+                <ul class="mb-0">
+                  {% for item in bracket.deck_building %}
+                    <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              <div class="col-12 col-md-6">
+                <h3 class="h6 text-uppercase text-muted">Turn &amp; Conversation Notes</h3>
+                <ul class="mb-0">
+                  {% for item in bracket.table_contract %}
+                    <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <h2 class="h5 mb-3">How DragonsVault estimates your bracket</h2>
+      <p class="mb-0">
+        When you set a commander, DragonsVault reviews your list for Game Changers, fast mana, tutors,
+        extra-turn loops, instant-win combos, and other staples frequently cited by the Commander Format Panel
+        and the cEDH Decklist Database. The resulting bracket badge is a conversation starter&mdash;feel free
+        to override it whenever your playgroup prefers a different pace.
+      </p>
+      <div class="small text-muted mt-3">
+        We currently score decks with the following signals:
+      </div>
+      <ul class="small text-muted ps-3 mb-3">
+        <li><span class="fw-semibold">Game Changers:</span> any card on Wizards&rsquo; published list.</li>
+        <li><span class="fw-semibold">Mass land denial:</span> repeatable Armageddon- or Stasis-style effects.</li>
+        <li><span class="fw-semibold">Extra turns & tutors:</span> the counts outlined in the Wizards article.</li>
+        <li><span class="fw-semibold">cEDH staples & fast mana:</span> high-prevalence cards and 0-mana rocks.</li>
+        <li><span class="fw-semibold">Instant-win combos &amp; Spellbook lines:</span> flagged via &ldquo;you win/lose the game&rdquo; text, classic finishers like Laboratory Maniac, Jace, Wielder of Mysteries, and Thassa&rsquo;s Oracle, plus Commander Spellbook&rsquo;s two-card combos that win outright or go infinite on mana, life, damage, card draw, tokens, or turns.</li>
+      </ul>
+      <div class="alert alert-secondary small mb-0">
+        <div class="fw-semibold mb-1">Want card-by-card details?</div>
+        <div>
+          Open any deck folder and expand the <em>Bracket Insight</em> drop-down above the commander tools.
+          It lists the exact cards counted in each category so you can adjust your list before a pod.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const accordionEl = document.getElementById('bracketAccordion');
+
+    function openBracketById(collapseId) {
+      const collapseEl = document.getElementById(collapseId);
+      if (!collapseEl) return;
+      const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+      bsCollapse.show();
+      const section = collapseEl.closest('.bracket-section');
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    document.querySelectorAll('a[data-bracket-target]').forEach((link) => {
+      link.addEventListener('click', (ev) => {
+        const target = link.getAttribute('data-bracket-target');
+        if (!target) return;
+        ev.preventDefault();
+        openBracketById(target);
+        history.replaceState({}, document.title, '#' + (link.getAttribute('href') || '').replace('#',''));
+      });
+    });
+
+    if (location.hash && location.hash.startsWith('#bracket-')) {
+      const level = location.hash.replace('#bracket-', '');
+      openBracketById('bracket-collapse-' + level);
+    }
+
+    if (accordionEl) {
+      accordionEl.addEventListener('shown.bs.collapse', ({ target }) => {
+        const section = target.closest('.bracket-section');
+        accordionEl.querySelectorAll('.bracket-section').forEach((el) => el.classList.remove('is-focused'));
+        if (section) section.classList.add('is-focused');
+      });
+    }
+  })();
+</script>
+
+{% endblock %}
+
+
+
+

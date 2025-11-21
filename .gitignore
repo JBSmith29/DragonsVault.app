@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+*.so
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+env/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# Flask / project-local data (your app uses instance/ for DB, uploads, jinja cache)
+instance/
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+
+# Test/cache
+.pytest_cache/
+.cache/
+
+# Secrets
+.env
+.env.*
+
+# Runtime caches
+data/archidekt/
+data/
+
+# Test artifacts
+.pytest-instance/
+
+# Windows ADS metadata created when downloading assets on Windows
+*:Zone.Identifier

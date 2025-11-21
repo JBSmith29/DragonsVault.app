@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+{% block title %}Wishlist - DragonsVault{% endblock %}
+{% block content %}
+
+<h1 class="mb-3">Wishlist</h1>
+
+{# Safe fallbacks if counts are missing from the view #}
+{% set total_items = total if total is defined else (items|length) %}
+{% set open_cnt = open_count if open_count is defined else (items|selectattr('status','equalto','open')|list|length) %}
+{% set acq_cnt = acquired if acquired is defined else (items|selectattr('status','equalto','acquired')|list|length) %}
+{% set ord_cnt = ordered_count if ordered_count is defined else (items|selectattr('status','equalto','ordered')|list|length) %}
+{% set fetch_cnt = to_fetch_count if to_fetch_count is defined else (items|selectattr('status','equalto','to_fetch')|list|length) %}
+{% set removed_cnt = removed if removed is defined else (items|selectattr('status','equalto','removed')|list|length) %}
+
+<!-- Summary + actions -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div class="d-flex gap-2 flex-wrap">
+    <span class="badge text-bg-primary">Open: {{ open_cnt }}</span>
+    <span class="badge text-bg-warning">To Fetch: {{ fetch_cnt }}</span>
+    <span class="badge text-bg-info">Ordered: {{ ord_cnt }}</span>
+    <span class="badge text-bg-success">Acquired: {{ acq_cnt }}</span>
+    <span class="badge text-bg-secondary">Removed: {{ removed_cnt }}</span>
+    <span class="badge text-bg-dark">Total: {{ total_items }}</span>
+  </div>
+
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('views.list_checker') }}" class="btn btn-outline-light btn-sm">List Checker</a>
+    <a href="{{ url_for('views.wishlist_export') }}" class="btn btn-outline-secondary btn-sm">Export CSV</a>
+  </div>
+</div>
+
+<!-- Filters + search -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <ul class="nav nav-pills small" id="wl-filters">
+    <li class="nav-item"><a class="nav-link active" href="#" data-filter="all">All</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-filter="open">Open</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-filter="to_fetch">To Fetch</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-filter="ordered">Ordered</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-filter="acquired">Acquired</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-filter="removed">Removed</a></li>
+  </ul>
+
+  <div class="input-group input-group-sm" style="max-width: 360px;">
+    <span class="input-group-text">Search</span>
+    <input type="search" class="form-control" id="wl-search" placeholder="Card name..." />
+    <button class="btn btn-outline-secondary" type="button" id="wl-clear">Clear</button>
+  </div>
+</div>
+
+<!-- Bulk actions -->
+<div class="alert alert-secondary d-flex align-items-center flex-wrap gap-2 mb-3" id="wlBulkBar" style="display:none;">
+  <div><strong id="wlBulkCount">0</strong> selected</div>
+  <div class="vr mx-2 d-none d-sm-block" style="height:20px"></div>
+  <div class="d-flex flex-wrap gap-2">
+    <button class="btn btn-sm btn-outline-primary" type="button" data-bulk-status="open">Mark Open</button>
+    <button class="btn btn-sm btn-outline-warning" type="button" data-bulk-status="to_fetch">Mark To Fetch</button>
+    <button class="btn btn-sm btn-outline-info" type="button" data-bulk-status="ordered">Mark Ordered</button>
+    <button class="btn btn-sm btn-outline-success" type="button" data-bulk-status="acquired">Mark Acquired</button>
+    <button class="btn btn-sm btn-outline-secondary" type="button" data-bulk-status="removed">Mark Removed</button>
+    <button class="btn btn-sm btn-outline-danger" type="button" id="wlBulkDeleteBtn">Delete</button>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-responsive">
+  <table class="table table-sm align-middle table-hover cards-table" id="wl-table">
+    <thead>
+      <tr>
+        <th style="width:36px;" class="text-center">
+          <input class="form-check-input" type="checkbox" id="wlSelectAll" aria-label="Select all wishlist items">
+        </th>
+        <th style="min-width:260px;">Card</th>
+        <th class="text-center" style="width:120px;">Requested</th>
+        <th class="text-center" style="width:110px;">Missing</th>
+        <th style="width:120px;">Status</th>
+        <th style="width:260px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr class="wishlist-row" data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
+        <td class="text-center">
+          <input
+            type="checkbox"
+            class="form-check-input wl-select"
+            value="{{ it.id }}"
+            aria-label="Select {{ it.name }}"
+            data-mark-url="{{ url_for('views.wishlist_mark', item_id=it.id) }}"
+            data-delete-url="{{ url_for('views.wishlist_delete', item_id=it.id) }}"
+          >
+        </td>
+        <td>
+          <div class="d-flex gap-2">
+            <div class="wishlist-thumb rounded overflow-hidden">
+              <img
+                src=""
+                alt="{{ it.name }}"
+                class="wishlist-thumb-img"
+                loading="lazy"
+                data-scry-id="{{ it.scryfall_id or '' }}"
+                data-name="{{ it.name }}"
+              >
+            </div>
+            <div class="d-flex flex-column">
+              {% set back_to = request.full_path %}
+              {% set wl_href = (
+                url_for('views.scryfall_print_detail', sid=it.scryfall_id, return_to=back_to)
+                if it.scryfall_id
+                else url_for('views.scryfall_resolve_by_name', name=it.name, return_to=back_to)
+              ) %}
+
+              <a
+                class="link-light link-underline-opacity-25 wl-card-link"
+                href="{{ wl_href }}"
+                data-scry-id="{{ it.scryfall_id or '' }}"
+                data-name="{{ it.name }}"
+              ><strong>{{ it.name }}</strong></a>
+
+              <div class="small text-muted">
+                {% if it.created_at %}Added {{ it.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+              </div>
+              {% set folder_list = it.source_folders_list %}
+              {% if folder_list %}
+                <div class="small text-muted d-flex flex-wrap gap-1 mt-1">
+                  <span class="fw-semibold text-secondary">Fetch:</span>
+                  {% for entry in folder_list %}
+                    <span class="badge bg-secondary-subtle text-secondary">
+                      {{ entry.name }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+
+        <td class="text-center">
+          <form method="post"
+                action="{{ url_for('views.wishlist_update', item_id=it.id) }}"
+                class="d-inline-flex gap-1 justify-content-center align-items-center"
+                hx-boost="false">
+            <input type="number"
+                   name="requested_qty"
+                   class="form-control form-control-sm text-center"
+                   value="{{ it.requested_qty or 0 }}"
+                   min="0" style="max-width:80px;">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </form>
+        </td>
+
+        <td class="text-center">
+          {% if (it.missing_qty or 0) > 0 %}
+            <span class="badge rounded-pill text-bg-danger">x{{ it.missing_qty }}</span>
+          {% else %}
+            <span class="text-muted">&mdash;</span>
+          {% endif %}
+        </td>
+
+        <td>
+          {% set st = it.status or 'open' %}
+          {% if st == 'acquired' %}
+            <span class="badge text-bg-success">Acquired</span>
+          {% elif st == 'ordered' %}
+            <span class="badge text-bg-info">Ordered</span>
+          {% elif st == 'to_fetch' %}
+            <span class="badge text-bg-warning">To Fetch</span>
+          {% elif st == 'removed' %}
+            <span class="badge text-bg-secondary">Removed</span>
+          {% else %}
+            <span class="badge text-bg-primary">Open</span>
+          {% endif %}
+        </td>
+
+        <td>
+          <div class="wl-actions d-inline-flex flex-nowrap align-items-center gap-1 text-nowrap">
+            <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline" hx-boost="false">
+              <input type="hidden" name="status" value="open">
+              <button type="submit" class="btn btn-outline-primary btn-sm">Open</button>
+            </form>
+
+            <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline" hx-boost="false">
+              <input type="hidden" name="status" value="to_fetch">
+              <button type="submit" class="btn btn-outline-warning btn-sm">To Fetch</button>
+            </form>
+
+            <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline" hx-boost="false">
+              <input type="hidden" name="status" value="ordered">
+              <button type="submit" class="btn btn-outline-info btn-sm">Ordered</button>
+            </form>
+
+            <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline" hx-boost="false">
+              <input type="hidden" name="status" value="acquired">
+              <button type="submit" class="btn btn-outline-success btn-sm">Acquired</button>
+            </form>
+
+            <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline" hx-boost="false">
+              <input type="hidden" name="status" value="removed">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">Removed</button>
+            </form>
+
+            <form method="post"
+                  action="{{ url_for('views.wishlist_delete', item_id=it.id) }}"
+                  class="d-inline"
+                  hx-boost="false"
+                  data-confirm='Delete "{{ it.name }}" from wishlist?'>
+              <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  #wl-filters .nav-link { cursor: pointer; }
+
+  /* Keep action buttons on one line; allow gentle horizontal scroll on tiny screens */
+  .wl-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: .25rem;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .wl-actions form { flex: 0 0 auto; }
+  .wl-actions .btn { white-space: nowrap; }
+  #wl-table td:last-child { white-space: nowrap; }
+  .wishlist-thumb { width: 120px; min-width: 120px; max-width: 120px; }
+  .wishlist-thumb img { object-fit: contain; width: 100%; height: auto; display: block; }
+  .wishlist-row td { padding-top: .9rem; padding-bottom: .9rem; }
+  .wl-select { cursor: pointer; }
+</style>
+
+<script>
+(function () {
+  const FALLBACK_IMG = "{{ url_for('static', filename='img/card-back-placeholder.png') }}";
+
+  // -------- Filter + search --------
+  const table = document.getElementById('wl-table');
+  const search = document.getElementById('wl-search');
+  const clearBtn = document.getElementById('wl-clear');
+  const filters = document.getElementById('wl-filters');
+
+  function applyFilter() {
+    if (!table) return;
+    const active = filters.querySelector('.nav-link.active');
+    const mode = active ? active.dataset.filter : 'all'; // all | open | to_fetch | ordered | acquired | removed
+    const q = (search?.value || '').trim().toLowerCase();
+
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const status = tr.getAttribute('data-status') || 'open';
+      const name = tr.getAttribute('data-name') || '';
+      const statusOk = (mode === 'all') || (status === mode);
+      const searchOk = !q || name.includes(q);
+      const visible = statusOk && searchOk;
+      tr.style.display = visible ? '' : 'none';
+      if (!visible) {
+        const cb = tr.querySelector('.wl-select');
+        if (cb && cb.checked) {
+          cb.checked = false;
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    });
+  }
+
+  if (filters) {
+    filters.addEventListener('click', (e) => {
+      const a = e.target.closest('a[data-filter]');
+      if (!a) return;
+      e.preventDefault();
+      filters.querySelectorAll('.nav-link').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+      applyFilter();
+    });
+  }
+  search?.addEventListener('input', applyFilter);
+  clearBtn?.addEventListener('click', () => { search.value = ''; applyFilter(); });
+  applyFilter();
+
+  // -------- Thumb images --------
+  const thumbCache = new Map();
+
+  async function fetchThumbByScryId(sid) {
+    if (thumbCache.has(sid)) return thumbCache.get(sid);
+    try {
+      const r = await fetch(`https://api.scryfall.com/cards/${sid}`);
+      if (!r.ok) throw 0;
+      const data = await r.json();
+      let src = null;
+      if (data?.image_uris) {
+        src = data.image_uris.normal || data.image_uris.small || data.image_uris.large || null;
+      } else if (Array.isArray(data?.card_faces) && data.card_faces.length) {
+        const f = data.card_faces[0];
+        src = f?.image_uris?.normal || f?.image_uris?.small || f?.image_uris?.large || null;
+      }
+      thumbCache.set(sid, src);
+      return src;
+    } catch {
+      thumbCache.set(sid, null);
+      return null;
+    }
+  }
+
+  async function hydrateThumb(img) {
+    if (!img) return;
+    const sid = img.dataset.scryId;
+    let src = null;
+    if (sid) {
+      src = await fetchThumbByScryId(sid);
+    }
+    img.src = src || FALLBACK_IMG;
+  }
+
+  document.querySelectorAll('.wishlist-thumb-img').forEach((img) => hydrateThumb(img));
+
+  // -------- Bulk selection + actions --------
+  const selectAll = document.getElementById('wlSelectAll');
+  const bulkBar = document.getElementById('wlBulkBar');
+  const bulkCount = document.getElementById('wlBulkCount');
+  const bulkDeleteBtn = document.getElementById('wlBulkDeleteBtn');
+  const itemCheckboxes = Array.from(document.querySelectorAll('.wl-select'));
+
+  function selectedItems() {
+    return itemCheckboxes.filter(cb => cb.checked);
+  }
+
+  function updateBulkUI() {
+    const selected = selectedItems();
+    const count = selected.length;
+    if (bulkBar) bulkBar.style.display = count ? '' : 'none';
+    if (bulkCount) bulkCount.textContent = count;
+    if (!selectAll) return;
+    if (count === 0) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+    } else if (count === itemCheckboxes.length) {
+      selectAll.checked = true;
+      selectAll.indeterminate = false;
+    } else {
+      selectAll.checked = false;
+      selectAll.indeterminate = true;
+    }
+  }
+
+  selectAll?.addEventListener('change', () => {
+    const checked = !!selectAll.checked;
+    itemCheckboxes.forEach(cb => {
+      cb.checked = checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    selectAll.indeterminate = false;
+  });
+
+  itemCheckboxes.forEach(cb => cb.addEventListener('change', updateBulkUI));
+  updateBulkUI();
+
+  async function postAction(url, payload) {
+    const body = new URLSearchParams(payload || {});
+    const res = await fetch(url, { method:'POST', body });
+    return res.ok;
+  }
+
+  async function applyStatus(status) {
+    const selected = selectedItems();
+    if (!selected.length) return;
+    const promises = selected.map(cb => postAction(cb.dataset.markUrl, { status }));
+    await Promise.all(promises);
+    window.location.reload();
+  }
+
+  async function applyDelete() {
+    const selected = selectedItems();
+    if (!selected.length) return;
+    if (!confirm(`Delete ${selected.length} item(s) from wishlist?`)) return;
+    const promises = selected.map(cb => postAction(cb.dataset.deleteUrl, {}));
+    await Promise.all(promises);
+    window.location.reload();
+  }
+
+  document.querySelectorAll('[data-bulk-status]').forEach(btn => {
+    btn.addEventListener('click', () => applyStatus(btn.dataset.bulkStatus));
+  });
+  bulkDeleteBtn?.addEventListener('click', applyDelete);
+})();
+</script>
+
+{% endblock %}

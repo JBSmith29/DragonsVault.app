@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Sets - DragonsVault{% endblock %}
+{% block breadcrumbs %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{{ url_for('views.dashboard') }}">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Sets</li>
+  </ol>
+</nav>
+{% endblock %}
+{% block content %}
+
+<style>
+  .cards-table thead th a {
+    color: inherit; text-decoration: none;
+  }
+  .cards-table thead th a:hover { text-decoration: underline; }
+
+  .cards-table .col-code { width: 6rem; white-space: nowrap; }
+  .cards-table .col-name { min-width: 16rem; }
+  .cards-table .col-release { width: 9rem; white-space: nowrap; }
+  .cards-table .col-count { width: 8rem; white-space: nowrap; }
+  .cards-table .col-actions { width: 12rem; }
+
+  .sort-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+  }
+  .sort-indicator {
+    font-size: .75em;
+  }
+
+  .quick-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .3rem .75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.05);
+    color: inherit;
+    font-size: .8rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .quick-chip:hover {
+    text-decoration: none;
+    border-color: rgba(255,255,255,.25);
+    background: rgba(255,255,255,.12);
+  }
+  .quick-chip.active {
+    background: var(--bs-primary);
+    border-color: rgba(255,255,255,.35);
+    color: #fff;
+  }
+  .filter-label {
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--bs-secondary);
+  }
+
+</style>
+
+<div class="page-section">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-0">Sets</h1>
+      <div class="text-muted small">Showing {{ sets|length }} set{{ 's' if sets|length != 1 else '' }} from Scryfall.</div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <form class="row g-2 mb-3" method="get">
+    <div class="col-md-6">
+      <input class="form-control" name="q" placeholder="Search by set code or name..." value="{{ q or '' }}">
+    </div>
+    <div class="col-md-2 d-grid">
+      <button class="btn btn-primary">Search</button>
+    </div>
+  </form>
+
+  {% if not sets or sets|length == 0 %}
+    <div class="alert alert-secondary">No sets found.</div>
+  {% else %}
+
+    {# Sort toggles #}
+    {% set sort = (request.args.get('sort') or '') %}
+    {% set direction = (request.args.get('dir') or 'asc') %}
+    {% set code_dir = 'asc' if sort!='code' or direction=='desc' else 'desc' %}
+    {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
+    {% set release_dir = 'asc' if sort!='release' or direction=='desc' else 'desc' %}
+    {% set rows_dir = 'asc' if sort!='rows' or direction=='desc' else 'desc' %}
+    {% set qty_dir = 'asc' if sort!='qty' or direction=='desc' else 'desc' %}
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle cards-table">
+        <thead>
+          <tr>
+            <th class="col-code" scope="col" aria-sort="{% if sort=='code' %}{{ 'descending' if direction=='desc' else 'ascending' }}{% else %}none{% endif %}">
+              <a class="sort-link{% if sort=='code' %} active{% endif %}"
+                 href="{{ url_for('views.sets_overview', sort='code', dir=code_dir, q=q) }}">
+                Code
+                {% if sort == 'code' %}
+                  <span class="sort-indicator">{{ 'v' if direction == 'desc' else '^' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th class="col-name" scope="col" aria-sort="{% if sort=='name' %}{{ 'descending' if direction=='desc' else 'ascending' }}{% else %}none{% endif %}">
+              <a class="sort-link{% if sort=='name' %} active{% endif %}"
+                 href="{{ url_for('views.sets_overview', sort='name', dir=name_dir, q=q) }}">
+                Name
+                {% if sort == 'name' %}
+                  <span class="sort-indicator">{{ 'v' if direction == 'desc' else '^' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th class="col-release text-end" scope="col" aria-sort="{% if sort=='release' %}{{ 'descending' if direction=='desc' else 'ascending' }}{% else %}none{% endif %}">
+              <a class="sort-link{% if sort=='release' %} active{% endif %}"
+                 href="{{ url_for('views.sets_overview', sort='release', dir=release_dir, q=q) }}">
+                Release
+                {% if sort == 'release' %}
+                  <span class="sort-indicator">{{ 'v' if direction == 'desc' else '^' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th class="col-count text-end" scope="col" aria-sort="{% if sort=='rows' %}{{ 'descending' if direction=='desc' else 'ascending' }}{% else %}none{% endif %}">
+              <a class="sort-link{% if sort=='rows' %} active{% endif %}"
+                 href="{{ url_for('views.sets_overview', sort='rows', dir=rows_dir, q=q) }}">
+                Owned Uniques
+                {% if sort == 'rows' %}
+                  <span class="sort-indicator">{{ 'v' if direction == 'desc' else '^' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th class="col-count text-end" scope="col" aria-sort="{% if sort=='qty' %}{{ 'descending' if direction=='desc' else 'ascending' }}{% else %}none{% endif %}">
+              <a class="sort-link{% if sort=='qty' %} active{% endif %}"
+                 href="{{ url_for('views.sets_overview', sort='qty', dir=qty_dir, q=q) }}">
+                Owned Qty
+                {% if sort == 'qty' %}
+                  <span class="sort-indicator">{{ 'v' if direction == 'desc' else '^' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th class="col-actions text-end" scope="col">Browse</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sets %}
+            <tr>
+              <td class="fw-semibold col-code">{{ (s.set_code or '')|upper }}</td>
+              <td class="fw-semibold col-name">
+                <a href="{{ url_for('views.set_gallery', set_code=s.set_code) }}">{{ s.set_name or "N/A" }}</a>
+              </td>
+              <td class="text-end col-release">
+                {% if s.release_display %}
+                  {{ s.release_display }}
+                {% else %}
+                  <span class="text-muted">N/A</span>
+                {% endif %}
+              </td>
+              <td class="text-end col-count">{{ s.rows }}</td>
+              <td class="text-end col-count">{{ s.qty }}</td>
+              <td class="text-end col-actions">
+                <div class="btn-group btn-group-sm">
+                  <a class="btn btn-outline-primary"
+                     href="{{ url_for('views.set_gallery', set_code=s.set_code) }}">
+                    All Prints
+                  </a>
+                  <a class="btn btn-primary"
+                     href="{{ url_for('views.list_cards', set=s.set_code) }}">
+                    My Cards
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

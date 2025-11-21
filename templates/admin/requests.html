@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+{% set status_colors = {'not_started': 'secondary', 'working': 'warning', 'completed': 'success'} %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Requests Queue</h1>
+      <p class="text-muted mb-0">Bug reports and feature ideas submitted from the contact page.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-2">
+      <h5 class="card-title mb-0">Status snapshot</h5>
+      <span class="badge text-bg-secondary">{{ request_counts.total }} total</span>
+      <span class="badge text-bg-secondary">Not started: {{ request_counts.get('not_started', 0) }}</span>
+      <span class="badge text-bg-warning-subtle text-warning">Working: {{ request_counts.get('working', 0) }}</span>
+      <span class="badge text-bg-success-subtle text-success">Completed: {{ request_counts.get('completed', 0) }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <h5 class="card-title mb-0">All submissions</h5>
+        <span class="badge text-bg-secondary">{{ requests|length }} in list</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="text-muted small">
+            <tr>
+              <th scope="col" style="min-width: 280px;">Request</th>
+              <th scope="col">Submitted</th>
+              <th scope="col">Contact</th>
+              <th scope="col" style="width: 320px;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in requests %}
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge text-bg-{% if item.request_type == 'bug' %}danger-subtle text-danger{% else %}info-subtle text-info{% endif %}">
+                      {{ item.type_label }}
+                    </span>
+                    <div class="fw-semibold">{{ item.title }}</div>
+                  </div>
+                  <div class="small text-muted mt-1">{{ item.details }}</div>
+                </td>
+                <td class="small">
+                  {% if item.created_at %}
+                    <div>{{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                  {% else %}
+                    <div>Unknown</div>
+                  {% endif %}
+                  {% if item.updated_at %}
+                    <div class="text-muted">Updated {{ item.updated_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                  {% endif %}
+                </td>
+                <td class="small">
+                  {% if item.requester_name %}
+                    <div class="fw-semibold">{{ item.requester_name }}</div>
+                  {% endif %}
+                  {% if item.requester_email %}
+                    <div class="text-muted">{{ item.requester_email }}</div>
+                  {% else %}
+                    <span class="text-muted fst-italic">No email provided</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge text-bg-{{ status_colors.get(item.status, 'secondary') }}">{{ item.status_label }}</span>
+                    <form method="post" class="d-flex flex-wrap align-items-center gap-2">
+                      <input type="hidden" name="action" value="update_request_status">
+                      <input type="hidden" name="request_id" value="{{ item.id }}">
+                      <label class="visually-hidden" for="status-{{ item.id }}">Status</label>
+                      <select
+                        class="form-select form-select-sm w-auto"
+                        id="status-{{ item.id }}"
+                        name="status"
+                      >
+                        {% for value, label in status_choices %}
+                          <option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                      </select>
+                      <button class="btn btn-primary btn-sm" type="submit">Update</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="4" class="text-center text-muted py-4">No requests yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

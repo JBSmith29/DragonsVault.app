@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  {% set selected_mode = (quantity_mode or 'absolute') if quantity_mode is defined else 'absolute' %}
+  {% set manual_seed = session.get('manual_import_seed') %}
+
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-2">
+    <div>
+      <h1 class="mb-1">Import / Export Cards</h1>
+      <p class="text-muted mb-0">
+        Upload a CSV or Excel export of your collection and choose how it should be applied.
+        Replace mode sets folder totals to exactly what is in your file; Add mode increases existing totals instead.
+      </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('views.manage_folder_preferences') }}">Account / Folders</a>
+      {% if manual_seed %}
+        <a class="btn btn-outline-info" href="{{ url_for('views.manual_import') }}">
+          Review skipped cards
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="alert alert-warning" role="alert">
+    <strong>Warning:</strong> Replace mode rewrites quantities for every matching card. If your file is partial
+    or outdated, consider using Add mode so the import only increments existing counts.
+  </div>
+
+  {% if manual_seed %}
+    <div class="alert alert-info" role="alert">
+      Skipped cards from your last import were sent to the Manual Import wizard.
+      <a href="{{ url_for('views.manual_import') }}" class="alert-link">Open manual import</a>.
+    </div>
+  {% endif %}
+
+  <style>
+    .folder-export-grid {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .folder-export-surface {
+      background: rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0.25rem 1.25rem rgba(15, 15, 20, 0.25);
+      backdrop-filter: blur(8px);
+    }
+    .folder-export-card {
+      position: relative;
+      display: block;
+      cursor: pointer;
+    }
+    .folder-export-card input[type="checkbox"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .folder-export-card-body {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 0.85rem;
+      padding: 0.85rem;
+      background: rgba(18, 24, 38, 0.65);
+      transition:
+        border-color 0.18s ease,
+        box-shadow 0.18s ease,
+        background 0.18s ease;
+      min-height: 92px;
+    }
+    .folder-export-card:hover .folder-export-card-body {
+      border-color: rgba(25, 135, 84, 0.4);
+    }
+    .folder-export-card input[type="checkbox"]:checked + .folder-export-card-body {
+      border-color: rgba(25, 135, 84, 0.9);
+      box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.2);
+      background: rgba(25, 135, 84, 0.05);
+    }
+    .folder-export-card input[type="checkbox"]:disabled + .folder-export-card-body {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .folder-export-card input[type="checkbox"]:focus-visible + .folder-export-card-body {
+      outline: 2px solid rgba(13, 110, 253, 0.6);
+      outline-offset: 2px;
+    }
+    @media (prefers-color-scheme: light) {
+      .folder-export-surface {
+        background: rgba(255, 255, 255, 0.75);
+        border-color: rgba(148, 163, 184, 0.25);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.45),
+          0 0.25rem 1rem rgba(15, 15, 20, 0.08);
+      }
+      .folder-export-card-body {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(108, 117, 125, 0.35);
+      }
+      .folder-export-card input[type="checkbox"]:checked + .folder-export-card-body {
+        background: rgba(25, 135, 84, 0.08);
+      }
+    }
+  </style>
+
+  <!-- Upload & Import -->
+  <form id="import-form" class="card border-0 shadow-sm" method="post" enctype="multipart/form-data" action="{{ url_for('views.import_csv') }}">
+    <input type="hidden" name="action" value="confirm">
+    <div class="card-header">Upload file</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <label for="file" class="form-label">Choose CSV or Excel file</label>
+        <input class="form-control" type="file" id="file" name="file"
+               accept=".csv,.tsv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+               required>
+        <div class="form-text">
+          Supports DragonShield exports (template below) and ManaBox binder exports. Files are limited to 10MB to keep imports fast and safe.
+          ManaBox&#8217;s &#8220;Binder Name&#8221; maps to folders, and &#8220;Binder Type&#8221; switches between deck and collection buckets automatically.
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Import mode</label>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-replace" value="absolute"
+                 {% if selected_mode == 'absolute' %}checked{% endif %}>
+          <label class="form-check-label" for="mode-replace">
+            Replace quantities (update existing rows, skip unchanged)
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-add" value="delta"
+                 {% if selected_mode == 'delta' %}checked{% endif %}>
+          <label class="form-check-label" for="mode-add">
+            Add to existing totals (increments current quantities)
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-newonly" value="new_only"
+                 {% if selected_mode == 'new_only' %}checked{% endif %}>
+          <label class="form-check-label" for="mode-newonly">
+            Add new cards only (leave existing quantities untouched)
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-purge" value="purge"
+                 {% if selected_mode == 'purge' %}checked{% endif %}>
+          <label class="form-check-label" for="mode-purge">
+            Clear then import everything (no skips; wipes existing cards first)
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-progress" id="btn-import">
+        <span class="btn-progress__icon" aria-hidden="true">
+          <span class="spinner-border spinner-border-sm btn-progress__spinner" role="status"></span>
+          <i class="bi bi-check2 btn-progress__check"></i>
+        </span>
+        <span class="btn-progress__label">Import</span>
+      </button>
+    </div>
+  </form>
+
+  <div class="alert alert-secondary d-flex justify-content-between align-items-center mt-4" role="alert">
+    <div>
+      Need a starting point? 
+    </div>
+    <div class="btn-group">
+      <button type="button" id="btn-download-template-dragonshield" class="btn btn-outline-primary">
+        DragonShield CSV template
+      </button>
+      <button type="button" id="btn-download-template-manabox" class="btn btn-outline-primary">
+        ManaBox CSV template
+      </button>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mt-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+      <div class="icon-circle icon-circle-sm text-bg-info-subtle text-info">
+        <i class="bi bi-magic"></i>
+      </div>
+      <div class="flex-grow-1">
+        <h2 class="h6 mb-1">Short list of cards?</h2>
+        <p class="text-muted small mb-0">
+          Use the manual import wizard to paste a list and pick the exact printing, foil, and folder for each card.
+        </p>
+      </div>
+      <a class="btn btn-outline-info" href="{{ url_for('views.manual_import') }}">
+        Manual Import Wizard
+      </a>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mt-3">
+    <div class="card-body d-flex flex-column gap-3">
+      <div class="d-flex align-items-start gap-2">
+        <div class="icon-circle icon-circle-sm text-bg-warning-subtle text-warning">
+          <i class="bi bi-flag"></i>
+        </div>
+        <div>
+          <h2 class="h6 mb-1">Unmatched cards queue</h2>
+          <p class="text-muted small mb-2">
+            If an import row can't be matched to a known printing, drop it here as a last-resort queue.
+            You'll be taken to the manual import wizard to pick the exact card details.
+          </p>
+        </div>
+      </div>
+      <form class="row g-3" method="post" action="{{ url_for('views.manual_import') }}">
+        <input type="hidden" name="action" value="parse">
+        <div class="col-12">
+          <label for="unmatchedList" class="form-label">Unmatched items</label>
+          <textarea
+            id="unmatchedList"
+            name="card_list"
+            class="form-control"
+            rows="4"
+            placeholder="2 ??? Unknown Set&#10;3 Mystery Card"
+          ></textarea>
+          <div class="form-text">
+            One card per line; include a quantity like &ldquo;3 Card Name&rdquo; if known.
+          </div>
+        </div>
+        <div class="col-12 d-flex gap-2 align-items-center flex-wrap">
+          <button type="submit" class="btn btn-warning">
+            Send to manual queue
+          </button>
+          <span class="text-muted small">We will prompt you to confirm set, language, foil, and folder.</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mt-4">
+    {% if folder_export_options %}
+      <form
+        method="get"
+        action="{{ url_for('views.export_cards') }}"
+        class="card-body d-flex flex-column gap-3"
+        data-hx-boost="false"
+        id="folderExportForm">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-box-arrow-down text-success"></i>
+            <h2 class="h5 mb-0">Export collection</h2>
+          </div>
+          <p class="text-muted small mb-0">
+            Download a CSV snapshot of your folders for backups, trades, or other trackers.
+          </p>
+        </div>
+        <div class="form-check form-switch mb-0">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            role="switch"
+            id="folderExportAll"
+            name="all_folders"
+            value="1"
+            checked>
+          <label class="form-check-label fw-semibold" for="folderExportAll">
+            Export every folder
+          </label>
+          <div class="form-text" id="folderExportStatus">
+            All of your folders will be exported.
+          </div>
+        </div>
+        <div class="folder-export-surface">
+          <p class="text-muted small mb-3">
+            Uncheck the toggle above to pick specific folders.
+          </p>
+          <div class="folder-export-grid">
+            {% for folder in folder_export_options %}
+              <label class="folder-export-card">
+                <input
+                  type="checkbox"
+                  value="{{ folder.id }}"
+                  id="folderExport{{ folder.id }}"
+                  name="folder_ids"
+                  data-folder-checkbox>
+                <div class="folder-export-card-body">
+                  <div class="fw-semibold">{{ folder.name }}</div>
+                  <div class="text-muted small">
+                    {{ folder.category_label }}{% if folder.is_proxy %} · Proxy{% endif %}{% if folder.is_public %} · Shared{% endif %}
+                  </div>
+                </div>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <label class="form-label">Export format</label>
+          <div class="dropdown dv-select w-100" data-dv-select="folder-export-format">
+            {% set default_format = export_format_options[0] if export_format_options else {'value': '', 'label': 'Standard CSV', 'description': 'Includes folder name, quantity, set code, collector number, language, and foil status.'} %}
+            <input type="hidden" name="format" data-dv-select-input value="{{ default_format.value }}">
+            <button
+              class="btn dv-select-toggle w-100 justify-content-between"
+              type="button"
+              id="folderExportFormatToggle"
+              data-bs-toggle="dropdown"
+              aria-expanded="false">
+              <span data-dv-select-label>{{ default_format.label }}</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="folderExportFormatToggle">
+              {% for option in export_format_options %}
+                <li>
+                  <button
+                    class="dropdown-item {% if loop.first %}active{% endif %}"
+                    type="button"
+                    data-dv-select-option
+                    data-value="{{ option.value }}"
+                    data-label="{{ option.label }}"
+                    data-description="{{ option.description }}">
+                    <div class="fw-semibold">{{ option.label }}</div>
+                    <div class="small text-muted">{{ option.description }}</div>
+                  </button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="form-text" id="folderExportFormatHelp">
+            {{ default_format.description }}
+          </div>
+        </div>
+        <div class="mt-auto d-grid">
+          <button class="btn btn-success" type="submit" id="folderExportSubmit">
+            Download export
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <div class="card-body d-flex flex-column gap-3">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-box-arrow-down text-success"></i>
+            <h2 class="h5 mb-0">Export collection</h2>
+          </div>
+          <p class="text-muted small mb-0">
+            Create a folder first, then come back to generate CSV exports.
+          </p>
+        </div>
+        <div class="alert alert-info mb-0">
+          You don't have any folders linked to your account yet.
+        </div>
+        <div class="mt-auto d-grid">
+          <a class="btn btn-outline-primary" href="{{ url_for('views.manage_folder_preferences') }}">
+            Create folders
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  (function () {
+    const form = document.getElementById("import-form");
+    const btn = document.getElementById("btn-import");
+    const STORAGE_KEY = "dv-import-progress";
+
+    function setBtnState(state) {
+      if (!btn) return;
+      btn.classList.remove("is-loading", "is-complete");
+      btn.disabled = false;
+      if (state === "loading") {
+        btn.classList.add("is-loading");
+        btn.disabled = true;
+      } else if (state === "complete") {
+        btn.classList.add("is-complete");
+      }
+    }
+
+    if (btn) {
+      const flag = sessionStorage.getItem(STORAGE_KEY);
+      if (flag === "pending") {
+        setBtnState("complete");
+        sessionStorage.removeItem(STORAGE_KEY);
+        window.setTimeout(() => setBtnState("idle"), 1600);
+      } else {
+        setBtnState("idle");
+      }
+    }
+
+    if (form && btn) {
+      form.addEventListener("submit", function () {
+        setBtnState("loading");
+        sessionStorage.setItem(STORAGE_KEY, "pending");
+      });
+      window.addEventListener("pageshow", function () {
+        if (!btn) return;
+        if (sessionStorage.getItem(STORAGE_KEY) === "pending" && !btn.classList.contains("is-complete")) {
+          setBtnState("complete");
+          sessionStorage.removeItem(STORAGE_KEY);
+          window.setTimeout(() => setBtnState("idle"), 1600);
+        }
+      });
+    }
+
+    // Escapes a CSV field per RFC 4180
+    function csvField(v) {
+      const s = String(v ?? '');
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }
+
+    function downloadTemplate(headers, filename) {
+      const line = headers.map(csvField).join(',');
+      const csv = "\uFEFF" + line + "\r\n";
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    const templates = [
+      {
+        id: "btn-download-template-dragonshield",
+        filename: "dragonsvault-import-template.csv",
+        headers: [
+          "Folder Name",
+          "Quantity",
+          "Trade Quantity",
+          "Card Name",
+          "Set Code",
+          "Set Name",
+          "Card Number",
+          "Condition",
+          "Printing",
+          "Language",
+          "Price Bought",
+          "Date Bought",
+          "LOW",
+          "MID",
+          "MARKET"
+        ]
+      },
+      {
+        id: "btn-download-template-manabox",
+        filename: "manabox-import-template.csv",
+        headers: [
+          "Binder Name",
+          "Binder Type",
+          "Name",
+          "Set code",
+          "Set name",
+          "Collector number",
+          "Foil",
+          "Rarity",
+          "Quantity",
+          "ManaBox ID",
+          "Scryfall ID",
+          "Purchase price",
+          "Misprint",
+          "Altered",
+          "Condition",
+          "Language",
+          "Purchase price currency"
+        ]
+      }
+    ];
+
+    templates.forEach(({ id, filename, headers }) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        downloadTemplate(headers, filename);
+      });
+    });
+
+    const exportToggle = document.getElementById("folderExportAll");
+    const exportStatus = document.getElementById("folderExportStatus");
+    const exportSubmit = document.getElementById("folderExportSubmit");
+    const exportFormatWrapper = document.querySelector('[data-dv-select="folder-export-format"]');
+    const exportFormatHelp = document.getElementById("folderExportFormatHelp");
+    const exportCheckboxes = Array.from(document.querySelectorAll("[data-folder-checkbox]"));
+
+    function updateExportState() {
+      if (!exportSubmit) return;
+      const useAll = exportToggle?.checked ?? true;
+      let selected = 0;
+      exportCheckboxes.forEach((cb) => {
+        cb.disabled = useAll;
+        if (useAll) {
+          cb.checked = false;
+        } else if (cb.checked) {
+          selected += 1;
+        }
+      });
+
+      if (exportStatus) {
+        if (useAll) {
+          exportStatus.textContent = "All of your folders will be exported.";
+        } else if (selected) {
+          exportStatus.textContent = selected === 1 ? "1 folder selected." : `${selected} folders selected.`;
+        } else {
+          exportStatus.textContent = "Choose at least one folder to continue.";
+        }
+      }
+
+      exportSubmit.disabled = !exportCheckboxes.length || (!useAll && selected === 0);
+    }
+
+    function updateFormatHelp(value) {
+      if (!exportFormatWrapper || !exportFormatHelp) return;
+      const options = Array.from(exportFormatWrapper.querySelectorAll("[data-dv-select-option]"));
+      const matchValue = value ?? "";
+      const button = options.find((btn) => (btn.dataset.value ?? "") === matchValue) || options[0];
+      if (button) {
+        exportFormatHelp.textContent = button.dataset.description || "";
+      }
+    }
+
+    if (exportToggle) {
+      exportToggle.addEventListener("change", updateExportState);
+      updateExportState();
+    }
+    exportCheckboxes.forEach((cb) => cb.addEventListener("change", updateExportState));
+    if (exportFormatWrapper) {
+      const formatInput = exportFormatWrapper.querySelector("[data-dv-select-input]");
+      if (formatInput) {
+        updateFormatHelp(formatInput.value || "");
+        exportFormatWrapper.addEventListener("dv-select:change", (event) => {
+          updateFormatHelp(event.detail?.value ?? formatInput.value ?? "");
+        });
+        exportFormatWrapper.addEventListener("dv-select:ready", (event) => {
+          updateFormatHelp(event.detail?.value ?? formatInput.value ?? "");
+        });
+      }
+    }
+  })();
+</script>
+
+{% endblock %}

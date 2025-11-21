@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} - DragonsVault{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ page_title }}</h1>
+      <p class="text-muted mb-0">
+        {% if is_admin %}
+          Choose the tool you need—admin-only actions only appear if you have permission.
+        {% else %}
+          Quickly jump to the account tools available to you.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="row row-cols-1 row-cols-lg-2 g-3 mb-4">
+    <div class="col">
+      <div class="card border-0 shadow-sm h-100">
+        <form method="post" class="card-body d-flex flex-column gap-3">
+          <input type="hidden" name="action" value="update_username">
+          <div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-person-badge text-primary"></i>
+              <h2 class="h5 mb-0">Profile</h2>
+            </div>
+            <p class="text-muted small mb-0">
+              Update your username as it appears across DragonsVault. Usernames must be unique.
+            </p>
+          </div>
+          <div>
+            <label class="form-label" for="username">Username</label>
+            <input
+              type="text"
+              class="form-control"
+              id="username"
+              name="username"
+              maxlength="{{ username_max }}"
+              value="{{ username_value }}"
+              required
+              autocomplete="username"
+            >
+            <div class="form-text">Usernames are required and must be unique.</div>
+          </div>
+          <div class="mt-auto">
+            <button type="submit" class="btn btn-primary">
+              Save username
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="row row-cols-1 row-cols-md-2 g-3">
+    {% for option in general_options %}
+      <div class="col">
+        <div class="card h-100 border-0 shadow-sm">
+          <div class="card-body d-flex flex-column gap-3">
+            <div class="d-flex align-items-center gap-3">
+              <div class="icon-circle icon-circle-sm text-bg-secondary-subtle text-secondary">
+                <i class="bi bi-{{ option.icon }}"></i>
+              </div>
+              <div>
+                <h2 class="h5 mb-1">{{ option.title }}</h2>
+                <p class="text-muted small mb-0">{{ option.description }}</p>
+              </div>
+            </div>
+            <div class="mt-auto">
+              <a class="btn btn-outline-primary" href="{{ option.url }}" {% if option.disable_hx %}data-hx-boost="false"{% endif %}>
+                {{ option.button_label or "Open" }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <hr class="my-4">
+  <div class="row row-cols-1 row-cols-md-2 g-3">
+    <div class="col">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body d-flex flex-column gap-3">
+          <div class="d-flex align-items-center gap-3">
+            <div class="icon-circle icon-circle-sm text-bg-info-subtle text-info">
+              <i class="bi bi-shield-lock"></i>
+            </div>
+            <div>
+              <h2 class="h5 mb-1">Privacy &amp; data</h2>
+              <p class="text-muted small mb-0">Manage cookies and regional privacy preferences.</p>
+            </div>
+          </div>
+          <ul class="list-unstyled small mb-0">
+            <li><a class="link-primary" href="{{ url_for('views.cookie_policy') }}">Cookie Policy</a></li>
+            <li><a class="link-primary" href="{{ url_for('views.do_not_sell') }}">Do Not Sell My Information</a></li>
+            <li><a class="link-primary" href="{{ url_for('views.do_not_share') }}">Do Not Share My Information</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if admin_options %}
+    <hr class="my-4">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-shield-lock"></i>
+      <h2 class="h5 mb-0">Admin tools</h2>
+    </div>
+    <div class="row row-cols-1 row-cols-md-2 g-3">
+      {% for option in admin_options %}
+        <div class="col">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body d-flex flex-column gap-3">
+              <div class="d-flex align-items-center gap-3">
+                <div class="icon-circle icon-circle-sm text-bg-primary-subtle text-primary">
+                  <i class="bi bi-{{ option.icon }}"></i>
+                </div>
+                <div>
+                  <h3 class="h5 mb-1">{{ option.title }}</h3>
+                  <p class="text-muted small mb-0">{{ option.description }}</p>
+                </div>
+              </div>
+              <div class="mt-auto">
+                <a class="btn btn-primary" href="{{ option.url }}">
+                  {{ option.button_label or "Open" }}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

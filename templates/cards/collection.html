@@ -1,0 +1,153 @@
+{# Collection overview: summarises bucket stats and type breakdowns. #}
+{% extends "base.html" %}
+{% block title %}Collection DragonsVault{% endblock %}
+{% block breadcrumbs %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{{ url_for('views.dashboard') }}">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Collection</li>
+  </ol>
+</nav>
+{% endblock %}
+{% block content %}
+
+{# Local table styling keeps visuals consistent with cards list. #}
+<style>
+  /* Header chips */
+  .stat-chip{
+    display:inline-flex; align-items:center; gap:.5rem;
+    padding:.35rem .6rem; border:1px solid var(--bs-border-color);
+    border-radius:.5rem; background:var(--bs-secondary-bg);
+  }
+
+  /* Type Breakdown tiles */
+  .type-tile{ display:flex; align-items:center; justify-content:flex-start; gap:.95rem; min-height:96px; padding:1rem 1.1rem; }
+  .type-left{ display:flex; align-items:center; gap:.85rem; min-width:0; }
+  .type-icon-group{ display:flex; flex-direction:column; align-items:center; gap:.35rem; min-width:72px; }
+  .type-icon{
+    width:40px; height:40px; border-radius:999px;
+    background:var(--bs-tertiary-bg); display:inline-flex; align-items:center; justify-content:center;
+    font-size:1.1rem; color:var(--bs-primary);
+  }
+  .type-icon i {
+    font-size: 1.25rem;
+  }
+  .type-count{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:64px; padding:.25rem .65rem;
+    border-radius:999px;
+    font-weight:700;
+  }
+  .type-name{ font-weight:700; white-space:nowrap; }
+  .type-count.badge{ font-weight:700; }
+</style>
+
+<div class="page-section">
+
+  <!-- Page header + quick stats -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="h3 mb-0">Collection</h1>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="stat-chip">Unique Cards <strong>{{ '{:,}'.format(total_rows or 0) }}</strong></span>
+      <span class="stat-chip">Total Qty <strong>{{ '{:,}'.format(total_qty or 0) }}</strong></span>
+      <a class="btn btn-primary"
+         href="{{ url_for('views.list_cards', collection=1) }}">
+        See All Collection
+      </a>
+    </div>
+  </div>
+
+  <!-- Collection folders list (table, like Cards list) -->
+  <div class="table-responsive">
+    <table class="table table-sm align-middle cards-table">
+      <caption class="visually-hidden">Collection folders and card counts</caption>
+      <thead>
+        <tr>
+          <th>Folder</th>
+          <th class="text-end">Unique Cards</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if buckets and buckets|length %}
+          {% for b in buckets %}
+            <tr>
+              <td class="fw-semibold">
+                {% if b.folder %}
+                  <a href="{{ url_for('views.folder_detail', folder_id=b.folder.id) }}">{{ b.label }}</a>
+                {% else %}
+                  {{ b.label }}
+                {% endif %}
+              </td>
+              <td class="text-end">{{ '{:,}'.format(b.rows or 0) }}</td>
+              <td class="text-end">{{ '{:,}'.format(b.qty or 0) }}</td>
+              <td class="text-end">
+                <div class="d-flex flex-column align-items-end gap-1">
+                  {% if b.folder %}
+                    <a class="btn btn-sm btn-primary"
+                       href="{{ url_for('views.list_cards', folder=b.folder.id) }}">
+                      Show Cards
+                    </a>
+                  {% else %}
+                    <button class="btn btn-sm btn-primary" disabled>Show Cards</button>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="4" class="text-muted">No folders found in the collection.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- TYPE BREAKDOWN (below the list) -->
+  {# Quick links into the main card list filtered by each bucket type. #}
+  {% if type_breakdown and type_breakdown|length %}
+    <h2 class="h6 text-uppercase text-muted mb-2">Type breakdown</h2>
+    {% set type_icon_classes = {
+      'Artifact': 'bi-cpu',
+      'Battle': 'bi-shield-check',
+      'Creature': 'bi-people',
+      'Enchantment': 'bi-stars',
+      'Instant': 'bi-lightning',
+      'Land': 'bi-geo-alt',
+      'Planeswalker': 'bi-compass',
+      'Sorcery': 'bi-fire'
+    } %}
+    <div class="row g-3 mb-4">
+      {% for t, n in type_breakdown %}
+      <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+        <a class="tile type-tile d-block"
+           href="{{ url_for('views.list_cards', type=t.lower(), collection=1) }}">
+          <div class="type-left">
+            <div class="type-icon-group">
+              {% set icon_class = type_icon_classes.get(t) %}
+              <div class="type-icon">
+                {% if icon_class %}
+                  <i class="bi {{ icon_class }}" aria-hidden="true"></i>
+                {% elif t %}
+                  <span aria-hidden="true">{{ t[0] }}</span>
+                {% else %}
+                  <span aria-hidden="true">?</span>
+                {% endif %}
+                <span class="visually-hidden">{{ t or 'Unknown card type' }}</span>
+              </div>
+              <span class="badge text-bg-secondary type-count">&times;{{ '{:,}'.format(n) }}</span>
+            </div>
+            <div class="text-truncate">
+              <div class="type-name text-truncate">{{ t }}</div>
+              <div class="text-muted small text-truncate">Show {{ t }} cards in collection</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}

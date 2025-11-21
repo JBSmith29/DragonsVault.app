@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}About DragonsVault{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-3">About DragonsVault</h1>
+  <p>
+    DragonsVault is a community-driven tool for organizing and analyzing collectible card decks. Our mission is to provide
+    a simple, privacy-conscious platform for managing personal collections, sharing ideas with friends, and learning from data.
+  </p>
+  <p>
+    This project started as a hobby among friends who wanted better deck-building utilities and has grown into a collaborative effort.
+    We continually refine the app based on user feedback and new features in the Magic community.
+  </p>
+  <h2 class="h5 mt-4">What We Value</h2>
+  <ul>
+    <li><strong>Transparency:</strong> Clear policies about how your data is used and how to control it.</li>
+    <li><strong>Accessibility:</strong> Experiences built with inclusive design principles.</li>
+    <li><strong>Community:</strong> Features that make it easy to collaborate and share responsibly.</li>
+  </ul>
+  <p>
+    Have suggestions? <a href="{{ url_for('views.contact_page') }}">Reach out</a> — we’d love to hear from you.
+  </p>
+</div>
+{% endblock %}

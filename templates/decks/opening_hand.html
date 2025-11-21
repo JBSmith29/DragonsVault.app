@@ -1,0 +1,2332 @@
+{% extends "base.html" %}
+{% block title %}Opening Hand - DragonsVault{% endblock %}
+
+{% block content %}
+
+<style>
+  .opening-hand-layout {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  }
+  .opening-hand-layout.full-mode {
+    grid-template-columns: 1fr;
+  }
+  @media (max-width: 992px) {
+    .opening-hand-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+  .hand-card-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    justify-items: center;
+  }
+  .hand-card {
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 1rem;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    position: relative;
+    cursor: pointer;
+    transition:
+      border-color 0.18s var(--dv-ease-soft, ease),
+      transform 0.18s var(--dv-ease-soft, ease),
+      box-shadow 0.18s var(--dv-ease-soft, ease);
+    width: 100%;
+    max-width: 220px;
+    transform-origin: center center;
+  }
+  .hand-card:not(.card-tapped):hover {
+    border-color: rgba(148, 180, 255, 0.45);
+    transform: translateY(-2px);
+  }
+  .hand-card img {
+    width: 100%;
+    aspect-ratio: 0.718;
+    border-radius: 0.85rem;
+    box-shadow: 0 1.5rem 2.5rem rgba(15, 23, 42, 0.2);
+    object-fit: contain;
+    background: radial-gradient(circle at 30% 20%, rgba(148, 180, 255, 0.18), transparent),
+      rgba(15, 23, 42, 0.85);
+    transition: transform 0.18s var(--dv-ease-soft, ease);
+  }
+  .hand-card .name {
+    display: none;
+  }
+  .hand-card.card-tapped {
+    border-color: rgba(250, 204, 21, 0.65);
+    background: rgba(250, 204, 21, 0.08);
+    transform: rotate(90deg);
+    margin-right: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .hand-card.card-tapped:hover {
+    transform: rotate(90deg);
+  }
+  .card-art {
+    display: block;
+  }
+  .card-annotation {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 0.6rem;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(226, 232, 240, 0.92);
+    pointer-events: none;
+  }
+  .draw-empty,
+  .board-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--bs-secondary-color);
+  }
+  .board-grid-layout {
+    display: grid;
+    grid-template-areas:
+      "creatures commandColumn"
+      "permanents commandColumn"
+      "lands commandColumn";
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+    column-gap: 1.25rem;
+    row-gap: 1.25rem;
+    align-items: start;
+  }
+  .board-column-command {
+    grid-area: commandColumn;
+    display: grid;
+    gap: 0;
+    align-content: start;
+  }
+  .board-zone {
+    background: transparent;
+    border: none;
+    border-radius: 0.85rem;
+    padding: 0.85rem 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 200px;
+  }
+  .board-zone[hidden] {
+    display: none;
+  }
+  .board-zone-header {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .board-zone-header::after {
+    content: "";
+    flex: 1 1 auto;
+    height: 1px;
+    background: rgba(148, 163, 184, 0.22);
+  }
+  .board-zone-cards {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    min-height: 180px;
+  }
+  .board-zone-permanents .board-zone-cards {
+    justify-content: flex-end;
+  }
+  .board-zone-command .board-zone-cards {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .board-zone-strip {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-bottom: 0.25rem;
+  }
+  .board-zone-strip::-webkit-scrollbar {
+    height: 6px;
+  }
+  .board-zone-strip::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+  }
+  .board-zone-strip::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .drop-target-active {
+    outline: 2px dashed rgba(148, 180, 255, 0.65);
+    outline-offset: 4px;
+  }
+  .board-zone-stack {
+    position: relative;
+    min-height: 240px;
+    padding-bottom: 2.75rem;
+  }
+  .board-zone-stack .hand-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: translate(
+      calc(var(--stack-index, 0) * 14px),
+      calc(var(--stack-index, 0) * 10px)
+    );
+    z-index: calc(100 + var(--stack-index, 0));
+    max-width: 200px;
+  }
+  .board-zone-stack .hand-card:focus-visible {
+    outline: 2px solid rgba(148, 180, 255, 0.75);
+    outline-offset: 2px;
+  }
+  .card-stack {
+    position: relative;
+    min-height: 220px;
+    width: min(220px, 100%);
+    max-width: 240px;
+  }
+  .card-stack .hand-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: translate(
+      calc(var(--stack-index, 0) * 12px),
+      calc(var(--stack-index, 0) * 8px)
+    );
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .card-stack .hand-card:hover {
+    z-index: 25;
+    transform: translate(
+      calc(var(--stack-index, 0) * 12px),
+      calc(var(--stack-index, 0) * 8px)
+    ) scale(1.05);
+    box-shadow: 0 0.5rem 1.25rem rgba(15, 23, 42, 0.35);
+  }
+  .board-zone-creatures { grid-area: creatures; }
+  .board-zone-permanents { grid-area: permanents; }
+  .board-zone-lands { grid-area: lands; }
+  @media (max-width: 1199.98px) {
+    .board-grid-layout {
+      grid-template-areas:
+        "commandColumn"
+        "creatures"
+        "permanents"
+        "lands";
+      grid-template-columns: 1fr;
+    }
+    .board-zone-stack {
+      position: relative;
+      min-height: auto;
+      padding-bottom: 0;
+    }
+    .board-zone-stack .hand-card {
+      position: static;
+      transform: none;
+      margin-bottom: 0.75rem;
+    }
+  }
+  .board-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .board-actions .btn {
+    min-width: 150px;
+  }
+  .board-note {
+    color: var(--bs-secondary-color);
+    font-size: 0.8rem;
+  }
+  .fetch-card-option.active {
+    border-color: rgba(148, 180, 255, 0.5) !important;
+    box-shadow: 0 0 0 2px rgba(148, 180, 255, 0.2);
+  }
+  .hand-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .hand-status .badge {
+    font-size: 0.75rem;
+  }
+  .opening-hand-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .opening-hand-actions .btn {
+    min-width: 160px;
+  }
+  .card-context-menu {
+    position: fixed;
+    min-width: 220px;
+    max-width: 260px;
+    padding: 0.4rem 0;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 0.65rem;
+    z-index: 5000;
+    backdrop-filter: blur(8px);
+  }
+  .card-context-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--bs-body-color);
+    text-align: left;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.95rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .card-context-item:hover,
+  .card-context-item:focus {
+    background: rgba(99, 102, 241, 0.25);
+    color: #e0e7ff;
+  }
+  .card-context-item + .card-context-item {
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+  }
+  .fetch-card-option {
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.75), rgba(30, 41, 59, 0.75));
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.85rem;
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  .fetch-card-option:hover,
+  .fetch-card-option:focus-visible {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0.5rem 1.25rem rgba(15, 23, 42, 0.35);
+    transform: translateY(-2px);
+  }
+  .fetch-option-title {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fetch-option-subtitle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .fetch-card-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+</style>
+
+<div class="mb-3">
+  <h1 class="mb-1">Opening Hand Simulator</h1>
+  <div class="text-muted small">
+    Pick an existing deck or paste a list to shuffle up and draw a virtual opening hand. The commander is automatically excluded.
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+      <div>
+        <h2 class="h6 text-uppercase text-muted mb-1">The Board</h2>
+        <div class="board-note">
+          Creatures rally on the left, artifacts and other permanents line the right column, lands hold the third row, and the command zone sits above a dedicated graveyard lane. Drag cards between zones, reorder them, right-click for more actions, or double-click a permanent to slip it back into your hand.
+      </div>
+    </div>
+      <div class="board-actions">
+        <button class="btn btn-outline-primary btn-sm" type="button" id="fetchCardBtn" data-bs-toggle="modal" data-bs-target="#fetchCardModal">
+          <i class="bi bi-search"></i>
+          Fetch Card
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" id="tokenPickerBtn" data-bs-toggle="modal" data-bs-target="#tokenPickerModal">
+          <i class="bi bi-stars"></i>
+          Tokens
+        </button>
+      </div>
+    </div>
+
+    <div class="board-grid-layout" id="boardArea">
+      <section class="board-zone board-zone-creatures" data-board-zone="creatures" hidden>
+        <div class="board-zone-header">Creatures</div>
+        <div id="boardCreatures" class="board-zone-cards board-zone-strip" data-empty-text="No creatures on the battlefield yet."></div>
+      </section>
+      <section class="board-zone board-zone-permanents" data-board-zone="permanents" hidden>
+        <div class="board-zone-header">Artifacts / Enchantments / Planeswalkers / Battles</div>
+        <div id="boardPermanents" class="board-zone-cards board-zone-strip" data-empty-text="No supporting permanents yet."></div>
+      </section>
+      <section class="board-zone board-zone-lands" data-board-zone="lands" hidden>
+        <div class="board-zone-header">Lands</div>
+        <div id="boardLands" class="board-zone-cards board-zone-strip" data-empty-text="No lands in play yet."></div>
+      </section>
+      <div class="board-column-command">
+        <section class="board-zone board-zone-command" data-board-zone="command">
+          <div class="board-zone-header">Command Zone</div>
+          <div id="boardCommand" class="board-zone-cards board-zone-strip" data-empty-text="No commanders ready yet."></div>
+        </section>
+        <section class="board-zone board-zone-graveyard board-zone-stack" data-board-zone="graveyard">
+          <div class="board-zone-header">Graveyard</div>
+          <div id="boardGraveyard" class="board-zone-stack" data-empty-text="No cards in the graveyard yet."></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="opening-hand-layout">
+  <section class="card shadow-sm border-0" id="deckSourceCard">
+    <div class="card-body">
+      <h2 class="h6 text-uppercase text-muted mb-3">Deck Source</h2>
+
+      <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#deckPickerModal" id="deckPickerBtn">
+          Pick Deck
+        </button>
+        <span class="text-muted small" id="deckPickerSummary">No deck selected</span>
+      </div>
+
+      <div class="alert alert-info small mt-3 d-none" role="status" id="handMessage"></div>
+      <div class="alert alert-warning small mt-3 d-none" role="alert" id="handWarnings"></div>
+
+      <input type="hidden" id="handState" value="">
+    </div>
+  </section>
+
+  <section>
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="opening-hand-actions d-none mb-3" id="handActionBar">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <button class="btn btn-primary" type="button" id="shuffleBtn">
+              Shuffle &amp; Deal
+            </button>
+            <button class="btn btn-outline-secondary" type="button" id="resetBtn">
+              Reset
+            </button>
+            <button class="btn btn-outline-light" type="button" id="drawBtn" disabled>
+              Draw 1
+            </button>
+            <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
+              Select New Deck
+            </button>
+          </div>
+        </div>
+        <div class="hand-status">
+          <span class="badge text-bg-primary text-uppercase" id="handDeckName">No deck selected</span>
+          <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
+        </div>
+        <div class="hand-card-grid" id="handGrid">
+          <div class="text-muted small">
+            Shuffle a deck to see your opening seven.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</div>
+
+
+<div class="modal fade" id="deckPickerModal" tabindex="-1" aria-labelledby="deckPickerLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="deckPickerLabel">Pick a deck</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label id="deckSelectLabel" class="form-label">Choose a deck</label>
+          <div class="dropdown dv-select w-100" data-dv-select="deck">
+            <input type="hidden" id="deckSelect" data-dv-select-input value="">
+            <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="deckSelectToggle" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="deckSelectLabel deckSelectToggle">
+              <span data-dv-select-label>Select a deck</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="deckSelectToggle">
+              <li>
+                <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a deck">Select a deck</button>
+              </li>
+              {% for deck in deck_options %}
+                <li>
+                  <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck.id }}" data-label="{{ deck.name }}">{{ deck.name }}</button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="form-text">Choose one of your saved decks to use its draw pile. Commanders stored with the deck are automatically excluded.</div>
+        </div>
+        <div class="border rounded-3 p-3 bg-body-tertiary">
+          <label for="deckListInput" class="form-label">Deck list (optional)</label>
+          <textarea id="deckListInput" class="form-control" rows="6" placeholder="7 Island&#10;1 Sol Ring&#10;1 Rhystic Study"></textarea>
+          <div class="form-text mt-2">Provide quantities like "2 Lightning Bolt" or "2x Lightning Bolt". Only one source is needed per shuffle.</div>
+        </div>
+        <div class="border rounded-3 p-3 bg-body-tertiary mt-3">
+          <label for="commanderInput" class="form-label">Commander name (optional)</label>
+          <input type="text" id="commanderInput" class="form-control" placeholder="Commander name(s) to exclude">
+          <div class="form-text mt-2">If your list includes partners or special commanders, list them here (use "//" between names) so they stay out of the draw.</div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="deckPickerApply">Use selection</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<template id="handCardTemplate">
+  <div class="hand-card">
+    <div class="image-wrapper">
+      <span class="card-art">
+        <img loading="lazy" alt="">
+      </span>
+    </div>
+    <div class="name"></div>
+  </div>
+</template>
+
+<div class="modal fade" id="fetchCardModal" tabindex="-1" aria-labelledby="fetchCardModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="fetchCardModalLabel">Fetch a Card</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="fetchCardForm" class="modal-body">
+        <div class="mb-3">
+          <label for="fetchCardSearch" class="form-label">Find a card to fetch</label>
+          <input
+            type="search"
+            class="form-control"
+            id="fetchCardSearch"
+            placeholder="Search name, type, or mana value">
+          <input type="hidden" id="fetchCardName" name="name">
+          <div class="form-text">
+            Cards come from the selected deck. Type to filter, or type a custom name to add a card not in the list.
+          </div>
+        </div>
+        <div id="fetchCardEmpty" class="text-muted small fst-italic d-none">No cards match that search.</div>
+        <div class="row g-3 fetch-card-list" id="fetchCardList"></div>
+        <div class="mb-3">
+          <label for="fetchCardImage" class="form-label">Image URL (optional)</label>
+          <input
+            type="url"
+            class="form-control"
+            id="fetchCardImage"
+            name="image"
+            placeholder="https://...">
+          <div class="form-text text-muted">
+            Leave blank to use the generic placeholder art.
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="fetchCardZoneToggle" class="form-label">Destination</label>
+          <div class="dropdown dv-select w-100" data-fetch-select="zone">
+            <input
+              type="hidden"
+              id="fetchCardZone"
+              name="zone"
+              value="hand"
+              data-dv-select-input>
+            <button
+              class="btn dv-select-toggle w-100 justify-content-between"
+              type="button"
+              id="fetchCardZoneToggle"
+              data-bs-toggle="dropdown"
+              aria-expanded="false">
+              <span data-dv-select-label>Put into hand</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="fetchCardZoneToggle">
+              <li>
+                <button class="dropdown-item active" type="button" data-dv-select-option data-value="hand" data-label="Put into hand">
+                  Put into hand
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="board:creatures" data-label="Battlefield - Creatures">
+                  Battlefield - Creatures
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="board:permanents" data-label="Battlefield - Noncreature">
+                  Battlefield - Noncreature
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="board:lands" data-label="Battlefield - Lands">
+                  Battlefield - Lands
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="board:command" data-label="Command Zone">
+                  Command Zone
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="board:graveyard" data-label="Graveyard">
+                  Graveyard
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="fetchCardSubmit">Add Card</button>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+
+<div class="modal fade" id="tokenPickerModal" tabindex="-1" aria-labelledby="tokenPickerLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="tokenPickerLabel">Add a Token</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-3">Tokens are pulled from the selected deck's printings. Pick one to place it on the battlefield.</div>
+        <div id="tokenPickerList" class="row g-3"></div>
+        <div id="tokenPickerEmpty" class="text-muted small text-center">Select a deck to view its tokens.</div>
+      </div>
+      <div class="modal-footer border-secondary-subtle d-flex justify-content-between">
+        <div class="text-muted small" id="tokenPickerStatus"></div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const deckListInput = document.getElementById('deckListInput');
+  const commanderInput = document.getElementById('commanderInput');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const drawBtn = document.getElementById('drawBtn');
+  const stateInput = document.getElementById('handState');
+  const handGrid = document.getElementById('handGrid');
+  const handDeckName = document.getElementById('handDeckName');
+  const handRemaining = document.getElementById('handRemaining');
+  const handMessage = document.getElementById('handMessage');
+  const handWarnings = document.getElementById('handWarnings');
+  const fetchCardModalEl = document.getElementById('fetchCardModal');
+  const fetchCardForm = document.getElementById('fetchCardForm');
+  const fetchCardSubmit = document.getElementById('fetchCardSubmit');
+  const handCardTemplate = document.getElementById('handCardTemplate');
+  const deckSelectWrapper = document.querySelector('[data-dv-select="deck"]');
+  const deckSelectInput = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-input]') : null;
+  const deckSelectLabelEl = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-label]') : null;
+  const deckOptionButtons = deckSelectWrapper ? Array.from(deckSelectWrapper.querySelectorAll('[data-dv-select-option]')) : [];
+  const fetchNameSelect = null;
+  const fetchZoneSelect = document.querySelector('[data-fetch-select="zone"]');
+  const handActionBar = document.getElementById('handActionBar');
+  const newDeckBtn = document.getElementById('newDeckBtn');
+  const deckPickerModal = document.getElementById('deckPickerModal');
+  const tokenPickerBtn = document.getElementById('tokenPickerBtn');
+  const tokenPickerModal = document.getElementById('tokenPickerModal');
+  const tokenPickerList = document.getElementById('tokenPickerList');
+  const tokenPickerEmpty = document.getElementById('tokenPickerEmpty');
+  const tokenPickerStatus = document.getElementById('tokenPickerStatus');
+  const fetchCardName = document.getElementById('fetchCardName');
+  const fetchCardList = document.getElementById('fetchCardList');
+  const fetchCardSearch = document.getElementById('fetchCardSearch');
+  const fetchCardEmpty = document.getElementById('fetchCardEmpty');
+  const deckPickerSummary = document.getElementById('deckPickerSummary');
+  const deckPickerApply = document.getElementById('deckPickerApply');
+  const deckSourceCard = document.getElementById('deckSourceCard');
+  const openingLayout = document.querySelector('.opening-hand-layout');
+  const placeholderImage = "{{ url_for('static', filename='img/card-placeholder.svg') }}";
+  const deckCardLookup = {{ deck_card_lookup | tojson | safe }} || {};
+  const deckTokenLookup = {{ deck_token_lookup | tojson | safe }} || {};
+
+  const boardContainers = {
+    creatures: document.getElementById('boardCreatures'),
+    permanents: document.getElementById('boardPermanents'),
+    lands: document.getElementById('boardLands'),
+    command: document.getElementById('boardCommand'),
+    graveyard: document.getElementById('boardGraveyard')
+  };
+  const boardZoneRoots = {
+    creatures: document.querySelector('[data-board-zone="creatures"]'),
+    permanents: document.querySelector('[data-board-zone="permanents"]'),
+    lands: document.querySelector('[data-board-zone="lands"]'),
+    command: document.querySelector('[data-board-zone="command"]'),
+    graveyard: document.querySelector('[data-board-zone="graveyard"]')
+  };
+
+  const boardState = {
+    creatures: [],
+    permanents: [],
+    lands: [],
+    command: [],
+    graveyard: []
+  };
+  const boardZones = Object.keys(boardState);
+  Object.entries(boardContainers).forEach(function ([zoneKey, container]) {
+    if (!container) {
+      return;
+    }
+    container.addEventListener('dragover', function (event) {
+      handleZoneDragOver(event, zoneKey);
+    });
+    container.addEventListener('drop', function (event) {
+      handleZoneDrop(event, zoneKey);
+    });
+  });
+
+  let handCards = [];
+  let cardSerial = 0;
+  let dragContext = null;
+  let contextMenuRef = null;
+  let contextCard = null;
+  let activeDropTarget = null;
+  let fetchNameSearchInput = null;
+  let fetchCardOptions = {};
+  let tokenModalInstance = null;
+  let lastTokenDeckId = null;
+
+  function setDeckSelection(value, label) {
+    const normalizedValue = value || '';
+    const normalizedLabel = label || 'Select a deck';
+    if (deckOptionButtons.length) {
+      deckOptionButtons.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.value === normalizedValue);
+      });
+    }
+    if (deckSelectInput) {
+      deckSelectInput.value = normalizedValue;
+    }
+    if (deckSelectLabelEl) {
+      deckSelectLabelEl.textContent = normalizedLabel;
+    }
+    if (deckSelectWrapper) {
+      deckSelectWrapper.dataset.dvSelectValue = normalizedValue;
+    }
+  }
+
+  deckOptionButtons.forEach((btn) => {
+    btn.addEventListener('click', (evt) => {
+      evt.preventDefault();
+      const val = btn.dataset.value || '';
+      const lbl = btn.dataset.label || btn.textContent.trim();
+      setDeckSelection(val, lbl);
+    });
+  });
+
+  function updateDvSelect(wrapper, value, label, options) {
+    if (!wrapper) {
+      return;
+    }
+    const opts = options || {};
+    const normalizedValue = value ?? '';
+    const placeholder = wrapper.dataset.placeholder || wrapper.getAttribute('data-placeholder') || 'Select an option';
+    const normalizedLabel = label || placeholder;
+    const hiddenInput = wrapper.querySelector('[data-dv-select-input]');
+    const labelEl = wrapper.querySelector('[data-dv-select-label]');
+    const toggleBtn = wrapper.querySelector('.dv-select-toggle');
+    const optionButtons = Array.from(wrapper.querySelectorAll('[data-dv-select-option]'));
+
+    optionButtons.forEach((btn) => {
+      btn.classList.toggle('active', (btn.dataset.value ?? '') === normalizedValue);
+    });
+
+    if (hiddenInput && hiddenInput.value !== normalizedValue) {
+      hiddenInput.value = normalizedValue;
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (labelEl) {
+      labelEl.textContent = normalizedLabel;
+    }
+
+    wrapper.dataset.dvSelectValue = normalizedValue;
+
+    if (opts.hide === true && toggleBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+      try {
+        bootstrap.Dropdown.getOrCreateInstance(toggleBtn).hide();
+      } catch (_) {
+        /* noop */
+      }
+    }
+
+    if (opts.trigger === true) {
+      wrapper.dispatchEvent(
+        new CustomEvent('dv-select:change', {
+          detail: { value: normalizedValue, label: normalizedLabel },
+        }),
+      );
+    }
+  }
+
+  function refreshDvSelect(wrapper) {
+    if (!wrapper) {
+      return;
+    }
+    const placeholder = wrapper.dataset.placeholder || wrapper.getAttribute('data-placeholder') || 'Select an option';
+    wrapper.dataset.placeholder = placeholder;
+    const optionButtons = Array.from(wrapper.querySelectorAll('[data-dv-select-option]'));
+    const hiddenInput = wrapper.querySelector('[data-dv-select-input]');
+    const manualButton = wrapper.querySelector('button[data-custom="manual"]');
+
+    optionButtons.forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        const value = btn.dataset.value ?? '';
+        const label = btn.dataset.label ?? btn.textContent.trim();
+        updateDvSelect(wrapper, value, label, { trigger: true, hide: true });
+      });
+    });
+
+    if (manualButton) {
+      manualButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        const manualName = window.prompt('Enter a card name');
+        if (!manualName) {
+          updateDvSelect(wrapper, '', placeholder, { trigger: false, hide: true });
+          return;
+        }
+        const trimmed = manualName.trim();
+        if (!trimmed) {
+          updateDvSelect(wrapper, '', placeholder, { trigger: false, hide: true });
+          return;
+        }
+        if (wrapper === fetchNameSelect) {
+          fetchCardOptions[trimmed] = {
+            name: trimmed,
+            image: null,
+            hover: null,
+            type_line: '',
+          };
+        }
+        updateDvSelect(wrapper, trimmed, trimmed, { trigger: true, hide: true });
+      });
+    }
+
+    if (!optionButtons.length) {
+      updateDvSelect(wrapper, '', placeholder, { trigger: false, hide: false });
+      if (hiddenInput) {
+        hiddenInput.value = '';
+      }
+      return;
+    }
+
+    const currentValue = hiddenInput?.value || wrapper.dataset.dvSelectValue || '';
+    let activeItem = null;
+    if (currentValue) {
+      activeItem = optionButtons.find((btn) => (btn.dataset.value ?? '') === currentValue);
+    }
+    if (!activeItem) {
+      activeItem = optionButtons.find((btn) => btn.classList.contains('active')) || null;
+    }
+
+    if (activeItem) {
+      const value = activeItem.dataset.value ?? '';
+      const label = activeItem.dataset.label ?? activeItem.textContent.trim();
+      updateDvSelect(wrapper, value, label, { trigger: false, hide: false });
+    } else {
+      updateDvSelect(wrapper, '', placeholder, { trigger: false, hide: false });
+    }
+  }
+
+  function populateFetchList(deckId) {
+    if (!fetchCardList || !fetchCardName || !fetchCardSearch || !fetchCardEmpty) {
+      return;
+    }
+    const entries = (deckCardLookup[deckId] || []).filter(function (entry) {
+      const name = (entry.name || entry.value || '').toLowerCase();
+      if (!name) return false;
+      const inHand = handCards.some(function (c) { return (c.name || '').toLowerCase() === name; });
+      const onBoard = boardZones.some(function (zone) {
+        return (boardState[zone] || []).some(function (c) { return (c.name || '').toLowerCase() === name; });
+      });
+      return !(inHand || onBoard);
+    });
+    fetchCardOptions = {};
+    fetchCardList.innerHTML = '';
+
+    entries.forEach(function (entry) {
+      const value = entry.value || entry.name;
+      const displayName = entry.name || value;
+      const typeLine = entry.type_line || '';
+      const manaValueRaw = entry.mana_value;
+      const manaValue = manaValueRaw === null || manaValueRaw === undefined ? '' : String(manaValueRaw);
+      const lowerName = displayName.toLowerCase();
+      const lowerType = typeLine.toLowerCase();
+      fetchCardOptions[value] = {
+        name: displayName,
+        image: entry.image || entry.hover || null,
+        hover: entry.hover || entry.image || null,
+        type_line: typeLine,
+        mana_value: manaValueRaw,
+        filter: `${lowerName} ${lowerType} ${manaValue}`.trim(),
+      };
+
+      const col = document.createElement('div');
+      col.className = 'col-12 col-sm-6 col-lg-4';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn w-100 d-flex align-items-center gap-3 fetch-card-option shadow-sm';
+      btn.dataset.value = value;
+      btn.dataset.filter = fetchCardOptions[value].filter;
+
+      const thumb = document.createElement('div');
+      thumb.className = 'flex-shrink-0 overflow-hidden rounded';
+      thumb.style.width = '72px';
+      thumb.style.aspectRatio = '0.72';
+      const img = document.createElement('img');
+      img.src = entry.image || placeholderImage;
+      img.alt = displayName;
+      img.className = 'w-100 h-100 object-fit-cover';
+      thumb.appendChild(img);
+
+      const body = document.createElement('div');
+      body.className = 'flex-grow-1 text-start';
+      const title = document.createElement('div');
+      title.className = 'fw-semibold fetch-option-title';
+      title.textContent = displayName;
+      const subtitle = document.createElement('div');
+      subtitle.className = 'text-muted small fetch-option-subtitle';
+      subtitle.textContent = '';
+      body.appendChild(title);
+      body.appendChild(subtitle);
+
+      btn.appendChild(thumb);
+      btn.appendChild(body);
+      btn.addEventListener('click', function () {
+        setFetchSelection(value);
+      });
+
+      col.appendChild(btn);
+      fetchCardList.appendChild(col);
+    });
+
+    fetchCardEmpty.classList.toggle('d-none', entries.length > 0);
+    setFetchSelection('');
+    applyFetchFilter(fetchCardSearch ? fetchCardSearch.value : '');
+  }
+  function currentDeckId() {
+    if (!deckSelectWrapper) {
+      return '';
+    }
+    return deckSelectInput ? (deckSelectInput.value || '') : '';
+  }
+
+  function hasDeckSelection() {
+    const deckId = currentDeckId();
+    const deckList = (deckListInput ? deckListInput.value : '').trim();
+    return !!(deckId || deckList);
+  }
+
+  function updateActionVisibility() {
+    const active = hasDeckSelection();
+    const deckId = currentDeckId();
+    const deckListText = (deckListInput ? deckListInput.value : '').trim();
+    if (deckSourceCard) {
+      deckSourceCard.classList.toggle('d-none', active);
+    }
+    if (openingLayout) {
+      openingLayout.classList.toggle('full-mode', active);
+    }
+    if (handDeckName) {
+      if (deckId) {
+        const labelEl = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-label]') : null;
+        handDeckName.textContent = (labelEl && labelEl.textContent.trim()) || 'Selected deck';
+      } else if (deckListText) {
+        handDeckName.textContent = 'Custom list';
+      } else {
+        handDeckName.textContent = 'No deck selected';
+      }
+    }
+    if (handActionBar) {
+      handActionBar.classList.toggle('d-none', !active);
+    }
+    if (!active) {
+      showMessage('Select a deck or paste a deck list to begin.', 'info');
+    } else if (handMessage && handMessage.classList.contains('alert-info')) {
+      showMessage('');
+    }
+    if (deckPickerSummary) {
+      if (deckId) {
+        const labelEl = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-label]') : null;
+        deckPickerSummary.textContent = (labelEl && labelEl.textContent.trim()) || 'Deck selected';
+      } else if (deckListText) {
+        deckPickerSummary.textContent = 'Using pasted list';
+      } else {
+        deckPickerSummary.textContent = 'No deck selected';
+      }
+    }
+  }
+
+  if (fetchCardSearch) {
+    fetchCardSearch.addEventListener('input', function (event) {
+      applyFetchFilter(event.target.value || '');
+    });
+  }
+
+  function tokensForDeck(deckId) {
+    if (!deckId) {
+      return [];
+    }
+    return deckTokenLookup[deckId] || [];
+  }
+
+  function setTokenStatus(text, level) {
+    if (!tokenPickerStatus) return;
+    tokenPickerStatus.textContent = text || '';
+    tokenPickerStatus.className = 'text-muted small';
+    if (level === 'error') tokenPickerStatus.classList.add('text-danger');
+    if (level === 'success') tokenPickerStatus.classList.add('text-success');
+  }
+
+  function applyFetchFilter(query) {
+    if (!fetchCardList) return;
+    const needle = (query || '').toLowerCase().trim();
+    const buttons = Array.from(fetchCardList.querySelectorAll('.fetch-card-option'));
+    let anyVisible = false;
+    buttons.forEach(function (btn) {
+      const filterText = btn.dataset.filter || '';
+      const match = !needle || filterText.includes(needle);
+      btn.closest('.col-12')?.classList.toggle('d-none', !match);
+      if (match) anyVisible = true;
+    });
+    fetchCardEmpty.classList.toggle('d-none', anyVisible);
+  }
+
+  function setFetchSelection(value) {
+    const targetValue = value || '';
+    const buttons = Array.from(fetchCardList ? fetchCardList.querySelectorAll('.fetch-card-option') : []);
+    buttons.forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.value === targetValue);
+    });
+    if (fetchCardName) {
+      fetchCardName.value = targetValue;
+    }
+    if (fetchCardSearch && targetValue) {
+      const option = fetchCardOptions[targetValue];
+      if (option) {
+        fetchCardSearch.value = option.name;
+      }
+    }
+  }
+
+  function renderTokenList(deckId) {
+    if (!tokenPickerList || !tokenPickerEmpty) return;
+    tokenPickerList.innerHTML = '';
+    const tokens = tokensForDeck(deckId);
+    const hasTokens = Array.isArray(tokens) && tokens.length > 0;
+    tokenPickerEmpty.classList.toggle('d-none', hasTokens);
+    tokenPickerEmpty.textContent = deckId
+      ? 'No tokens detected for this deck yet.'
+      : 'Select a deck to view its tokens.';
+    if (!hasTokens) {
+      if (deckId) {
+        const col = document.createElement('div');
+        col.className = 'col-12';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-outline-secondary w-100';
+        btn.textContent = 'Add a generic token to the battlefield';
+        btn.addEventListener('click', function () {
+          addTokenToBoard({ name: 'Token', image: null, hover: null, type_line: 'Token' });
+        });
+        col.appendChild(btn);
+        tokenPickerList.appendChild(col);
+        tokenPickerEmpty.classList.add('d-none');
+      }
+      return;
+    }
+
+    tokens.forEach(function(token) {
+      const col = document.createElement('div');
+      col.className = 'col-12 col-sm-6 col-md-4';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn w-100 text-start bg-dark text-light border border-secondary d-flex align-items-center gap-3';
+      const thumb = document.createElement('div');
+      thumb.className = 'flex-shrink-0 overflow-hidden rounded';
+      thumb.style.width = '88px';
+      thumb.style.aspectRatio = '0.72';
+      const img = document.createElement('img');
+      img.src = token.image || placeholderImage;
+      img.alt = token.name || 'Token';
+      img.className = 'w-100 h-100 object-fit-cover';
+      thumb.appendChild(img);
+      const body = document.createElement('div');
+      body.className = 'flex-grow-1';
+      const title = document.createElement('div');
+      title.className = 'fw-semibold';
+      title.textContent = token.name || 'Token';
+      const subtitle = document.createElement('div');
+      subtitle.className = 'text-muted small';
+      subtitle.textContent = token.type_line || 'Token';
+      body.appendChild(title);
+      body.appendChild(subtitle);
+      btn.appendChild(thumb);
+      btn.appendChild(body);
+      btn.addEventListener('click', function() {
+        addTokenToBoard(token);
+      });
+      col.appendChild(btn);
+      tokenPickerList.appendChild(col);
+    });
+  }
+
+  function addTokenToBoard(token) {
+    const payload = normalizeCard({
+      name: token && token.name ? token.name : 'Token',
+      image: token && token.image ? token.image : placeholderImage,
+      hover: token && (token.hover || token.image) ? (token.hover || token.image) : placeholderImage,
+      type_line: token && token.type_line ? token.type_line : 'Token',
+    });
+    if (!payload) return;
+    moveCardToBoard(payload, 'permanents');
+    if (tokenModalInstance) {
+      tokenModalInstance.hide();
+    }
+    setTokenStatus('Token added to battlefield.', 'success');
+  }
+
+  function updateTokenPicker(deckId) {
+    const tokens = tokensForDeck(deckId);
+    const hasTokens = Array.isArray(tokens) && tokens.length > 0;
+    if (tokenPickerBtn) {
+      tokenPickerBtn.disabled = false;
+      tokenPickerBtn.title = hasTokens ? '' : 'No tokens detected for this deck yet.';
+    }
+    if (!hasTokens && tokenPickerList) {
+      tokenPickerList.innerHTML = '';
+    }
+    if (!hasTokens && tokenPickerStatus) {
+      tokenPickerStatus.textContent = '';
+    }
+  }
+
+  function normalizeCard(card) {
+    if (!card) {
+      return null;
+    }
+    const copy = Object.assign({}, card);
+    copy.__uid = copy.__uid || 'card-' + Date.now() + '-' + (cardSerial++);
+    copy.name = copy.name || card.name || 'Card';
+
+    if (!copy.image) {
+      if (card.image_uris) {
+        copy.image = card.image_uris.normal || card.image_uris.large || card.image_uris.small || card.image_uris.png;
+      }
+      copy.image = copy.image || card.image || card.normal || card.small || card.large || placeholderImage;
+    }
+
+    copy.hover = copy.hover || card.hover || card.hover_image || card.hoverImage || copy.image;
+    copy.type_line = copy.type_line || card.type_line || card.typeLine || '';
+    copy.tapped = Boolean(card.tapped);
+
+    return copy;
+  }
+
+  function showMessage(text, kind) {
+    if (!handMessage) {
+      return;
+    }
+    const tone = kind || 'info';
+    if (!text) {
+      handMessage.classList.add('d-none');
+      handMessage.textContent = '';
+      return;
+    }
+    handMessage.textContent = text;
+    handMessage.className = 'alert alert-' + tone + ' small mt-3';
+  }
+
+  function showWarnings(warnings) {
+    if (!handWarnings) {
+      return;
+    }
+    if (!warnings || !warnings.length) {
+      handWarnings.classList.add('d-none');
+      handWarnings.textContent = '';
+      return;
+    }
+    handWarnings.textContent = warnings.join(' ');
+    handWarnings.className = 'alert alert-warning small mt-3';
+  }
+
+  function removeCardById(collection, id) {
+    if (!Array.isArray(collection)) {
+      return null;
+    }
+    const index = collection.findIndex(function (card) {
+      return card.__uid === id;
+    });
+    if (index === -1) {
+      return null;
+    }
+    const removed = collection.splice(index, 1);
+    return removed.length ? removed[0] : null;
+  }
+
+  function createCardElement(card, source, zone) {
+    if (!handCardTemplate) {
+      return null;
+    }
+    const fragment = handCardTemplate.content.cloneNode(true);
+    const cardEl = fragment.querySelector('.hand-card');
+    const img = cardEl ? cardEl.querySelector('img') : null;
+    const nameEl = cardEl ? cardEl.querySelector('.name') : null;
+
+    if (!cardEl) {
+      return null;
+    }
+
+    cardEl.dataset.cardId = card.__uid;
+    cardEl.dataset.source = source;
+    if (zone) {
+      cardEl.dataset.zone = zone;
+    } else {
+      delete cardEl.dataset.zone;
+    }
+    cardEl.draggable = true;
+    cardEl.classList.toggle('card-tapped', Boolean(card.tapped));
+
+    const imageSrc = card.image || placeholderImage;
+    if (img) {
+      img.src = imageSrc;
+      img.alt = card.name || '';
+      if (card.hover) {
+        img.dataset.hoverSrc = card.hover;
+      } else {
+        delete img.dataset.hoverSrc;
+      }
+    }
+
+    if (nameEl) {
+      nameEl.textContent = card.name || 'Card';
+    }
+
+    cardEl.addEventListener('click', function (event) {
+      if (event.detail > 1) {
+        return;
+      }
+      handleCardInteraction(cardEl.dataset.cardId, source, zone || null);
+    });
+    if (source === 'board') {
+      cardEl.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        returnCardToHand(cardEl.dataset.cardId, 'board');
+      });
+    }
+    cardEl.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+      openContextMenu(event, card, source, zone || null);
+    });
+    cardEl.addEventListener('dragstart', function (event) {
+      handleDragStart(event, card, source, zone || null);
+    });
+    cardEl.addEventListener('dragend', handleDragEnd);
+    cardEl.addEventListener('dragover', function (event) {
+      handleCardDragOver(event, card, zone || null);
+    });
+    cardEl.addEventListener('drop', function (event) {
+      handleCardDrop(event, card, zone || null);
+    });
+
+    return cardEl;
+  }
+
+  function renderCollection(container, cards, config) {
+    if (!container) {
+      return;
+    }
+    const cfg = config || {};
+    container.innerHTML = '';
+
+    if (!cards || !cards.length) {
+      const empty = document.createElement('div');
+      empty.className = cfg.emptyClass || 'text-muted';
+      empty.textContent = cfg.emptyText || 'Nothing here yet.';
+      container.appendChild(empty);
+      return;
+    }
+
+    cards.forEach(function (card) {
+      const el = createCardElement(card, cfg.source || 'hand', cfg.zone);
+      if (!el) {
+        return;
+      }
+      if (typeof cfg.afterRender === 'function') {
+        cfg.afterRender(card, el);
+      }
+      container.appendChild(el);
+    });
+
+    if (window.dvAttachCheckerHover) {
+      window.dvAttachCheckerHover(container);
+    }
+  }
+
+  function renderZone(zoneKey) {
+    const container = boardContainers[zoneKey];
+    if (!container) {
+      return;
+    }
+    const zoneRoot = boardZoneRoots[zoneKey];
+    container.innerHTML = '';
+    const cards = boardState[zoneKey] || [];
+    const keepVisible = zoneKey === 'command' || zoneKey === 'graveyard';
+
+    if (!cards.length) {
+      if (zoneRoot) {
+        zoneRoot.hidden = !keepVisible;
+      }
+      if (keepVisible) {
+        const empty = document.createElement('div');
+        empty.className = 'board-empty text-muted small';
+        empty.textContent = container.dataset.emptyText || 'No cards here yet.';
+        container.appendChild(empty);
+      }
+      return;
+    }
+
+    if (zoneRoot) {
+      zoneRoot.hidden = false;
+    }
+
+    const orderMap = new Map();
+    cards.forEach(function (c, idx) {
+      orderMap.set(c.__uid, idx);
+    });
+
+    const childMap = new Map();
+    cards.forEach(function (c) {
+      const parentId = c.stack_parent || null;
+      if (!parentId) {
+        return;
+      }
+      if (!childMap.has(parentId)) {
+        childMap.set(parentId, []);
+      }
+      childMap.get(parentId).push(c);
+    });
+
+    const roots = cards.filter(function (c) {
+      return !c.stack_parent || !orderMap.has(c.stack_parent);
+    });
+
+    const sortByOrder = function (a, b) {
+      return (orderMap.get(a.__uid) || 0) - (orderMap.get(b.__uid) || 0);
+    };
+
+    roots.sort(sortByOrder).forEach(function (card) {
+        const children = (childMap.get(card.__uid) || []).sort(sortByOrder);
+      if (children.length === 0 && zoneKey !== 'graveyard') {
+        const singleEl = createCardElement(card, 'board', zoneKey);
+        if (singleEl) {
+          singleEl.style.removeProperty('--stack-index');
+          container.appendChild(singleEl);
+        }
+        return;
+      }
+
+      if (zoneKey === 'graveyard' && children.length === 0) {
+        const graveEl = createCardElement(card, 'board', zoneKey);
+        if (graveEl) {
+          graveEl.style.setProperty('--stack-index', String(orderMap.get(card.__uid) || 0));
+          container.appendChild(graveEl);
+        }
+        return;
+      }
+
+      const stackWrap = document.createElement('div');
+      stackWrap.className = 'card-stack';
+      const allCards = [card].concat(children);
+      const isCreature = function (c) {
+        return (c.type_line || '').toLowerCase().indexOf('creature') !== -1;
+      };
+      allCards.sort(function (a, b) {
+        return (isCreature(a) ? 1 : 0) - (isCreature(b) ? 1 : 0);
+      });
+      allCards.forEach(function (entry, idx) {
+        const el = createCardElement(entry, 'board', zoneKey);
+        if (!el) {
+          return;
+        }
+        el.style.setProperty('--stack-index', String(idx));
+        stackWrap.appendChild(el);
+      });
+      container.appendChild(stackWrap);
+    });
+
+    if (window.dvAttachCheckerHover) {
+      window.dvAttachCheckerHover(container);
+    }
+  }
+
+  function renderBoard() {
+    boardZones.forEach(renderZone);
+  }
+
+  function renderHand() {
+    renderCollection(handGrid, handCards, {
+      source: 'hand',
+      emptyText: 'Shuffle a deck to see your opening seven.',
+      emptyClass: 'text-muted small'
+    });
+  }
+
+  function classifyCard(card) {
+    if (!card) {
+      return 'permanents';
+    }
+    if (card.boardZone && boardState[card.boardZone]) {
+      return card.boardZone;
+    }
+
+    const typeLine = (card.type_line || '').toLowerCase();
+
+    if (!typeLine && card.lastBoardZone && boardState[card.lastBoardZone]) {
+      return card.lastBoardZone;
+    }
+
+    if (typeLine.indexOf('land') !== -1) {
+      return 'lands';
+    }
+    if (typeLine.indexOf('creature') !== -1) {
+      return 'creatures';
+    }
+    if (typeLine.indexOf('instant') !== -1 || typeLine.indexOf('sorcery') !== -1) {
+      return 'graveyard';
+    }
+    if (
+      typeLine.indexOf('artifact') !== -1 ||
+      typeLine.indexOf('enchantment') !== -1 ||
+      typeLine.indexOf('planeswalker') !== -1 ||
+      typeLine.indexOf('battle') !== -1
+    ) {
+      return 'permanents';
+    }
+    if (typeLine.indexOf('instant') !== -1 || typeLine.indexOf('sorcery') !== -1) {
+      return 'graveyard';
+    }
+    return 'permanents';
+  }
+
+  function removeCardFromBoard(cardId) {
+    let removed = null;
+    boardZones.some(function (zone) {
+      const cards = boardState[zone];
+      const index = cards.findIndex(function (card) {
+        return card.__uid === cardId;
+      });
+      if (index !== -1) {
+        removed = cards.splice(index, 1)[0];
+        // Detach any children that were stacked on this card
+        cards.forEach(function (c) {
+          if (c.stack_parent === cardId) {
+            c.stack_parent = null;
+          }
+        });
+        return true;
+      }
+      return false;
+    });
+    return removed;
+  }
+
+  function findCardOnBoard(cardId) {
+    let found = null;
+    boardZones.some(function (zone) {
+      const cards = boardState[zone];
+      const match = cards.find(function (card) {
+        return card.__uid === cardId;
+      });
+      if (match) {
+        found = match;
+        return true;
+      }
+      return false;
+    });
+    return found;
+  }
+
+  function insertCardIntoBoardZone(card, zone, beforeId) {
+    const zoneCards = boardState[zone];
+    if (!Array.isArray(zoneCards)) {
+      return;
+    }
+    let insertIndex = -1;
+    if (typeof beforeId === 'string' && beforeId) {
+      insertIndex = zoneCards.findIndex(function (entry) {
+        return entry.__uid === beforeId;
+      });
+    }
+    if (insertIndex < 0 || insertIndex > zoneCards.length) {
+      insertIndex = zoneCards.length;
+    }
+    zoneCards.splice(insertIndex, 0, card);
+  }
+
+  function moveCardToBoard(card, preferredZone, beforeId, stackParentId) {
+    if (!card) {
+      return;
+    }
+    const zone = preferredZone && boardState[preferredZone] ? preferredZone : classifyCard(card);
+    removeCardFromBoard(card.__uid);
+    card.boardZone = zone;
+    card.lastBoardZone = zone;
+    card.stack_parent = stackParentId || null;
+    if (zone === 'graveyard' || zone === 'command') {
+      card.tapped = false;
+    }
+    insertCardIntoBoardZone(card, zone, beforeId);
+    renderBoard();
+  }
+
+  function borrowCardFromSource(cardId, source) {
+    let card = null;
+    if (source === 'board') {
+      card = removeCardFromBoard(cardId);
+    } else if (source === 'hand') {
+      card = removeCardById(handCards, cardId);
+      if (card) {
+        renderHand();
+      }
+    }
+    if (card) {
+      if (source !== 'board') {
+        delete card.boardZone;
+        card.tapped = false;
+      }
+      card.stack_parent = null;
+    }
+    return card;
+  }
+
+  function returnCardToHand(cardId, source) {
+    if (!cardId) {
+      return;
+    }
+    const origin = source || 'board';
+    const card = borrowCardFromSource(cardId, origin);
+    if (!card) {
+      return;
+    }
+    card.lastBoardZone = card.boardZone || card.lastBoardZone || null;
+    delete card.boardZone;
+    card.tapped = false;
+    handCards.push(card);
+    renderHand();
+    renderBoard();
+    closeContextMenu();
+  }
+
+  function placeDraggedCard(targetZone, beforeId) {
+    if (!dragContext) {
+      return;
+    }
+    if (!targetZone || !boardState[targetZone]) {
+      dragContext = null;
+      return;
+    }
+
+    const { cardId, source } = dragContext;
+    let card = borrowCardFromSource(cardId, source);
+    if (!card) {
+      dragContext = null;
+      return;
+    }
+
+    const stackParent = beforeId && beforeId !== cardId ? beforeId : null;
+    moveCardToBoard(card, targetZone, beforeId, stackParent);
+    dragContext = null;
+    clearActiveDropTarget();
+    closeContextMenu();
+  }
+
+  function setActiveDropTarget(element) {
+    if (activeDropTarget === element) {
+      return;
+    }
+    if (activeDropTarget) {
+      activeDropTarget.classList.remove('drop-target-active');
+    }
+    activeDropTarget = element;
+    if (activeDropTarget) {
+      activeDropTarget.classList.add('drop-target-active');
+    }
+  }
+
+  function clearActiveDropTarget() {
+    if (!activeDropTarget) {
+      return;
+    }
+    activeDropTarget.classList.remove('drop-target-active');
+    activeDropTarget = null;
+  }
+
+  function handleDragStart(event, card, source, zone) {
+    if (!card) {
+      return;
+    }
+    if (event.dataTransfer) {
+      try {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', card.__uid);
+      } catch (err) {
+        // ignore
+      }
+    }
+    dragContext = {
+      cardId: card.__uid,
+      source: source,
+      zone: zone || card.boardZone || null,
+      originalIndex: null
+    };
+    if (dragContext.zone && boardState[dragContext.zone]) {
+      dragContext.originalIndex = boardState[dragContext.zone].findIndex(function (entry) {
+        return entry.__uid === card.__uid;
+      });
+    }
+    clearActiveDropTarget();
+    closeContextMenu();
+  }
+
+  function handleDragEnd() {
+    dragContext = null;
+    clearActiveDropTarget();
+  }
+
+  function handleZoneDragOver(event, zone) {
+    if (!dragContext) {
+      return;
+    }
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+    if (event && event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    const container = boardContainers[zone];
+    if (container) {
+      setActiveDropTarget(container);
+    }
+  }
+
+  function handleZoneDrop(event, zone) {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+    if (!dragContext) {
+      return;
+    }
+    placeDraggedCard(zone, null);
+  }
+
+  function handleCardDragOver(event, targetCard, zone) {
+    if (!dragContext) {
+      return;
+    }
+    if (targetCard && dragContext.cardId === targetCard.__uid) {
+      return;
+    }
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+    if (event && event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    const element = event.currentTarget;
+    if (element) {
+      setActiveDropTarget(element);
+    }
+  }
+
+  function handleCardDrop(event, targetCard, zone) {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+    if (!dragContext || !targetCard) {
+      return;
+    }
+    if (dragContext.cardId === targetCard.__uid && (!zone || (dragContext.zone === zone))) {
+      dragContext = null;
+      clearActiveDropTarget();
+      renderBoard();
+      return;
+    }
+    const targetZone = zone || targetCard.boardZone || dragContext.zone;
+    if (!targetZone || !boardState[targetZone]) {
+      dragContext = null;
+      clearActiveDropTarget();
+      return;
+    }
+    placeDraggedCard(targetZone, targetCard.__uid);
+  }
+
+  function ensureContextMenu() {
+    if (contextMenuRef) {
+      return contextMenuRef;
+    }
+    const menu = document.createElement('div');
+    menu.id = 'cardContextMenu';
+    menu.className = 'card-context-menu shadow-lg';
+    menu.tabIndex = -1;
+    menu.hidden = true;
+    document.body.appendChild(menu);
+    contextMenuRef = menu;
+
+    document.addEventListener('click', function (event) {
+      if (!contextMenuRef || contextMenuRef.hidden) {
+        return;
+      }
+      if (!contextMenuRef.contains(event.target)) {
+        closeContextMenu();
+      }
+    });
+    document.addEventListener('contextmenu', function (event) {
+      if (!contextMenuRef || contextMenuRef.hidden) {
+        return;
+      }
+      if (!contextMenuRef.contains(event.target)) {
+        closeContextMenu();
+      }
+    });
+    window.addEventListener('resize', closeContextMenu);
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeContextMenu();
+      }
+    });
+    return menu;
+  }
+
+  function closeContextMenu() {
+    if (!contextMenuRef) {
+      return;
+    }
+    contextMenuRef.hidden = true;
+    contextMenuRef.innerHTML = '';
+    contextCard = null;
+  }
+
+  function duplicateCardToZone(card, zone) {
+    const cloneSource = Object.assign({}, card);
+    delete cloneSource.__uid;
+    cloneSource.tapped = false;
+    const copy = normalizeCard(cloneSource);
+    if (!copy) {
+      return;
+    }
+    moveCardToBoard(copy, zone || classifyCard(copy));
+  }
+
+  function openContextMenu(event, card, source, zone) {
+    const menu = ensureContextMenu();
+    if (!menu) {
+      return;
+    }
+    closeContextMenu();
+
+    const isBoardCard = source === 'board';
+    const currentZone = zone || card.boardZone || null;
+    const options = [];
+    const cardId = card.__uid;
+
+    if (isBoardCard) {
+      options.push({
+        label: card.tapped ? 'Untap' : 'Tap',
+        action: function () {
+          card.tapped = !card.tapped;
+          renderBoard();
+        }
+      });
+      options.push({
+        label: 'Return to Hand',
+        action: function () {
+          returnCardToHand(cardId, 'board');
+        }
+      });
+    } else if (source !== 'hand') {
+      options.push({
+        label: 'Return to Hand',
+        action: function () {
+          returnCardToHand(cardId, source);
+        }
+      });
+    }
+
+    if (isBoardCard && currentZone !== 'graveyard') {
+      options.push({
+        label: 'Move to Graveyard',
+        action: function () {
+          const item = borrowCardFromSource(cardId, 'board');
+          if (!item) {
+            return;
+          }
+          moveCardToBoard(item, 'graveyard');
+        }
+      });
+    } else if (!isBoardCard) {
+      options.push({
+        label: 'Move to Graveyard',
+        action: function () {
+          const item = borrowCardFromSource(cardId, source);
+          if (!item) {
+            return;
+          }
+          moveCardToBoard(item, 'graveyard');
+        }
+      });
+    }
+
+    if (currentZone !== 'command') {
+      options.push({
+        label: 'Move to Command Zone',
+        action: function () {
+          const item = borrowCardFromSource(cardId, isBoardCard ? 'board' : source);
+          if (!item) {
+            return;
+          }
+          moveCardToBoard(item, 'command');
+        }
+      });
+    }
+
+    const battlefieldTargets = [
+      { zone: 'creatures', label: 'Battlefield - Creatures' },
+      { zone: 'permanents', label: 'Battlefield - Noncreature' },
+      { zone: 'lands', label: 'Battlefield - Lands' }
+    ];
+    battlefieldTargets.forEach(function (entry) {
+      if (currentZone === entry.zone) {
+        return;
+      }
+      options.push({
+        label: 'Move to ' + entry.label,
+        action: function () {
+          const item = borrowCardFromSource(cardId, isBoardCard ? 'board' : source);
+          if (!item) {
+            return;
+          }
+          moveCardToBoard(item, entry.zone);
+        }
+      });
+    });
+
+    if (isBoardCard && currentZone !== 'graveyard') {
+      options.push({
+        label: 'Create Copy (Token)',
+        action: function () {
+          duplicateCardToZone(card, currentZone);
+        }
+      });
+    }
+
+    if (!options.length) {
+      return;
+    }
+
+    contextCard = { card: card, source: source, zone: currentZone };
+    menu.innerHTML = '';
+    options.forEach(function (opt) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'card-context-item';
+      button.textContent = opt.label;
+      button.addEventListener('click', function () {
+        opt.action();
+        closeContextMenu();
+      });
+      menu.appendChild(button);
+    });
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 768;
+    const menuRect = menu.getBoundingClientRect();
+    const approximateWidth = menuRect.width || 220;
+    const approximateHeight = menuRect.height || (options.length * 36 + 12);
+    let left = event.clientX;
+    let top = event.clientY;
+    if (left + approximateWidth > viewportWidth) {
+      left = Math.max(8, viewportWidth - approximateWidth - 8);
+    }
+    if (top + approximateHeight > viewportHeight) {
+      top = Math.max(8, viewportHeight - approximateHeight - 8);
+    }
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    menu.hidden = false;
+    menu.focus({ preventScroll: true });
+  }
+
+  function setHand(cards) {
+    if (!Array.isArray(cards) || !cards.length) {
+      handCards = [];
+    } else {
+      handCards = cards.map(function (card) {
+        return normalizeCard(card);
+      }).filter(Boolean);
+    }
+    renderHand();
+  }
+
+  function addDraw(card, remaining, deckName) {
+    const normalized = normalizeCard(card);
+    if (!normalized) {
+      return;
+    }
+    handCards.push(normalized);
+    renderHand();
+    if (typeof remaining === 'number' && handRemaining) {
+      handRemaining.hidden = false;
+      handRemaining.textContent = remaining + ' cards remaining';
+    }
+    if (handDeckName && deckName) {
+      handDeckName.textContent = deckName;
+    }
+  }
+
+  function handleCardInteraction(cardId, source, zone) {
+    if (!cardId) {
+      return;
+    }
+
+    if (source === 'board') {
+      if (zone === 'command') {
+        const moved = removeCardFromBoard(cardId);
+        if (!moved) {
+          return;
+        }
+        moveCardToBoard(moved);
+        closeContextMenu();
+        return;
+      }
+      const card = findCardOnBoard(cardId);
+      if (card) {
+        card.tapped = !card.tapped;
+        renderBoard();
+        closeContextMenu();
+      }
+      return;
+    }
+
+    let card = null;
+    if (source === 'hand') {
+      card = removeCardById(handCards, cardId);
+      renderHand();
+    }
+
+    if (!card) {
+      return;
+    }
+
+    moveCardToBoard(card);
+    closeContextMenu();
+  }
+
+  function resetSimulator() {
+    if (stateInput) {
+      stateInput.value = '';
+    }
+    handCards = [];
+    boardZones.forEach(function (zone) {
+      boardState[zone] = [];
+    });
+    renderHand();
+    renderBoard();
+    if (handDeckName) {
+      handDeckName.textContent = 'No deck selected';
+    }
+    if (handRemaining) {
+      handRemaining.hidden = true;
+      handRemaining.textContent = '';
+    }
+    if (drawBtn) {
+      drawBtn.disabled = true;
+    }
+    showMessage('');
+    showWarnings([]);
+    closeContextMenu();
+  }
+
+  if (fetchCardForm && fetchCardModalEl) {
+    const modalFactory = window.bootstrap && window.bootstrap.Modal
+      ? window.bootstrap.Modal
+      : (typeof bootstrap !== 'undefined' && bootstrap.Modal ? bootstrap.Modal : null);
+    const fetchModal = modalFactory ? modalFactory.getOrCreateInstance(fetchCardModalEl) : null;
+
+    const handleFetchSubmit = function (event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      const formData = new FormData(fetchCardForm);
+        const selectedValue = (formData.get('name') || '').toString().trim();
+        const searchValue = (fetchCardSearch ? fetchCardSearch.value : '').toString().trim();
+      const imageUrl = (formData.get('image') || '').toString().trim();
+      const zoneValue = (formData.get('zone') || 'hand').toString();
+
+      const selectedOption = selectedValue && fetchCardOptions[selectedValue] ? fetchCardOptions[selectedValue] : null;
+      const cardName = selectedOption ? selectedOption.name : searchValue || selectedValue;
+
+      if (!cardName) {
+        fetchCardForm.reportValidity();
+        if (!selectedOption && fetchCardSearch) {
+          fetchCardSearch.focus();
+        }
+        return;
+      }
+
+      const inferredImage = selectedOption ? (selectedOption.image || selectedOption.hover || null) : null;
+      const inferredHover = selectedOption ? (selectedOption.hover || selectedOption.image || null) : null;
+      const inferredTypeLine = selectedOption ? selectedOption.type_line : '';
+
+      const payload = normalizeCard({
+        name: cardName,
+        image: imageUrl || inferredImage || placeholderImage,
+        hover: imageUrl || inferredHover || inferredImage || placeholderImage,
+        type_line: inferredTypeLine,
+      });
+
+      if (!payload) {
+        return;
+      }
+
+      if (zoneValue === 'hand') {
+        handCards.push(payload);
+        renderHand();
+      } else {
+        const parts = zoneValue.split(':');
+        const forcedZone = parts.length > 1 ? parts[1] : null;
+        moveCardToBoard(payload, forcedZone);
+      }
+
+      if (fetchModal) {
+        fetchModal.hide();
+      }
+      closeContextMenu();
+      fetchCardForm.reset();
+      if (fetchCardSearch) {
+        fetchCardSearch.value = '';
+        applyFetchFilter('');
+      }
+      setFetchSelection('');
+      if (fetchZoneSelect) {
+        const zoneInput = fetchZoneSelect.querySelector('[data-dv-select-input]');
+        if (zoneInput) {
+          zoneInput.value = 'hand';
+        }
+        const zoneButton = fetchZoneSelect.querySelector('[data-dv-select-option][data-value="hand"]');
+        const zoneLabel = zoneButton ? (zoneButton.dataset.label || zoneButton.textContent.trim()) : 'Put into hand';
+        updateDvSelect(fetchZoneSelect, 'hand', zoneLabel, { trigger: false, hide: false });
+      }
+    };
+
+    fetchCardForm.addEventListener('submit', handleFetchSubmit);
+    if (fetchCardSubmit) {
+      fetchCardSubmit.addEventListener('click', handleFetchSubmit);
+    }
+
+    fetchCardModalEl.addEventListener('shown.bs.modal', function () {
+      populateFetchList(currentDeckId());
+      if (fetchZoneSelect) {
+        const zoneInput = fetchZoneSelect.querySelector('[data-dv-select-input]');
+        if (zoneInput) {
+          zoneInput.value = 'hand';
+        }
+        const zoneButton = fetchZoneSelect.querySelector('[data-dv-select-option][data-value="hand"]');
+        const zoneLabel = zoneButton ? (zoneButton.dataset.label || zoneButton.textContent.trim()) : 'Put into hand';
+        updateDvSelect(fetchZoneSelect, 'hand', zoneLabel, { trigger: false, hide: false });
+      }
+      if (fetchCardSearch) {
+        fetchCardSearch.value = '';
+        setFetchSelection('');
+        applyFetchFilter('');
+        setTimeout(function () {
+          fetchCardSearch.focus({ preventScroll: true });
+        }, 50);
+      }
+    });
+
+    fetchCardModalEl.addEventListener('hidden.bs.modal', function () {
+      fetchCardForm.reset();
+      if (fetchZoneSelect) {
+        const zoneInput = fetchZoneSelect.querySelector('[data-dv-select-input]');
+        if (zoneInput) {
+          zoneInput.value = 'hand';
+        }
+        const zoneButton = fetchZoneSelect.querySelector('[data-dv-select-option][data-value="hand"]');
+        const zoneLabel = zoneButton ? (zoneButton.dataset.label || zoneButton.textContent.trim()) : 'Put into hand';
+        updateDvSelect(fetchZoneSelect, 'hand', zoneLabel, { trigger: false, hide: false });
+      }
+      setFetchSelection('');
+      if (fetchCardSearch) {
+        fetchCardSearch.value = '';
+      }
+      applyFetchFilter('');
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetSimulator);
+  }
+
+  if (shuffleBtn) {
+    shuffleBtn.addEventListener('click', async function () {
+      showMessage('');
+      showWarnings([]);
+      const deckId = currentDeckId();
+      const deckList = (deckListInput ? deckListInput.value : '').trim();
+      const commander = (commanderInput ? commanderInput.value : '').trim();
+
+      if (!deckId && !deckList) {
+        showMessage('Choose a deck or paste a deck list before shuffling.', 'warning');
+        return;
+      }
+
+      shuffleBtn.disabled = true;
+      if (drawBtn) {
+        drawBtn.disabled = true;
+      }
+      showMessage('Shuffling...', 'info');
+
+      try {
+        const response = await fetch('{{ url_for("views.opening_hand_shuffle") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deck_id: deckList ? null : deckId,
+            deck_list: deckList,
+            commander_name: commander
+          })
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          showMessage(data.error || 'Unable to shuffle deck.', 'danger');
+          return;
+        }
+
+        showMessage('Opening hand ready from ' + data.deck_name + '.', 'success');
+        if (stateInput) {
+          stateInput.value = data.state;
+        }
+        if (handDeckName) {
+          handDeckName.textContent = data.deck_name;
+        }
+        if (handRemaining) {
+          handRemaining.hidden = false;
+          handRemaining.textContent = data.remaining + ' cards remaining';
+        }
+
+        setHand(data.hand);
+        boardZones.forEach(function (zone) {
+          boardState[zone] = [];
+        });
+        if (Array.isArray(data.commanders) && data.commanders.length) {
+          const commanderCards = data.commanders
+            .map(function (entry) {
+              return normalizeCard(entry);
+            })
+            .filter(Boolean);
+          commanderCards.forEach(function (commanderCard) {
+            commanderCard.boardZone = 'command';
+            commanderCard.lastBoardZone = 'command';
+            boardState.command.push(commanderCard);
+          });
+        }
+        renderBoard();
+        closeContextMenu();
+        if (drawBtn) {
+          drawBtn.disabled = false;
+        }
+        showWarnings(data.warnings || []);
+      } catch (err) {
+        console.error(err);
+        showMessage('An unexpected error occurred while shuffling.', 'danger');
+      } finally {
+        shuffleBtn.disabled = false;
+      }
+    });
+  }
+
+  if (drawBtn) {
+    drawBtn.addEventListener('click', async function () {
+      const state = stateInput ? stateInput.value : '';
+      if (!state) {
+        return;
+      }
+      drawBtn.disabled = true;
+
+      try {
+        const response = await fetch('{{ url_for("views.opening_hand_draw") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: state })
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          showMessage(data.error || 'Unable to draw.', 'warning');
+          if (data.state && stateInput) {
+            stateInput.value = data.state;
+          }
+          if (typeof data.remaining === 'number' && handRemaining) {
+            handRemaining.hidden = false;
+            handRemaining.textContent = data.remaining + ' cards remaining';
+          }
+          drawBtn.disabled = data.remaining === 0;
+          return;
+        }
+
+        if (stateInput) {
+          stateInput.value = data.state;
+        }
+        if (handRemaining) {
+          handRemaining.hidden = false;
+          handRemaining.textContent = data.remaining + ' cards remaining';
+        }
+
+        addDraw(data.card, data.remaining, data.deck_name);
+        showMessage('');
+        drawBtn.disabled = data.remaining <= 0;
+      } catch (err) {
+        console.error(err);
+        showMessage('An unexpected error occurred while drawing.', 'danger');
+        drawBtn.disabled = false;
+      }
+    });
+  }
+
+  if (deckSelectWrapper) {
+    deckSelectWrapper.addEventListener('dv-select:ready', function (event) {
+      const value = event.detail && event.detail.value ? event.detail.value : '';
+      populateFetchList(value);
+      updateTokenPicker(value);
+      updateActionVisibility();
+    });
+    deckSelectWrapper.addEventListener('dv-select:change', function (event) {
+      const value = event.detail && event.detail.value ? event.detail.value : '';
+      populateFetchList(value);
+      updateTokenPicker(value);
+      updateActionVisibility();
+    });
+    refreshDvSelect(deckSelectWrapper);
+    const initialVal = deckSelectInput ? (deckSelectInput.value || '') : '';
+    const initialLabel = deckSelectLabelEl ? deckSelectLabelEl.textContent.trim() : 'Select a deck';
+    deckSelectWrapper.dispatchEvent(new CustomEvent('dv-select:ready', {
+      detail: { value: initialVal, label: initialLabel }
+    }));
+  }
+
+  if (deckListInput) {
+    deckListInput.addEventListener('input', updateActionVisibility);
+  }
+
+  if (deckPickerApply) {
+    deckPickerApply.addEventListener('click', () => {
+      populateFetchList(currentDeckId());
+      updateTokenPicker(currentDeckId());
+      updateActionVisibility();
+      resetSimulator();
+      if (shuffleBtn) {
+        shuffleBtn.click();
+      }
+    });
+  }
+
+  if (deckPickerModal) {
+    deckPickerModal.addEventListener('shown.bs.modal', () => {
+      populateFetchList(currentDeckId());
+    });
+    deckPickerModal.addEventListener('hidden.bs.modal', () => {
+      updateActionVisibility();
+    });
+  }
+
+  if (tokenPickerModal) {
+    const ModalCtor = window.bootstrap && window.bootstrap.Modal
+      ? window.bootstrap.Modal
+      : (typeof bootstrap !== 'undefined' && bootstrap.Modal ? bootstrap.Modal : null);
+    tokenModalInstance = ModalCtor ? ModalCtor.getOrCreateInstance(tokenPickerModal) : null;
+
+    tokenPickerModal.addEventListener('show.bs.modal', function () {
+      const deckId = currentDeckId();
+      lastTokenDeckId = deckId;
+      renderTokenList(deckId);
+      setTokenStatus(deckId ? '' : 'Select a deck first.');
+    });
+
+    tokenPickerModal.addEventListener('hidden.bs.modal', function () {
+      setTokenStatus('');
+    });
+  }
+
+  if (newDeckBtn) {
+    newDeckBtn.addEventListener('click', function () {
+      if (deckSelectWrapper) {
+        updateDvSelect(deckSelectWrapper, '', 'Select a deck', { trigger: true, hide: true });
+      }
+      if (deckListInput) {
+        deckListInput.value = '';
+      }
+      if (fetchCardSearch) {
+        fetchCardSearch.value = '';
+      }
+      resetSimulator();
+      populateFetchList(currentDeckId());
+      updateTokenPicker('');
+      updateActionVisibility();
+    });
+  }
+
+  if (fetchZoneSelect) {
+    refreshDvSelect(fetchZoneSelect);
+    const zoneButton = fetchZoneSelect.querySelector('[data-dv-select-option][data-value="hand"]');
+    const zoneLabel = zoneButton ? (zoneButton.dataset.label || zoneButton.textContent.trim()) : 'Put into hand';
+    updateDvSelect(fetchZoneSelect, 'hand', zoneLabel, { trigger: false, hide: false });
+  }
+
+  populateFetchList(currentDeckId());
+  updateTokenPicker(currentDeckId());
+  resetSimulator();
+  updateActionVisibility();
+})();
+</script>
+
+{% endblock %}
+
+
+
+

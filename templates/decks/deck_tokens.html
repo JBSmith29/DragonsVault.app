@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block title %}All Deck Tokens - DragonsVault{% endblock %}
+{% block content %}
+
+<style>
+  .deck-token-stats {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+  .deck-token-stat {
+    padding: .85rem 1rem;
+    border-radius: .85rem;
+    background: rgba(15, 23, 42, .45);
+    border: 1px solid rgba(148, 163, 184, .18);
+  }
+  .deck-token-stat .label {
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-size: .7rem;
+    color: var(--bs-secondary-color);
+  }
+  .deck-token-stat .value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--bs-body-color);
+  }
+
+  .deck-token-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  .deck-token-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .75rem;
+    border-radius: .75rem;
+    border: 1px solid rgba(148, 163, 184, .25);
+    background: rgba(15, 23, 42, .35);
+    color: inherit;
+    text-decoration: none;
+    font-size: .8rem;
+    font-weight: 600;
+  }
+  .deck-token-pill .badge {
+    font-size: .7rem;
+  }
+
+  .deck-token-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  .deck-token-card {
+    padding: 1.1rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(148, 163, 184, .16);
+    background: rgba(15, 23, 42, .4);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    transition: border-color .18s var(--dv-ease-soft), transform .18s var(--dv-ease-soft);
+  }
+  .deck-token-card:hover {
+    border-color: rgba(99, 102, 241, .45);
+    transform: translateY(-2px);
+  }
+  .deck-token-card-header {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  .deck-token-thumb {
+    flex: 0 0 96px;
+    height: 96px;
+    border-radius: .75rem;
+    overflow: hidden;
+    background: rgba(15, 23, 42, .6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: .25rem;
+  }
+  .deck-token-thumb img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .deck-token-meta .token-name {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: .15rem;
+  }
+  .deck-token-meta .token-type {
+    font-size: .85rem;
+    color: var(--bs-secondary-color);
+  }
+  .token-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-top: .5rem;
+  }
+  .token-pill-row .badge {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .token-deck-entry + .token-deck-entry {
+    margin-top: .75rem;
+  }
+  .token-deck-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+  }
+  .token-deck-header a {
+    font-weight: 600;
+    text-decoration: none;
+    color: inherit;
+  }
+  .token-deck-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .5rem;
+  }
+  .token-source-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .6rem;
+    border-radius: .6rem;
+    border: 1px solid rgba(148, 163, 184, .2);
+    background: rgba(148, 163, 184, .1);
+    color: inherit;
+    text-decoration: none;
+    font-size: .8rem;
+  }
+  .token-source-link span {
+    font-size: .75rem;
+    color: var(--bs-secondary-color);
+  }
+
+  @media (max-width: 576px) {
+    .deck-token-grid {
+      grid-template-columns: 1fr;
+    }
+    .deck-token-card-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .deck-token-thumb {
+      width: 100%;
+      max-width: 220px;
+    }
+  }
+</style>
+
+<div class="mb-3">
+  <h1 class="mb-1">All Deck Tokens</h1>
+  <div class="text-muted small">
+    Aggregate view of every token created by your non-build decks.
+    {% if cache_epoch %}
+      <span class="ms-2">Scryfall cache updated: {{ cache_epoch }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="deck-token-stats mb-4">
+  <div class="deck-token-stat">
+    <div class="label">Unique Tokens</div>
+    <div class="value">{{ token_count|default(0) }}</div>
+  </div>
+  <div class="deck-token-stat">
+    <div class="label">Decks With Tokens</div>
+    <div class="value">{{ deck_with_tokens|default(0) }}<small class="text-muted fs-6"> / {{ deck_count|default(0) }}</small></div>
+  </div>
+  <div class="deck-token-stat">
+    <div class="label">Producer Cards</div>
+    <div class="value">{{ total_sources|default(0) }}</div>
+  </div>
+  <div class="deck-token-stat">
+    <div class="label">Total Copies (qty)</div>
+    <div class="value">{{ total_qty|default(0) }}</div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <div class="input-group input-group-sm" style="max-width: 360px;">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="search"
+                 class="form-control"
+                 id="tokenSearch"
+                 placeholder="Search tokens by name or type">
+          <button type="button" class="btn btn-outline-secondary" id="tokenClear">Clear</button>
+        </div>
+        {% if deck_summaries %}
+          <div class="d-flex align-items-center gap-2">
+            <span class="small text-nowrap mb-0">Filter by deck</span>
+            <select id="deckFilterSelect" class="form-select form-select-sm" data-token-deck-filter>
+              <option value="" selected>All decks</option>
+              {% for deck in deck_summaries|sort(attribute='name') %}
+                <option value="{{ deck.id }}">{{ deck.name }} ({{ deck.token_count }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+      </div>
+      <div class="text-muted small">
+        Showing <span id="tokenVisibleCount">{{ token_count|default(0) }}</span> of {{ token_count|default(0) }} tokens.
+      </div>
+    </div>
+
+    {% if deck_summaries %}
+      <div class="deck-token-summary mb-3">
+        {% for deck in deck_summaries[:10] %}
+          <a href="{{ url_for('views.folder_detail', folder_id=deck.id) }}"
+             class="deck-token-pill"
+             title="{{ deck.token_count }} token{{ 's' if deck.token_count != 1 else '' }}">
+            <span>{{ deck.name }}</span>
+            <span class="badge rounded-pill text-bg-primary">{{ deck.token_count }}</span>
+            {% if deck.is_proxy %}
+              <span class="badge rounded-pill text-bg-warning text-dark">Proxy</span>
+            {% endif %}
+          </a>
+        {% endfor %}
+        {% if deck_summaries|length > 10 %}
+          <span class="text-muted small align-self-center">…and {{ deck_summaries|length - 10 }} more decks.</span>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if not tokens %}
+      <div class="alert alert-info mb-0">
+        No deck tokens detected yet. Once your decks include cards that create tokens, they will appear here.
+      </div>
+    {% else %}
+      <div class="deck-token-grid" id="deckTokenGrid">
+        {% for token in tokens %}
+          {% set deck_ids = token.decks | map(attribute='deck_id') | list %}
+          {% set deck_names = token.decks | map(attribute='deck_name') | reject('equalto', None) | list %}
+          {% set search_key = (token.name ~ ' ' ~ token.type_line ~ ' ' ~ (deck_names | join(' ')))|lower %}
+          <article class="deck-token-card"
+                   data-search="{{ search_key }}"
+                   data-decks="{{ deck_ids | join(',') }}">
+            <div class="deck-token-card-header">
+              <div class="deck-token-thumb">
+                {% if token.image %}
+                  <img src="{{ token.image }}"
+                       alt="{{ token.name }}"
+                       {% if token.normal %}
+                         data-hover-src="{{ token.normal }}"
+                       {% elif token.image %}
+                         data-hover-src="{{ token.image }}"
+                       {% endif %}>
+                {% else %}
+                  <div class="w-100 h-100 bg-secondary-subtle opacity-50"></div>
+                {% endif %}
+              </div>
+              <div class="deck-token-meta flex-grow-1">
+                <div class="token-name">{{ token.name }}</div>
+                <div class="token-type">{{ token.type_line or 'Token' }}</div>
+                <div class="token-pill-row">
+                  <span class="badge text-bg-primary">Decks: {{ token.deck_count }}</span>
+                  <span class="badge text-bg-secondary">Cards: {{ token.total_sources }}</span>
+                  <span class="badge text-bg-dark">Qty: {{ token.total_qty }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="token-deck-list">
+              {% for deck in token.decks %}
+                <div class="token-deck-entry">
+                  <div class="token-deck-header">
+                    <a href="{{ url_for('views.folder_detail', folder_id=deck.deck_id) }}">
+                      {{ deck.deck_name }}
+                    </a>
+                    <span class="badge rounded-pill text-bg-secondary">Cards: {{ deck.card_count }}</span>
+                  </div>
+                  <div class="token-deck-sources">
+                    {% for source in deck.sources %}
+                      <a href="{{ url_for('views.card_detail', card_id=source.card_id) }}"
+                         class="token-source-link"
+                         {% if source.img %}
+                           data-hover-src="{{ source.img }}"
+                         {% endif %}>
+                        {{ source.name }}
+                        <span>×{{ source.qty }}</span>
+                      </a>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  const searchInput = document.getElementById('tokenSearch');
+  const clearBtn = document.getElementById('tokenClear');
+  const cards = Array.from(document.querySelectorAll('.deck-token-card'));
+  const visibleCount = document.getElementById('tokenVisibleCount');
+  const deckFilter = document.querySelector('[data-token-deck-filter]');
+  let selectedDeck = '';
+
+  if (!cards.length) {
+    return;
+  }
+
+  function applyFilter() {
+    const q = ((searchInput && searchInput.value) || '').trim().toLowerCase();
+    let visible = 0;
+    cards.forEach((card) => {
+      const haystack = (card.dataset.search || '').toLowerCase();
+      const decks = (card.dataset.decks || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      const matchesText = !q || haystack.includes(q);
+      const matchesDeck = !selectedDeck || decks.includes(selectedDeck);
+      const match = matchesText && matchesDeck;
+      card.classList.toggle('d-none', !match);
+      if (match) {
+        visible += 1;
+      }
+    });
+    if (visibleCount) {
+      visibleCount.textContent = String(visible);
+    }
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', applyFilter);
+  }
+  if (deckFilter) {
+    deckFilter.addEventListener('change', () => {
+      selectedDeck = deckFilter.value || '';
+      applyFilter();
+    });
+  }
+  applyFilter();
+  if (clearBtn && searchInput) {
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      searchInput.focus();
+      if (deckFilter) {
+        deckFilter.value = '';
+      }
+      selectedDeck = '';
+      applyFilter();
+    });
+  }
+})();
+</script>
+
+{% endblock %}

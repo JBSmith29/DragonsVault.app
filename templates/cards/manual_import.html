@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Manual Import Wizard</h1>
+      <p class="text-muted mb-0">
+        Paste a decklist-style card list, confirm the exact printing, foil preference, and folder for each card.
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('views.import_csv') }}">Back to file import</a>
+  </div>
+
+  <div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body">
+      <form method="post">
+        <input type="hidden" name="action" value="parse">
+        <div class="mb-3">
+          <label for="card_list" class="form-label">Card list</label>
+          <textarea
+            class="form-control"
+            rows="8"
+            id="card_list"
+            name="card_list"
+            placeholder="Example:&#10;3 Sol Ring&#10;1 Cyclonic Rift&#10;2 Lightning Greaves"
+          >{{ card_list }}</textarea>
+          <div class="form-text">
+            One card per line. Quantities are optional (default 1). Example formats: <code>3 Sol Ring</code> or <code>Sol Ring</code>.
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Review cards</button>
+      </form>
+    </div>
+  </div>
+
+  {% if entries %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Step 2: Confirm printings &amp; folders</h2>
+        {% if entry_errors %}
+          <div class="alert alert-danger">
+            <ul class="mb-0">
+              {% for err in entry_errors %}
+                <li>{{ err }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+        <form method="post">
+          <input type="hidden" name="action" value="import">
+          <input type="hidden" name="entry_ids" value="{{ entries | map(attribute='index') | join(',') }}">
+          <div class="table-responsive">
+            <table class="table align-middle manual-import-table">
+              <thead>
+                <tr>
+                  <th>Card</th>
+                  <th style="width: 260px;">Printing</th>
+                  <th style="width: 140px;">Finish</th>
+                  <th style="width: 220px;">Folder</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for entry in entries %}
+                  <tr>
+                    <td>
+                      <div class="fw-semibold">{{ entry.name }}</div>
+                      <div class="text-muted small">Quantity: {{ entry.quantity }}</div>
+                      <input type="hidden" name="entry-{{ entry.index }}-name" value="{{ entry.name }}">
+                      <input type="hidden" name="entry-{{ entry.index }}-quantity" value="{{ entry.quantity }}">
+                    </td>
+                    <td>
+                      <div class="dropdown dv-select dv-select-sm w-100" data-dv-select="printing-{{ entry.index }}">
+                        <input type="hidden" name="entry-{{ entry.index }}-printing" data-dv-select-input value="{{ entry.options[0].value }}">
+                        <button
+                          class="btn dv-select-toggle btn-sm w-100 justify-content-between"
+                          type="button"
+                          id="printingToggle{{ entry.index }}"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false">
+                          <span data-dv-select-label>
+                            {{ entry.options[0].set_code }} · #{{ entry.options[0].collector_number }} · {{ entry.options[0].set_name or 'Unknown Set' }}
+                          </span>
+                          <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="printingToggle{{ entry.index }}">
+                          <li class="dv-select-search-wrapper">
+                            <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search printings…" autocomplete="off" data-dv-select-search>
+                          </li>
+                          {% for option in entry.options %}
+                            <li>
+                              <button
+                                class="dropdown-item {% if loop.first %}active{% endif %}"
+                                type="button"
+                                data-dv-select-option
+                                data-value="{{ option.value }}"
+                                data-label="{{ option.set_code }} · #{{ option.collector_number }} · {{ option.set_name or 'Unknown Set' }}">
+                                {{ option.set_code }} · #{{ option.collector_number }} · {{ option.set_name or 'Unknown Set' }}
+                              </button>
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                      <div class="form-text small">
+                        Choose the exact set/collector number.
+                      </div>
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm" name="entry-{{ entry.index }}-finish">
+                        <option value="nonfoil">Nonfoil</option>
+                        <option value="foil">Foil</option>
+                      </select>
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm mb-2" name="entry-{{ entry.index }}-folder_id">
+                        <option value="">New folder…</option>
+                        {% for folder in folder_options %}
+                          <option value="{{ folder.id }}">{{ folder.name }}</option>
+                        {% endfor %}
+                      </select>
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        name="entry-{{ entry.index }}-folder_name"
+                        placeholder="Folder name"
+                      >
+                      <div class="form-text small">
+                        Leave blank to re-use the selected folder or create a new one.
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="submit" class="btn btn-success">Import cards</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

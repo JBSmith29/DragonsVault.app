@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Shared Folders</h1>
+      <p class="text-muted mb-0">Browse the decks and collections that others have shared with you or marked public.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('views.list_cards') }}">Back to My Cards</a>
+  </div>
+
+  {% if shared_with_me %}
+    <div class="mb-4">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-people-fill text-primary"></i>
+        <h2 class="h5 mb-0">Shared with me</h2>
+      </div>
+      <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+        {% for entry in shared_with_me %}
+          <div class="col">
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-body d-flex flex-column">
+                <div class="mb-2">
+                  <div class="fw-semibold">{{ entry.folder.name }}</div>
+                  <div class="text-muted small">Owner: {{ entry.owner.username or entry.owner.email }}</div>
+                </div>
+                <p class="small text-muted mb-4">
+                  Category: {{ entry.folder.category or 'deck' | title }}
+                </p>
+                <div class="mt-auto d-flex gap-2">
+                  <a class="btn btn-primary btn-sm" href="{{ url_for('views.shared_folder_detail', folder_id=entry.folder.id) }}">
+                    View folder
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if my_public_folders %}
+    <div class="mb-4">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-broadcast text-success"></i>
+        <h2 class="h5 mb-0">My public folders</h2>
+      </div>
+      <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+        {% for folder in my_public_folders %}
+          <div class="col">
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-body d-flex flex-column">
+                <div class="mb-2 fw-semibold">{{ folder.name }}</div>
+                <p class="small text-muted mb-4">
+                  These folders are visible to all signed-in users.
+                </p>
+                <div class="mt-auto d-flex gap-2">
+                  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.folder_sharing', folder_id=folder.id) }}">
+                    Manage sharing
+                  </a>
+                  <a class="btn btn-primary btn-sm" href="{{ url_for('views.shared_folder_detail', folder_id=folder.id) }}">
+                    View folder
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if other_public_folders %}
+    <div class="mb-4">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-globe text-info"></i>
+        <h2 class="h5 mb-0">Public folders</h2>
+      </div>
+      <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+        {% for folder in other_public_folders %}
+          <div class="col">
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-body d-flex flex-column">
+                <div class="mb-2">
+                  <div class="fw-semibold">{{ folder.name }}</div>
+                  <div class="text-muted small">Owner: {{ folder.owner_user.username or folder.owner_user.email }}</div>
+                </div>
+                <p class="small text-muted mb-4">
+                  Marked public by the owner.
+                </p>
+                <div class="mt-auto">
+                  <a class="btn btn-primary btn-sm" href="{{ url_for('views.shared_folder_detail', folder_id=folder.id) }}">
+                    View folder
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if not shared_with_me and not my_public_folders and not other_public_folders %}
+    <div class="alert alert-info mb-0">
+      No folders have been shared with you yet. Ask a friend to share one or mark your own folders public from the sharing settings.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

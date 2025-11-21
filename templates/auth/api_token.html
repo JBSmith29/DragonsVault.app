@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}API Access - DragonsVault{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center g-4">
+  <div class="col-12 col-xl-8">
+    <div class="card shadow border-0">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">API access</h1>
+        <p class="text-muted">
+          Use API tokens for CLI scripts or automation that needs to hit protected endpoints like <code>/import</code> or <code>/admin</code>.
+          Tokens act as passwords&mdash;store them securely and rotate them if leaked.
+        </p>
+
+        {% if issued_token %}
+          <div class="alert alert-warning">
+            <strong>Copy your token now:</strong>
+            <code class="d-block mt-2 text-break">{{ issued_token }}</code>
+          </div>
+        {% endif %}
+
+        <dl class="row">
+          <dt class="col-sm-3">Current token</dt>
+          <dd class="col-sm-9">
+            {% if token_hint %}
+              Active (ends with <strong>{{ token_hint }}</strong>, issued {{ token_created_at or 'unknown' }})
+            {% else %}
+              <span class="text-muted">None</span>
+            {% endif %}
+          </dd>
+        </dl>
+
+        <form method="post" class="d-flex gap-2">
+          <input type="hidden" name="action" value="create">
+          <button class="btn btn-primary" type="submit">Generate new token</button>
+        </form>
+        <form method="post" class="d-inline" style="display:inline-block;">
+          <input type="hidden" name="action" value="revoke">
+          <button class="btn btn-outline-danger mt-3" type="submit" {% if not token_hint %}disabled{% endif %}>
+            Revoke existing token
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-8">
+    <div class="card shadow border-0">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Update password</h2>
+        <p class="text-muted">
+          Change your sign-in password from here. Use a phrase you do not reuse elsewhere and update it if you suspect your account was compromised.
+        </p>
+        <form method="post" class="row g-3">
+          <input type="hidden" name="action" value="update_password">
+          <div class="col-12">
+            <label class="form-label" for="current_password">Current password</label>
+            <input
+              type="password"
+              class="form-control"
+              id="current_password"
+              name="current_password"
+              autocomplete="current-password"
+              required
+            >
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="new_password">New password</label>
+            <input
+              type="password"
+              class="form-control"
+              id="new_password"
+              name="new_password"
+              autocomplete="new-password"
+              minlength="{{ min_password_length }}"
+              required
+            >
+            <div class="form-text">
+              Must be at least {{ min_password_length }} characters long.
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="confirm_password">Confirm new password</label>
+            <input
+              type="password"
+              class="form-control"
+              id="confirm_password"
+              name="confirm_password"
+              autocomplete="new-password"
+              required
+            >
+          </div>
+          <div class="col-12 d-flex align-items-center gap-3">
+            <button class="btn btn-primary" type="submit">Save new password</button>
+            <span class="text-muted small">You will stay signed in after updating.</span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

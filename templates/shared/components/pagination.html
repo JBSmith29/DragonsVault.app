@@ -1,0 +1,70 @@
+{# Shared pagination macro. Use via:
+   {% from "shared/components/pagination.html" import render_pagination %}
+   {% call(page_number) render_pagination(page=current, pages=total, window=2, classes="pagination pagination-sm") %}
+     {{ url_for("endpoint", page=page_number, **other_args) }}
+   {% endcall %}
+#}
+{% macro render_pagination(page, pages, window=2, classes="pagination pagination-sm flex-wrap mb-0") %}
+  {% set page = page|int %}
+  {% set pages = pages|int %}
+  {% if pages <= 1 %}
+    <ul class="{{ classes }}">
+      <li class="page-item active"><span class="page-link">1</span></li>
+    </ul>
+  {% else %}
+    {% set start = page - window %}
+    {% if start < 1 %}{% set start = 1 %}{% endif %}
+    {% set end = page + window %}
+    {% if end > pages %}{% set end = pages %}{% endif %}
+    <ul class="{{ classes }}">
+      {# First / Previous #}
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        {% set first_href = caller(1) if page > 1 else "#" %}
+        <a class="page-link" href="{{ first_href }}" {% if page <= 1 %}tabindex="-1" aria-disabled="true"{% endif %}>&laquo;</a>
+      </li>
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        {% set prev_page = page - 1 %}
+        {% set prev_href = caller(prev_page) if page > 1 else "#" %}
+        <a class="page-link" href="{{ prev_href }}" {% if page <= 1 %}tabindex="-1" aria-disabled="true"{% endif %}>&lsaquo;</a>
+      </li>
+
+      {# Leading ellipsis #}
+      {% if start > 1 %}
+        <li class="page-item"><a class="page-link" href="{{ caller(1) }}">1</a></li>
+        {% if start > 2 %}
+          <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+        {% endif %}
+      {% endif %}
+
+      {# Windowed page numbers #}
+      {% for p in range(start, end + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          {% if p == page %}
+            <span class="page-link">{{ p }}</span>
+          {% else %}
+            <a class="page-link" href="{{ caller(p) }}">{{ p }}</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+
+      {# Trailing ellipsis #}
+      {% if end < pages %}
+        {% if end < pages - 1 %}
+          <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+        {% endif %}
+        <li class="page-item"><a class="page-link" href="{{ caller(pages) }}">{{ pages }}</a></li>
+      {% endif %}
+
+      {# Next / Last #}
+      <li class="page-item {% if page >= pages %}disabled{% endif %}">
+        {% set next_page = page + 1 %}
+        {% set next_href = caller(next_page) if page < pages else "#" %}
+        <a class="page-link" href="{{ next_href }}" {% if page >= pages %}tabindex="-1" aria-disabled="true"{% endif %}>&rsaquo;</a>
+      </li>
+      <li class="page-item {% if page >= pages %}disabled{% endif %}">
+        {% set last_href = caller(pages) if page < pages else "#" %}
+        <a class="page-link" href="{{ last_href }}" {% if page >= pages %}tabindex="-1" aria-disabled="true"{% endif %}>&raquo;</a>
+      </li>
+    </ul>
+  {% endif %}
+{% endmacro %}

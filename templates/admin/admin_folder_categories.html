@@ -1,0 +1,370 @@
+{# Folder management page (admin + personal). #}
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Bulk edit dropdowns styled like the Opening Hand picker */
+  .bulk-select {
+    background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(148,163,184,0.08));
+    border: 1px solid rgba(148,163,184,0.25);
+    color: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    border-radius: 0.75rem;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  }
+  .bulk-select:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 0.15rem rgba(99, 102, 241, 0.25);
+  }
+  .bulk-select option {
+    background: #0f172a;
+    color: inherit;
+  }
+</style>
+<div class="container py-4">
+  <h1 class="mb-3">{{ page_title or "Folder Categories" }}</h1>
+  {% set default_display = default_collection | map('title') | list %}
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ 'warning' if cat=='message' else cat }} alert-dismissible fade show" role="alert">
+          {{ msg|safe }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <p class="text-muted small">
+    Mark folders that should count toward your collection. Decks can also be staged in the build queue while you iterate.
+    Defaults consider {{ default_display|join(', ') }} as collection buckets, but you can change them at any time.
+  </p>
+
+  <div class="mb-3">
+    <span class="badge text-bg-primary me-2">Decks: {{ deck_count }}</span>
+    <span class="badge text-bg-warning me-2">Build Queue: {{ build_count }}</span>
+    <span class="badge text-bg-success me-2">Collection: {{ collection_count }}</span>
+    <span class="badge text-bg-info me-2">Proxy: {{ proxy_count }}</span>
+    <span class="badge text-bg-secondary">Total: {{ deck_count + build_count + collection_count }}</span>
+  </div>
+
+  <form method="post">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            {% if allow_delete %}
+            <th style="width:4%;" class="text-center">
+              <input class="form-check-input" type="checkbox" id="select-all-folders" aria-label="Select all folders">
+            </th>
+            {% endif %}
+            <th style="width:26%;">Folder</th>
+            <th style="width:28%;">Category</th>
+            {% if show_owner_field %}
+            <th style="width:20%;">Owner</th>
+            {% endif %}
+            <th style="width:10%;" class="text-center">Proxy</th>
+            <th style="width:16%;">Notes</th>
+            {% if allow_delete %}
+            <th style="width:6%;" class="text-center">Actions</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% if folders and folders|length %}
+            {% for folder in folders %}
+              {% set is_collection = folder.is_collection %}
+              {% set is_build = folder.is_build %}
+              {% set lower_name = (folder.name or '')|lower %}
+              <tr>
+                {% if allow_delete %}
+                <td class="text-center">
+                  <input
+                    type="checkbox"
+                    class="form-check-input folder-select"
+                    name="delete_folder_ids"
+                    value="{{ folder.id }}"
+                    aria-label="Select {{ folder.name or 'folder' }}"
+                  >
+                </td>
+                {% endif %}
+                <td class="fw-semibold">{{ folder.name or '[unnamed]' }}</td>
+                <td>
+                  <div class="form-check form-check-inline">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="category-{{ folder.id }}"
+                      id="cat-{{ folder.id }}-deck"
+                      value="{{ deck_category }}"
+                      {% if not is_collection and not is_build %}checked{% endif %}
+                    >
+                    <label class="form-check-label" for="cat-{{ folder.id }}-deck">Deck</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="category-{{ folder.id }}"
+                      id="cat-{{ folder.id }}-build"
+                      value="{{ build_category }}"
+                      {% if is_build %}checked{% endif %}
+                    >
+                    <label class="form-check-label" for="cat-{{ folder.id }}-build">Build Queue</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="category-{{ folder.id }}"
+                      id="cat-{{ folder.id }}-collection"
+                      value="{{ collection_category }}"
+                      {% if is_collection %}checked{% endif %}
+                    >
+                    <label class="form-check-label" for="cat-{{ folder.id }}-collection">Collection</label>
+                  </div>
+                </td>
+                {% if show_owner_field %}
+                <td>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm mb-1"
+                    name="owner-{{ folder.id }}"
+                    value="{{ folder.owner or '' }}"
+                    placeholder="Display owner"
+                  >
+                  {% if show_owner_controls %}
+                  <select
+                    class="form-select form-select-sm"
+                    name="owner_user-{{ folder.id }}"
+                    aria-label="Linked user">
+                    <option value="">No linked user</option>
+                    {% for user in users %}
+                      <option
+                        value="{{ user.id }}"
+                        {% if folder.owner_user_id == user.id %}selected{% endif %}
+                      >
+                        {{ user.username or user.email }}{% if user.is_admin %} (admin){% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  {% endif %}
+                </td>
+                {% endif %}
+                <td class="text-center">
+                  <div class="form-check form-switch d-inline-flex align-items-center gap-2 mb-0">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="proxy-{{ folder.id }}"
+                      name="proxy-{{ folder.id }}"
+                      value="1"
+                      {% if folder.is_proxy %}checked{% endif %}
+                    >
+                    <label class="form-check-label small" for="proxy-{{ folder.id }}">Proxy</label>
+                  </div>
+                </td>
+                <td>
+                  <textarea
+                    class="form-control form-control-sm"
+                    name="notes-{{ folder.id }}"
+                    id="notes-{{ folder.id }}"
+                    rows="2"
+                    placeholder="Add notes...">{{ folder.notes or '' }}</textarea>
+                </td>
+                {% if allow_delete %}
+                <td class="text-center">
+                  <button
+                    type="submit"
+                    class="btn btn-outline-danger btn-sm"
+                    name="delete_folder_id"
+                    value="{{ folder.id }}"
+                    formnovalidate
+                    data-confirm="Delete &ldquo;{{ folder.name|e }}&rdquo;? This removes the folder and its cards.">
+                    Delete
+                  </button>
+                </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="{{ 4 + (1 if show_owner_field else 0) + (2 if allow_delete else 0) }}" class="text-muted">
+                No folders found. Create folders via CSV import or within the app first.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      {% if back_url %}
+      <a class="btn btn-outline-secondary" href="{{ back_url }}">Back</a>
+      {% endif %}
+      <div class="d-flex flex-wrap gap-2">
+        {% if allow_delete %}
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            id="bulkEditBtn"
+            data-bs-toggle="modal"
+            data-bs-target="#bulkEditModal"
+            disabled>
+            Bulk edit selected
+          </button>
+          <button
+            type="submit"
+            class="btn btn-outline-danger"
+            name="bulk_delete"
+            value="1"
+            formnovalidate
+            onclick="return confirm('Delete selected folders? This removes the folders and their cards.');"
+          >
+            Delete selected
+          </button>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="modal fade" id="bulkEditModal" tabindex="-1" aria-labelledby="bulkEditLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bulkEditLabel">Bulk edit folders</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" id="bulkEditForm">
+        <input type="hidden" name="bulk_action" value="bulk_edit">
+        <input type="hidden" name="bulk_folder_ids" value="">
+        <div class="modal-body">
+          <div class="text-muted small mb-3">Apply the selected values to every checked folder.</div>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Category</label>
+              <select class="form-select bulk-select" name="bulk_category">
+                <option value="">No change</option>
+                <option value="{{ deck_category }}">Deck</option>
+                <option value="{{ build_category }}">Build Queue</option>
+                <option value="{{ collection_category }}">Collection</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Proxy flag</label>
+              <select class="form-select bulk-select" name="bulk_proxy">
+                <option value="">No change</option>
+                <option value="proxy">Mark as proxy</option>
+                <option value="owned">Mark as owned</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check mt-4 pt-2">
+                <input class="form-check-input" type="checkbox" id="bulkOwnerApply" name="bulk_owner_apply" value="1">
+                <label class="form-check-label" for="bulkOwnerApply">Update owner</label>
+              </div>
+              <input type="text" class="form-control" name="bulk_owner_value" placeholder="Owner name" aria-describedby="bulkOwnerHelp">
+              <div class="form-text" id="bulkOwnerHelp">Only applied when checked.</div>
+            </div>
+            <div class="col-12">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="bulkNotesApply" name="bulk_notes_apply" value="1">
+                <label class="form-check-label" for="bulkNotesApply">Replace notes</label>
+              </div>
+              <textarea class="form-control" rows="3" name="bulk_notes_value" placeholder="New notes for selected folders"></textarea>
+            </div>
+          </div>
+          <div class="alert alert-info small mt-3 d-flex justify-content-between align-items-center">
+            <span>Selected folders: <strong data-bulk-count>0</strong></span>
+            <span class="text-muted">Only chosen fields will be changed.</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+  (() => {
+    const selectAll = document.getElementById("select-all-folders");
+    const getCheckboxes = () => Array.from(document.querySelectorAll(".folder-select"));
+    let bulkToggling = false;
+    if (!selectAll) return;
+    selectAll.addEventListener("change", () => {
+      const boxes = getCheckboxes();
+      bulkToggling = true;
+      boxes.forEach((cb) => {
+        cb.checked = selectAll.checked;
+        // Fire change so downstream listeners (like bulk edit enablement) update immediately.
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      bulkToggling = false;
+      selectAll.indeterminate = false;
+      syncHeader();
+    });
+    const syncHeader = () => {
+      if (bulkToggling) return;
+      const boxes = getCheckboxes();
+      const checkedCount = boxes.filter((cb) => cb.checked).length;
+      const total = boxes.length;
+      if (!total) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+      }
+      if (checkedCount === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+      } else if (checkedCount === total) {
+        selectAll.checked = true;
+        selectAll.indeterminate = false;
+      } else {
+        selectAll.checked = false;
+        selectAll.indeterminate = true;
+      }
+    };
+    getCheckboxes().forEach((cb) => cb.addEventListener("change", syncHeader));
+  })();
+
+  (() => {
+    const bulkBtn = document.getElementById("bulkEditBtn");
+    const modalEl = document.getElementById("bulkEditModal");
+    const bulkIdsInput = document.querySelector('#bulkEditForm input[name="bulk_folder_ids"]');
+    const countEl = document.querySelector('[data-bulk-count]');
+    const checkboxes = Array.from(document.querySelectorAll(".folder-select"));
+    const form = document.getElementById("bulkEditForm");
+    if (!bulkBtn || !modalEl || !form) return;
+
+    const selectedIds = () => checkboxes.filter((cb) => cb.checked).map((cb) => cb.value);
+
+    const updateButton = () => {
+      bulkBtn.disabled = selectedIds().length === 0;
+    };
+
+    checkboxes.forEach((cb) => cb.addEventListener("change", updateButton));
+    updateButton();
+
+    modalEl.addEventListener("show.bs.modal", () => {
+      const ids = selectedIds();
+      if (bulkIdsInput) bulkIdsInput.value = ids.join(",");
+      if (countEl) countEl.textContent = ids.length;
+    });
+
+    form.addEventListener("submit", (evt) => {
+      const ids = selectedIds();
+      if (!ids.length) {
+        evt.preventDefault();
+        return;
+      }
+      if (bulkIdsInput) bulkIdsInput.value = ids.join(",");
+      setTimeout(() => {
+        window.location.href = window.location.href;
+      }, 50);
+    });
+  })();
+</script>
+{% endblock %}
