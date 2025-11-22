@@ -30,7 +30,7 @@ def test_import_confirm_runs_inline(client, create_user, app):
         "/import",
         data={
             "action": "confirm",
-            "quantity_mode": "absolute",
+            "quantity_mode": "delta",
             "file": (csv_bytes, "inline.csv"),
         },
         content_type="multipart/form-data",
@@ -58,7 +58,7 @@ def test_process_csv_sets_folder_owner_username(app, create_user, tmp_path):
             str(csv_path),
             default_folder="Unsorted",
             dry_run=False,
-            quantity_mode="absolute",
+            quantity_mode="delta",
             owner_user_id=user.id,
             owner_username=user.username,
         )

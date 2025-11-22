@@ -1,15 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container py-4">
-  {% set selected_mode = (quantity_mode or 'absolute') if quantity_mode is defined else 'absolute' %}
+{% set selected_mode = (quantity_mode or 'delta') if quantity_mode is defined else 'delta' %}
   {% set manual_seed = session.get('manual_import_seed') %}
 
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-2">
     <div>
       <h1 class="mb-1">Import / Export Cards</h1>
       <p class="text-muted mb-0">
-        Upload a CSV or Excel export of your collection and choose how it should be applied.
-        Replace mode sets folder totals to exactly what is in your file; Add mode increases existing totals instead.
+        Upload a CSV or Excel export of your collection and choose how it should update your counts.
+        Imports default to adding on top of what you already own. Use <em>Add new cards only</em> to skip duplicates
+        or <em>Clear &amp; import</em> when you have a full, up-to-date spreadsheet that should replace everything.
       </p>
     </div>
     <div class="d-flex flex-wrap gap-2">
@@ -23,8 +24,8 @@
   </div>
 
   <div class="alert alert-warning" role="alert">
-    <strong>Warning:</strong> Replace mode rewrites quantities for every matching card. If your file is partial
-    or outdated, consider using Add mode so the import only increments existing counts.
+    <strong>Heads up:</strong> Clear &amp; import wipes every card before processing your file.
+    Only use it when the spreadsheet represents your full, current inventory.
   </div>
 
   {% if manual_seed %}
@@ -127,17 +128,10 @@
       <div class="mb-3">
         <label class="form-label">Import mode</label>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-replace" value="absolute"
-                 {% if selected_mode == 'absolute' %}checked{% endif %}>
-          <label class="form-check-label" for="mode-replace">
-            Replace quantities (update existing rows, skip unchanged)
-          </label>
-        </div>
-        <div class="form-check">
           <input class="form-check-input" type="radio" name="quantity_mode" id="mode-add" value="delta"
                  {% if selected_mode == 'delta' %}checked{% endif %}>
           <label class="form-check-label" for="mode-add">
-            Add to existing totals (increments current quantities)
+            Add to existing totals (default; increments current quantities)
           </label>
         </div>
         <div class="form-check">
@@ -154,6 +148,10 @@
             Clear then import everything (no skips; wipes existing cards first)
           </label>
         </div>
+        <div class="form-text">
+          Add mode increases quantities, Add new cards only skips duplicates, and Clear &amp; import is for rebuilding
+          from a complete spreadsheet.
+        </div>
       </div>
 
       <button type="submit" class="btn btn-primary btn-progress" id="btn-import">
@@ -168,7 +166,7 @@
 
   <div class="alert alert-secondary d-flex justify-content-between align-items-center mt-4" role="alert">
     <div>
-      Need a starting point? 
+      Need a template? Download a starter CSV with the columns DragonsVault expects.
     </div>
     <div class="btn-group">
       <button type="button" id="btn-download-template-dragonshield" class="btn btn-outline-primary">
@@ -186,9 +184,9 @@
         <i class="bi bi-magic"></i>
       </div>
       <div class="flex-grow-1">
-        <h2 class="h6 mb-1">Short list of cards?</h2>
+        <h2 class="h6 mb-1">Only a few cards to log?</h2>
         <p class="text-muted small mb-0">
-          Use the manual import wizard to paste a list and pick the exact printing, foil, and folder for each card.
+          The manual import wizard lets you paste a list and confirm the printing, finish, and folder for every card.
         </p>
       </div>
       <a class="btn btn-outline-info" href="{{ url_for('views.manual_import') }}">
@@ -206,8 +204,8 @@
         <div>
           <h2 class="h6 mb-1">Unmatched cards queue</h2>
           <p class="text-muted small mb-2">
-            If an import row can't be matched to a known printing, drop it here as a last-resort queue.
-            You'll be taken to the manual import wizard to pick the exact card details.
+            Paste any leftovers the importer couldn't resolve. We'll route them into the manual wizard so you can choose
+            the right set, finish, and folder later.
           </p>
         </div>
       </div>
@@ -285,7 +283,7 @@
                 <div class="folder-export-card-body">
                   <div class="fw-semibold">{{ folder.name }}</div>
                   <div class="text-muted small">
-                    {{ folder.category_label }}{% if folder.is_proxy %} · Proxy{% endif %}{% if folder.is_public %} · Shared{% endif %}
+                    {{ folder.category_label }}{% if folder.is_proxy %} &middot; Proxy{% endif %}{% if folder.is_public %} &middot; Shared{% endif %}
                   </div>
                 </div>
               </label>

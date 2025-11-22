@@ -453,16 +453,11 @@
               </td>
 
               <td class="owner-cell text-truncate">
-                <div class="owner-box">
-                  <div class="owner-label">Deck owner</div>
-                  <div class="owner-value">
-                    {% if d.owner %}
-                      {{ d.owner }}
-                    {% else %}
-                      <span class="text-muted">&mdash;</span>
-                    {% endif %}
-                  </div>
-                </div>
+                {% if d.owner %}
+                  {{ d.owner }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
               </td>
 
               <!-- Color Identity (friendly name) -->
@@ -978,6 +973,7 @@
       if (deckId) openDrawer(deckId);
     });
   });
+
 })();
 
 // Deck tag modal
@@ -1101,7 +1097,20 @@
       setStatus('');
       const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
+      if (filterInput) {
+        requestAnimationFrame(() => {
+          filterInput.focus();
+          filterInput.select();
+        });
+      }
     });
+  });
+
+  modalEl.addEventListener('shown.bs.modal', () => {
+    if (filterInput) {
+      filterInput.focus();
+      filterInput.select();
+    }
   });
 
   if (clearBtn) {

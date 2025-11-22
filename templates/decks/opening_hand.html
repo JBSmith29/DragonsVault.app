@@ -300,12 +300,19 @@
   .card-context-item + .card-context-item {
     border-top: 1px solid rgba(148, 163, 184, 0.18);
   }
+  #fetchCardModal .modal-dialog {
+    max-width: 900px;
+  }
   .fetch-card-option {
-    background: linear-gradient(145deg, rgba(15, 23, 42, 0.75), rgba(30, 41, 59, 0.75));
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.8));
     border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 0.85rem;
-    padding: 0.65rem 0.75rem;
-    text-align: left;
+    padding: 0.85rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   }
   .fetch-card-option:hover,
@@ -315,16 +322,30 @@
     transform: translateY(-2px);
   }
   .fetch-option-title {
-    font-size: 0.95rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    width: 100%;
+    line-height: 1.2;
   }
   .fetch-option-subtitle {
-    white-space: nowrap;
+    font-size: 0.75rem;
+    text-align: center;
+    width: 100%;
+    color: var(--bs-secondary-color);
+  }
+  .fetch-card-thumb {
+    width: 100%;
+    max-width: 120px;
+    aspect-ratio: 0.72;
+    border-radius: 0.85rem;
     overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+    box-shadow: 0 0.65rem 1.4rem rgba(15, 23, 42, 0.35);
+  }
+  .fetch-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .fetch-card-list {
     max-height: 60vh;
@@ -411,7 +432,7 @@
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">
         <div class="opening-hand-actions d-none mb-3" id="handActionBar">
-          <div class="d-flex flex-wrap align-items-center gap-2">
+          <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
             <button class="btn btn-primary" type="button" id="shuffleBtn">
               Shuffle &amp; Deal
             </button>
@@ -425,6 +446,9 @@
               Select New Deck
             </button>
           </div>
+          <button class="btn btn-outline-success ms-auto" type="button" id="untapAllBtn">
+            Untap All
+          </button>
         </div>
         <div class="hand-status">
           <span class="badge text-bg-primary text-uppercase" id="handDeckName">No deck selected</span>
@@ -502,7 +526,7 @@
 </template>
 
 <div class="modal fade" id="fetchCardModal" tabindex="-1" aria-labelledby="fetchCardModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-dark text-light border border-secondary">
       <div class="modal-header border-secondary-subtle">
         <h5 class="modal-title" id="fetchCardModalLabel">Fetch a Card</h5>
@@ -647,6 +671,7 @@
   const tokenPickerList = document.getElementById('tokenPickerList');
   const tokenPickerEmpty = document.getElementById('tokenPickerEmpty');
   const tokenPickerStatus = document.getElementById('tokenPickerStatus');
+  const untapAllBtn = document.getElementById('untapAllBtn');
   const fetchCardName = document.getElementById('fetchCardName');
   const fetchCardList = document.getElementById('fetchCardList');
   const fetchCardSearch = document.getElementById('fetchCardSearch');
@@ -883,36 +908,33 @@
       };
 
       const col = document.createElement('div');
-      col.className = 'col-12 col-sm-6 col-lg-4';
+      col.className = 'col-6 col-md-4 col-xl-3';
+      col.dataset.fetchOption = '1';
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'btn w-100 d-flex align-items-center gap-3 fetch-card-option shadow-sm';
+      btn.className = 'btn fetch-card-option w-100 shadow-sm';
       btn.dataset.value = value;
       btn.dataset.filter = fetchCardOptions[value].filter;
 
       const thumb = document.createElement('div');
-      thumb.className = 'flex-shrink-0 overflow-hidden rounded';
-      thumb.style.width = '72px';
-      thumb.style.aspectRatio = '0.72';
+      thumb.className = 'fetch-card-thumb';
       const img = document.createElement('img');
       img.src = entry.image || placeholderImage;
       img.alt = displayName;
-      img.className = 'w-100 h-100 object-fit-cover';
       thumb.appendChild(img);
 
-      const body = document.createElement('div');
-      body.className = 'flex-grow-1 text-start';
       const title = document.createElement('div');
-      title.className = 'fw-semibold fetch-option-title';
+      title.className = 'fetch-option-title';
       title.textContent = displayName;
       const subtitle = document.createElement('div');
-      subtitle.className = 'text-muted small fetch-option-subtitle';
-      subtitle.textContent = '';
-      body.appendChild(title);
-      body.appendChild(subtitle);
+      subtitle.className = 'fetch-option-subtitle';
+      subtitle.textContent = typeLine || '';
 
       btn.appendChild(thumb);
-      btn.appendChild(body);
+      btn.appendChild(title);
+      if (subtitle.textContent) {
+        btn.appendChild(subtitle);
+      }
       btn.addEventListener('click', function () {
         setFetchSelection(value);
       });
@@ -1007,7 +1029,10 @@
     buttons.forEach(function (btn) {
       const filterText = btn.dataset.filter || '';
       const match = !needle || filterText.includes(needle);
-      btn.closest('.col-12')?.classList.toggle('d-none', !match);
+      const wrapper = btn.closest('[data-fetch-option]');
+      if (wrapper) {
+        wrapper.classList.toggle('d-none', !match);
+      }
       if (match) anyVisible = true;
     });
     fetchCardEmpty.classList.toggle('d-none', anyVisible);
@@ -1120,6 +1145,17 @@
     if (!hasTokens && tokenPickerStatus) {
       tokenPickerStatus.textContent = '';
     }
+  }
+
+  if (untapAllBtn) {
+    untapAllBtn.addEventListener('click', function () {
+      const changed = untapAllBoardCards();
+      if (changed) {
+        showMessage('All permanents untapped.', 'info');
+      } else {
+        showMessage('No tapped permanents on the battlefield.', 'info');
+      }
+    });
   }
 
   function normalizeCard(card) {
@@ -1383,6 +1419,23 @@
 
   function renderBoard() {
     boardZones.forEach(renderZone);
+  }
+
+  function untapAllBoardCards() {
+    let changed = false;
+    boardZones.forEach(function (zone) {
+      const cards = boardState[zone] || [];
+      cards.forEach(function (card) {
+        if (card.tapped) {
+          card.tapped = false;
+          changed = true;
+        }
+      });
+    });
+    if (changed) {
+      renderBoard();
+    }
+    return changed;
   }
 
   function renderHand() {

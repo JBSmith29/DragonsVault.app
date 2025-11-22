@@ -14,7 +14,6 @@
   <div class="card mb-4 border-0 shadow-sm">
     <div class="card-body">
       <form method="post">
-        <input type="hidden" name="action" value="parse">
         <div class="mb-3">
           <label for="card_list" class="form-label">Card list</label>
           <textarea
@@ -28,7 +27,101 @@
             One card per line. Quantities are optional (default 1). Example formats: <code>3 Sol Ring</code> or <code>Sol Ring</code>.
           </div>
         </div>
-        <button type="submit" class="btn btn-primary">Review cards</button>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="defaultFolderToggle">Default existing folder</label>
+            <div class="dropdown dv-select w-100" data-dv-select="default-folder">
+              <input type="hidden" name="default_folder_id" data-dv-select-input value="{{ default_folder_id }}">
+              <button
+                class="btn dv-select-toggle w-100 justify-content-between"
+                type="button"
+                id="defaultFolderToggle"
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+                <span data-dv-select-label>{{ default_folder_label }}</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="defaultFolderToggle">
+                <li class="dv-select-search-wrapper">
+                  <input
+                    type="text"
+                    class="form-control form-control-sm dv-select-search"
+                    placeholder="Search folders..."
+                    autocomplete="off"
+                    data-dv-select-search>
+                </li>
+                <li>
+                  <button
+                    class="dropdown-item {% if not default_folder_id %}active{% endif %}"
+                    type="button"
+                    data-dv-select-option
+                    data-value=""
+                    data-label="None (choose per card)">
+                    None (choose per card)
+                  </button>
+                </li>
+                {% for folder in folder_options %}
+                  <li>
+                    <button
+                      class="dropdown-item {% if default_folder_id|int == folder.id %}active{% endif %}"
+                      type="button"
+                      data-dv-select-option
+                      data-value="{{ folder.id }}"
+                      data-label="{{ folder.name }}">
+                      {{ folder.name }}
+                    </button>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+            <div class="form-text">Optional: pre-select this folder for every imported card.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="default_folder_name">Or name a new folder</label>
+            <input
+              type="text"
+              class="form-control"
+              id="default_folder_name"
+              name="default_folder_name"
+              value="{{ default_folder_name }}"
+              placeholder="Manual Import"
+            >
+            <div class="form-text">Leave blank to reuse "Manual Import".</div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label d-block">Folder type (for new folders)</label>
+          <div class="btn-group" role="group">
+            <input
+              type="radio"
+              class="btn-check"
+              name="default_folder_category"
+              id="folderTypeDeck"
+              value="{{ deck_category }}"
+              {% if default_folder_category != collection_category %}checked{% endif %}
+            >
+            <label class="btn btn-outline-light btn-sm" for="folderTypeDeck">Deck</label>
+            <input
+              type="radio"
+              class="btn-check"
+              name="default_folder_category"
+              id="folderTypeCollection"
+              value="{{ collection_category }}"
+              {% if default_folder_category == collection_category %}checked{% endif %}
+            >
+            <label class="btn btn-outline-light btn-sm" for="folderTypeCollection">Collection</label>
+          </div>
+          <div class="form-text">Used whenever a brand-new folder is created.</div>
+        </div>
+        <div class="mt-4 d-flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary" name="action" value="parse">Review cards</button>
+          <button type="submit" class="btn btn-outline-success" name="action" value="quick_upload">
+            Quick upload (no printing selection)
+          </button>
+        </div>
+        <div class="form-text mt-2">
+          Quick upload drops cards into the selected folder (or "Manual Import") with blank printings so you can refine them later.
+        </div>
       </form>
     </div>
   </div>
@@ -49,6 +142,9 @@
         <form method="post">
           <input type="hidden" name="action" value="import">
           <input type="hidden" name="entry_ids" value="{{ entries | map(attribute='index') | join(',') }}">
+          <input type="hidden" name="default_folder_id" value="{{ default_folder_id }}">
+          <input type="hidden" name="default_folder_name" value="{{ default_folder_name }}">
+          <input type="hidden" name="default_folder_category" value="{{ default_folder_category }}">
           <div class="table-responsive">
             <table class="table align-middle manual-import-table">
               <thead>
@@ -84,7 +180,7 @@
                         </button>
                         <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="printingToggle{{ entry.index }}">
                           <li class="dv-select-search-wrapper">
-                            <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search printings…" autocomplete="off" data-dv-select-search>
+                            <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search printings..." autocomplete="off" data-dv-select-search>
                           </li>
                           {% for option in entry.options %}
                             <li>
@@ -111,20 +207,70 @@
                       </select>
                     </td>
                     <td>
-                      <select class="form-select form-select-sm mb-2" name="entry-{{ entry.index }}-folder_id">
-                        <option value="">New folder…</option>
-                        {% for folder in folder_options %}
-                          <option value="{{ folder.id }}">{{ folder.name }}</option>
-                        {% endfor %}
-                      </select>
+                      {% set prefill_id = entry.prefill_folder_id|default('', true) %}
+                      {% set folder_label = namespace(value='New folder...') %}
+                      {% if prefill_id %}
+                        {% set existing_label = folder_lookup.get(prefill_id) %}
+                        {% if existing_label %}
+                          {% set folder_label.value = existing_label %}
+                        {% endif %}
+                      {% elif entry.prefill_folder_name %}
+                        {% set folder_label.value = entry.prefill_folder_name %}
+                      {% endif %}
+                      <div class="dropdown dv-select dv-select-sm w-100" data-dv-select="entry-folder-{{ entry.index }}">
+                        <input type="hidden" name="entry-{{ entry.index }}-folder_id" data-dv-select-input value="{{ prefill_id }}">
+                        <button
+                          class="btn dv-select-toggle btn-sm w-100 justify-content-between"
+                          type="button"
+                          id="entryFolderToggle{{ entry.index }}"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false">
+                          <span data-dv-select-label>{{ folder_label.value }}</span>
+                          <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="entryFolderToggle{{ entry.index }}">
+                          <li class="dv-select-search-wrapper">
+                            <input
+                              type="text"
+                              class="form-control form-control-sm dv-select-search"
+                              placeholder="Search folders..."
+                              autocomplete="off"
+                              data-dv-select-search>
+                          </li>
+                          <li>
+                            <button
+                              class="dropdown-item {% if not prefill_id %}active{% endif %}"
+                              type="button"
+                              data-dv-select-option
+                              data-value=""
+                              data-label="New folder...">
+                              New folder...
+                            </button>
+                          </li>
+                          {% for folder in folder_options %}
+                            <li>
+                              <button
+                                class="dropdown-item {% if prefill_id|int == folder.id %}active{% endif %}"
+                                type="button"
+                                data-dv-select-option
+                                data-value="{{ folder.id }}"
+                                data-label="{{ folder.name }}">
+                                {{ folder.name }}
+                              </button>
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                      {% set prefill_name = entry.prefill_folder_name if entry.prefill_folder_name is not none else 'Manual Import' %}
                       <input
                         type="text"
                         class="form-control form-control-sm"
                         name="entry-{{ entry.index }}-folder_name"
-                        placeholder="Folder name"
+                        value="{{ prefill_name }}"
+                        placeholder="Manual Import"
                       >
                       <div class="form-text small">
-                        Leave blank to re-use the selected folder or create a new one.
+                        Leave as "Manual Import" (or your default) to auto-create that folder, or pick an existing folder above.
                       </div>
                     </td>
                   </tr>

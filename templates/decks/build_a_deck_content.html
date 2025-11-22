@@ -103,6 +103,42 @@
     display: inline-block;
   }
 
+  .commander-preview-box {
+    width: 132px;
+    min-height: 180px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: .75rem;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: .35rem;
+  }
+  .commander-preview-box img {
+    width: 100%;
+    height: auto;
+    border-radius: .5rem;
+    display: none;
+  }
+  .commander-preview-box[data-loaded="true"] img {
+    display: block;
+  }
+  .commander-preview-box .placeholder {
+    text-align: center;
+    font-size: .75rem;
+    color: rgba(226, 232, 240, 0.65);
+  }
+  .commander-preview-box[data-loaded="true"] .placeholder {
+    display: none;
+  }
+  .commander-preview-box[data-commander-preview][data-ready="false"] {
+    display: none;
+  }
+  .commander-panel-preview {
+    width: 148px;
+    min-height: 210px;
+  }
+
   #buildDeckRoot .card.shadow-sm {
     background: rgba(15, 23, 42, 0.5);
     border: 1px solid rgba(148, 163, 184, 0.16);
@@ -147,18 +183,8 @@
 
   .deck-card-grid {
     display: grid;
-    gap: 1.25rem;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-  @media (min-width: 768px) {
-    .deck-card-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (min-width: 1200px) {
-    .deck-card-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   }
   .deck-card {
     background: rgba(15, 23, 42, 0.35);
@@ -183,7 +209,7 @@
   }
   .deck-card__image img {
     width: 100%;
-    max-width: 260px;
+    max-width: 160px;
     border-radius: 1rem;
     box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.35);
   }
@@ -503,7 +529,7 @@
   }
   .edhrec-card__image img {
     width: 100%;
-    max-width: 260px;
+    max-width: 200px;
     border-radius: 1rem;
     box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.35);
   }
@@ -757,6 +783,14 @@
             <form method="post" novalidate>
               <div class="mb-3">
                 <label class="form-label fw-semibold" for="newCommander">Commander Name</label>
+                <div class="mb-2">
+                  <div class="commander-preview-box" data-commander-preview data-ready="false">
+                    <img data-commander-preview-img alt="Commander preview">
+                    <div class="placeholder" data-commander-preview-text>
+                      Commander art preview
+                    </div>
+                  </div>
+                </div>
                 <input id="newCommander"
                        class="form-control"
                        name="commander_name"
@@ -768,25 +802,68 @@
               </div>
               <div class="mb-3">
                 <label class="form-label fw-semibold" for="newDeckName">Deck Name (optional)</label>
-                <input id="newDeckName"
-                       class="form-control"
-                       name="deck_name"
-                       placeholder="Build: Atraxa Superfriends">
+                  <input id="newDeckName"
+                         class="form-control"
+                         name="deck_name"
+                         placeholder="Build: Atraxa Superfriends">
               </div>
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="newDeckTag">Starting Tag (optional)</label>
-                <select id="newDeckTag"
-                        class="form-select"
-                        name="deck_tag">
-                  <option value="" selected>No starting tag</option>
-                  {% for category, tags in (deck_tag_groups|default({}, true)).items() %}
-                    <optgroup label="{{ category }}">
+                <label class="form-label fw-semibold" for="newDeckTagToggle">Starting Tag (optional)</label>
+                <div class="dropdown dv-select w-100" data-dv-select="build-deck-tag">
+                  <input type="hidden" name="deck_tag" value="" data-dv-select-input id="newDeckTagValue">
+                  <button
+                    class="btn dv-select-toggle w-100 justify-content-between"
+                    type="button"
+                    id="newDeckTagToggle"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+                    <span data-dv-select-label>No starting tag</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="newDeckTagToggle">
+                    <li>
+                      <button
+                        class="dropdown-item active"
+                        type="button"
+                        data-dv-select-option
+                        data-value=""
+                        data-label="No starting tag">
+                        No starting tag
+                      </button>
+                    </li>
+                    {% for category, tags in (deck_tag_groups|default({}, true)).items() %}
+                      <li>
+                        <h6 class="dropdown-header text-uppercase small text-muted" data-dv-select-category>
+                          {{ category }}
+                        </h6>
+                      </li>
                       {% for tag in tags %}
-                        <option value="{{ tag }}">{{ tag }}</option>
+                        <li>
+                          <button
+                            class="dropdown-item"
+                            type="button"
+                            data-dv-select-option
+                            data-value="{{ tag }}"
+                            data-label="{{ tag }}">
+                            {{ tag }}
+                          </button>
+                        </li>
                       {% endfor %}
-                    </optgroup>
-                  {% endfor %}
-                </select>
+                    {% endfor %}
+                  </ul>
+                </div>
+                <noscript>
+                  <select class="form-select mt-2" name="deck_tag">
+                    <option value="" selected>No starting tag</option>
+                    {% for category, tags in (deck_tag_groups|default({}, true)).items() %}
+                      <optgroup label="{{ category }}">
+                        {% for tag in tags %}
+                          <option value="{{ tag }}">{{ tag }}</option>
+                        {% endfor %}
+                      </optgroup>
+                    {% endfor %}
+                  </select>
+                </noscript>
                 <div class="form-text">You can refine this later with EDHREC theme options.</div>
               </div>
               <div class="form-check form-switch mb-3">
@@ -862,26 +939,112 @@
         {% set commander_hover = commander_data.hover_image if commander_data and commander_data.hover_image else hover_lookup.get((commander_name or '')|lower) %}
         {% set commander_card_id = commander_data.card_id if commander_data and commander_data.card_id else None %}
         <div class="card shadow-sm mb-4">
+          <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center gap-2">
+            <span class="fw-semibold">Upgrade Plan Workspace</span>
+            <div class="d-flex align-items-center gap-2">
+              {% if upgrade_plan.adds or upgrade_plan.cuts %}
+                <form method="post"
+                      action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                      data-preserve-scroll
+                      class="mb-0">
+                  <input type="hidden" name="action" value="clear">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Clear Plan</button>
+                </form>
+              {% endif %}
+              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#upgradePlanCollapse"
+                      aria-expanded="true"
+                      aria-controls="upgradePlanCollapse">
+                <i class="bi bi-chevron-up"></i>
+                <span class="visually-hidden">Toggle upgrade plan</span>
+              </button>
+            </div>
+          </div>
+          <div id="upgradePlanCollapse" class="collapse show" data-persist-collapse="upgrade-plan">
+            <div class="card-body">
+            <p class="text-muted small mb-3">
+              Mark cards you want to try adding or cutting. This list is stored locally for this playground deck and
+              doesn't change your collection.
+            </p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <h6 class="text-uppercase small text-muted">Potential Additions</h6>
+                {% if upgrade_plan.adds %}
+                  <ul class="list-group list-group-flush">
+                    {% for name in upgrade_plan.adds %}
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {% set hover_src = hover_lookup.get(name|lower) %}
+                        {{ synergy_card_link(name, hover_src) }}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="addition">
+                          <input type="hidden" name="action" value="remove">
+                          <input type="hidden" name="card_name" value="{{ name }}">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-muted small mb-0">Use the buttons below to queue cards for testing.</p>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <h6 class="text-uppercase small text-muted">Consider Cutting</h6>
+                {% if upgrade_plan.cuts %}
+                  <ul class="list-group list-group-flush">
+                    {% for name in upgrade_plan.cuts %}
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {% set hover_src = hover_lookup.get(name|lower) %}
+                        {{ synergy_card_link(name, hover_src) }}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="cut">
+                          <input type="hidden" name="action" value="remove">
+                          <input type="hidden" name="card_name" value="{{ name }}">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-muted small mb-0">Mark cards from the deck list to revisit here.</p>
+                {% endif %}
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
           <div class="card-body">
             <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start">
-              <div>
-                <div class="d-flex align-items-center gap-2">
-                  <h2 class="h4 mb-0">{{ deck_name }}</h2>
-                  {% if selected_folder.category == selected_folder.CATEGORY_BUILD %}
-                    <span class="badge text-bg-warning text-uppercase">In Build Queue</span>
-                  {% else %}
-                    <span class="badge text-bg-success text-uppercase">Promoted</span>
-                  {% endif %}
-                </div>
-                <div class="text-muted small mt-1">
-                  {% if deck_summary.color_identity %}
-                    Color identity: {{ deck_summary.color_identity.label }}
-                    {% if deck_summary.color_identity.html %}
-                      <span class="mana-inline ms-1" aria-label="Color identity">{{ deck_summary.color_identity.html | safe }}</span>
+              <div class="d-flex flex-wrap align-items-start gap-3 flex-grow-1">
+                <div>
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h2 class="h4 mb-0">{{ deck_name }}</h2>
+                    {% if selected_folder.category == selected_folder.CATEGORY_BUILD %}
+                      <span class="badge text-bg-warning text-uppercase">In Build Queue</span>
+                    {% else %}
+                      <span class="badge text-bg-success text-uppercase">Promoted</span>
                     {% endif %}
-                    &middot;
-                  {% endif %}
-                  Total cards: {{ deck_summary.total_cards or 0 }} &middot; Unique: {{ deck_summary.unique_cards or 0 }}
+                  </div>
+                  <div class="text-muted small mt-1">
+                    {% if deck_summary.color_identity %}
+                      Color identity: {{ deck_summary.color_identity.label }}
+                      {% if deck_summary.color_identity.html %}
+                        <span class="mana-inline ms-1" aria-label="Color identity">{{ deck_summary.color_identity.html | safe }}</span>
+                      {% endif %}
+                      &middot;
+                    {% endif %}
+                    Total cards: {{ deck_summary.total_cards or 0 }} &middot; Unique: {{ deck_summary.unique_cards or 0 }}
+                  </div>
                 </div>
               </div>
               <div class="d-flex flex-wrap align-items-start gap-2">
@@ -932,6 +1095,20 @@
                     {% else %}
                       <span class="text-muted">Not set</span>
                     {% endif %}
+                    {% set commander_art = commander_hover %}
+                    <div class="commander-preview-box commander-panel-preview mt-3" data-loaded="{{ 'true' if commander_art else 'false' }}">
+                      {% if commander_art %}
+                        <img src="{{ commander_art }}"
+                             alt="Commander art for {{ commander_name or 'this deck' }}">
+                      {% endif %}
+                      <div class="placeholder text-center">
+                        {% if commander_name %}
+                          {{ commander_name }}
+                        {% else %}
+                          Commander art
+                        {% endif %}
+                      </div>
+                    </div>
                     <div class="mt-3 d-flex flex-wrap align-items-center gap-2">
                       <button class="btn btn-sm btn-outline-primary"
                               type="button"
@@ -1161,90 +1338,6 @@
         {% endif %}
 
         <div class="card shadow-sm mb-4">
-          <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center gap-2">
-            <span class="fw-semibold">Upgrade Plan Workspace</span>
-            <div class="d-flex align-items-center gap-2">
-              {% if upgrade_plan.adds or upgrade_plan.cuts %}
-                <form method="post"
-                      action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
-                      data-preserve-scroll
-                      class="mb-0">
-                  <input type="hidden" name="action" value="clear">
-                  <button class="btn btn-sm btn-outline-secondary" type="submit">Clear Plan</button>
-                </form>
-              {% endif %}
-              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
-                      type="button"
-                      data-bs-toggle="collapse"
-                      data-bs-target="#upgradePlanCollapse"
-                      aria-expanded="true"
-                      aria-controls="upgradePlanCollapse">
-                <i class="bi bi-chevron-up"></i>
-                <span class="visually-hidden">Toggle upgrade plan</span>
-              </button>
-            </div>
-          </div>
-          <div id="upgradePlanCollapse" class="collapse show" data-persist-collapse="upgrade-plan">
-            <div class="card-body">
-            <p class="text-muted small mb-3">
-              Mark cards you want to try adding or cutting. This list is stored locally for this playground deck and
-              doesn't change your collection.
-            </p>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <h6 class="text-uppercase small text-muted">Potential Additions</h6>
-                {% if upgrade_plan.adds %}
-                  <ul class="list-group list-group-flush">
-                    {% for name in upgrade_plan.adds %}
-                      <li class="list-group-item d-flex justify-content-between align-items-center">
-                        {% set hover_src = hover_lookup.get(name|lower) %}
-                        {{ synergy_card_link(name, hover_src) }}
-                        <form method="post"
-                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
-                              data-preserve-scroll
-                              class="mb-0">
-                          <input type="hidden" name="mode" value="addition">
-                          <input type="hidden" name="action" value="remove">
-                          <input type="hidden" name="card_name" value="{{ name }}">
-                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
-                        </form>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% else %}
-                  <p class="text-muted small mb-0">Use the buttons below to queue cards for testing.</p>
-                {% endif %}
-              </div>
-              <div class="col-md-6">
-                <h6 class="text-uppercase small text-muted">Consider Cutting</h6>
-                {% if upgrade_plan.cuts %}
-                  <ul class="list-group list-group-flush">
-                    {% for name in upgrade_plan.cuts %}
-                      <li class="list-group-item d-flex justify-content-between align-items-center">
-                        {% set hover_src = hover_lookup.get(name|lower) %}
-                        {{ synergy_card_link(name, hover_src) }}
-                        <form method="post"
-                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
-                              data-preserve-scroll
-                              class="mb-0">
-                          <input type="hidden" name="mode" value="cut">
-                          <input type="hidden" name="action" value="remove">
-                          <input type="hidden" name="card_name" value="{{ name }}">
-                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
-                        </form>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% else %}
-              <p class="text-muted small mb-0">Mark cards from the deck list to revisit here.</p>
-            {% endif %}
-              </div>
-            </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm mb-4">
           <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
             <span class="fw-semibold">Core Roles</span>
             <button class="btn btn-outline-secondary btn-sm collapse-toggle"
@@ -1410,13 +1503,8 @@
                                         <span class="badge text-bg-success">In Deck</span>
                                       {% endif %}
                                       {% if owned and not in_deck %}
-                                        <span class="badge text-bg-info text-dark">Owned</span>
+                                        <span class="badge text-bg-info text-dark">Available</span>
                                       {% endif %}
-                                    </div>
-                                  {% endif %}
-                                  {% if matches_colors is not none %}
-                                    <div class="text-muted small">
-                                      {{ 'Matches colors' if matches_colors else 'Off-color' }}
                                     </div>
                                   {% endif %}
                                   {% if color_identity_html %}
@@ -1570,20 +1658,12 @@
                                     <span class="badge text-bg-success">In Deck</span>
                                   {% endif %}
                                   {% if owned and not in_deck %}
-                                    <span class="badge text-bg-info text-dark">Owned</span>
+                                    <span class="badge text-bg-info text-dark">Available</span>
                                   {% endif %}
                                 </div>
                               {% endif %}
-                              {% if card.category or matches_colors is not none %}
-                                <div class="text-muted small">
-                                  {{ card.category }}
-                                  {% if card.category and matches_colors is not none %}
-                                    &middot;
-                                  {% endif %}
-                                  {% if matches_colors is not none %}
-                                    {{ 'Matches colors' if matches_colors else 'Off-color' }}
-                                  {% endif %}
-                                </div>
+                              {% if card.category %}
+                                <div class="text-muted small">{{ card.category }}</div>
                               {% endif %}
                               {% if color_identity_html %}
                                 <div class="text-muted small mana-inline justify-content-center" aria-label="Color identity">
@@ -1649,6 +1729,90 @@
   </div>
 {% endif %}
 
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center gap-2">
+            <span class="fw-semibold">Upgrade Plan Workspace</span>
+            <div class="d-flex align-items-center gap-2">
+              {% if upgrade_plan.adds or upgrade_plan.cuts %}
+                <form method="post"
+                      action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                      data-preserve-scroll
+                      class="mb-0">
+                  <input type="hidden" name="action" value="clear">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Clear Plan</button>
+                </form>
+              {% endif %}
+              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#upgradePlanCollapse"
+                      aria-expanded="true"
+                      aria-controls="upgradePlanCollapse">
+                <i class="bi bi-chevron-up"></i>
+                <span class="visually-hidden">Toggle upgrade plan</span>
+              </button>
+            </div>
+          </div>
+          <div id="upgradePlanCollapse" class="collapse show" data-persist-collapse="upgrade-plan">
+            <div class="card-body">
+            <p class="text-muted small mb-3">
+              Mark cards you want to try adding or cutting. This list is stored locally for this playground deck and
+              doesn't change your collection.
+            </p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <h6 class="text-uppercase small text-muted">Potential Additions</h6>
+                {% if upgrade_plan.adds %}
+                  <ul class="list-group list-group-flush">
+                    {% for name in upgrade_plan.adds %}
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {% set hover_src = hover_lookup.get(name|lower) %}
+                        {{ synergy_card_link(name, hover_src) }}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="addition">
+                          <input type="hidden" name="action" value="remove">
+                          <input type="hidden" name="card_name" value="{{ name }}">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-muted small mb-0">Use the buttons below to queue cards for testing.</p>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <h6 class="text-uppercase small text-muted">Consider Cutting</h6>
+                {% if upgrade_plan.cuts %}
+                  <ul class="list-group list-group-flush">
+                    {% for name in upgrade_plan.cuts %}
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {% set hover_src = hover_lookup.get(name|lower) %}
+                        {{ synergy_card_link(name, hover_src) }}
+                        <form method="post"
+                              action="{{ url_for('views.build_update_upgrade_plan', folder_id=selected_folder.id) }}"
+                              data-preserve-scroll
+                              class="mb-0">
+                          <input type="hidden" name="mode" value="cut">
+                          <input type="hidden" name="action" value="remove">
+                          <input type="hidden" name="card_name" value="{{ name }}">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+              <p class="text-muted small mb-0">Mark cards from the deck list to revisit here.</p>
+            {% endif %}
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+
         <div class="card shadow-sm">
           <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center gap-2">
             <span class="fw-semibold">Deck List</span>
@@ -1674,7 +1838,6 @@
           </div>
           <div id="deckListCollapse" class="collapse show" data-persist-collapse="deck-list">
             <div class="card-body">
-            {% set deck_tag_label = deck_summary.tag_label or deck_summary.tag or 'Deck Tag' %}
             {% if deck_card_rows %}
               <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
                 <div class="text-muted small fw-semibold text-uppercase">Card Display</div>
@@ -1774,9 +1937,6 @@
                         <div class="deck-card__badges">
                           {% if commander_synergy is not none %}
                             <span class="badge text-bg-primary">Commander {{ '+' if commander_synergy >= 0 else '' }}{{ commander_synergy }}%</span>
-                          {% endif %}
-                          {% if theme_synergy is not none %}
-                            <span class="badge text-bg-primary">{{ deck_tag_label }} {{ '+' if theme_synergy >= 0 else '' }}{{ theme_synergy }}%</span>
                           {% endif %}
                           {% if available_copies %}
                             <span class="badge text-bg-info text-dark">Available{% if available_copies > 1 %} x{{ available_copies }}{% endif %}</span>
@@ -2585,9 +2745,8 @@
           showMessage(data.message || 'Cards added.');
           queueEntries.clear();
           renderQueue();
-          rememberScroll();
+          showMessage(data.message || 'Cards added to the deck. Refresh when you are ready to review them.');
           persistDetailsState();
-          setTimeout(() => window.location.reload(), 350);
         } catch (err) {
           showError('Network error while adding cards.');
         } finally {
@@ -2648,4 +2807,80 @@
   document.addEventListener('htmx:afterSwap', () => {
     initBuildDeck();
   });
+</script>
+
+<script>
+(function() {
+  const commanderInput = document.getElementById('newCommander');
+  const previewBox = document.querySelector('[data-commander-preview]');
+  if (!commanderInput || !previewBox || !window.fetch) {
+    return;
+  }
+
+  const imgEl = previewBox.querySelector('[data-commander-preview-img]');
+  const textEl = previewBox.querySelector('[data-commander-preview-text]');
+  let debounceId;
+
+  const setPlaceholder = (message) => {
+    previewBox.dataset.loaded = 'false';
+    previewBox.dataset.ready = 'false';
+    if (imgEl) {
+      imgEl.removeAttribute('src');
+      imgEl.removeAttribute('alt');
+    }
+    if (textEl) {
+      textEl.textContent = message || 'Commander art preview';
+    }
+  };
+
+  const fetchPreview = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setPlaceholder('Commander art preview');
+      return;
+    }
+    if (trimmed.length < 3) {
+      setPlaceholder('Type a full commander name');
+      return;
+    }
+    if (textEl) {
+      textEl.textContent = 'Loading preview...';
+    }
+    const endpoint = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(trimmed)}`;
+    fetch(endpoint)
+      .then((resp) => {
+        if (!resp.ok) throw new Error('Not found');
+        return resp.json();
+      })
+      .then((data) => {
+        let uri = null;
+        if (data.image_uris) {
+          uri = data.image_uris.art_crop || data.image_uris.large || data.image_uris.normal;
+        }
+        if (!uri && Array.isArray(data.card_faces) && data.card_faces[0]?.image_uris) {
+          const faces = data.card_faces[0].image_uris;
+          uri = faces.art_crop || faces.large || faces.normal;
+        }
+        if (!uri) throw new Error('No image');
+        if (imgEl) {
+          imgEl.src = uri;
+          imgEl.alt = data.name || trimmed;
+        }
+        previewBox.dataset.loaded = 'true';
+        previewBox.dataset.ready = 'true';
+      })
+      .catch(() => {
+        setPlaceholder('No preview available');
+      });
+  };
+
+  commanderInput.addEventListener('input', () => {
+    clearTimeout(debounceId);
+    debounceId = setTimeout(() => fetchPreview(commanderInput.value), 400);
+  });
+
+  if (commanderInput.value.trim()) {
+    fetchPreview(commanderInput.value);
+  }
+})();
 </script>

@@ -211,17 +211,19 @@ def import_csv():
     """Upload route that powers CSV/XLS collection imports and dry-run previews."""
 
     def _normalize_quantity_mode(raw: str | None) -> str:
-        value = (raw or "absolute").strip().lower()
+        value = (raw or "delta").strip().lower()
+        if value in {"absolute", "replace", "overwrite"}:
+            return "absolute"
         if value in {"delta", "add", "increment"}:
             return "delta"
         if value in {"new_only", "new", "add_new"}:
             return "new_only"
         if value in {"purge", "clear", "reset"}:
             return "purge"
-        return "absolute"
+        return "delta"
 
     if request.method == "GET":
-        return render_template("cards/import.html", quantity_mode="absolute", **_export_context())
+        return render_template("cards/import.html", quantity_mode="delta", **_export_context())
 
     action = (request.form.get("action") or "").strip().lower()
 
@@ -558,10 +560,51 @@ def export_cards():
 def manual_import():
     """Manual import wizard for pasted decklists."""
     folder_options = _move_folder_choices()
+    folder_lookup = {str(option["id"]): option["name"] for option in folder_options}
     card_list = request.form.get("card_list") or session.pop("manual_import_seed", "") or ""
     parsed_entries: list[dict] = []
     step = "input"
     entry_errors: list[str] = []
+
+    default_folder_id = (request.form.get("default_folder_id") or "").strip()
+    default_folder_name = (request.form.get("default_folder_name") or "").strip()
+    default_folder_category = (request.form.get("default_folder_category") or Folder.CATEGORY_DECK).strip().lower()
+    if default_folder_category not in {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}:
+        default_folder_category = Folder.CATEGORY_DECK
+
+    default_folder_label = "None (choose per card)"
+    if default_folder_id and default_folder_id in folder_lookup:
+        default_folder_label = folder_lookup.get(default_folder_id) or default_folder_label
+    elif default_folder_name:
+        default_folder_label = f'Create "{default_folder_name}"'
+
+    def resolve_target_folder(folder_id_value: str | None, folder_name_value: str | None) -> Folder:
+        folder: Folder | None = None
+        if folder_id_value and folder_id_value.isdigit():
+            folder = Folder.query.filter(
+                Folder.id == int(folder_id_value),
+                Folder.owner_user_id == current_user.id,
+            ).first()
+        if folder:
+            return folder
+        fallback_name = (folder_name_value or default_folder_name or "Manual Import").strip()
+        if not fallback_name:
+            fallback_name = "Manual Import"
+        folder = (
+            Folder.query.filter(
+                func.lower(Folder.name) == fallback_name.lower(),
+                Folder.owner_user_id == current_user.id,
+            ).first()
+        )
+        if not folder:
+            folder = Folder(
+                name=fallback_name,
+                owner_user_id=current_user.id,
+                category=default_folder_category,
+            )
+            db.session.add(folder)
+            db.session.flush()
+        return folder
 
     if request.method == "POST":
         action = (request.form.get("action") or "").strip().lower()
@@ -572,6 +615,9 @@ def manual_import():
             else:
                 parsed_entries = []
                 idx_counter = 0
+                prefill_folder_name = default_folder_name
+                if not prefill_folder_name and not default_folder_id:
+                    prefill_folder_name = "Manual Import"
                 for raw_entry in raw_entries:
                     qty = max(raw_entry["quantity"], 1)
                     for _ in range(qty):
@@ -582,10 +628,53 @@ def manual_import():
                                 "name": raw_entry["name"],
                                 "quantity": 1,
                                 "options": options,
+                                "prefill_folder_id": default_folder_id,
+                                "prefill_folder_name": prefill_folder_name or "",
                             }
                         )
                         idx_counter += 1
                 step = "review"
+        elif action == "quick_upload":
+            raw_entries = _parse_manual_card_list(card_list)
+            if not raw_entries:
+                flash("Please enter at least one card (e.g., '3 Sol Ring').", "warning")
+            else:
+                folder = resolve_target_folder(default_folder_id, default_folder_name)
+
+                merged: dict[str, int] = {}
+                for entry in raw_entries:
+                    name = entry.get("name") or ""
+                    qty = int(entry.get("quantity") or 0) or 1
+                    if not name:
+                        continue
+                    merged[name] = merged.get(name, 0) + max(qty, 1)
+
+                created = 0
+                for name, qty in merged.items():
+                    card = Card(
+                        name=name,
+                        set_code="",
+                        collector_number="",
+                        lang="EN",
+                        folder_id=folder.id,
+                        quantity=qty,
+                        is_foil=False,
+                    )
+                    db.session.add(card)
+                    created += 1
+
+                if created:
+                    db.session.commit()
+                    total_qty = sum(merged.values())
+                    flash(
+                        f"Quick uploaded {total_qty} card{'s' if total_qty != 1 else ''} into \"{folder.name}\". "
+                        "Edit printings and details later from that folder.",
+                        "success",
+                    )
+                    return redirect(url_for("views.list_cards"))
+                else:
+                    db.session.rollback()
+                    flash("Unable to quick upload the provided entries.", "warning")
         elif action == "import":
             entry_ids_raw = (request.form.get("entry_ids") or "").strip()
             entry_ids = [chunk.strip() for chunk in entry_ids_raw.split(",") if chunk.strip()]
@@ -620,28 +709,7 @@ def manual_import():
                     folder_id_raw = (request.form.get(f"entry-{entry_id}-folder_id") or "").strip()
                     folder_name = (request.form.get(f"entry-{entry_id}-folder_name") or "").strip()
 
-                    folder = None
-                    if folder_id_raw.isdigit():
-                        folder = Folder.query.filter(
-                            Folder.id == int(folder_id_raw),
-                            Folder.owner_user_id == current_user.id,
-                        ).first()
-                    if not folder:
-                        fallback_name = folder_name or "Manual Import"
-                        folder = (
-                            Folder.query.filter(
-                                func.lower(Folder.name) == fallback_name.strip().lower(),
-                                Folder.owner_user_id == current_user.id,
-                            ).first()
-                        )
-                        if not folder:
-                            folder = Folder(
-                                name=fallback_name.strip() or "Manual Import",
-                                owner_user_id=current_user.id,
-                                category=Folder.CATEGORY_DECK,
-                            )
-                            db.session.add(folder)
-                            db.session.flush()
+                    folder = resolve_target_folder(folder_id_raw, folder_name)
 
                     scryfall_data = None
                     if set_code and collector_number:
@@ -677,10 +745,17 @@ def manual_import():
     return render_template(
         "cards/manual_import.html",
         folder_options=folder_options,
+        folder_lookup=folder_lookup,
         card_list=card_list,
         entries=parsed_entries,
         step=step,
         entry_errors=entry_errors,
+        default_folder_id=default_folder_id,
+        default_folder_name=default_folder_name,
+        default_folder_category=default_folder_category,
+        default_folder_label=default_folder_label,
+        deck_category=Folder.CATEGORY_DECK,
+        collection_category=Folder.CATEGORY_COLLECTION,
     )
 
 

@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import current_user, login_required
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import Card, Folder
@@ -340,22 +342,48 @@ def _start_new_build() -> Any:
     base_name = deck_name or f"Build: {commander_payload['name']}"
     folder_name = _generate_unique_folder_name(base_name)
 
+    owner_name = None
+    owner_user_id = None
+    try:
+        if current_user.is_authenticated:
+            owner_user_id = current_user.id
+            owner_name = (current_user.username or current_user.email or "").strip() or None
+    except Exception:
+        owner_name = None
+        owner_user_id = None
+
     folder = Folder(
         name=folder_name,
         category=Folder.CATEGORY_BUILD,
         commander_name=commander_payload["name"],
         commander_oracle_id=commander_payload.get("oracle_id"),
         deck_tag=deck_tag or None,
+        owner_user_id=owner_user_id,
+        owner=owner_name,
     )
     db.session.add(folder)
 
-    if include_commander:
-        try:
-            _add_card_to_folder(folder, commander_payload["name"])
-        except ValueError as exc:
-            current_app.logger.warning("Unable to add commander card for %s: %s", commander_payload["name"], exc)
+    def _ensure_commander():
+        if not include_commander:
+            return
+        with db.session.no_autoflush:
+            try:
+                _add_card_to_folder(folder, commander_payload["name"])
+            except ValueError as exc:
+                current_app.logger.warning("Unable to add commander card for %s: %s", commander_payload["name"], exc)
 
-    _safe_commit()
+    _ensure_commander()
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        folder.name = _generate_unique_folder_name(folder.name)
+        db.session.add(folder)
+        _ensure_commander()
+        db.session.commit()
+    except Exception:
+        _safe_commit()
     flash(f'Created build deck "{folder.name}".', "success")
     return redirect(url_for("views.build_a_deck", folder_id=folder.id))
 

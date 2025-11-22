@@ -39,6 +39,14 @@
       width: 160px;
     }
   }
+  .commander-thumb-inline {
+    width: 120px;
+  }
+  @media (min-width: 768px) {
+    .commander-thumb-inline {
+      width: 140px;
+    }
+  }
 
   .deck-header-meta {
     display: flex;
@@ -347,25 +355,67 @@
     margin-top: .75rem;
   }
 
-  .synergy-card-grid {
-    display: grid;
-    gap: 1.25rem;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-  @media (min-width: 576px) {
-    .synergy-card-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (min-width: 992px) {
-    .synergy-card-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+  .synergy-card-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
+
+  .synergy-card {
+    background: linear-gradient(165deg, rgba(15, 23, 42, 0.65), rgba(30, 64, 175, 0.35));
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 1rem;
+    padding: 1.1rem 1rem 1.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .85rem;
+    box-shadow: 0 1.25rem 2.5rem rgba(15, 23, 42, 0.35);
+    transition: transform .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft), background-color .18s var(--dv-ease-soft);
+    color: var(--bs-body-color);
+    text-align: center;
+  }
+  .synergy-card:hover {
+    transform: translateY(-4px);
+    background-color: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.45);
+  }
+  .synergy-card__image {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .synergy-card-thumb {
+    width: 100%;
+    max-width: 180px;
+    border-radius: 1rem;
+    box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.35);
+  }
+  .synergy-card__body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    text-align: center;
+  }
+  .synergy-card__header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
   }
 
-  .synergy-card {
-    background: rgba(15, 23, 42, 0.35);
-    border: 1px solid rgba(148, 163, 184, 0.16);
+  .deck-card-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
+  .deck-card {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: .85rem;
     padding: 1rem;
     height: 100%;
@@ -374,35 +424,99 @@
     gap: .75rem;
     box-shadow: none;
     transition: transform .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft), background-color .18s var(--dv-ease-soft);
-    color: var(--bs-body-color);
   }
-  .synergy-card:hover {
+  .deck-card:hover {
     transform: translateY(-4px);
-    background-color: rgba(99, 102, 241, 0.18);
-    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.45);
   }
-  .synergy-card__image {
+  .deck-card__image {
     display: flex;
     justify-content: center;
   }
-  .synergy-card-thumb {
+  .deck-card__image img {
     width: 100%;
-    max-width: 260px;
+    max-width: 160px;
     border-radius: 1rem;
     box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.35);
   }
-  .synergy-card__body {
+  .deck-card__body {
     display: flex;
     flex-direction: column;
     gap: .5rem;
     text-align: center;
   }
-  .synergy-card__header {
+  .deck-card__badges,
+  .deck-card__tags,
+  .deck-card__meta {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-start;
     justify-content: center;
+    gap: .35rem;
+  }
+  .deck-card__actions {
+    margin-top: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    justify-content: center;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card-grid {
+    display: flex;
+    flex-direction: column;
     gap: .5rem;
+    width: 100%;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    padding: .65rem 1rem;
+    gap: .5rem;
+    border-radius: 0;
+    box-shadow: none;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    background: transparent;
+    transition: background-color .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft);
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card__image {
+    display: none;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: .25rem .75rem;
+    align-items: center;
+    text-align: left;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card__body > .fw-semibold {
+    grid-column: 1 / -1;
+    justify-content: flex-start !important;
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card__badges,
+  #synergyRoot[data-view-mode="list"] .deck-card__tags,
+  #synergyRoot[data-view-mode="list"] .deck-card__meta {
+    justify-content: flex-start;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card__actions {
+    grid-row: 2;
+    grid-column: 2;
+    justify-content: flex-end;
+    margin-top: 0;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card__meta {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  #synergyRoot[data-view-mode="list"] .deck-card:hover {
+    transform: none;
+    background-color: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.25);
   }
   .synergy-card__title {
     font-weight: 600;
@@ -426,7 +540,9 @@
   .synergy-card-meta-list {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: .25rem;
+    width: 100%;
   }
   .synergy-card-meta {
     color: var(--bs-secondary-color);
@@ -491,9 +607,12 @@
     margin-left: auto;
     gap: .35rem;
   }
-  #synergyRoot[data-view-mode="list"] .synergy-card-color,
   #synergyRoot[data-view-mode="list"] .synergy-card-tags {
     display: none;
+  }
+  #synergyRoot[data-view-mode="list"] .synergy-card-color {
+    display: flex;
+    justify-content: flex-start;
   }
   #synergyRoot[data-view-mode="list"] .synergy-card-meta-list {
     display: flex;
@@ -955,16 +1074,13 @@
     </div>
     <div id="synergySummaryCollapse" class="collapse show" data-persist-collapse="synergy-summary">
       <div class="card-body">
+        {% set commander_art = None %}
+        {% if deck.commander %}
+          {% set commander_art = deck.commander.image
+            or deck.commander.hover_image
+            or hover_lookup.get(deck.commander.name|default('', true)|lower) %}
+        {% endif %}
         <div class="d-flex flex-wrap align-items-center gap-3">
-          {% if deck.commander and deck.commander.image %}
-            <img
-              src="{{ deck.commander.image }}"
-              alt="{{ deck.commander.name or deck.name }}"
-              class="commander-thumb flex-shrink-0"
-              loading="lazy"
-              referrerpolicy="no-referrer"
-              data-hover-src="{{ deck.commander.image }}">
-          {% endif %}
           <div class="flex-grow-1">
             <h2 class="h4 mb-1">{{ deck.name }}</h2>
             <div class="deck-header-meta mb-3">
@@ -990,6 +1106,17 @@
                   <span class="synergy-card-color ms-0" aria-label="Color identity">{{ deck.color_identity.html | safe }}</span>
                 {% endif %}
               </div>
+              {% if commander_art %}
+                <div class="mt-3">
+                  <img
+                    src="{{ commander_art }}"
+                    alt="{{ deck.commander.name or deck.name }}"
+                    class="commander-thumb commander-thumb-inline"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                    data-hover-src="{{ commander_art }}">
+                </div>
+              {% endif %}
             </div>
             {% if deck.tag %}
               <div class="d-flex flex-wrap align-items-center gap-2 text-muted small mb-3">
@@ -2282,142 +2409,153 @@
         <div id="deckCardFilterEmpty" class="alert alert-info small d-none" role="status">
           No cards match the current filters. Try a different search or clear the filter.
         </div>
-        <div class="table-responsive">
+        {% if analysis.deck_card_rows %}
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+            <div class="text-muted small fw-semibold text-uppercase">Card Display</div>
+            <div class="btn-group btn-group-sm view-toggle-group" role="group" aria-label="Card display mode">
+              <button type="button" class="btn btn-outline-secondary view-mode-active" data-view-toggle="grid" aria-pressed="true">
+                <i class="bi bi-grid-3x3-gap-fill me-1" aria-hidden="true"></i> Gallery
+              </button>
+              <button type="button" class="btn btn-outline-secondary" data-view-toggle="list" aria-pressed="false">
+                <i class="bi bi-list-ul me-1" aria-hidden="true"></i> List
+              </button>
+            </div>
+          </div>
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-sm-6 col-lg-4">
+              <label for="deckCardFilterInput" class="form-label small text-uppercase text-muted mb-1">Filter cards</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="search"
+                       id="deckCardFilterInput"
+                       class="form-control"
+                       placeholder="Search name, role, or type"
+                       data-synergy-card-filter>
+                <button class="btn btn-outline-secondary"
+                        type="button"
+                        data-synergy-card-filter-clear
+                        disabled>
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="deckCardFilterEmpty" class="text-muted small text-center py-3 d-none">
+            No cards match the current filters.
+          </div>
           {% set deck_tag_label = edhrec.theme.tag_label or deck.tag_label or 'Deck Tag' %}
-          <table id="deckCardBreakdownTable" class="table table-sm table-hover table-striped align-middle mb-0 deck-synergy-table">
-            <thead>
-              <tr class="text-uppercase text-muted small text-nowrap">
-                <th scope="col">
-                  <button type="button" class="table-sort-button" data-sort-card data-sort-direction="none">
-                    Card
-                    <span class="sort-indicator" aria-hidden="true"></span>
-                    <span class="visually-hidden">Toggle card sort</span>
-                  </button>
-                </th>
-                <th scope="col" class="text-center">Commander</th>
-                <th scope="col" class="text-center">{{ deck_tag_label }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for card in analysis.deck_card_rows %}
-                {% set is_mdfc = card.layout is defined and (card.layout or '')|lower == 'modal_dfc' %}
-                {% set other_faces = namespace(names=[]) %}
-                {% if card.type_faces %}
-                  {% for face in card.type_faces %}
-                    {% set face_name = face.name %}
-                    {% if face_name and face_name|lower != card.name|lower and face_name not in other_faces.names %}
-                      {% set _ = other_faces.names.append(face_name) %}
-                    {% endif %}
-                  {% endfor %}
-                {% endif %}
-                {% set display_name = card.name %}
-                {% if is_mdfc and other_faces.names %}
-                  {% set display_name = card.name ~ ' // ' ~ (other_faces.names | join(' // ')) %}
-                {% endif %}
-                {% set search_tokens = [display_name] %}
-                {% if card.type_line %}{% set _ = search_tokens.append(card.type_line) %}{% endif %}
-                {% if card.primary_type %}{% set _ = search_tokens.append(card.primary_type) %}{% endif %}
-                {% if card.color_identity_label is defined and card.color_identity_label %}{% set _ = search_tokens.append(card.color_identity_label) %}{% endif %}
-                {% if card.notes %}{% set _ = search_tokens.append(card.notes) %}{% endif %}
-                {% for label in card.roles or [] %}
-                  {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
-                {% endfor %}
-                {% for label in card.theme_labels|default([], true) %}
-                  {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
-                {% endfor %}
-                {% for label in card.categories|default([], true) %}
-                  {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
-                {% endfor %}
-                {% for label in card.tag_labels|default([], true) %}
-                  {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
-                {% endfor %}
-                <tr data-role-keys="{{ (card.roles or []) | join(' ') }}"
-                    data-card-search="{{ search_tokens|join(' ')|lower }}">
-                  <td style="min-width: 14rem;" data-card-name="{{ (card.name or '')|lower }}">
-                    {% set hover_src = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
-                    {% set badge_ns = namespace(html=[]) %}
-                    {% if card.quantity and card.quantity > 1 %}
-                      {% set _ = badge_ns.html.append('<span class="badge text-bg-secondary">x{0}</span>'.format(card.quantity)) %}
-                    {% endif %}
-                    {% set meta_lines = [] %}
-                    {% if card.type_line %}
-                      {% set _ = meta_lines.append(card.type_line) %}
-                    {% elif card.primary_type %}
-                      {% set _ = meta_lines.append(card.primary_type) %}
-                    {% endif %}
-                    {% if card.color_identity_html %}
-                      {% set _ = meta_lines.append('<span class="mana-inline" aria-label="Color identity">' ~ card.color_identity_html ~ '</span>') %}
-                    {% endif %}
-                    {% set tag_tokens = [] %}
-                    {% if card.role_labels %}
-                      {% for label in card.role_labels %}
-                        {% if label and label not in tag_tokens %}
-                          {% set _ = tag_tokens.append(label) %}
-                        {% endif %}
-                      {% endfor %}
-                    {% endif %}
-                    {% if card.theme_labels %}
-                      {% for label in card.theme_labels %}
-                        {% if label and label not in tag_tokens %}
-                          {% set _ = tag_tokens.append(label) %}
-                        {% endif %}
-                      {% endfor %}
-                    {% endif %}
-                    {% if not tag_tokens and card.categories %}
-                      {% for label in card.categories %}
-                        {% if label and label not in tag_tokens %}
-                          {% set _ = tag_tokens.append(label) %}
-                        {% endif %}
-                      {% endfor %}
-                    {% endif %}
-                    {{- register_card_link(card.name, card.card_id, None, external=(not card.card_id)) -}}
-                    {{ synergy_card_row(display_name, hover_src, card.card_id, meta=meta_lines, tags=tag_tokens, badge_html=badge_ns.html|join('')) }}
-                  </td>
-                  <td class="text-center">
-                    {% set commander_source = card.commander_source %}
-                    {% if commander_source %}
-                      {% set commander_synergy = commander_source.synergy_percent %}
-                      {% if commander_synergy is not none %}
-                        {% if commander_synergy >= 0 %}
-                          <span class="badge rounded-pill text-bg-success">+{{ commander_synergy }}%</span>
-                        {% else %}
-                          <span class="badge rounded-pill text-bg-warning">{{ commander_synergy }}%</span>
-                        {% endif %}
-                      {% else %}
-                        <span class="text-muted small">&mdash;</span>
-                      {% endif %}
-                      <div class="text-muted small mt-1">
-                        {{ commander_source.source_label or deck.commander.name }}
-                      </div>
-                    {% else %}
-                      <span class="text-muted small">&mdash;</span>
-                    {% endif %}
-                  </td>
-                  <td class="text-center">
-                    {% set theme_source = card.theme_source %}
-                    {% if theme_source %}
-                      {% set theme_synergy = theme_source.synergy_percent %}
-                      {% if theme_synergy is not none %}
-                        {% if theme_synergy >= 0 %}
-                          <span class="badge rounded-pill text-bg-success">+{{ theme_synergy }}%</span>
-                        {% else %}
-                          <span class="badge rounded-pill text-bg-warning">{{ theme_synergy }}%</span>
-                        {% endif %}
-                      {% else %}
-                        <span class="text-muted small">&mdash;</span>
-                      {% endif %}
-                      <div class="text-muted small mt-1">
-                        {{ theme_source.source_label or deck_tag_label }}
-                      </div>
-                    {% else %}
-                      <span class="text-muted small">&mdash;</span>
-                    {% endif %}
-                  </td>
-                </tr>
+          <div class="deck-card-grid" data-synergy-card-collection>
+            {% for card in analysis.deck_card_rows %}
+              {% set hover_src = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
+              {% set image_src = hover_src or url_for('static', filename='img/card-placeholder.svg') %}
+              {% set commander_source = card.commander_source %}
+              {% set commander_synergy = commander_source.synergy_percent if commander_source else None %}
+              {% set theme_source = card.theme_source %}
+              {% set theme_synergy = theme_source.synergy_percent if theme_source else None %}
+              {% set type_line = card.type_line if card.type_line is defined and card.type_line else (
+                card.card_type if card.card_type is defined and card.card_type else (
+                  card.primary_type if card.primary_type is defined else none
+                )
+              ) %}
+              {% set color_identity_html = card.color_identity_html if card.color_identity_html is defined else None %}
+              {% set deck_role_keys = card.roles or [] %}
+              {% set available = card.available_in_collection or card.collection_available or card.available or 0 %}
+              {% set quantity = card.quantity|default(1, true)|int %}
+              {% if quantity <= 0 %}{% set quantity = 1 %}{% endif %}
+              {% set search_tokens = [card.name] %}
+              {% if type_line %}{% set _ = search_tokens.append(type_line) %}{% endif %}
+              {% if card.primary_type %}{% set _ = search_tokens.append(card.primary_type) %}{% endif %}
+              {% if card.color_identity_label %}{% set _ = search_tokens.append(card.color_identity_label) %}{% endif %}
+              {% if card.notes %}{% set _ = search_tokens.append(card.notes) %}{% endif %}
+              {% for label in deck_role_keys %}
+                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
               {% endfor %}
-            </tbody>
-          </table>
-        </div>
+              {% for label in card.theme_labels|default([], true) %}
+                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+              {% endfor %}
+              {% for label in card.categories|default([], true) %}
+                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+              {% endfor %}
+              {% for label in card.tag_labels|default([], true) %}
+                {% if label %}{% set _ = search_tokens.append(label) %}{% endif %}
+              {% endfor %}
+              {% set tag_tokens = [] %}
+              {% if card.role_labels %}
+                {% for label in card.role_labels %}
+                  {% if label and label not in tag_tokens %}
+                    {% set _ = tag_tokens.append(label) %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+              {% if card.theme_labels %}
+                {% for label in card.theme_labels %}
+                  {% if label and label not in tag_tokens %}
+                    {% set _ = tag_tokens.append(label) %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+              {% if not tag_tokens and card.categories %}
+                {% for label in card.categories %}
+                  {% if label and label not in tag_tokens %}
+                    {% set _ = tag_tokens.append(label) %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+              <div class="deck-card"
+                   data-synergy-card
+                   data-card-search="{{ search_tokens|join(' ')|lower }}">
+                <div class="deck-card__image">
+                  <img src="{{ image_src }}" alt="{{ card.name }}">
+                </div>
+                <div class="deck-card__body">
+                  <div class="fw-semibold d-flex flex-wrap justify-content-center gap-2">
+                    {{ synergy_card_link(card.name, hover_src, card.card_id, classes='text-reset text-decoration-none') }}
+                    {% if quantity > 1 %}
+                      <span class="badge rounded-pill bg-secondary-subtle text-secondary">x{{ quantity }}</span>
+                    {% endif %}
+                  </div>
+                  {% set badge_html = [] %}
+                  {% if commander_synergy is not none %}
+                    {% set _ = badge_html.append('<span class="badge text-bg-primary">Commander {0}{1}%</span>'.format('+' if commander_synergy >= 0 else '', commander_synergy)) %}
+                  {% endif %}
+                  {% if theme_synergy is not none %}
+                    {% set _ = badge_html.append('<span class="badge text-bg-primary">{0} {1}{2}%</span>'.format(deck_tag_label, '+' if theme_synergy >= 0 else '', theme_synergy)) %}
+                  {% endif %}
+                  {% if available %}
+                    {% set _ = badge_html.append('<span class="badge text-bg-info text-dark">Available</span>') %}
+                  {% endif %}
+                  {% if badge_html %}
+                    <div class="deck-card__badges">
+                      {{ badge_html|join('')|safe }}
+                    </div>
+                  {% endif %}
+                  {% if color_identity_html %}
+                    <div class="text-muted small mana-inline justify-content-center" aria-label="Color identity">
+                      {{ color_identity_html | safe }}
+                    </div>
+                  {% endif %}
+                  {% if type_line %}
+                    <div class="deck-card__meta text-muted small">
+                      <span>{{ type_line }}</span>
+                    </div>
+                  {% endif %}
+                  {% if card.price_text %}
+                    <div class="text-muted small">Price: {{ card.price_text }}</div>
+                  {% endif %}
+                  {% if tag_tokens %}
+                    <div class="deck-card__tags">
+                      {% for token in tag_tokens %}
+                        <span class="theme-pill">{{ token }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted small mb-0">No cards recorded yet for this deck.</p>
+        {% endif %}
       </div>
     </div>
 </section>

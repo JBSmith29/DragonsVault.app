@@ -144,7 +144,7 @@ def set_gallery(set_code):
 
     set_name = set_name_for_code(code) or code.upper()
 
-    prints, total = search_prints(set_code=code, limit=5000, offset=0)
+    prints, total = search_prints(set_code=code, limit=0, offset=0)
 
     owned_rows = (
         db.session.query(Card.collector_number, func.coalesce(func.sum(Card.quantity), 0))
@@ -229,11 +229,16 @@ def set_gallery(set_code):
         }
     )
 
-    name_query_lower = name_query.lower()
+    def _normalize(text: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+    query_tokens = [_token for _token in _normalize(name_query).split() if _token]
     filtered_cards = []
     for card in cards:
-        if name_query and name_query_lower not in (card.get("name") or "").lower():
-            continue
+        if query_tokens:
+            normalized_name = _normalize(card.get("name"))
+            if any(token not in normalized_name for token in query_tokens):
+                continue
         if rarity_filter and (card.get("rarity") or "").lower() != rarity_filter:
             continue
         filtered_cards.append(card)
@@ -252,6 +257,7 @@ def set_gallery(set_code):
         name_query=name_query,
         rarity_filter=rarity_filter,
         rarity_options=rarity_options,
+        rarity_label=("All rarities" if not rarity_filter else rarity_filter.replace("_", " ").title()),
     )
 
 

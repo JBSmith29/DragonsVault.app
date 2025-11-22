@@ -15,7 +15,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func
 
 from extensions import db, limiter
-from models import Folder, SiteRequest, User, AuditLog
+from models import Folder, FolderShare, SiteRequest, User, AuditLog
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded
 from services.jobs import (
@@ -60,7 +60,7 @@ def _folder_categories_page(admin_mode: bool):
     if request.method == "POST":
         delete_ids_raw = request.form.getlist("delete_folder_ids")
         single_delete_id = request.form.get("delete_folder_id")
-        if bulk_action != "bulk_edit":
+        if bulk_action not in {"bulk_edit", "bulk_share"}:
             if single_delete_id:
                 delete_ids_raw.append(single_delete_id)
             delete_ids: set[int] = set()
@@ -156,6 +156,89 @@ def _folder_categories_page(admin_mode: bool):
             record_audit_event(
                 "folder_bulk_updated",
                 {"selected": list(selected_ids), "changes": updated},
+            )
+            return redirect(url_for(target_endpoint))
+
+        if bulk_action == "bulk_share":
+            if admin_mode:
+                flash("Bulk sharing is only available from your account folders.", "warning")
+                return redirect(url_for(target_endpoint))
+
+            raw_selected = request.form.get("bulk_folder_ids") or ""
+            selected_ids: set[int] = set()
+            for part in raw_selected.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    selected_ids.add(int(part))
+                except (TypeError, ValueError):
+                    continue
+
+            if not selected_ids:
+                flash("Select at least one folder to share.", "warning")
+                return redirect(url_for(target_endpoint))
+
+            share_identifier_raw = (request.form.get("bulk_share_identifier") or "").strip()
+            share_identifier = share_identifier_raw.lower()
+            if not share_identifier:
+                flash("Provide an email or username to share with.", "warning")
+                return redirect(url_for(target_endpoint))
+
+            target_user = (
+                User.query.filter(func.lower(User.email) == share_identifier).first()
+                or User.query.filter(func.lower(User.username) == share_identifier).first()
+            )
+            if not target_user:
+                flash("No user found with that email or username.", "warning")
+                return redirect(url_for(target_endpoint))
+
+            folder_lookup = {folder.id: folder for folder in folders}
+            selected_folders = [folder_lookup[fid] for fid in selected_ids if fid in folder_lookup]
+            if not selected_folders:
+                flash("Selected folders were not found.", "warning")
+                return redirect(url_for(target_endpoint))
+
+            added = 0
+            already_shared = 0
+            skipped_owned = 0
+
+            for folder in selected_folders:
+                if folder.owner_user_id == target_user.id:
+                    skipped_owned += 1
+                    continue
+                existing = FolderShare.query.filter_by(folder_id=folder.id, shared_user_id=target_user.id).first()
+                if existing:
+                    already_shared += 1
+                    continue
+                db.session.add(FolderShare(folder_id=folder.id, shared_user_id=target_user.id))
+                added += 1
+
+            if added:
+                _safe_commit()
+
+            message_bits = []
+            if added:
+                message_bits.append(
+                    f"Shared {added} folder{'s' if added != 1 else ''} with {target_user.username or target_user.email}."
+                )
+            if already_shared:
+                message_bits.append(f"{already_shared} already shared.")
+            if skipped_owned:
+                message_bits.append(f"{skipped_owned} already owned by the recipient.")
+            if not message_bits:
+                message_bits.append("No shares were created.")
+
+            flash(" ".join(message_bits), "success" if added else "info")
+            record_audit_event(
+                "folder_bulk_shared",
+                {
+                    "selected": list(selected_ids),
+                    "shared_with": target_user.id,
+                    "added": added,
+                    "already_shared": already_shared,
+                    "owned_by_target": skipped_owned,
+                },
             )
             return redirect(url_for(target_endpoint))
 

@@ -66,15 +66,25 @@ Within a web browser, navigate to [http://localhost:8000](http://localhost:8000)
 
 ### 6.1 Download the Scryfall Bulk Data Collection
 
-Run the following commands against your running DragonsVault instance using `docker compose exec`.
+Run the following commands against your running DragonsVault instance using `docker compose exec`. The shell snippets use a heredoc so the embedded Python executes in a single command (PowerShell users can copy/paste the inline `python - <<'PY' … PY` block instead).
 
    ```bash
    docker compose exec web flask fetch-scryfall-bulk --progress
    docker compose exec web flask refresh-scryfall
-   docker compose exec web flask shell -c "from services.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"
-   docker compose exec web flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"
+   docker compose exec web flask shell <<'PY'
+   from services.jobs import run_scryfall_refresh_inline
+   run_scryfall_refresh_inline('rulings')
+   exit()
+   PY
+   docker compose exec web flask shell <<'PY'
+   from services.symbols_cache import ensure_symbols_cache
+   ensure_symbols_cache(force=True)
+   exit()
+   PY
    docker compose exec web flask sync-spellbook-combos
    ```
+
+> `flask shell` does not support `-c`; you must drop into the shell (or use the heredoc above) and run the Python import manually.
 
 > This step is optional, but highly recommended for offline browsing.
 
@@ -110,7 +120,7 @@ Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `qu
    ```
 
 - Excel (`.xlsx`, `.xlsm`) files are supported; only the first worksheet is read.
-- `quantity_mode` option (absolute or delta) controls whether quantities overwrite or accumulate.
+- `quantity_mode` option (`delta` or `new_only`) controls whether imports add to existing totals or only create brand-new rows. Combine with `--overwrite` when you need to wipe everything and rebuild from a fresh spreadsheet.
 
 ### Collection Export
 
@@ -134,7 +144,7 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 | **Command** | **Purpose** |
 | - | - |
 | `flask db upgrade` | Apply database migrations. |
-| `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {absolute,delta}]` | CLI importer mirroring the web importer. |
+| `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {delta,new_only}]` | CLI importer mirroring the web importer. |
 | `flask fetch-scryfall-bulk [--progress]` | Download the Scryfall `default_cards` bulk file. |
 | `flask refresh-scryfall` | Load the downloaded bulk file into memory and build indexes. |
 | `flask shell -c "from services.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"` | Download rulings bulk data (inline helper). |

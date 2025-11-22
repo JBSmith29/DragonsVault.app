@@ -55,15 +55,55 @@
              placeholder="e.g. Lightning Bolt">
     </div>
     <div class="col-sm-4 col-lg-3">
-      <label for="setGalleryRarityFilter" class="form-label small text-muted">Rarity</label>
-      <select id="setGalleryRarityFilter" name="rarity" class="form-select">
-        <option value="">All rarities</option>
-        {% for rarity in rarity_options %}
-          <option value="{{ rarity }}" {% if rarity_filter == rarity %}selected{% endif %}>
-            {{ rarity.replace('_', ' ')|title }}
-          </option>
-        {% endfor %}
-      </select>
+      <label for="setGalleryRarityToggle" class="form-label small text-muted">Rarity</label>
+      <div class="dropdown dv-select w-100" data-dv-select="set-rarity">
+        <input type="hidden"
+               name="rarity"
+               value="{{ rarity_filter }}"
+               data-dv-select-input
+               id="setGalleryRarityValue">
+        <button class="btn dv-select-toggle w-100 justify-content-between"
+                type="button"
+                id="setGalleryRarityToggle"
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+          <span data-dv-select-label>{{ rarity_label }}</span>
+          <i class="bi bi-chevron-down"></i>
+        </button>
+        <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="setGalleryRarityToggle">
+          <li>
+            <button class="dropdown-item {% if not rarity_filter %}active{% endif %}"
+                    type="button"
+                    data-dv-select-option
+                    data-value=""
+                    data-label="All rarities">
+              All rarities
+            </button>
+          </li>
+          {% for rarity in rarity_options %}
+            {% set display = rarity.replace('_', ' ')|title %}
+            <li>
+              <button class="dropdown-item {% if rarity_filter == rarity %}active{% endif %}"
+                      type="button"
+                      data-dv-select-option
+                      data-value="{{ rarity }}"
+                      data-label="{{ display }}">
+                {{ display }}
+              </button>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <noscript>
+        <select id="setGalleryRarityFilter" name="rarity" class="form-select mt-2">
+          <option value="">All rarities</option>
+          {% for rarity in rarity_options %}
+            <option value="{{ rarity }}" {% if rarity_filter == rarity %}selected{% endif %}>
+              {{ rarity.replace('_', ' ')|title }}
+            </option>
+          {% endfor %}
+        </select>
+      </noscript>
     </div>
     <div class="col-sm-2 col-lg-2 d-grid">
       <button class="btn btn-primary">Apply</button>

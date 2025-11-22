@@ -92,8 +92,13 @@
         btn,
         label: (btn.dataset.label || btn.textContent || "").toLowerCase(),
       }));
+      const categoryItems = Array.from(wrapper.querySelectorAll("[data-dv-select-category]"));
       searchInput.addEventListener("input", () => {
         const q = searchInput.value.trim().toLowerCase();
+        const showCategories = !q;
+        categoryItems.forEach((node) => {
+          node.style.display = showCategories ? "" : "none";
+        });
         searchTargets.forEach(({ btn, label }) => {
           const match = !q || label.includes(q);
           if (btn.closest("li")) {

@@ -1298,6 +1298,12 @@ def _read_json_array(path: Path):
         with open(path, "r", encoding="utf-8") as fin:
             return json.load(fin)
 
+def _normalize_search_text(value: str) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^a-z0-9]+", " ", str(value).lower()).strip()
+
+
 @lru_cache(maxsize=1)
 def get_all_prints():
     p = Path(DEFAULT_PATH)
@@ -1325,14 +1331,14 @@ def search_prints(name_q: str | None = None, set_code: str | None = None, limit:
     if not prints:
         return [], 0
 
-    tokens = [t for t in (name_q or "").lower().split() if t]
+    tokens = [t for t in _normalize_search_text(name_q).split() if t]
     set_code = (set_code or "").lower()
 
     def ok(p):
         if set_code and (p.get("set") or "").lower() != set_code:
             return False
         if tokens:
-            nm = (p.get("name") or "").lower()
+            nm = _normalize_search_text(p.get("name"))
             for t in tokens:
                 if t not in nm:
                     return False
@@ -1340,11 +1346,15 @@ def search_prints(name_q: str | None = None, set_code: str | None = None, limit:
 
     filtered = (p for p in prints if ok(p))
     buf, total = [], 0
-    stop_at = offset + limit
+    limit = int(limit or 0)
+    offset = max(int(offset or 0), 0)
+    stop_at = offset + limit if limit > 0 else None
     for p in filtered:
-        if total < stop_at:
+        if stop_at is None or total < stop_at:
             buf.append(p)
         total += 1
+    if limit <= 0:
+        return buf[offset:], total
     return buf[offset:offset+limit], total
 
 def _image_set_for_print(p):
@@ -1389,13 +1399,13 @@ def search_unique_cards(name_q: str | None = None,
     if not prints:
         return [], 0
 
-    tokens = [t for t in (name_q or "").lower().split() if t]
+    tokens = [t for t in _normalize_search_text(name_q).split() if t]
     want_set = (set_code or "").lower()
 
     groups = {}  # oracle_id -> dict
 
     for p in prints:
-        nm = (p.get("name") or "").lower()
+        nm = _normalize_search_text(p.get("name"))
         if tokens and any(t not in nm for t in tokens):
             continue
 
