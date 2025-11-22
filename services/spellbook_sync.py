@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -8,6 +9,9 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import requests
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 __all__ = [
     "INSTANT_WIN_RESULTS",
@@ -23,6 +27,9 @@ __all__ = [
 API_BASE_URL = "https://backend.commanderspellbook.com/variants/"
 PAGE_SIZE = 100
 DEFAULT_QUERY_SUFFIX = " legal:commander"
+SPELLBOOK_TIMEOUT = int(os.getenv("COMMANDER_SPELLBOOK_TIMEOUT", "120"))
+_RETRY_STATUS = (408, 429, 500, 502, 503, 504)
+_spellbook_session: Session | None = None
 
 INSTANT_WIN_RESULTS: List[str] = [
     "Win the game",
@@ -52,14 +59,28 @@ class SpellbookVariantRecord:
 
 
 def _iter_variants(params: Optional[Dict[str, str]] = None) -> Iterator[Dict[str, any]]:
+    global _spellbook_session
+    if _spellbook_session is None:
+        retry = Retry(
+            total=4,
+            backoff_factor=1.5,
+            status_forcelist=_RETRY_STATUS,
+            allowed_methods=frozenset({"GET"}),
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session = requests.Session()
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        _spellbook_session = session
+
     next_url: Optional[str] = API_BASE_URL
     query = dict(params) if params else {"limit": PAGE_SIZE}
 
     while next_url:
-        response = requests.get(
+        response = _spellbook_session.get(
             next_url,
             params=query if next_url == API_BASE_URL else None,
-            timeout=30,
+            timeout=SPELLBOOK_TIMEOUT,
         )
         response.raise_for_status()
         payload = response.json()

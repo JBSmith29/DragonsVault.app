@@ -6,6 +6,7 @@ import gzip
 import json
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -25,7 +26,7 @@ from services.jobs import (
     enqueue_spellbook_refresh,
     run_spellbook_refresh_inline,
 )
-from services.live_updates import latest_job_events
+from services.live_updates import emit_job_event, latest_job_events
 from services.edhrec import (
     cache_root,
     commander_cache_snapshot,
@@ -243,6 +244,7 @@ def _folder_categories_page(admin_mode: bool):
         show_owner_controls=admin_mode,
         show_owner_field=True,
         allow_delete=True,
+        allow_share_controls=not admin_mode,
         back_url=url_for("views.admin_console") if admin_mode else url_for("views.account_center"),
         page_title="Folder Categories" if admin_mode else "My Folders",
     )
@@ -409,6 +411,7 @@ def admin_console():
         is_stale,
         load_default_cache as load_cache,
         reload_default_cache as reload_cache,
+        rulings_bulk_path,
     )
 
     inline_refresh = current_app.config.get("SCRYFALL_REFRESH_INLINE", False)
@@ -439,16 +442,46 @@ def admin_console():
             current_app.logger.exception("Inline %s fallback failed", kind)
             return False
 
+    def _refresh_symbols_dataset() -> dict:
+        if not symbols_enabled or not ensure_symbols_cache:
+            raise RuntimeError("Symbols module is not available.")
+        job_id = f"symbols-{uuid.uuid4().hex[:8]}"
+        emit_job_event("symbols", "queued", job_id=job_id, dataset="symbology")
+        emit_job_event("symbols", "started", job_id=job_id, dataset="symbology", rq_id=None)
+        try:
+            sym_map, fetched_remote = ensure_symbols_cache(force=True, return_status=True)
+            size = 0
+            if symbols_json_path and symbols_json_path.exists():
+                size = symbols_json_path.stat().st_size
+            emit_job_event(
+                "symbols",
+                "completed",
+                job_id=job_id,
+                dataset="symbology",
+                status="downloaded" if fetched_remote else "cached",
+                bytes=size,
+            )
+            return {"map": sym_map, "job_id": job_id, "fetched": fetched_remote, "size": size}
+        except Exception as exc:
+            emit_job_event("symbols", "failed", job_id=job_id, dataset="symbology", error=str(exc))
+            raise
+
+    symbols_json_path: Optional[Path] = None
+    symbols_svg_dir: Optional[Path] = None
     try:
-        from services.symbols_cache import ensure_symbols_cache
+        from services.symbols_cache import ensure_symbols_cache, SYMBOLS_JSON, SYMBOLS_DIR
 
         symbols_enabled = True
+        symbols_json_path = SYMBOLS_JSON
+        symbols_svg_dir = SYMBOLS_DIR
     except Exception:
         ensure_symbols_cache = None
         symbols_enabled = False
+        symbols_json_path = None
+        symbols_svg_dir = None
 
     data_dir = Path(os.getenv("SCRYFALL_DATA_DIR", "data"))
-    rulings_path = data_dir / "rulings_by_oracle.json"
+    rulings_path = Path(rulings_bulk_path())
     prints_path = Path(DEFAULT_PATH)
     spellbook_path = data_dir / "spellbook_combos.json"
 
@@ -506,8 +539,12 @@ def admin_console():
             if not symbols_enabled:
                 flash("Symbols module is not available.", "warning")
                 return redirect(url_for("views.admin_console"))
+            job_id = None
             try:
-                sym_map, fetched_remote = ensure_symbols_cache(force=True, return_status=True)
+                result = _refresh_symbols_dataset()
+                job_id = result.get("job_id")
+                sym_map = result.get("map") or {}
+                fetched_remote = result.get("fetched")
                 if fetched_remote:
                     flash(f"Refreshed {len(sym_map)} Scryfall symbols.", "success")
                 else:
@@ -519,7 +556,10 @@ def admin_console():
                 current_app.logger.exception("Symbol refresh failed")
                 flash(f"Failed to refresh symbols: {exc}", "danger")
             finally:
-                record_audit_event("admin_action", {"action": action})
+                payload = {"action": action}
+                if job_id:
+                    payload["job_id"] = job_id
+                record_audit_event("admin_action", payload)
             return redirect(url_for("views.admin_console"))
 
         def _should_run_inline(error: RuntimeError) -> bool:
@@ -635,8 +675,9 @@ def admin_console():
 
             if symbols_enabled:
                 try:
-                    sym_map, fetched_remote = ensure_symbols_cache(force=True, return_status=True)
-                    if fetched_remote:
+                    result = _refresh_symbols_dataset()
+                    sym_map = result.get("map") or {}
+                    if result.get("fetched"):
                         summary_success.append(f"Scryfall symbols ({len(sym_map)})")
                     else:
                         summary_warnings.append(
@@ -750,6 +791,34 @@ def admin_console():
             spellbook_counts = {"early": 0, "late": 0, "total": 0}
             spellbook_categories = {}
 
+    fallback_svg_dir = Path(current_app.static_folder or "static") / "symbols"
+    symbols_stats = {
+        "exists": False,
+        "path": str(symbols_json_path) if symbols_json_path else "N/A",
+        "size": 0,
+        "mtime": None,
+        "entries": 0,
+        "svg_dir": str(symbols_svg_dir or fallback_svg_dir),
+        "svg_exists": False,
+        "svg_count": 0,
+    }
+    if symbols_json_path:
+        symbols_stats["path"] = str(symbols_json_path)
+        if symbols_json_path.exists():
+            symbols_stats["exists"] = True
+            symbols_stats["size"] = symbols_json_path.stat().st_size
+            symbols_stats["mtime"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(symbols_json_path.stat().st_mtime))
+            try:
+                payload = json.loads(symbols_json_path.read_text(encoding="utf-8"))
+                symbols_stats["entries"] = len(payload.get("data") or [])
+            except Exception as exc:
+                current_app.logger.warning("Failed to read symbols dataset info: %s", exc)
+    svg_dir = symbols_svg_dir or fallback_svg_dir
+    symbols_stats["svg_dir"] = str(svg_dir)
+    if svg_dir.exists():
+        symbols_stats["svg_exists"] = True
+        symbols_stats["svg_count"] = sum(1 for entry in svg_dir.glob("*.svg") if entry.is_file())
+
     try:
         stats = sc.cache_stats() if hasattr(sc, "cache_stats") else {}
     except Exception as exc:
@@ -802,6 +871,7 @@ def admin_console():
             "early_threshold": EARLY_MANA_VALUE_THRESHOLD,
             "late_threshold": LATE_MANA_VALUE_THRESHOLD,
         },
+        symbols=symbols_stats,
         stats=stats,
         symbols_enabled=symbols_enabled,
         folder_counts=folder_counts,

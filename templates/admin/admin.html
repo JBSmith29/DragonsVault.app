@@ -248,10 +248,35 @@
           <h5 class="card-title mb-2">Scryfall Symbols</h5>
           <div class="small text-muted mb-2">Mana symbols cache (JSON + SVGs in <code>/static/symbols</code>).</div>
           {% if symbols_enabled %}
+            <ul class="list-unstyled small mb-3">
+              <li>Status: {{ 'Present' if symbols.exists else 'Missing' }}</li>
+              <li>Path: <code>{{ symbols.path }}</code></li>
+              <li>Size: {{ symbols.size }} bytes</li>
+              <li>Updated: {{ symbols.mtime or 'N/A' }}</li>
+              <li>Entries: {{ symbols.entries }}</li>
+              <li>SVG cache: {{ symbols.svg_count }} icons ({{ 'Present' if symbols.svg_exists else 'Missing' }})<br>
+                <span class="text-muted">Directory: <code>{{ symbols.svg_dir }}</code></span></li>
+            </ul>
             <form method="post" class="d-inline">
               <input type="hidden" name="action" value="refresh_symbols">
               <button class="btn btn-primary btn-sm" type="submit">Refresh Symbols</button>
             </form>
+            <div class="border rounded-3 bg-body-tertiary-subtle mt-3 p-3 job-monitor"
+                 data-job-monitor
+                 data-job-scope="symbols"
+                 data-job-dataset="symbology"
+                 data-job-label="Scryfall Symbols">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    When a symbols refresh runs the latest status appears here automatically.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
           {% else %}
             <div class="alert alert-warning small mb-0">
               Symbols module not available. Make sure <code>services/symbols_cache.py</code> exists and is importable.

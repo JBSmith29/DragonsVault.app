@@ -88,7 +88,15 @@
                   >
                 </td>
                 {% endif %}
-                <td class="fw-semibold">{{ folder.name or '[unnamed]' }}</td>
+                <td class="fw-semibold align-middle">
+                  <div class="d-flex justify-content-between gap-2 flex-wrap align-items-center">
+                    <span>{{ folder.name or '[unnamed]' }}</span>
+                    {% if allow_share_controls %}
+                      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.folder_sharing', folder_id=folder.id) }}"
+                         title="Share this folder">Share</a>
+                    {% endif %}
+                  </div>
+                </td>
                 <td>
                   <div class="form-check form-check-inline">
                     <input

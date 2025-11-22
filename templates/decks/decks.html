@@ -191,6 +191,26 @@
     min-width:160px;
   }
 
+  .owner-cell .owner-box {
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    padding:.35rem .6rem;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:.75rem;
+    background:rgba(255,255,255,.04);
+    position:relative;
+  }
+  .owner-cell .owner-label {
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:rgba(255,255,255,.65);
+  }
+  .owner-cell .owner-value {
+    font-weight:600;
+  }
+
   .legend-grid {
     display:grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -407,7 +427,7 @@
                               data-clear-url="{{ clear_url }}"
                               data-candidate-url="{{ candidate_url }}">
                         {% if cmd_name %}
-                          Commander: {{ cmd_name }} (click to change)
+                          Commander: {{ cmd_name }}
                         {% else %}
                           Click here to set commander
                         {% endif %}
@@ -433,11 +453,16 @@
               </td>
 
               <td class="owner-cell text-truncate">
-                {% if d.owner %}
-                  {{ d.owner }}
-                {% else %}
-                  <span class="text-muted">&mdash;</span>
-                {% endif %}
+                <div class="owner-box">
+                  <div class="owner-label">Deck owner</div>
+                  <div class="owner-value">
+                    {% if d.owner %}
+                      {{ d.owner }}
+                    {% else %}
+                      <span class="text-muted">&mdash;</span>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
 
               <!-- Color Identity (friendly name) -->

@@ -45,7 +45,7 @@ def login():
         dest = request.args.get("next") or url_for("views.dashboard")
         resp = redirect(dest)
         if request.headers.get("HX-Request"):
-            resp.headers["HX-Refresh"] = "true"
+            resp.headers["HX-Redirect"] = dest
         return resp
 
     return render_template("auth/login.html", disable_hx=True)

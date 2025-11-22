@@ -750,18 +750,18 @@ def create_app():
     )
     @click.option(
         "--card-count",
-        default=2,
+        "card_counts",
         type=int,
-        show_default=True,
-        help="Exact number of cards a combo must use.",
+        multiple=True,
+        help="Restrict combos to the given card counts (repeat flag to include multiple). Defaults to 2 and 3 cards.",
     )
-    def sync_spellbook_combos(output, early_threshold, late_threshold, card_count):
+    def sync_spellbook_combos(output, early_threshold, late_threshold, card_counts):
         """Download instant-win combos from Commander Spellbook and persist them locally."""
 
         dataset = generate_spellbook_combo_dataset(
             early_threshold=early_threshold,
             late_threshold=late_threshold,
-            card_count_target=card_count,
+            card_count_targets=card_counts or (2, 3),
         )
 
         output_path = Path(output)

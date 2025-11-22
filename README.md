@@ -71,15 +71,16 @@ Run the following commands against your running DragonsVault instance using `doc
    ```bash
    docker compose exec web flask fetch-scryfall-bulk --progress
    docker compose exec web flask refresh-scryfall
-   docker compose exec web flask refresh-rulings
-   docker compose exec web flask refresh-symbols
+   docker compose exec web flask shell -c "from services.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"
+   docker compose exec web flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"
+   docker compose exec web flask sync-spellbook-combos
    ```
 
 > This step is optional, but highly recommended for offline browsing.
 
 ### 6.2 Classify Folders
 
-Navigate to `Admin` ? `Folder Categories`. Mark your bulk collection bins (e.g., “Lands”, “Mythic”) as `collection` and keep actual decks as `deck`.
+Navigate to `Admin` ? `Folder Categories`. Mark your bulk collection bins (e.g., Lands, Mythic) as `collection` and keep actual decks as `deck`.
 
 ### 6.3 Import Existing Cards
 
@@ -122,11 +123,11 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 
 ## ?? Authentication & API Tokens
 
-- **Create users** – run `docker compose exec web flask users create USERNAME EMAIL --admin` (or use the Admin ? Create User form). Usernames must be unique and logins accept either email or username; passwords are prompted interactively.
-- **Sign in** – visit `/login` to access Import/Admin links plus the account menu.
-- **Generate tokens** – use the `/account/api-token` page or `docker compose exec web flask users token you@example.com` to print a new Bearer token (shown once).
-- **Use tokens** – add `Authorization: Bearer <token>` (or `?api_token=...`) when calling protected endpoints from scripts/CI pipelines.
-- **Audit trail** – logins, admin actions, imports, and token rotations are stored in `audit_logs` for traceability.
+- **Create users**  run `docker compose exec web flask users create USERNAME EMAIL --admin` (or use the Admin ? Create User form). Usernames must be unique and logins accept either email or username; passwords are prompted interactively.
+- **Sign in**  visit `/login` to access Import/Admin links plus the account menu.
+- **Generate tokens**  use the `/account/api-token` page or `docker compose exec web flask users token you@example.com` to print a new Bearer token (shown once).
+- **Use tokens**  add `Authorization: Bearer <token>` (or `?api_token=...`) when calling protected endpoints from scripts/CI pipelines.
+- **Audit trail**  logins, admin actions, imports, and token rotations are stored in `audit_logs` for traceability.
 
 ## ?? Command Reference
 
@@ -136,8 +137,9 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 | `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {absolute,delta}]` | CLI importer mirroring the web importer. |
 | `flask fetch-scryfall-bulk [--progress]` | Download the Scryfall `default_cards` bulk file. |
 | `flask refresh-scryfall` | Load the downloaded bulk file into memory and build indexes. |
-| `flask refresh-rulings` | Download rulings bulk data. |
-| `flask refresh-symbols` | Refresh mana symbol JSON/SVGs. |
+| `flask shell -c "from services.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"` | Download rulings bulk data (inline helper). |
+| `flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` | Refresh mana symbol JSON/SVGs. |
+| `flask sync-spellbook-combos [--card-count N ...]` | Pull Commander Spellbook combos into `data/spellbook_combos.json`. |
 | `flask repair-oracle-ids-advanced [--dry-run]` | Fill missing `oracle_id` values via Scryfall cache lookups. |
 | `flask dedupe-cards` | Detect duplicate prints within folders. |
 | `flask fts-ensure` | Ensure the FTS table & triggers exist. |
@@ -176,6 +178,7 @@ Key environment variables (defaults in parentheses):
 | `CACHE_REDIS_URL` | `""` | Redis connection string (used when `CACHE_TYPE=RedisCache`). |
 | `CACHE_DIR` | `instance/cache` | Filesystem cache directory (used when `CACHE_TYPE=FileSystemCache`). |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection used for rate limiting and background jobs. |
+| `COMMANDER_SPELLBOOK_TIMEOUT` | `120` | Seconds to wait before spellbook downloads time out (adjust if the API is slow). |
 
 `.env` files are loaded automatically by `python-dotenv`.
 
@@ -204,14 +207,14 @@ DragonsVault/
 | - | - |
 | OperationalError: no such column: folder.category | Run `flask db upgrade`. If upgrading from a very old DB, stamp to the latest seen revision before running upgrade. |
 | Scryfall-owned counts show zero | Ensure collection folders are marked as `collection` in Admin ? Folder Categories. |
-| Mana symbols missing from card text | Run `flask refresh-symbols` or use the Admin button to re-fetch symbology. |
-| CSV import fails with “Unsupported file type” | Confirm the file is `.csv`, `.xlsx`, or `.xlsm`. The importer checks extensions. |
+| Mana symbols missing from card text | Run `flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` or use the Admin button to re-fetch symbology. |
+| CSV import fails with Unsupported file type | Confirm the file is `.csv`, `.xlsx`, or `.xlsm`. The importer checks extensions. |
 | FTS search returns stale results | Run `flask fts-reindex`. |
 | SQLite locks / slow queries | Limit concurrent writers, run `flask analyze`/`flask vacuum`, and consider migrating to PostgreSQL if concurrency needs grow. |
 
 ## ?? License
 
-This project is released under the [Unlicense](https://unlicense.org/), which dedicates it to the public domain. Card data and imagery are provided courtesy of [Scryfall](https://scryfall.com/) and remain © Wizards of the Coast.
+This project is released under the [Unlicense](https://unlicense.org/), which dedicates it to the public domain. Card data and imagery are provided courtesy of [Scryfall](https://scryfall.com/) and remain  Wizards of the Coast.
 
 
 
