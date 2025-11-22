@@ -5,13 +5,16 @@ from extensions import db
 
 class Folder(db.Model):
     __tablename__ = "folder"  # keep singular to match your existing table
+    __table_args__ = (
+        db.UniqueConstraint("owner_user_id", "name", name="uq_folder_owner_name"),
+    )
 
     CATEGORY_DECK = "deck"
     CATEGORY_COLLECTION = "collection"
     CATEGORY_BUILD = "build"
 
     id   = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False, index=True)
     category = db.Column(
         db.String(20),
         nullable=False,

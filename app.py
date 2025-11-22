@@ -26,7 +26,7 @@ from sqlalchemy.orm import with_loader_criteria
 
 from dotenv import load_dotenv; load_dotenv()
 
-from config import Config
+from config import Config, INSTANCE_DIR as CONFIG_INSTANCE_DIR
 from extensions import db, migrate, cache, limiter, login_manager
 from flask_login import current_user
 
@@ -499,7 +499,11 @@ def _validate_sqlite_database(app: Flask) -> None:
 def create_app():
     """Create, configure, and return a fully-initialised Flask app."""
     # Use instance_relative_config so ./instance is writable
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(
+        __name__,
+        instance_path=str(CONFIG_INSTANCE_DIR),
+        instance_relative_config=False,
+    )
     app.config.from_object(Config)
     _configure_logging(app)
 

@@ -2,12 +2,13 @@
 import csv
 import io
 import logging
-import uuid
 import os
+import uuid
 from dataclasses import dataclass, asdict, field
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.exc import IntegrityError
-from flask import current_app
+from sqlalchemy import or_
+from flask import current_app, has_request_context
 from extensions import db, cache
 from models import Card, Folder
 from pathlib import Path
@@ -24,10 +25,15 @@ class PreviewData:
 
 # --- NEW: lazy-load helper for the Scryfall cache ---
 _CACHE_READY: Optional[bool] = None
+IMPORT_ENABLE_SCRYFALL_LOOKUPS = os.getenv("IMPORT_ENABLE_SCRYFALL_LOOKUPS", "1").lower() in {"1", "true", "yes", "on"}
 def _ensure_cache_loaded() -> bool:
     """Load Scryfall bulk cache once per process, if present."""
     global _CACHE_READY
     if _CACHE_READY is None:
+        if not IMPORT_ENABLE_SCRYFALL_LOOKUPS:
+            logger.warning("Skipping Scryfall cache load for CSV import (IMPORT_ENABLE_SCRYFALL_LOOKUPS=0).")
+            _CACHE_READY = False
+            return False
         _CACHE_READY = cache_exists() and load_cache()
     return bool(_CACHE_READY)
 # ----------------------------------------------------
@@ -251,6 +257,14 @@ def _norm_folder_category(raw: Optional[str]) -> Optional[str]:
         return Folder.CATEGORY_COLLECTION
     return None
 
+
+def _folder_query_for_owner(name: str, owner_user_id: Optional[int]):
+    """Return a query restricted to the owning user's folder namespace."""
+    query = Folder.query.filter(Folder.name == name)
+    if owner_user_id is not None:
+        query = query.filter(Folder.owner_user_id == owner_user_id)
+    return query
+
 def _read_text(filepath: str) -> str:
     with open(filepath, "r", encoding="utf-8-sig", errors="replace") as f:
         return f.read()
@@ -374,7 +388,9 @@ def process_csv(
     def _commit_batch():
         try:
             db.session.commit()
-            db.session.expunge_all()  # release identity map to keep memory stable on large imports
+            if not has_request_context():
+                # Releasing the identity map keeps worker memory flat without detaching web request users.
+                db.session.expunge_all()
         except Exception:
             db.session.rollback()
             raise
@@ -402,7 +418,7 @@ def process_csv(
             is_foil = _to_bool(row.get(mapping.get("is_foil")))
 
             # ensure folder
-            folder = Folder.query.filter_by(name=folder_name).first()
+            folder = _folder_query_for_owner(folder_name, owner_user_id).first()
             if not folder and not dry_run:
                 folder = Folder(name=folder_name)
                 if folder_category:

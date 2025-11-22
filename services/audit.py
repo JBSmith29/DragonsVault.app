@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from flask import current_app, request
+from flask import current_app, request, session
 from flask_login import current_user
 
 from extensions import db
@@ -17,8 +17,12 @@ def record_audit_event(action: str, details: Optional[Dict[str, Any]] = None) ->
         if current_user and getattr(current_user, "is_authenticated", False):
             try:
                 user_id = int(current_user.get_id())
-            except (TypeError, ValueError):
-                user_id = None
+            except (TypeError, ValueError, Exception):
+                raw_session_id = session.get("_user_id")
+                try:
+                    user_id = int(raw_session_id) if raw_session_id is not None else None
+                except (TypeError, ValueError):
+                    user_id = None
 
         entry = AuditLog(
             user_id=user_id,

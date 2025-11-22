@@ -156,16 +156,30 @@ def _save_upload_if_present(file):
 
 def _export_context() -> dict:
     """Builds folder and format metadata for the import/export UI."""
+    user_id = None
+    if current_user.is_authenticated:
+        try:
+            user_id = int(current_user.get_id())
+        except (TypeError, ValueError, Exception):
+            raw_id = session.get("_user_id")
+            try:
+                user_id = int(raw_id) if raw_id is not None else None
+            except (TypeError, ValueError):
+                user_id = None
+
     folder_category_labels = {
         Folder.CATEGORY_DECK: "Deck",
         Folder.CATEGORY_COLLECTION: "Collection",
         Folder.CATEGORY_BUILD: "In-progress build",
     }
-    user_folders = (
-        Folder.query.filter(Folder.owner_user_id == current_user.id)
-        .order_by(func.lower(Folder.name))
-        .all()
-    )
+    if user_id is None:
+        user_folders = []
+    else:
+        user_folders = (
+            Folder.query.filter(Folder.owner_user_id == user_id)
+            .order_by(func.lower(Folder.name))
+            .all()
+        )
     folder_export_options = [
         {
             "id": folder.id,

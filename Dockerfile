@@ -28,11 +28,10 @@ COPY . .
 
 # Flask defaults; override in compose or `docker run` if needed
 ENV FLASK_APP=app:create_app \
-    FLASK_ENV=development \
-    FLASK_RUN_HOST=0.0.0.0 \
-    FLASK_RUN_PORT=5000 \
+    FLASK_ENV=production \
+    FLASK_DEBUG=0 \
     INSTANCE_DIR=/app/instance
 
 EXPOSE 5000
 
-CMD ["flask", "run"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "90", "app:create_app()"]

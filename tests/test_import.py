@@ -67,3 +67,40 @@ def test_process_csv_sets_folder_owner_username(app, create_user, tmp_path):
         assert folder is not None
         assert folder.owner_user_id == user.id
         assert folder.owner == user.username
+
+
+def test_process_csv_allows_duplicate_folder_names_per_user(app, create_user, tmp_path):
+    user_one, _ = create_user(email="one@example.com", username="playerone")
+    user_two, _ = create_user(email="two@example.com", username="playertwo")
+    csv_path = tmp_path / "dupe.csv"
+    csv_path.write_text(
+        "Folder Name,Card Name,Set Code,Collector Number,Quantity\n"
+        "Shared Folder,Lightning Bolt,M11,146,3\n",
+        encoding="utf-8",
+    )
+    with app.app_context():
+        stats_one, _ = process_csv(
+            str(csv_path),
+            default_folder="Unsorted",
+            dry_run=False,
+            quantity_mode="delta",
+            owner_user_id=user_one.id,
+            owner_username=user_one.username,
+        )
+        assert stats_one.added == 1
+
+        stats_two, _ = process_csv(
+            str(csv_path),
+            default_folder="Unsorted",
+            dry_run=False,
+            quantity_mode="delta",
+            owner_user_id=user_two.id,
+            owner_username=user_two.username,
+        )
+        assert stats_two.added == 1
+
+        folder_one = Folder.query.filter_by(name="Shared Folder", owner_user_id=user_one.id).first()
+        folder_two = Folder.query.filter_by(name="Shared Folder", owner_user_id=user_two.id).first()
+        assert folder_one is not None
+        assert folder_two is not None
+        assert folder_one.id != folder_two.id
