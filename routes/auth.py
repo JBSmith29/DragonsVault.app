@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+import requests
 
-from flask import flash, jsonify, redirect, render_template, request, url_for, session
+from flask import flash, jsonify, redirect, render_template, request, url_for, session, current_app
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 
-from extensions import db
+from extensions import db, limiter
 from models import User
 from services.audit import record_audit_event
 
@@ -62,6 +63,8 @@ def logout():
 
 
 @views.route("/register", methods=["GET", "POST"])
+@limiter.limit("3 per minute", methods=["POST"]) if limiter else (lambda f: f)
+@limiter.limit("10 per hour", methods=["POST"]) if limiter else (lambda f: f)
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("views.dashboard"))
@@ -71,10 +74,13 @@ def register():
         username = (request.form.get("username") or "").strip().lower()
         password = (request.form.get("password") or "").strip()
         confirm = (request.form.get("confirm_password") or "").strip()
+        hcaptcha_site_key = current_app.config.get("HCAPTCHA_SITE_KEY")
+        hcaptcha_enabled = bool(current_app.config.get("HCAPTCHA_ENABLED"))
         context = {
             "email": email,
             "username": username,
             "min_password_length": MIN_PASSWORD_LENGTH,
+            "hcaptcha_site_key": hcaptcha_site_key,
         }
 
         if not email or not username or not password:
@@ -86,6 +92,31 @@ def register():
         if password != confirm:
             flash("Passwords do not match.", "warning")
             return render_template("auth/register.html", disable_hx=True, **context)
+        if hcaptcha_enabled:
+            token = request.form.get("h-captcha-response") or ""
+            secret = current_app.config.get("HCAPTCHA_SECRET")
+            if not secret:
+                current_app.logger.warning("HCAPTCHA_ENABLED is true but no HCAPTCHA_SECRET configured.")
+            if not token or not secret:
+                flash("Captcha verification failed. Please try again.", "warning")
+                return render_template("auth/register.html", disable_hx=True, **context)
+            try:
+                resp = requests.post(
+                    "https://hcaptcha.com/siteverify",
+                    data={
+                        "response": token,
+                        "secret": secret,
+                        "remoteip": request.remote_addr,
+                    },
+                    timeout=5,
+                )
+                data = resp.json() if resp.ok else {}
+            except Exception as exc:
+                current_app.logger.warning("Captcha verification error: %s", exc)
+                data = {}
+            if not data.get("success"):
+                flash("Captcha verification failed. Please try again.", "warning")
+                return render_template("auth/register.html", disable_hx=True, **context)
         existing_email = User.query.filter(func.lower(User.email) == email).first()
         if existing_email:
             flash("That email is already registered.", "warning")
@@ -108,7 +139,12 @@ def register():
         flash("Account created. Please sign in.", "success")
         return redirect(url_for("views.login"))
 
-    return render_template("auth/register.html", min_password_length=MIN_PASSWORD_LENGTH, disable_hx=True)
+    return render_template(
+        "auth/register.html",
+        min_password_length=MIN_PASSWORD_LENGTH,
+        hcaptcha_site_key=current_app.config.get("HCAPTCHA_SITE_KEY"),
+        disable_hx=True,
+    )
 
 
 @views.route("/account/api-token", methods=["GET", "POST"])

@@ -56,6 +56,12 @@
               autocomplete="new-password"
             >
           </div>
+          {% if hcaptcha_site_key %}
+          <div class="mb-3">
+            <div class="h-captcha" data-sitekey="{{ hcaptcha_site_key }}"></div>
+          </div>
+          <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+          {% endif %}
           <button class="btn btn-primary w-100" type="submit">Create account</button>
         </form>
         <p class="text-muted small mt-3 mb-0">

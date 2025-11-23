@@ -45,6 +45,9 @@ class BaseConfig:
     SCRYFALL_REFRESH_INLINE = os.getenv("SCRYFALL_REFRESH_INLINE", "0").lower() in {"1","true","yes","on"}
     IMPORT_RUN_INLINE = os.getenv("IMPORT_RUN_INLINE", "0").lower() in {"1","true","yes","on"}
     TYPE_FILTER_USE_DB = os.getenv("TYPE_FILTER_USE_DB", "0").lower() in {"1","true","yes","on"}
+    HCAPTCHA_ENABLED = os.getenv("HCAPTCHA_ENABLED", "0").lower() in {"1","true","yes","on"}
+    HCAPTCHA_SITE_KEY = os.getenv("HCAPTCHA_SITE_KEY")
+    HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET")
     CONTENT_SECURITY_POLICY = {
         "default-src": "'self'",
         "img-src": "'self' data: https://c1.scryfall.com https://cards.scryfall.io",
