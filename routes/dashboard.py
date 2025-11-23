@@ -10,7 +10,7 @@ from extensions import cache, db
 from models import Card, Folder
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded, set_name_for_code, find_by_set_cn, cache_epoch
-from services.commander_utils import primary_commander_oracle_id, split_commander_oracle_ids
+from services.commander_utils import primary_commander_oracle_id, split_commander_oracle_ids, split_commander_names
 from services.symbols_cache import ensure_symbols_cache, render_mana_html, render_oracle_html
 
 from .base import _collection_metadata, _lookup_print_data, color_identity_name, views
@@ -69,14 +69,20 @@ def _prefetch_commander_cards(folder_map: dict[int, Folder]) -> dict[int, Card]:
     to avoid per-deck lookups.
     """
     wanted: dict[int, set[str]] = {}
+    wanted_names: dict[int, set[str]] = {}
     oracle_pool: set[str] = set()
+    name_pool: set[str] = set()
     for fid, folder in folder_map.items():
         ids = {oid.strip().lower() for oid in split_commander_oracle_ids(folder.commander_oracle_id) if oid.strip()}
         if ids:
             wanted[fid] = ids
             oracle_pool.update(ids)
+        names = {name.strip().lower() for name in split_commander_names(getattr(folder, "commander_name", "") or "") if name.strip()}
+        if names:
+            wanted_names[fid] = names
+            name_pool.update(names)
     if not oracle_pool:
-        return {}
+        oracle_pool = set()
 
     rows = (
         Card.query.options(
@@ -103,6 +109,30 @@ def _prefetch_commander_cards(folder_map: dict[int, Folder]) -> dict[int, Card]:
         oid = (card.oracle_id or "").strip().lower()
         if fid in wanted and oid in wanted[fid] and fid not in commander_cards:
             commander_cards[fid] = card
+
+    if name_pool:
+        name_rows = (
+            Card.query.options(
+                load_only(
+                    Card.id,
+                    Card.name,
+                    Card.set_code,
+                    Card.collector_number,
+                    Card.oracle_id,
+                    Card.quantity,
+                    Card.folder_id,
+                )
+            )
+            .filter(Card.folder_id.in_(wanted_names.keys()))
+            .filter(func.lower(Card.name).in_(name_pool))
+            .order_by(Card.folder_id.asc(), Card.quantity.desc(), Card.id.asc())
+            .all()
+        )
+        for card in name_rows:
+            fid = card.folder_id
+            lname = (card.name or "").strip().lower()
+            if fid in wanted_names and lname in wanted_names[fid] and fid not in commander_cards:
+                commander_cards[fid] = card
     return commander_cards
 
 
@@ -154,6 +184,7 @@ def dashboard():
     # Commander presenter + folder color identity
     dashboard_cmdr = {}
     deck_ci_letters, deck_ci_name, deck_ci_html = {}, {}, {}
+    placeholder_thumb = url_for("static", filename="img/card-placeholder.svg")
 
     if decks:
         folder_ids = [d["id"] for d in decks]
@@ -215,18 +246,8 @@ def dashboard():
         epoch = cache_epoch()
         for fid in folder_ids:
             f = folder_map.get(fid)
-            target_oid = primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)) if f else None
-            thumb_payload = _commander_thumbnail_payload(
-                fid,
-                target_oid,
-                getattr(f, "commander_name", None) if f else None,
-                next((d["rows"] for d in decks if d["id"] == fid), 0),
-                next((d["qty"] for d in decks if d["id"] == fid), 0),
-                epoch,
-            )
-            dashboard_cmdr[fid] = thumb_payload
-
-            pr = exact_print_for_card(commander_cards.get(fid)) if f else None
+            cmd_card = commander_cards.get(fid) if f else None
+            pr = exact_print_for_card(cmd_card) if cmd_card else None
             if not pr and f:
                 pr = _lookup_print_data(
                     getattr(f, "commander_set_code", None),
@@ -234,6 +255,28 @@ def dashboard():
                     getattr(f, "commander_name", None),
                     primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)),
                 )
+
+            if pr:
+                small, large = image_urls_from_print(pr)
+                name = getattr(f, "commander_name", None) or (cmd_card.name if cmd_card else pr.get("name"))
+                dashboard_cmdr[fid] = {
+                    "name": name,
+                    "small": small or large or placeholder_thumb,
+                    "large": large or small or placeholder_thumb,
+                    "alt": name or "Commander",
+                }
+            else:
+                target_oid = primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)) if f else None
+                thumb_payload = _commander_thumbnail_payload(
+                    fid,
+                    target_oid,
+                    getattr(f, "commander_name", None) if f else None,
+                    next((d["rows"] for d in decks if d["id"] == fid), 0),
+                    next((d["qty"] for d in decks if d["id"] == fid), 0),
+                    epoch,
+                )
+                dashboard_cmdr[fid] = thumb_payload
+
             letters = ci_letters_from_print(pr or {})
             deck_ci_letters[fid] = letters
             deck_ci_name[fid] = color_identity_name(letters)

@@ -2384,27 +2384,94 @@ def decks_overview():
         mana_str = "".join(f"{{{ch}}}" for ch in (letters_str if letters_str else "C"))
         deck_ci_html[fid] = render_mana_html(mana_str, use_local=False)
 
-        # —— commander thumbnail: use the OWNED printing in this folder
-
+        # —— commander thumbnail: prefer the exact owned printing in this deck
         f = folder_map.get(fid)
-        target_oid = primary_commander_oracle_id(cmd_oid) if cmd_oid else None
-        if not target_oid and f:
-            target_oid = primary_commander_oracle_id(f.commander_oracle_id)
-        thumb_payload = _commander_thumbnail_payload(
-            fid,
-            target_oid,
-            cmd_name,
-            int(_rows or 0),
-            int(_qty or 0),
-            thumbnail_epoch,
-        )
-        final_name = thumb_payload.get("name") or cmd_name
-        deck_cmdr[fid] = {
-            "name": final_name,
-            "small": thumb_payload.get("small") or placeholder_thumb,
-            "large": thumb_payload.get("large") or placeholder_thumb,
-            "alt": thumb_payload.get("alt") or (final_name or "Commander"),
-        }
+        cmd_card = None
+        try:
+            oracle_ids = [
+                (oid or "").strip().lower()
+                for oid in split_commander_oracle_ids(f.commander_oracle_id) if (oid or "").strip()
+            ] if f else []
+            if oracle_ids:
+                cmd_card = (
+                    Card.query.filter(
+                        Card.folder_id == fid,
+                        Card.oracle_id.isnot(None),
+                        func.lower(Card.oracle_id).in_(oracle_ids),
+                    )
+                    .order_by(Card.quantity.desc(), Card.id.asc())
+                    .first()
+                )
+            if not cmd_card and f and f.commander_name:
+                name_candidates = [n.strip().lower() for n in split_commander_names(f.commander_name) if n.strip()]
+                if name_candidates:
+                    cmd_card = (
+                        Card.query.filter(
+                            Card.folder_id == fid,
+                            func.lower(Card.name).in_(name_candidates),
+                        )
+                        .order_by(Card.quantity.desc(), Card.id.asc())
+                        .first()
+                    )
+        except Exception:
+            cmd_card = None
+
+        def _img_from_print(pr: dict | None) -> tuple[str | None, str | None]:
+            if not pr:
+                return None, None
+            iu = (pr or {}).get("image_uris") or {}
+            if iu:
+                return (
+                    iu.get("small") or iu.get("normal") or iu.get("large") or iu.get("png"),
+                    iu.get("png") or iu.get("large") or iu.get("normal") or iu.get("small"),
+                )
+            faces = (pr or {}).get("card_faces") or []
+            if faces:
+                fiu = (faces[0] or {}).get("image_uris") or {}
+                return (
+                    fiu.get("small") or fiu.get("normal") or fiu.get("large") or fiu.get("png"),
+                    fiu.get("png") or fiu.get("large") or fiu.get("normal") or fiu.get("small"),
+                )
+            return None, None
+
+        pr = None
+        final_name = cmd_name
+        if cmd_card:
+            final_name = final_name or getattr(f, "commander_name", None) or cmd_card.name
+            try:
+                pr = find_by_set_cn(cmd_card.set_code, cmd_card.collector_number, cmd_card.name)
+            except Exception:
+                pr = None
+            if not pr:
+                pr = _lookup_print_data(cmd_card.set_code, cmd_card.collector_number, cmd_card.name, cmd_card.oracle_id)
+
+        if pr:
+            small, large = _img_from_print(pr)
+            deck_cmdr[fid] = {
+                "name": final_name,
+                "small": small or placeholder_thumb,
+                "large": large or small or placeholder_thumb,
+                "alt": (final_name or "Commander"),
+            }
+        else:
+            target_oid = primary_commander_oracle_id(cmd_oid) if cmd_oid else None
+            if not target_oid and f:
+                target_oid = primary_commander_oracle_id(f.commander_oracle_id)
+            thumb_payload = _commander_thumbnail_payload(
+                fid,
+                target_oid,
+                cmd_name,
+                int(_rows or 0),
+                int(_qty or 0),
+                thumbnail_epoch,
+            )
+            final_name = thumb_payload.get("name") or cmd_name
+            deck_cmdr[fid] = {
+                "name": final_name,
+                "small": thumb_payload.get("small") or placeholder_thumb,
+                "large": thumb_payload.get("large") or placeholder_thumb,
+                "alt": thumb_payload.get("alt") or (final_name or "Commander"),
+            }
 
     # ---- optional sorting ----
     if sort in {"name", "ci", "pips", "qty", "bracket", "owner"}:
