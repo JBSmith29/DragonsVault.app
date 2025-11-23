@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from flask import jsonify, redirect, render_template, url_for
+from flask import jsonify, redirect, render_template, session, url_for
 from sqlalchemy import func
+from sqlalchemy.orm import load_only
 
-from extensions import db
+from extensions import cache, db
 from models import Card, Folder
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded, set_name_for_code
@@ -13,6 +14,95 @@ from services.commander_utils import primary_commander_oracle_id, split_commande
 from services.symbols_cache import ensure_symbols_cache, render_mana_html, render_oracle_html
 
 from .base import _collection_metadata, _lookup_print_data, color_identity_name, views
+
+
+@cache.memoize(timeout=60)
+def _dashboard_card_stats(user_key: str, collection_ids: tuple[int, ...], collection_lower: tuple[str, ...]) -> dict:
+    """
+    Aggregate collection-wide stats. Memoized per user to avoid repeated table scans.
+    """
+    _ = user_key  # ensure cache key scopes to the requesting user
+    totals = (
+        db.session.query(
+            func.count(Card.id),
+            func.coalesce(func.sum(Card.quantity), 0),
+            func.count(func.distinct(Card.name)),
+            func.count(func.distinct(func.lower(Card.set_code))),
+        )
+        .filter(Card.is_proxy.is_(False))
+        .one()
+    )
+    total_rows, total_qty, unique_names, set_count = totals
+
+    collection_qty = 0
+    if collection_ids:
+        collection_qty = (
+            db.session.query(func.coalesce(func.sum(Card.quantity), 0))
+            .filter(Card.folder_id.in_(collection_ids))
+            .filter(Card.is_proxy.is_(False))
+            .scalar()
+            or 0
+        )
+    elif collection_lower:
+        collection_qty = (
+            db.session.query(func.coalesce(func.sum(Card.quantity), 0))
+            .join(Folder, Card.folder_id == Folder.id)
+            .filter(func.lower(Folder.name).in_(collection_lower))
+            .filter(Card.is_proxy.is_(False))
+            .scalar()
+            or 0
+        )
+
+    return {
+        "rows": int(total_rows or 0),
+        "qty": int(total_qty or 0),
+        "unique_names": int(unique_names or 0),
+        "sets": int(set_count or 0),
+        "collection_qty": int(collection_qty or 0),
+    }
+
+
+def _prefetch_commander_cards(folder_map: dict[int, Folder]) -> dict[int, Card]:
+    """
+    Pull all commander print candidates for the provided folders in one query
+    to avoid per-deck lookups.
+    """
+    wanted: dict[int, set[str]] = {}
+    oracle_pool: set[str] = set()
+    for fid, folder in folder_map.items():
+        ids = {oid.strip().lower() for oid in split_commander_oracle_ids(folder.commander_oracle_id) if oid.strip()}
+        if ids:
+            wanted[fid] = ids
+            oracle_pool.update(ids)
+    if not oracle_pool:
+        return {}
+
+    rows = (
+        Card.query.options(
+            load_only(
+                Card.id,
+                Card.name,
+                Card.set_code,
+                Card.collector_number,
+                Card.oracle_id,
+                Card.quantity,
+                Card.folder_id,
+            )
+        )
+        .filter(Card.folder_id.in_(wanted.keys()))
+        .filter(Card.oracle_id.isnot(None))
+        .filter(func.lower(Card.oracle_id).in_(oracle_pool))
+        .order_by(Card.folder_id.asc(), Card.quantity.desc(), Card.id.asc())
+        .all()
+    )
+
+    commander_cards: dict[int, Card] = {}
+    for card in rows:
+        fid = card.folder_id
+        oid = (card.oracle_id or "").strip().lower()
+        if fid in wanted and oid in wanted[fid] and fid not in commander_cards:
+            commander_cards[fid] = card
+    return commander_cards
 
 
 @views.route("/")
@@ -26,26 +116,14 @@ def dashboard():
     """Render the high-level collection overview tiles and deck summaries."""
     collection_ids, _collection_names, collection_lower = _collection_metadata()
 
-    # High-level stats
-    total_rows = (
-        db.session.query(func.count(Card.id))
-        .filter(Card.is_proxy.is_(False))
-        .scalar()
-        or 0
-    )
-    total_qty = (
-        db.session.query(func.coalesce(func.sum(Card.quantity), 0))
-        .filter(Card.is_proxy.is_(False))
-        .scalar()
-        or 0
-    )
-    unique_names = (
-        db.session.query(func.count(func.distinct(Card.name)))
-        .filter(Card.is_proxy.is_(False))
-        .scalar()
-        or 0
-    )
+    stats_key = str(session.get("_user_id") or "anon")
+    stats = _dashboard_card_stats(stats_key, tuple(sorted(collection_ids)), tuple(sorted(collection_lower)))
+    total_rows = stats["rows"]
+    total_qty = stats["qty"]
+    unique_names = stats["unique_names"]
+    set_count = stats["sets"]
 
+    _ = ensure_cache_loaded()
     # Decks (folders NOT in excluded)
     deck_query = (
         db.session.query(
@@ -69,33 +147,7 @@ def dashboard():
     deck_count = len(decks)
 
     # Collection totals (excluded buckets)
-    if collection_ids:
-        collection_qty = (
-            db.session.query(func.coalesce(func.sum(Card.quantity), 0))
-            .filter(Card.folder_id.in_(collection_ids))
-            .filter(Card.is_proxy.is_(False))
-            .scalar()
-            or 0
-        )
-    elif collection_lower:
-        collection_qty = (
-            db.session.query(func.coalesce(func.sum(Card.quantity), 0))
-            .join(Folder, Card.folder_id == Folder.id)
-            .filter(func.lower(Folder.name).in_(collection_lower))
-            .filter(Card.is_proxy.is_(False))
-            .scalar()
-            or 0
-        )
-    else:
-        collection_qty = 0
-
-    # Distinct sets
-    set_count = (
-        db.session.query(func.count(func.distinct(func.lower(Card.set_code))))
-        .filter(Card.is_proxy.is_(False))
-        .scalar()
-        or 0
-    )
+    collection_qty = stats["collection_qty"]
 
     # Commander presenter + folder color identity
     dashboard_cmdr = {}
@@ -104,6 +156,7 @@ def dashboard():
     if decks:
         folder_ids = [d["id"] for d in decks]
         folder_map = {f.id: f for f in Folder.query.filter(Folder.id.in_(folder_ids)).all()}
+        commander_cards = _prefetch_commander_cards(folder_map)
 
         def ci_letters_from_print(pr: dict) -> str:
             ci_list = (pr or {}).get("color_identity") or []
@@ -148,13 +201,7 @@ def dashboard():
             pr = None
             cmd_card = None
             if f and getattr(f, "commander_oracle_id", None):
-                cmd_ids = split_commander_oracle_ids(f.commander_oracle_id)
-                if cmd_ids:
-                    cmd_card = (
-                        Card.query.filter(Card.folder_id == fid, Card.oracle_id.in_(cmd_ids))
-                        .order_by(Card.quantity.desc())
-                        .first()
-                    )
+                cmd_card = commander_cards.get(fid)
                 if cmd_card:
                     cmd_name = getattr(f, "commander_name", None) or cmd_card.name
                     alt = cmd_name or "Commander"

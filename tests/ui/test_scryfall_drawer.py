@@ -3,11 +3,38 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
+import platform
+from pathlib import Path
 
 import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import Error as PlaywrightError, sync_playwright  # type: ignore  # noqa: E402
+
+
+def _should_skip_playwright() -> bool:
+    if (os.getenv("FORCE_PLAYWRIGHT") or "").lower() in {"1", "true", "yes", "on"}:
+        return False
+    if (os.getenv("SKIP_PLAYWRIGHT") or "").lower() in {"1", "true", "yes", "on"}:
+        return True
+    model_path = Path("/sys/firmware/devicetree/base/model")
+    try:
+        if model_path.exists() and "raspberry pi" in model_path.read_text(errors="ignore").lower():
+            return True
+    except Exception:
+        pass
+    machine = platform.machine().lower()
+    if machine.startswith("arm") or "aarch64" in machine:
+        return True
+    return False
+
+
+if _should_skip_playwright():
+    pytest.skip(
+        "Skipping Playwright UI tests on ARM/Pi or constrained hardware (set FORCE_PLAYWRIGHT=1 to run).",
+        allow_module_level=True,
+    )
 
 
 @pytest.mark.ui

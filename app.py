@@ -2,6 +2,7 @@
 
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import shutil
 import sqlite3
@@ -198,13 +199,33 @@ def _safe_init_cache(app: Flask):
 
 def _configure_logging(app: Flask) -> None:
     """Configure structured logging with request IDs."""
-    handler = logging.StreamHandler()
-    handler.addFilter(RequestIdFilter())
-    handler.setFormatter(JsonRequestFormatter())
-    app.logger.handlers = [handler]
-    app.logger.setLevel(logging.INFO if not app.debug else logging.DEBUG)
-    logging.getLogger("werkzeug").handlers = [handler]
-    logging.getLogger("werkzeug").setLevel(logging.INFO if not app.debug else logging.DEBUG)
+    stream_handler = logging.StreamHandler()
+    stream_handler.addFilter(RequestIdFilter())
+    stream_handler.setFormatter(JsonRequestFormatter())
+    stream_handler.setLevel(logging.INFO)
+
+    handlers = [stream_handler]
+
+    try:
+        logs_dir = Path(app.instance_path) / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            logs_dir / "app.log",
+            maxBytes=5 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.addFilter(RequestIdFilter())
+        file_handler.setFormatter(JsonRequestFormatter())
+        file_handler.setLevel(logging.INFO)
+        handlers.append(file_handler)
+    except Exception as exc:
+        app.logger.warning("Falling back to stream-only logging (file handler unavailable): %s", exc)
+
+    app.logger.handlers = handlers
+    app.logger.setLevel(logging.INFO)
+    logging.getLogger("werkzeug").handlers = handlers
+    logging.getLogger("werkzeug").setLevel(logging.INFO)
 
 
 def _ensure_folder_deck_tag_column():
