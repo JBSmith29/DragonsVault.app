@@ -11,7 +11,13 @@ services:
   web:
     build: .
     command: >-
-      gunicorn --bind 0.0.0.0:5000 --workers ${WEB_CONCURRENCY:-1} --timeout 90 "app:create_app()"
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${WEB_CONCURRENCY:-2}
+      --threads ${WEB_THREADS:-1}
+      --worker-tmp-dir /dev/shm
+      --timeout ${WEB_TIMEOUT:-60}
+      "app:create_app()"
     ports:
       - "5000:5000"
     restart: unless-stopped
