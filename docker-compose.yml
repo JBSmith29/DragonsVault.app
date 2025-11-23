@@ -6,14 +6,21 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    command:
+      [
+        "redis-server",
+        "--save", "60", "1",
+        "--loglevel", "warning",
+        "--maxmemory", "128mb",
+        "--maxmemory-policy", "allkeys-lru"
+      ]
 
   web:
     build: .
     command: >-
       gunicorn
       --bind 0.0.0.0:5000
-      --workers ${WEB_CONCURRENCY:-2}
+      --workers ${WEB_CONCURRENCY:-1}
       --threads ${WEB_THREADS:-1}
       --worker-tmp-dir /dev/shm
       --timeout ${WEB_TIMEOUT:-60}
@@ -25,9 +32,7 @@ services:
       FLASK_ENV: production
       FLASK_DEBUG: "0"
       INSTANCE_DIR: /app/instance
-      CACHE_TYPE: RedisCache
-      CACHE_REDIS_HOST: redis
-      CACHE_REDIS_PORT: "6379"
+      CACHE_TYPE: SimpleCache
       CACHE_DEFAULT_TIMEOUT: "600"
       REDIS_URL: redis://redis:6379/0
       RATELIMIT_STORAGE_URI: redis://redis:6379/1

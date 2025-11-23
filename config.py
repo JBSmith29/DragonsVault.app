@@ -36,7 +36,10 @@ class BaseConfig:
     CACHE_REDIS_PORT = int(os.getenv("CACHE_REDIS_PORT", 6379))
     CACHE_REDIS_DB = int(os.getenv("CACHE_REDIS_DB", 0))
     CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL")
-    RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+    RATELIMIT_STORAGE_URI = os.getenv(
+        "RATELIMIT_STORAGE_URI",
+        os.getenv("RATELIMIT_REDIS_URI") or os.getenv("REDIS_URL") or "memory://",
+    )
     RATELIMIT_DEFAULT = os.getenv("RATELIMIT_DEFAULT", "200 per minute")
     ENABLE_TALISMAN = os.getenv("ENABLE_TALISMAN", "1").lower() in {"1","true","yes","on"}
     TALISMAN_FORCE_HTTPS = os.getenv("TALISMAN_FORCE_HTTPS", "1").lower() in {"1","true","yes","on"}
