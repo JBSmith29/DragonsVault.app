@@ -13,7 +13,7 @@ from typing import Dict, Iterable, List, Optional, Set
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db
 from models import Card, Folder, FolderShare, User
@@ -1512,7 +1512,15 @@ def list_cards():
         Card.rarity,
         Card.color_identity_mask,
     )
-    cards = query.options(load_only(*card_columns)).limit(per).offset((page - 1) * per).all()
+    cards = (
+        query.options(
+            load_only(*card_columns),
+            selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
+        )
+        .limit(per)
+        .offset((page - 1) * per)
+        .all()
+    )
 
     # Build template display maps via cache
     sc.ensure_cache_loaded()
@@ -1624,7 +1632,10 @@ def list_cards():
 @login_required
 def shared_folders():
     shared_rows = (
-        FolderShare.query.join(Folder, Folder.id == FolderShare.folder_id)
+        FolderShare.query.options(
+            selectinload(FolderShare.folder).selectinload(Folder.owner_user),
+        )
+        .join(Folder, Folder.id == FolderShare.folder_id)
         .filter(FolderShare.shared_user_id == current_user.id)
         .order_by(func.lower(Folder.name))
         .all()
@@ -1640,7 +1651,8 @@ def shared_folders():
     shared_ids = {entry["folder"].id for entry in shared_with_me if entry["folder"]}
 
     public_query = (
-        Folder.query.filter(Folder.is_public.is_(True))
+        Folder.query.options(selectinload(Folder.owner_user))
+        .filter(Folder.is_public.is_(True))
         .order_by(func.lower(Folder.name))
         .all()
     )

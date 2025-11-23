@@ -6,6 +6,7 @@ import csv
 import json
 import re
 from io import StringIO
+from math import ceil
 
 from flask import abort, flash, jsonify, make_response, redirect, render_template, request, url_for, current_app
 from sqlalchemy import func
@@ -207,11 +208,39 @@ def _wishlist_upsert_rows(rows) -> tuple[int, int, int]:
 
 @views.route("/wishlist", methods=["GET"])
 def wishlist():
-    items = (
-        WishlistItem.query.order_by(
-            WishlistItem.status.asc(), WishlistItem.created_at.desc(), WishlistItem.name.asc()
-        ).all()
+    try:
+        page = int(request.args.get("page") or 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per = int(request.args.get("per") or request.args.get("per_page") or 100)
+    except (TypeError, ValueError):
+        per = 100
+
+    page = max(page, 1)
+    per = max(1, min(per, 500))
+
+    base_query = WishlistItem.query.order_by(
+        WishlistItem.status.asc(), WishlistItem.created_at.desc(), WishlistItem.name.asc()
     )
+    total_items = base_query.order_by(None).count()
+    pages = max(1, ceil(total_items / per)) if per else 1
+    page = min(page, pages) if total_items else 1
+    start = (page - 1) * per + 1 if total_items else 0
+    end = min(start + per - 1, total_items) if total_items else 0
+
+    items = base_query.limit(per).offset((page - 1) * per).all()
+
+    def _url_with(page_num: int):
+        args = request.args.to_dict(flat=False)
+        args["page"] = [str(page_num)]
+        if "per" not in args and "per_page" not in args:
+            args["per"] = [str(per)]
+        return url_for("views.wishlist", **{k: v if len(v) > 1 else v[0] for k, v in args.items()})
+
+    prev_url = _url_with(page - 1) if page > 1 else None
+    next_url = _url_with(page + 1) if page < pages else None
+    page_urls = [(n, _url_with(n)) for n in range(1, pages + 1)]
 
     rows = db.session.query(WishlistItem.status, func.count(WishlistItem.id)).group_by(WishlistItem.status).all()
     counts = {status: count for status, count in rows}
@@ -220,17 +249,23 @@ def wishlist():
     ordered_count = counts.get("ordered", 0)
     acquired_count = counts.get("acquired", 0)
     removed_count = counts.get("removed", 0)
-    total = open_count + to_fetch_count + ordered_count + acquired_count + removed_count
-
     return render_template(
         "decks/wishlist.html",
         items=items,
+        page=page,
+        pages=pages,
+        per_page=per,
+        prev_url=prev_url,
+        next_url=next_url,
+        page_urls=page_urls,
+        start=start,
+        end=end,
         open_count=open_count,
         to_fetch_count=to_fetch_count,
         ordered_count=ordered_count,
         acquired=acquired_count,
         removed=removed_count,
-        total=total,
+        total=total_items,
     )
 
 
@@ -307,7 +342,7 @@ def wishlist_update(item_id: int):
         item.missing_qty = 0
 
     db.session.commit()
-    return redirect(url_for("views.wishlist"))
+    return redirect(request.referrer or url_for("views.wishlist"))
 
 
 @views.route("/wishlist/export", methods=["GET"])
@@ -356,7 +391,7 @@ def wishlist_delete(item_id):
         return ("", 204)
 
     flash(f'Removed "{item.name}" from wishlist.', "success")
-    return redirect(url_for("views.wishlist"))
+    return redirect(request.referrer or url_for("views.wishlist"))
 
 
 __all__ = [

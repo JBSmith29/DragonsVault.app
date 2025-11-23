@@ -63,6 +63,32 @@
 
 <!-- Table -->
 <div class="table-responsive">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+    <div class="text-muted small">
+      {% if total_items > 0 %}
+        Showing {{ start }}-{{ end }} of {{ total_items }}
+      {% else %}
+        No wishlist items yet.
+      {% endif %}
+    </div>
+    {% if pages > 1 %}
+      <nav aria-label="Wishlist pagination">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if not prev_url %}disabled{% endif %}">
+            <a class="page-link" href="{{ prev_url or '#' }}" aria-label="Previous page" {% if not prev_url %}tabindex="-1" aria-disabled="true"{% endif %}>&laquo;</a>
+          </li>
+          {% for num, href in page_urls %}
+            <li class="page-item {% if num == page %}active{% endif %}">
+              <a class="page-link" href="{{ href }}">{{ num }}</a>
+            </li>
+          {% endfor %}
+          <li class="page-item {% if not next_url %}disabled{% endif %}">
+            <a class="page-link" href="{{ next_url or '#' }}" aria-label="Next page" {% if not next_url %}tabindex="-1" aria-disabled="true"{% endif %}>&raquo;</a>
+          </li>
+        </ul>
+      </nav>
+    {% endif %}
+  </div>
   <table class="table table-sm align-middle table-hover cards-table" id="wl-table">
     <thead>
       <tr>

@@ -7,6 +7,7 @@ import json
 import os
 import time
 import uuid
+from math import ceil
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -1027,11 +1028,50 @@ def admin_requests():
             )
             return redirect(url_for("views.admin_requests"))
         return redirect(url_for("views.admin_requests"))
-    items = SiteRequest.query.order_by(SiteRequest.created_at.desc()).all()
+    try:
+        page = int(request.args.get("page") or 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per = int(request.args.get("per") or request.args.get("per_page") or 50)
+    except (TypeError, ValueError):
+        per = 50
+
+    page = max(page, 1)
+    per = max(1, min(per, 200))
+
+    base_query = SiteRequest.query.order_by(SiteRequest.created_at.desc())
+    total = base_query.order_by(None).count()
+    pages = max(1, ceil(total / per)) if per else 1
+    page = min(page, pages) if total else 1
+    start = (page - 1) * per + 1 if total else 0
+    end = min(start + per - 1, total) if total else 0
+
+    items = base_query.limit(per).offset((page - 1) * per).all()
+
+    def _url_with(page_num: int):
+        args = request.args.to_dict(flat=False)
+        args["page"] = [str(page_num)]
+        if "per" not in args and "per_page" not in args:
+            args["per"] = [str(per)]
+        return url_for("views.admin_requests", **{k: v if len(v) > 1 else v[0] for k, v in args.items()})
+
+    prev_url = _url_with(page - 1) if page > 1 else None
+    next_url = _url_with(page + 1) if page < pages else None
+    page_urls = [(n, _url_with(n)) for n in range(1, pages + 1)]
     request_counts = _site_request_counts()
     return render_template(
         "admin/requests.html",
         requests=items,
+        page=page,
+        pages=pages,
+        per_page=per,
+        prev_url=prev_url,
+        next_url=next_url,
+        page_urls=page_urls,
+        start=start,
+        end=end,
+        total=total,
         status_choices=status_choices,
         status_labels=status_labels,
         request_counts=request_counts,
@@ -1063,6 +1103,4 @@ def legacy_imports_ws():
 
 
 __all__ = ["admin_console", "admin_folder_categories", "admin_manage_users", "admin_requests"]
-
-
 
