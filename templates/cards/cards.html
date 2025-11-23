@@ -19,7 +19,7 @@
       or selected_types or []
     ) %}
 
-<div class="page-section">
+<div class="page-section" id="cardsPageSection">
   <h1 class="mb-3">Browse All Cards</h1>
 
   {# Badge helper: reuse consistent styling when rendering card types. #}
@@ -46,7 +46,6 @@
 
     .card-thumb { display:block; }
     .col-colors { width:170px; min-width:170px; white-space:nowrap; }
-
     .drawer-cycler { position:relative; }
     .drawer-cycler .nav-btn {
       position:absolute; top:50%; transform:translateY(-50%);
@@ -71,6 +70,42 @@
       background:rgba(0,0,0,.55); color:#fff;
     }
     @media (hover:hover){ .flip-face-btn:hover{ background:rgba(0,0,0,.72);} }
+
+    /* Floating action bar for card actions */
+    .card-action-bar {
+      position:fixed;
+      bottom:1rem;
+      left:0;
+      right:0;
+      z-index:1030;
+      pointer-events:none;
+    }
+    .card-action-bar .bar-surface {
+      pointer-events:auto;
+      margin:0 auto;
+      max-width:1100px;
+      background:var(--bs-body-bg);
+      border:1px solid var(--bs-border-color-translucent);
+      border-radius:1rem;
+      box-shadow:0 .75rem 2.5rem rgba(0,0,0,.25);
+      padding:.85rem 1rem;
+    }
+    .card-action-bar .bar-title {
+      font-weight:600;
+      font-size:.95rem;
+    }
+    .card-action-bar .muted {
+      color:var(--bs-secondary-color);
+    }
+    .card-action-bar .quantity-wrap { max-width:120px; }
+    .card-action-bar .bar-grid { row-gap:.5rem; }
+    .page-section-with-bar { padding-bottom:160px; }
+    .printing-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; }
+    .printing-card { border:1px solid var(--bs-border-color); border-radius:.75rem; padding:.65rem; background:var(--bs-body-bg); transition:all .15s ease; cursor:pointer; }
+    .printing-card.active { border-color: var(--bs-primary); box-shadow:0 0 0 3px rgba(13,110,253,.25); }
+    .printing-card .thumb { border-radius:.5rem; background:var(--bs-secondary-bg); width:100%; }
+    .printing-card .meta { font-size:.9rem; margin-top:.5rem; }
+    .printing-card .badge { font-size:.75rem; }
   </style>
 
   {# Search + filter form controls the query params for the list view. #}
@@ -373,69 +408,6 @@
     </div>
   </div>
 
-  {% if move_folder_options %}
-    <div id="cardSelectToolbar" class="alert alert-secondary d-flex flex-wrap align-items-center gap-3 mb-3 d-none">
-      <div class="fw-semibold mb-0">
-        <strong id="cardSelectCount">0</strong>
-        card<span id="cardSelectPlural">s</span> selected
-      </div>
-      <form id="cardSelectForm"
-            method="post"
-            action="{{ url_for('views.bulk_move_cards') }}"
-            class="d-flex flex-wrap align-items-center gap-2 ms-auto">
-        <input type="hidden" name="card_ids" id="cardSelectInput">
-        <input type="hidden" name="redirect_to" value="{{ back_to }}">
-        <label class="visually-hidden" for="cardSelectTargetToggle">Move cards to folder</label>
-        <div class="dropdown dv-select dv-select-sm"
-             data-dv-select="card-move-target"
-             id="cardSelectTargetWrapper">
-          <input type="hidden"
-                 name="target_folder_id"
-                 id="cardSelectTargetInput"
-                 data-dv-select-input
-                 value="">
-          <button class="btn dv-select-toggle btn-sm d-flex align-items-center gap-2"
-                  type="button"
-                  id="cardSelectTargetToggle"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false">
-            <span data-dv-select-label>Choose destination…</span>
-            <i class="bi bi-chevron-down"></i>
-          </button>
-          <ul class="dropdown-menu dv-select-menu"
-              aria-labelledby="cardSelectTargetToggle">
-            <li>
-              <button class="dropdown-item active"
-                      type="button"
-                      data-dv-select-option
-                      data-value=""
-                      data-label="Choose destination…">
-                Choose destination…
-              </button>
-            </li>
-            {% for option in move_folder_options %}
-              <li>
-                <button class="dropdown-item"
-                        type="button"
-                        data-dv-select-option
-                        data-value="{{ option.id }}"
-                        data-label="{{ option.name }}">
-                  {{ option.name }}
-                  {% if option.is_collection %}
-                    <span class="badge bg-secondary ms-2">Collection</span>
-                  {% elif option.is_proxy %}
-                    <span class="badge bg-warning text-dark ms-2">Proxy</span>
-                  {% endif %}
-                </button>
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-        <button class="btn btn-primary btn-sm" type="submit" id="cardSelectSubmit" disabled>Move cards</button>
-        <button class="btn btn-link btn-sm" type="button" id="cardSelectClear">Clear selection</button>
-      </form>
-    </div>
-    {% endif %}
   {% if cards|length == 0 %}
     <div class="alert alert-secondary">
       No cards match your filters. Try broadening them or
@@ -482,13 +454,13 @@
             <th>Art</th>
             <th><a href="{{ keep_params('name', name_dir) }}">Name</a></th>
             <th><a href="{{ keep_params('ctype', ctyp_dir) }}">Type</a></th>
+            <th><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
+            <th>Set</th>
+            <th class="text-end"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
             <th class="col-colors"><a href="{{ keep_params('colors', col_dir) }}">Colors</a></th>
             <th><a href="{{ keep_params('rar', rar_dir) }}">Rarity</a></th>
-            <th><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
-            <th><a href="{{ keep_params('set', set_dir) }}">Set</a></th>
             <th><a href="{{ keep_params('cn', cn_dir) }}">#</a></th>
             <th><a href="{{ keep_params('foil', foil_dir) }}">Foil</a></th>
-            <th class="text-end"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
           </tr>
         </thead>
         <tbody>
@@ -529,7 +501,17 @@
             {% if (not collection_flag or (fname in COLLECTION_FOLDERS)) and type_ok %}
             {% set hover_src = hover_map.get(card.id) if hover_map else None %}
             {% set display_name = display_name_map.get(card.id) or card.name %}
-            <tr class="card-row" data-card-id="{{ card.id }}" data-folder="{{ (fname or '')|lower }}" data-ignore-hover="true">
+            <tr class="card-row"
+                data-card-id="{{ card.id }}"
+                data-folder="{{ (fname or '')|lower }}"
+                data-folder-id="{{ card.folder_id }}"
+                data-quantity="{{ card.quantity }}"
+                data-set="{{ card.set_code }}"
+                data-cn="{{ card.collector_number }}"
+                data-lang="{{ card.lang }}"
+                data-foil="{{ 1 if card.is_foil else 0 }}"
+                data-name="{{ display_name }}"
+                data-ignore-hover="true">
               {% if move_folder_options %}
                 <td class="col-select">
                   <div class="form-check mb-0">
@@ -564,6 +546,15 @@
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
+              <td>
+                {% if card.folder and card.folder.name %}
+                  {{ folder_badge(card.folder.name) }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-uppercase">{{ card.set_code }}</td>
+              <td class="text-end">{{ card.quantity }}</td>
               <td class="col-colors">
                 {% set cols = (color_map.get(card.id) if color_map else []) %}
                 {% if not cols or not cols|length %}{% set cols = ['C'] %}{% endif %}
@@ -587,17 +578,8 @@
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td>
-                {% if card.folder and card.folder.name %}
-                  {{ folder_badge(card.folder.name) }}
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td class="text-uppercase">{{ card.set_code }}</td>
               <td>{{ card.collector_number }}</td>
               <td>{{ "✓" if card.is_foil else "" }}</td>
-              <td class="text-end">{{ card.quantity }}</td>
             </tr>
             {% endif %}
           {% endfor %}
@@ -642,6 +624,54 @@
   {% endif %}
 </div>
 
+{% if move_folder_options %}
+<div class="card-action-bar d-none" id="cardActionBar">
+  <div class="bar-surface">
+    <div class="row align-items-center bar-grid">
+      <div class="col-12 col-md-3 d-flex flex-column">
+        <div class="bar-title">Bulk actions</div>
+        <div class="small muted" id="cardActionSummary">Select cards to enable actions</div>
+      </div>
+      <div class="col-12 col-md">
+        <label class="form-label mb-1" for="cardActionMoveToggle">Move to</label>
+        <div class="dropdown dv-select w-100" data-dv-select="card-action-move" id="cardActionMoveWrapper">
+          <input type="hidden" id="cardActionMoveInput" data-dv-select-input value="">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="cardActionMoveToggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-dv-select-label>Choose destination…</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="cardActionMoveToggle">
+            <li>
+              <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Choose destination…">Choose destination…</button>
+            </li>
+            {% for option in move_folder_options %}
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ option.id }}" data-label="{{ option.name }}">
+                  {{ option.name }}
+                  {% if option.is_collection %}
+                    <span class="badge bg-secondary ms-2">Collection</span>
+                  {% elif option.is_proxy %}
+                    <span class="badge bg-warning text-dark ms-2">Proxy</span>
+                  {% endif %}
+                </button>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-6 col-md-auto quantity-wrap" id="cardActionQtyWrap">
+        <label class="form-label mb-1" for="cardActionQty">Qty</label>
+        <input type="number" min="1" step="1" class="form-control" id="cardActionQty" value="1">
+      </div>
+      <div class="col-12 col-md-auto d-flex gap-2 justify-content-end flex-wrap">
+        <button type="button" class="btn btn-outline-secondary" id="cardActionEditBtn" disabled>Edit printing</button>
+        <button type="button" class="btn btn-primary" id="cardActionMoveBtn" disabled>Move cards</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Drawer -->
 <div class="offcanvas offcanvas-end w-500" tabindex="-1" id="cardDrawer" aria-labelledby="cardDrawerLabel">
   <div class="offcanvas-header">
@@ -651,6 +681,70 @@
   <div class="offcanvas-body">
     <div id="drawerContent">
       <div class="text-center small text-muted">Select a card…</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editPrintingModal" tabindex="-1" aria-labelledby="editPrintingLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content bg-body text-body border border-secondary-subtle rounded-4">
+      <div class="modal-header border-secondary-subtle">
+        <div>
+          <p class="text-muted small mb-1">Update printing</p>
+          <h5 class="modal-title" id="editPrintingLabel">Edit printing</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="editPrintingForm">
+        <div class="modal-body">
+          <div id="editPrintingAlert" class="alert alert-warning d-none mb-3"></div>
+          <div class="border rounded-3 p-3 bg-body-tertiary mb-3">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+              <div>
+                <div class="small text-muted">Card</div>
+                <div class="fw-semibold" id="editPrintingCardName">Loading…</div>
+              </div>
+              <div class="vr d-none d-md-block"></div>
+              <div>
+                <div class="small text-muted">Owned quantity</div>
+                <div class="fw-semibold" id="editPrintingOwnedQty">—</div>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="editPrintingCardId" name="card_id" value="">
+          <div class="mb-3">
+            <label class="form-label">Printing</label>
+            <input type="hidden" id="printingSelectInput" value="">
+            <div id="printingGridEmpty" class="text-muted small d-none">No printings found for this card.</div>
+            <div class="printing-grid" id="printingOptionsGrid"></div>
+            <div class="form-text">Pick the exact set, collector number, language, and variant.</div>
+          </div>
+          <div class="mb-3">
+            <label for="foilingSelectToggle" class="form-label">Foiling</label>
+            <div class="dropdown dv-select w-100" data-dv-select="card-foiling" id="foilingSelectWrapper">
+              <input type="hidden" id="foilingSelectInput" data-dv-select-input value="nonfoil">
+              <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="foilingSelectToggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <span data-dv-select-label>Nonfoil</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="foilingSelectToggle">
+                <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="nonfoil" data-label="Nonfoil">Nonfoil</button></li>
+                <li><button class="dropdown-item" type="button" data-dv-select-option data-value="foil" data-label="Foil">Foil</button></li>
+              </ul>
+            </div>
+            <div class="form-text" id="foilingAvailability">Select a printing to see available finishes.</div>
+          </div>
+          <div class="mb-3">
+            <label for="editPrintingQty" class="form-label">Quantity</label>
+            <input type="number" min="1" step="1" class="form-control" id="editPrintingQty" value="1">
+            <div class="form-text" id="editPrintingQtyHelp">Defaulting to 1 copy.</div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary-subtle">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="editPrintingSubmit">Save</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -972,108 +1066,362 @@
     }
   }
 
-  const selectionToolbar = document.getElementById('cardSelectToolbar');
-  if (selectionToolbar) {
+  const actionBar = document.getElementById('cardActionBar');
+  if (actionBar) {
     const cardCheckboxes = Array.from(document.querySelectorAll('.card-select'));
     const selectAllToggle = document.getElementById('cardSelectAll');
-    const countEl = document.getElementById('cardSelectCount');
-    const pluralEl = document.getElementById('cardSelectPlural');
-    const hiddenInput = document.getElementById('cardSelectInput');
-    const clearBtn = document.getElementById('cardSelectClear');
-    const submitBtn = document.getElementById('cardSelectSubmit');
-    const targetWrapper = document.getElementById('cardSelectTargetWrapper');
-    const targetInput = document.getElementById('cardSelectTargetInput');
-    const formEl = document.getElementById('cardSelectForm');
-
+    const actionSummary = document.getElementById('cardActionSummary');
+    const qtyInput = document.getElementById('cardActionQty');
+    const qtyWrap = document.getElementById('cardActionQtyWrap');
+    const moveWrapper = document.getElementById('cardActionMoveWrapper');
+    const moveInput = document.getElementById('cardActionMoveInput');
+    const moveBtn = document.getElementById('cardActionMoveBtn');
+    const editBtn = document.getElementById('cardActionEditBtn');
     const totalCheckboxes = cardCheckboxes.length;
+    const pageSection = document.getElementById('cardsPageSection');
 
-    const getTargetValue = () => (targetInput?.value || '').trim();
+    const selectedCards = () => cardCheckboxes.filter(cb => cb.checked);
+    const findRow = (cb) => cb?.closest('tr.card-row');
+    const selectedRows = () => selectedCards().map(cb => findRow(cb)).filter(Boolean);
 
-    const resetTargetSelection = () => {
-      if (targetWrapper) {
-        const defaultBtn = targetWrapper.querySelector('[data-dv-select-option][data-value=""]');
-        if (defaultBtn) {
-          defaultBtn.click();
-          return;
+    function updateActionUI() {
+      const sel = selectedCards();
+      const rows = selectedRows();
+      const count = sel.length;
+      const targetValue = (moveInput?.value || '').trim();
+      const singleRow = count === 1 ? rows[0] : null;
+      const maxQty = singleRow ? parseInt(singleRow.dataset.quantity || '1', 10) || 1 : 1;
+
+      if (qtyWrap) {
+        qtyWrap.classList.toggle('d-none', count !== 1);
+      }
+      if (qtyInput) {
+        qtyInput.disabled = count !== 1;
+        qtyInput.max = maxQty;
+        if (count !== 1) {
+          qtyInput.value = 1;
+        } else if (parseInt(qtyInput.value, 10) > maxQty) {
+          qtyInput.value = maxQty;
         }
       }
-      if (targetInput) {
-        targetInput.value = '';
-      }
-    };
 
-    function syncSelectionState() {
-      const selected = cardCheckboxes.filter(cb => cb.checked);
-      const ids = selected.map(cb => cb.value);
-      const count = ids.length;
-      countEl.textContent = count;
-      if (pluralEl) pluralEl.textContent = count === 1 ? '' : 's';
-      hiddenInput.value = ids.join(',');
-      if (count > 0) {
-        selectionToolbar.classList.remove('d-none');
-      } else {
-        selectionToolbar.classList.add('d-none');
+      const summaryText = count === 0
+        ? 'Select cards to enable actions'
+        : `${count} card${count === 1 ? '' : 's'} selected${count === 1 ? ` (${maxQty} owned)` : ''}`;
+      if (actionSummary) {
+        actionSummary.textContent = summaryText;
+        actionSummary.classList.remove('text-danger');
       }
+
       if (selectAllToggle && totalCheckboxes) {
         selectAllToggle.checked = count > 0 && count === totalCheckboxes;
         selectAllToggle.indeterminate = count > 0 && count < totalCheckboxes;
       }
-      submitBtn.disabled = !count || !getTargetValue();
+
+      if (moveBtn) moveBtn.disabled = !count || !targetValue;
+      if (editBtn) {
+        editBtn.disabled = count !== 1;
+        editBtn.classList.toggle('d-none', count !== 1);
+      }
+      actionBar.classList.toggle('d-none', count === 0);
+      if (pageSection) {
+        pageSection.classList.toggle('page-section-with-bar', count > 0);
+      }
+    }
+
+    function handleCheckboxChange() {
+      updateActionUI();
     }
 
     cardCheckboxes.forEach(cb => {
-      cb.addEventListener('change', syncSelectionState);
+      cb.addEventListener('change', handleCheckboxChange);
       cb.addEventListener('click', evt => evt.stopPropagation());
     });
 
     if (selectAllToggle) {
       selectAllToggle.addEventListener('change', () => {
         const checked = selectAllToggle.checked;
-        cardCheckboxes.forEach(cb => {
-          cb.checked = checked;
-        });
-        syncSelectionState();
+        cardCheckboxes.forEach(cb => { cb.checked = checked; });
+        updateActionUI();
       });
     }
 
-    if (clearBtn) {
-      clearBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        cardCheckboxes.forEach(cb => {
-          cb.checked = false;
+    if (moveWrapper) {
+      moveWrapper.addEventListener('dv-select:change', updateActionUI);
+      moveWrapper.addEventListener('dv-select:ready', updateActionUI);
+    }
+
+    const showToast = (message, isError = false) => {
+      const alert = document.getElementById('editPrintingAlert');
+      const modalShown = document.getElementById('editPrintingModal')?.classList.contains('show');
+      if (alert && modalShown) {
+        alert.textContent = message;
+        alert.classList.toggle('alert-warning', isError);
+        alert.classList.toggle('alert-success', !isError);
+        alert.classList.remove('d-none');
+        return;
+      }
+      if (actionSummary) {
+        actionSummary.textContent = message;
+        actionSummary.classList.toggle('text-danger', isError);
+        if (!isError) actionSummary.classList.remove('text-danger');
+      }
+    };
+
+    function reloadCards() {
+      window.location.reload();
+    }
+
+    async function performMove() {
+      const ids = selectedCards().map(cb => cb.value);
+      if (!ids.length) return;
+      const payload = {
+        card_ids: ids,
+        target_folder_id: moveInput?.value || null,
+      };
+      if (ids.length === 1 && qtyInput && !qtyInput.disabled) {
+        const row = selectedRows()[0];
+        const maxQty = parseInt(row?.dataset.quantity || '1', 10) || 1;
+        const qty = Math.min(parseInt(qtyInput.value, 10) || 1, maxQty);
+        payload["quantity"] = qty;
+      }
+      moveBtn.disabled = true;
+      try {
+        const res = await fetch("{{ url_for('views.bulk_move_cards') }}", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload),
         });
-        if (selectAllToggle) {
-          selectAllToggle.checked = false;
-          selectAllToggle.indeterminate = false;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || `HTTP ${res.status}`);
         }
-        resetTargetSelection();
-        syncSelectionState();
+        if (data?.success) {
+          reloadCards();
+          return;
+        }
+        showToast(data?.message || "Move failed", true);
+      } catch (err) {
+        console.error("Move failed", err);
+        showToast("Move failed. Please try again.", true);
+      } finally {
+        moveBtn.disabled = false;
+      }
+    }
+
+    async function fetchPrintingOptions(cardId) {
+      const res = await fetch(`/api/card/${cardId}/printing-options`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    function setFoilingOptions(finishes) {
+      const wrapper = document.getElementById('foilingSelectWrapper');
+      const input = document.getElementById('foilingSelectInput');
+      if (!wrapper || !input) return;
+      const buttons = Array.from(wrapper.querySelectorAll('[data-dv-select-option]'));
+      const normalized = (finishes || []).map(f => (f || '').toLowerCase());
+      const allowed = new Set(normalized.filter(f => f === 'foil' || f === 'nonfoil'));
+      const available = allowed.size ? allowed : new Set(['nonfoil','foil']);
+      buttons.forEach(btn => {
+        const val = (btn.dataset.value || '').toLowerCase();
+        const supported = !available.size || available.has(val);
+        btn.disabled = !supported;
+        btn.classList.toggle('disabled', !supported);
+      });
+      const desired = (input.value || '').toLowerCase();
+      let chosen = null;
+      if (available.size && available.has(desired)) {
+        chosen = buttons.find(b => (b.dataset.value || '').toLowerCase() === desired && !b.disabled);
+      }
+      if (!chosen && available.size) {
+        chosen = buttons.find(b => available.has((b.dataset.value || '').toLowerCase()) && !b.disabled);
+      }
+      if (chosen) {
+        chosen.click();
+      }
+      const hint = document.getElementById('foilingAvailability');
+      if (hint) {
+        hint.textContent = available.size
+          ? `Available finishes: ${Array.from(available).join(', ')}`
+          : 'Select a printing to see available finishes.';
+      }
+    }
+
+    function renderPrintingOptions(options, currentValue) {
+      const grid = document.getElementById('printingOptionsGrid');
+      const input = document.getElementById('printingSelectInput');
+      const emptyState = document.getElementById('printingGridEmpty');
+      if (!grid || !input) return;
+      grid.innerHTML = '';
+      const opts = options || [];
+      if (!opts.length) {
+        if (emptyState) emptyState.classList.remove('d-none');
+        return;
+      }
+      if (emptyState) emptyState.classList.add('d-none');
+      const placeholder = '/static/img/card-placeholder.svg';
+      let activeCard = null;
+
+      const setActive = (btn, finishes) => {
+        if (activeCard) activeCard.classList.remove('active');
+        activeCard = btn;
+        btn.classList.add('active');
+        input.value = btn.dataset.value || '';
+        if (finishes) setFoilingOptions(finishes);
+      };
+
+      opts.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'printing-card text-start';
+        btn.dataset.value = opt.value || '';
+        btn.dataset.finishes = (opt.finishes || []).join(',');
+
+        const img = document.createElement('img');
+        img.src = opt.image || placeholder;
+        img.alt = opt.set ? `${opt.set} #${opt.collector_number || ''}` : 'Printing';
+        img.loading = 'lazy';
+        img.className = 'thumb w-100';
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = `
+          <div class="fw-semibold">${opt.set || ''} #${opt.collector_number || ''}</div>
+          <div class="text-muted small">${(opt.set_name || '').replace(/</g,'&lt;')}</div>
+          <div class="d-flex flex-wrap gap-1 mt-1">
+            <span class="badge text-bg-light text-dark">${(opt.lang || 'EN').toUpperCase()}</span>
+            ${(opt.promo_types || []).map(p => `<span class="badge bg-secondary-subtle text-secondary-emphasis">${p}</span>`).join('')}
+          </div>
+        `;
+
+        btn.appendChild(img);
+        btn.appendChild(meta);
+        btn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          const finishes = (btn.dataset.finishes || '').split(',').filter(Boolean);
+          setActive(btn, finishes);
+        });
+        if (!activeCard && opt.value === currentValue) {
+          setActive(btn, opt.finishes || []);
+        }
+        grid.appendChild(btn);
+      });
+
+      if (!activeCard && grid.firstElementChild) {
+        const first = grid.firstElementChild;
+        const finishes = (first.dataset.finishes || '').split(',').filter(Boolean);
+        setActive(first, finishes);
+      }
+    }
+
+    function openEditModalForRow(row) {
+      if (!row) return;
+      const cardId = row.dataset.cardId;
+      const modalEl = document.getElementById('editPrintingModal');
+      if (!modalEl || !cardId) return;
+      const alertEl = document.getElementById('editPrintingAlert');
+      if (alertEl) alertEl.classList.add('d-none');
+      const nameEl = document.getElementById('editPrintingCardName');
+      const ownedEl = document.getElementById('editPrintingOwnedQty');
+      const qtyInputModal = document.getElementById('editPrintingQty');
+      const qtyHelp = document.getElementById('editPrintingQtyHelp');
+      const cardIdInput = document.getElementById('editPrintingCardId');
+      const foilInput = document.getElementById('foilingSelectInput');
+      if (foilInput) {
+        foilInput.value = parseInt(row.dataset.foil || '0', 10) ? 'foil' : 'nonfoil';
+      }
+      if (nameEl) nameEl.textContent = row.dataset.name || 'Card';
+      const maxQty = parseInt(row.dataset.quantity || '1', 10) || 1;
+      if (ownedEl) ownedEl.textContent = maxQty;
+      if (qtyInputModal) {
+        qtyInputModal.max = maxQty;
+        qtyInputModal.value = Math.min(maxQty, 1);
+      }
+      if (qtyHelp) qtyHelp.textContent = `You own ${maxQty} cop${maxQty === 1 ? 'y' : 'ies'} of this printing.`;
+      if (cardIdInput) cardIdInput.value = cardId;
+
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      renderPrintingOptions([], '');
+      setFoilingOptions([]);
+
+      fetchPrintingOptions(cardId)
+        .then(data => {
+          renderPrintingOptions(data?.options || [], data?.current || '');
+          if (data?.current_finish && document.getElementById('foilingSelectInput')) {
+            document.getElementById('foilingSelectInput').value = data.current_finish;
+          }
+          if (data?.finishes) setFoilingOptions(data.finishes);
+        })
+        .catch(err => {
+          console.error('Failed to load printing options', err);
+          showToast('Failed to load printing options.', true);
+        });
+
+      modal.show();
+    }
+
+    if (editBtn) {
+      editBtn.addEventListener('click', () => {
+        const row = selectedRows()[0];
+        openEditModalForRow(row);
       });
     }
 
-    if (targetWrapper) {
-      targetWrapper.addEventListener('dv-select:change', () => {
-        syncSelectionState();
-      });
-      targetWrapper.addEventListener('dv-select:ready', () => {
-        syncSelectionState();
-      });
-    } else if (targetInput) {
-      targetInput.addEventListener('change', syncSelectionState);
+    if (moveBtn) {
+      moveBtn.addEventListener('click', performMove);
     }
 
-    if (formEl) {
-      formEl.addEventListener('submit', () => {
-        submitBtn.disabled = true;
+    const editForm = document.getElementById('editPrintingForm');
+    if (editForm) {
+      editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const cardId = document.getElementById('editPrintingCardId')?.value;
+        const printingValue = document.getElementById('printingSelectInput')?.value;
+        const finishValue = document.getElementById('foilingSelectInput')?.value || 'nonfoil';
+        const qtyInputEl = document.getElementById('editPrintingQty');
+        const maxQty = parseInt(qtyInputEl?.max || '1', 10) || 1;
+        const qty = Math.min(parseInt(qtyInputEl?.value, 10) || 1, maxQty);
+        if (!cardId || !printingValue) {
+          showToast("Choose a printing before saving.", true);
+          return;
+        }
+        document.getElementById('editPrintingSubmit').disabled = true;
+        try {
+          const res = await fetch(`/api/card/${cardId}/update-printing`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              printing: printingValue,
+              finish: finishValue,
+              quantity: qty,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+          if (data?.success) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editPrintingModal'));
+            modal?.hide();
+            reloadCards();
+            return;
+          }
+          showToast(data?.message || 'Update failed.', true);
+        } catch (err) {
+          console.error('Update failed', err);
+          showToast('Update failed. Please try again.', true);
+        } finally {
+          document.getElementById('editPrintingSubmit').disabled = false;
+        }
       });
     }
 
-    syncSelectionState();
+    updateActionUI();
   }
 
   document.addEventListener('click', function (e) {
     if (e.target.closest('a.card-link')) return;
     if (e.target.closest('.card-select')) return;
+    if (e.target.closest('#cardActionBar')) return;
     const row = e.target.closest('tr.card-row');
     if (!row) return;
     if (window.getSelection && window.getSelection().toString()) return;

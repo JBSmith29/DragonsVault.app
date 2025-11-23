@@ -9,11 +9,12 @@ from sqlalchemy.orm import load_only
 from extensions import cache, db
 from models import Card, Folder
 from services import scryfall_cache as sc
-from services.scryfall_cache import ensure_cache_loaded, set_name_for_code
+from services.scryfall_cache import ensure_cache_loaded, set_name_for_code, find_by_set_cn, cache_epoch
 from services.commander_utils import primary_commander_oracle_id, split_commander_oracle_ids
 from services.symbols_cache import ensure_symbols_cache, render_mana_html, render_oracle_html
 
 from .base import _collection_metadata, _lookup_print_data, color_identity_name, views
+from .cards import _commander_thumbnail_payload
 
 
 @cache.memoize(timeout=60)
@@ -129,6 +130,7 @@ def dashboard():
         db.session.query(
             Folder.id,
             Folder.name,
+            func.count(Card.id).label("rows"),
             func.coalesce(func.sum(Card.quantity), 0).label("qty"),
         )
         .outerjoin(Card, Card.folder_id == Folder.id)
@@ -143,7 +145,7 @@ def dashboard():
         .order_by(func.coalesce(func.sum(Card.quantity), 0).desc(), Folder.name.asc())
         .all()
     )
-    decks = [{"id": rid, "name": rname, "qty": int(rqty or 0)} for (rid, rname, rqty) in deck_rows]
+    decks = [{"id": rid, "name": rname, "rows": int(rrows or 0), "qty": int(rqty or 0)} for (rid, rname, rrows, rqty) in deck_rows]
     deck_count = len(decks)
 
     # Collection totals (excluded buckets)
@@ -192,46 +194,46 @@ def dashboard():
                 )
             return None, None
 
+        def exact_print_for_card(card_row: Card | None) -> dict | None:
+            """Return the exact print object for a stored card row if possible."""
+            if not card_row:
+                return None
+            try:
+                pr = find_by_set_cn(card_row.set_code, card_row.collector_number, card_row.name)
+                if pr:
+                    return pr
+            except Exception:
+                pr = None
+            # fallback to cached lookup
+            return _lookup_print_data(
+                getattr(card_row, "set_code", None),
+                getattr(card_row, "collector_number", None),
+                getattr(card_row, "name", None),
+                getattr(card_row, "oracle_id", None),
+            )
+
+        epoch = cache_epoch()
         for fid in folder_ids:
             f = folder_map.get(fid)
-            cmd_name, small, large = None, None, None
-            alt = ""
+            target_oid = primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)) if f else None
+            thumb_payload = _commander_thumbnail_payload(
+                fid,
+                target_oid,
+                getattr(f, "commander_name", None) if f else None,
+                next((d["rows"] for d in decks if d["id"] == fid), 0),
+                next((d["qty"] for d in decks if d["id"] == fid), 0),
+                epoch,
+            )
+            dashboard_cmdr[fid] = thumb_payload
 
-            # Commander art: owned print in this folder
-            pr = None
-            cmd_card = None
-            if f and getattr(f, "commander_oracle_id", None):
-                cmd_card = commander_cards.get(fid)
-                if cmd_card:
-                    cmd_name = getattr(f, "commander_name", None) or cmd_card.name
-                    alt = cmd_name or "Commander"
-                    pr = _lookup_print_data(
-                        cmd_card.set_code, cmd_card.collector_number, cmd_card.name, cmd_card.oracle_id
-                    )
-
-            # Fallback: use saved commander metadata even if the deck list lacks the print.
-            if not pr and f and (f.commander_oracle_id or f.commander_name):
+            pr = exact_print_for_card(commander_cards.get(fid)) if f else None
+            if not pr and f:
                 pr = _lookup_print_data(
                     getattr(f, "commander_set_code", None),
                     getattr(f, "commander_collector_number", None),
                     getattr(f, "commander_name", None),
                     primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)),
                 )
-                if not cmd_name:
-                    cmd_name = getattr(f, "commander_name", None) or (pr or {}).get("name")
-                if not alt:
-                    alt = cmd_name or (pr or {}).get("name") or "Commander"
-
-            if pr and (small is None and large is None):
-                small, large = image_urls_from_print(pr)
-
-            dashboard_cmdr[fid] = {
-                "name": cmd_name,
-                "small": small,
-                "large": large,
-                "alt": alt or (cmd_name or "Commander"),
-            }
-
             letters = ci_letters_from_print(pr or {})
             deck_ci_letters[fid] = letters
             deck_ci_name[fid] = color_identity_name(letters)

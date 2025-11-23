@@ -1677,6 +1677,7 @@ def shared_folders():
 def bulk_move_cards():
     """Move multiple cards to another folder."""
     json_payload = request.get_json(silent=True) or {}
+    wants_json = request.is_json or bool(json_payload) or "application/json" in (request.headers.get("Accept") or "")
 
     redirect_target = (
         request.form.get("redirect_to")
@@ -1727,6 +1728,8 @@ def bulk_move_cards():
 
     card_ids = list(dict.fromkeys(card_ids))
     if not card_ids:
+        if wants_json:
+            return jsonify({"success": False, "message": "Select at least one card to move."}), 400
         flash("Select at least one card to move.", "warning")
         return redirect(redirect_target)
 
@@ -1738,11 +1741,15 @@ def bulk_move_cards():
     try:
         target_id = int(target_raw)
     except (TypeError, ValueError):
+        if wants_json:
+            return jsonify({"success": False, "message": "Choose a destination folder."}), 400
         flash("Choose a destination folder.", "warning")
         return redirect(redirect_target)
 
     target_folder = Folder.query.get(target_id)
     if not target_folder:
+        if wants_json:
+            return jsonify({"success": False, "message": "Destination folder was not found."}), 404
         flash("Destination folder was not found.", "danger")
         return redirect(redirect_target)
 
@@ -1750,29 +1757,312 @@ def bulk_move_cards():
 
     cards = Card.query.filter(Card.id.in_(card_ids)).all()
     if not cards:
+        if wants_json:
+            return jsonify({"success": False, "message": "No matching cards were found."}), 404
         flash("No matching cards were found.", "warning")
         return redirect(redirect_target)
 
+    single_qty = None
+    raw_qty = json_payload.get("quantity") or request.form.get("quantity")
+    if len(card_ids) == 1 and raw_qty is not None:
+        try:
+            single_qty = max(int(raw_qty), 1)
+        except (TypeError, ValueError):
+            single_qty = None
+
     moved = 0
+    merged = 0
+    skipped = 0
     for card in cards:
         ensure_folder_access(card.folder, write=True)
         if card.folder_id == target_folder.id:
+            skipped += 1
             continue
-        card.folder_id = target_folder.id
-        moved += 1
 
-    if moved:
+        move_qty = single_qty if single_qty is not None else card.quantity or 0
+        if move_qty <= 0:
+            skipped += 1
+            continue
+        if move_qty > (card.quantity or 0):
+            move_qty = card.quantity or move_qty
+
+        existing = (
+            Card.query.filter(
+                Card.folder_id == target_folder.id,
+                Card.name == card.name,
+                Card.set_code == card.set_code,
+                Card.collector_number == card.collector_number,
+                Card.lang == card.lang,
+                Card.is_foil == card.is_foil,
+                Card.is_proxy == card.is_proxy,
+            )
+            .order_by(Card.id.asc())
+            .first()
+        )
+
+        remaining = (card.quantity or 0) - move_qty
+        if remaining <= 0:
+            if existing:
+                existing.quantity = (existing.quantity or 0) + move_qty
+                merged += move_qty
+                db.session.delete(card)
+            else:
+                card.folder_id = target_folder.id
+                moved += move_qty
+        else:
+            card.quantity = remaining
+            if existing:
+                existing.quantity = (existing.quantity or 0) + move_qty
+                merged += move_qty
+            else:
+                clone = Card(
+                    name=card.name,
+                    set_code=card.set_code,
+                    collector_number=card.collector_number,
+                    folder_id=target_folder.id,
+                    quantity=move_qty,
+                    oracle_id=card.oracle_id,
+                    lang=card.lang,
+                    is_foil=card.is_foil,
+                    is_proxy=card.is_proxy,
+                    type_line=card.type_line,
+                    rarity=card.rarity,
+                    color_identity_mask=card.color_identity_mask,
+                )
+                db.session.add(clone)
+                moved += move_qty
+
+    total_changed = (moved or 0) + (merged or 0)
+    if total_changed:
         _safe_commit()
         record_audit_event(
             "cards_bulk_move",
-            {"target_folder": target_folder.id, "count": moved, "card_ids": card_ids[:50]},
+            {"target_folder": target_folder.id, "moved_qty": moved, "merged_qty": merged, "card_ids": card_ids[:50]},
         )
         folder_name = target_folder.name or f"Folder {target_folder.id}"
-        flash(f"Moved {moved} card{'s' if moved != 1 else ''} to {folder_name}.", "success")
+        message = f"Moved {total_changed} card{'s' if total_changed != 1 else ''} to {folder_name}."
+        if wants_json:
+            return jsonify({"success": True, "message": message, "moved": moved, "merged": merged})
+        flash(message, "success")
     else:
-        flash("Selected cards are already in that folder.", "info")
+        info_msg = "Selected cards are already in that folder."
+        if wants_json:
+            return jsonify({"success": False, "message": info_msg, "skipped": skipped}), 200
+        flash(info_msg, "info")
 
     return redirect(redirect_target)
+
+
+@views.get("/api/card/<int:card_id>/printing-options")
+@login_required
+def api_card_printing_options(card_id: int):
+    """Return cached printings for a card so the UI can populate dropdowns."""
+    card = Card.query.get_or_404(card_id)
+    ensure_folder_access(card.folder, write=True)
+    ensure_cache_loaded()
+
+    oracle_id = card.oracle_id
+    if not oracle_id:
+        try:
+            oracle_id = unique_oracle_by_name(card.name)
+        except Exception:
+            oracle_id = None
+
+    prints: list[dict] = []
+    if oracle_id:
+        try:
+            prints = list(prints_for_oracle(oracle_id) or [])
+        except Exception:
+            prints = []
+    if not prints:
+        try:
+            pr = find_by_set_cn(card.set_code, card.collector_number, card.name)
+            if pr:
+                prints = [pr]
+                oracle_id = oracle_id or pr.get("oracle_id")
+        except Exception:
+            prints = []
+
+    current_value = f"{(card.set_code or '').upper()}::{card.collector_number or ''}::{(card.lang or 'en').upper()}"
+    options: list[dict] = []
+    seen_values: set[str] = set()
+    for pr in prints:
+        set_code = (pr.get("set") or "").upper()
+        cn = str(pr.get("collector_number") or "")
+        lang = (pr.get("lang") or "en").upper()
+        value = f"{set_code}::{cn}::{lang}"
+        if value in seen_values:
+            continue
+        seen_values.add(value)
+        imgs = _image_from_print(pr)
+        options.append(
+            {
+                "value": value,
+                "set": set_code,
+                "set_name": pr.get("set_name") or (set_name_for_code(set_code.lower()) if set_code else ""),
+                "collector_number": cn,
+                "lang": lang,
+                "finishes": pr.get("finishes") or [],
+                "promo_types": pr.get("promo_types") or [],
+                "oracle_id": pr.get("oracle_id") or oracle_id,
+                "image": imgs.get("normal") or imgs.get("large") or imgs.get("small"),
+            }
+        )
+
+    if not options:
+        options.append(
+            {
+                "value": current_value,
+                "set": (card.set_code or "").upper(),
+                "set_name": set_name_for_code((card.set_code or "").lower()) if card.set_code else "",
+                "collector_number": card.collector_number or "",
+                "lang": (card.lang or "en").upper(),
+                "finishes": ["foil" if card.is_foil else "nonfoil"],
+                "promo_types": [],
+                "oracle_id": oracle_id or card.oracle_id,
+                "image": None,
+            }
+        )
+
+    current_finish = "foil" if card.is_foil else "nonfoil"
+    current_finishes: list[str] = []
+    for opt in options:
+        if opt["value"] == current_value:
+            current_finishes = opt.get("finishes") or []
+            break
+    if not current_finishes and options:
+        current_finishes = options[0].get("finishes") or []
+
+    return jsonify(
+        {
+            "options": options,
+            "current": current_value,
+            "finishes": current_finishes,
+            "current_finish": current_finish,
+        }
+    )
+
+
+@views.post("/api/card/<int:card_id>/update-printing")
+@login_required
+def api_update_card_printing(card_id: int):
+    """Change a card's printing (set/collector/lang/finish), merging quantities when needed."""
+    card = Card.query.get_or_404(card_id)
+    ensure_folder_access(card.folder, write=True)
+
+    payload = request.get_json(silent=True) or {}
+    printing_raw = (payload.get("printing") or payload.get("printing_value") or request.form.get("printing") or "").strip()
+    finish_raw = (payload.get("finish") or request.form.get("finish") or "").strip().lower()
+    qty_raw = payload.get("quantity") or request.form.get("quantity")
+
+    if not printing_raw or "::" not in printing_raw:
+        return jsonify({"success": False, "message": "Choose a printing to update."}), 400
+
+    parts = printing_raw.split("::")
+    while len(parts) < 3:
+        parts.append("")
+    set_code, collector_number, lang = parts[0].strip(), parts[1].strip(), (parts[2] or "en").strip()
+
+    try:
+        target_qty = int(qty_raw)
+    except (TypeError, ValueError):
+        target_qty = 1
+    target_qty = max(1, min(target_qty, card.quantity or 1))
+
+    ensure_cache_loaded()
+    pr = None
+    oracle_id = card.oracle_id
+    if not oracle_id:
+        try:
+            oracle_id = unique_oracle_by_name(card.name)
+        except Exception:
+            oracle_id = None
+
+    try:
+        if oracle_id:
+            for candidate in prints_for_oracle(oracle_id) or []:
+                matches_set = (candidate.get("set") or "").lower() == set_code.lower()
+                matches_cn = str(candidate.get("collector_number") or "").lower() == str(collector_number).lower()
+                matches_lang = (candidate.get("lang") or "en").lower() == lang.lower()
+                if matches_set and matches_cn and matches_lang:
+                    pr = candidate
+                    break
+    except Exception:
+        pr = None
+
+    if pr is None:
+        try:
+            pr = find_by_set_cn(set_code, collector_number, card.name)
+        except Exception:
+            pr = None
+
+    new_name = (pr or {}).get("name") or card.name
+    new_oracle = (pr or {}).get("oracle_id") or oracle_id or card.oracle_id
+    new_type_line = (pr or {}).get("type_line") or card.type_line
+    new_rarity = (pr or {}).get("rarity") or card.rarity
+    finish_flag = finish_raw or ("foil" if card.is_foil else "nonfoil")
+    is_foil = finish_flag in {"foil", "etched", "glossy", "gilded"}
+
+    lang = (lang or "en").lower()
+    set_code = (set_code or "").upper()
+    collector_number = str(collector_number or "")
+
+    merge_target = (
+        Card.query.filter(
+            Card.id != card.id,
+            Card.folder_id == card.folder_id,
+            func.lower(Card.name) == func.lower(new_name or card.name),
+            Card.set_code == set_code,
+            Card.collector_number == collector_number,
+            Card.lang == lang,
+            Card.is_foil == is_foil,
+            Card.is_proxy == card.is_proxy,
+        )
+        .order_by(Card.id.asc())
+        .first()
+    )
+
+    remaining = (card.quantity or 0) - target_qty
+    if remaining <= 0:
+        if merge_target:
+            merge_target.quantity = (merge_target.quantity or 0) + target_qty
+            db.session.delete(card)
+        else:
+            card.name = new_name
+            card.oracle_id = new_oracle
+            card.set_code = set_code
+            card.collector_number = collector_number
+            card.lang = lang
+            card.is_foil = is_foil
+            card.type_line = new_type_line
+            card.rarity = new_rarity
+    else:
+        card.quantity = remaining
+        if merge_target:
+            merge_target.quantity = (merge_target.quantity or 0) + target_qty
+        else:
+            updated = Card(
+                name=new_name,
+                set_code=set_code,
+                collector_number=collector_number,
+                folder_id=card.folder_id,
+                quantity=target_qty,
+                oracle_id=new_oracle,
+                lang=lang,
+                is_foil=is_foil,
+                is_proxy=card.is_proxy,
+                type_line=new_type_line,
+                rarity=new_rarity,
+                color_identity_mask=card.color_identity_mask,
+            )
+            db.session.add(updated)
+
+    _safe_commit()
+    record_audit_event(
+        "card_update_printing",
+        {"card_id": card_id, "target": printing_raw, "qty": target_qty, "finish": finish_flag},
+    )
+    return jsonify({"success": True, "message": "Printing updated."})
 
 
 @views.route("/collection")
@@ -2831,6 +3121,8 @@ __all__ = [
     "create_proxy_deck",
     "create_proxy_deck_bulk",
     "bulk_move_cards",
+    "api_card_printing_options",
+    "api_update_card_printing",
     "api_deck_analysis",
     "deck_synergy_playground",
     "api_fetch_proxy_deck",
