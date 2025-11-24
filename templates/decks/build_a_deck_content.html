@@ -18,25 +18,82 @@
   }
   .build-role-card {
     cursor: pointer;
-    background: rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: .85rem;
-    box-shadow: none;
-    transition: transform .18s var(--dv-ease-soft), border-color .18s var(--dv-ease-soft), background-color .18s var(--dv-ease-soft);
+    position: relative;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(var(--bs-primary-rgb), .22), transparent 42%),
+      radial-gradient(circle at 85% 0%, rgba(45, 212, 191, .18), transparent 36%),
+      rgba(10, 17, 32, .82);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 1rem;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, .3);
+    transition: transform .16s var(--dv-ease-soft), border-color .16s var(--dv-ease-soft), box-shadow .16s var(--dv-ease-soft), background .16s var(--dv-ease-soft);
   }
   .build-role-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(99, 102, 241, 0.4);
-    background: rgba(99, 102, 241, 0.16);
+    transform: translateY(-6px);
+    border-color: rgba(var(--bs-primary-rgb), .6);
+    box-shadow: 0 18px 44px rgba(13, 110, 253, .22);
   }
   .build-role-card.active {
-    border-color: rgba(var(--bs-primary-rgb), .6);
-    background: rgba(var(--bs-primary-rgb), .18);
-    box-shadow: none;
+    border-color: rgba(var(--bs-primary-rgb), .9);
+    box-shadow: 0 20px 48px rgba(var(--bs-primary-rgb), .28);
+    background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .22), rgba(10, 17, 32, .9));
   }
   .build-role-card:focus-visible {
     outline: 2px solid rgba(var(--bs-primary-rgb), .8);
     outline-offset: 3px;
+  }
+  .build-role-card .role-header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:.75rem;
+  }
+  .build-role-avatar{
+    width:46px;
+    height:46px;
+    border-radius:50%;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:700;
+    letter-spacing:.02em;
+    color:#fff;
+    background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .5), rgba(45, 212, 191, .35));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+  }
+  .build-role-meta{
+    display:flex;
+    flex-direction:column;
+    gap:.15rem;
+    min-width:0;
+  }
+  .build-role-title{
+    font-weight:700;
+    letter-spacing:.01em;
+  }
+  .build-role-sub{
+    font-size:.8rem;
+    color:var(--bs-secondary-color);
+  }
+  .role-count-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+    padding:.3rem .8rem;
+    border-radius:.9rem;
+    background:rgba(var(--bs-primary-rgb), .14);
+    color:#fff;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+    box-shadow: inset 0 0 0 1px rgba(var(--bs-primary-rgb), .35);
+  }
+  .role-count-chip .role-count-label{
+    color:rgba(255,255,255,.8);
+    font-size:.8rem;
+  }
+  .build-role-cta{
+    color:var(--bs-secondary-color);
+    font-size:.9rem;
   }
   .build-role-detail-card .list-group-item {
     padding: .75rem 0;
@@ -1356,6 +1413,12 @@
               <div class="row g-3 build-role-grid">
                 {% for role in role_summaries %}
                   {% set role_key_attr = role.normalized_key or role.key or ('role-' ~ loop.index0) %}
+                  {% set role_label_clean = (role.label or '').strip() %}
+                  {% set role_parts = role_label_clean.split() %}
+                  {% set role_first = role_parts[0] if role_parts|length > 0 else '' %}
+                  {% set role_second = role_parts[1] if role_parts|length > 1 else '' %}
+                  {% set role_initials = (role_first[:1] ~ role_second[:1])|upper %}
+                  {% if not role_initials %}{% set role_initials = 'R' %}{% endif %}
                   <div class="col-md-6 col-lg-3">
                     <div class="border rounded p-3 h-100 build-role-card hover-lift card-hover-shadow"
                          data-role-key="{{ role_key_attr }}"
@@ -1363,11 +1426,22 @@
                          role="button"
                          tabindex="0"
                          aria-pressed="false">
-                      <div class="text-muted small text-uppercase mb-1">{{ role.label }}</div>
-                      <div class="display-6 fw-semibold mb-1">{{ role.current }}</div>
-                        <div class="text-muted small mb-2">
-                          cards tagged
+                      <div class="role-header mb-3">
+                        <div class="d-flex align-items-center gap-3">
+                          <div class="build-role-avatar">{{ role_initials }}</div>
+                          <div class="build-role-meta">
+                            <div class="build-role-title text-truncate">{{ role.label }}</div>
+                            <div class="build-role-sub">Core role</div>
+                          </div>
                         </div>
+                        <div class="role-count-chip">
+                          {{ role.current }}
+                          <span class="role-count-label">cards</span>
+                        </div>
+                      </div>
+                      <div class="build-role-cta">
+                        Click to see the cards filling this role.
+                      </div>
                     </div>
                   </div>
                 {% endfor %}

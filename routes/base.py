@@ -288,7 +288,8 @@ def _lookup_print_data(set_code, collector_number, name, oracle_id) -> dict:
 def _cards_fingerprint(cards: list[Card]) -> str:
     """Build a deterministic signature for a set of cards."""
     parts: list[str] = []
-    for card in sorted(cards, key=lambda c: getattr(card, "id", 0) or 0):
+    # Sort by id to ensure deterministic ordering before fingerprinting
+    for card in sorted(cards, key=lambda c: getattr(c, "id", 0) or 0):
         parts.append(
             "|".join(
                 [

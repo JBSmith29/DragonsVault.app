@@ -586,6 +586,16 @@
   .btn-plain{ background:transparent; border:0; padding:.25rem; line-height:1; }
   .btn-plain:focus{ box-shadow:none; }
   .btn-plain:hover{ background:rgba(255,255,255,.06); border-radius:.5rem; }
+  .tap-toggle{
+    background:transparent !important;
+    border:0;
+    color:inherit;
+    box-shadow:none;
+  }
+  .tap-toggle:hover{
+    background:rgba(255,255,255,.05) !important;
+    border:0;
+  }
   .tap-toggle img{ height:1.15rem; vertical-align:text-bottom; opacity:.9; }
 
   .token-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.5rem}
@@ -1573,14 +1583,16 @@
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
           <button id="tokensToggle"
-                  class="btn btn-sm btn-plain tap-toggle collapsed"
+                  class="btn btn-sm btn-plain tap-toggle d-inline-flex align-items-center gap-2 collapsed"
                   type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#deckTokensCollapse"
                   aria-expanded="false"
                   aria-controls="deckTokensCollapse"
                   title="Expand/Collapse">
             <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
+            <span class="fw-semibold">Tokens</span>
           </button>
-          <strong class="mb-0">Tokens</strong>
         </div>
       </div>
 
@@ -2109,23 +2121,7 @@
     });
   });
 
-  // Tokens collapse
-  const pane = document.getElementById('deckTokensCollapse');
-  const btn  = document.getElementById('tokensToggle');
-  if (pane && btn && typeof bootstrap !== 'undefined') {
-    const coll = new bootstrap.Collapse(pane, { toggle: false });
-    btn.addEventListener('click', () => {
-      if (pane.classList.contains('show')) { coll.hide(); } else { coll.show(); }
-    });
-    pane.addEventListener('shown.bs.collapse', () => {
-      btn.classList.remove('collapsed');
-      btn.setAttribute('aria-expanded', 'true');
-    });
-    pane.addEventListener('hidden.bs.collapse', () => {
-      btn.classList.add('collapsed');
-      btn.setAttribute('aria-expanded', 'false');
-    });
-  }
+  // Tokens collapse handled by Bootstrap data API
 
   // Export CSV for this folder (supports multiple formats)
   const exportButtons = document.querySelectorAll('[data-export-format]');
