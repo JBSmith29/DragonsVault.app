@@ -19,7 +19,7 @@ from extensions import cache, db, limiter
 from models import Card, Folder, FolderShare, User
 from services import scryfall_cache as sc
 from services.deck_synergy import analyze_deck
-from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
+from services.proxy_decks import fetch_archidekt_deck, fetch_goldfish_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
 from services.deck_tags import DECK_TAG_GROUPS, TAG_CATEGORY_MAP
@@ -734,7 +734,14 @@ def create_proxy_deck():
 
     fetched_errors: list[str] = []
     if deck_url:
-        fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_goldfish_deck(deck_url)
+        fetched_name = fetched_owner = fetched_commander = None
+        fetched_lines: list[str] = []
+        errors: list[str] = []
+
+        # Try Archidekt first, then fall back to MTGGoldfish
+        fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_archidekt_deck(deck_url)
+        if errors:
+            fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_goldfish_deck(deck_url)
         fetched_errors.extend(errors)
         if fetched_lines:
             decklist_text = decklist_text or "\n".join(fetched_lines)
