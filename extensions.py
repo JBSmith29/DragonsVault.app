@@ -20,6 +20,7 @@ from flask_caching import Cache
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 try:
     from flask_limiter import Limiter  # type: ignore
     from flask_limiter.util import get_remote_address  # type: ignore
@@ -45,6 +46,7 @@ metadata = MetaData(naming_convention=NAMING_CONVENTION)
 # Core extensions (initialized in app factory)
 db: SQLAlchemy = SQLAlchemy(metadata=metadata)
 migrate: Migrate = Migrate()
+csrf: CSRFProtect = CSRFProtect()
 
 # Lightweight in-memory cache (you can swap to Redis/Memcached later via env)
 cache: Cache = Cache(config={
@@ -54,4 +56,4 @@ cache: Cache = Cache(config={
 limiter = Limiter(key_func=get_remote_address) if _limiter_available else None
 login_manager: LoginManager = LoginManager()
 
-__all__ = ["db", "migrate", "cache", "limiter", "login_manager", "NAMING_CONVENTION", "metadata"]
+__all__ = ["db", "migrate", "cache", "csrf", "limiter", "login_manager", "NAMING_CONVENTION", "metadata", "generate_csrf"]

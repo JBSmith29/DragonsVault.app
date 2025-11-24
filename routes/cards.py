@@ -15,7 +15,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import load_only, selectinload
 
-from extensions import cache, db
+from extensions import cache, db, limiter
 from models import Card, Folder, FolderShare, User
 from services import scryfall_cache as sc
 from services.deck_synergy import analyze_deck
@@ -25,6 +25,7 @@ from services.commander_cache import compute_bracket_signature, get_cached_brack
 from services.deck_tags import DECK_TAG_GROUPS, TAG_CATEGORY_MAP
 from services.scryfall_cache import (
     cache_epoch,
+    cache_ready,
     ensure_cache_loaded,
     find_by_set_cn,
     prints_for_oracle,
@@ -53,10 +54,15 @@ from .base import (
     _safe_commit,
     color_identity_name,
     compute_folder_color_identity,
+    limiter_key_user_or_ip,
     views,
 )
 
 HAND_SIZE = 7
+
+# Cheap readiness check before touching the Scryfall cache on hot paths
+def _ensure_cache_ready() -> bool:
+    return cache_ready() or ensure_cache_loaded()
 
 RARITY_CHOICE_ORDER: List[tuple[str, str]] = [
     ("common", "Common"),
@@ -198,7 +204,7 @@ def _commander_card_payload(name: Optional[str], oracle_id: Optional[str]) -> Op
     if not resolved_name and not resolved_oid:
         return None
 
-    ensure_cache_loaded()
+    _ensure_cache_ready()
 
     pr = None
     if resolved_oid:
@@ -272,7 +278,7 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
     if not folder:
         return None, [], ["Deck not found."], []
 
-    ensure_cache_loaded()
+    _ensure_cache_ready()
 
     commander_oracle_ids, commander_names = _gather_commander_filters(folder)
 
@@ -356,7 +362,7 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
 def _deck_entries_from_list(
     raw_list: str, commander_hint: Optional[str] = None
 ) -> tuple[str, list[dict], list[str], list[dict]]:
-    ensure_cache_loaded()
+    _ensure_cache_ready()
     parsed = _parse_pasted_decklist(raw_list)
     entries: list[dict] = []
     warnings: list[str] = []
@@ -627,7 +633,8 @@ def _commander_thumbnail_payload(
     small = large = None
     alt = ""
     try:
-        ensure_cache_loaded(force=False)
+        if not cache_ready():
+            ensure_cache_loaded(force=False)
     except Exception:
         pass
     resolved_oid = primary_commander_oracle_id(target_oracle_id) if target_oracle_id else None
@@ -712,6 +719,8 @@ def _owner_names(decks: list[dict]) -> list[str]:
 
 
 @views.post("/decks/proxy")
+@limiter.limit("6 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("30 per hour", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 def create_proxy_deck():
     deck_name = (request.form.get("deck_name") or "").strip()
     owner = (request.form.get("deck_owner") or "").strip() or None
@@ -832,6 +841,8 @@ def create_proxy_deck():
 
 
 @views.post("/decks/proxy/bulk")
+@limiter.limit("3 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("15 per hour", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 def create_proxy_deck_bulk():
     raw_urls = (request.form.get("deck_urls") or "").strip()
     if not raw_urls:
@@ -902,6 +913,8 @@ def create_proxy_deck_bulk():
 
 
 @views.post("/api/decks/proxy/fetch")
+@limiter.limit("10 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("50 per hour", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 def api_fetch_proxy_deck():
     payload = request.get_json(silent=True) or {}
     deck_url = (payload.get("deck_url") or request.form.get("deck_url") or "").strip()
@@ -927,7 +940,7 @@ def api_fetch_proxy_deck():
 
 
 def _deck_drawer_summary(folder: Folder) -> dict:
-    ensure_cache_loaded()
+    _ensure_cache_ready()
 
     cards = (
         db.session.query(
@@ -1199,7 +1212,7 @@ def _apply_cache_type_color_filters(base_query, selected_types, selected_colors,
     if not use_types and not use_colors:
         return base_query
 
-    have_cache = ensure_cache_loaded()
+    have_cache = _ensure_cache_ready()
     if not have_cache:
         return base_query
 
@@ -1523,7 +1536,8 @@ def list_cards():
     )
 
     # Build template display maps via cache
-    sc.ensure_cache_loaded()
+    if not sc.cache_ready():
+        sc.ensure_cache_loaded()
     image_map, display_name_map, type_line_map, rarity_map = {}, {}, {}, {}
     color_identity_map = {}
     type_map = {}
@@ -1859,7 +1873,7 @@ def api_card_printing_options(card_id: int):
     """Return cached printings for a card so the UI can populate dropdowns."""
     card = Card.query.get_or_404(card_id)
     ensure_folder_access(card.folder, write=True)
-    ensure_cache_loaded()
+    _ensure_cache_ready()
 
     oracle_id = card.oracle_id
     if not oracle_id:
@@ -1969,7 +1983,7 @@ def api_update_card_printing(card_id: int):
         target_qty = 1
     target_qty = max(1, min(target_qty, card.quantity or 1))
 
-    ensure_cache_loaded()
+    _ensure_cache_ready()
     pr = None
     oracle_id = card.oracle_id
     if not oracle_id:
@@ -2123,7 +2137,7 @@ def collection_overview():
         else:
             item.update({"id": None, "rows": 0, "qty": 0})
 
-    have_cache = ensure_cache_loaded()
+    have_cache = _ensure_cache_ready()
     sets_with_names = [
         (scd or "", (set_name_for_code(scd) if have_cache else None), int(qty)) for scd, qty in by_set if scd
     ]
@@ -2268,7 +2282,7 @@ def decks_overview():
 
     deck_bracket_map: dict[int, dict] = {}
     if deck_ids:
-        ensure_cache_loaded()
+        _ensure_cache_ready()
         epoch = cache_epoch() + BRACKET_RULESET_EPOCH + spellbook_dataset_epoch()
 
         def _joined_oracle_text(pr: dict | None) -> str:
@@ -2366,7 +2380,8 @@ def decks_overview():
 
     # same symbols pipeline as elsewhere
     ensure_symbols_cache(force=False)
-    sc.ensure_cache_loaded()
+    if not sc.cache_ready():
+        sc.ensure_cache_loaded()
     thumbnail_epoch = cache_epoch()
     deck_ci_letters = {}
     deck_ci_name = {}
@@ -2542,7 +2557,7 @@ def deck_tokens_overview():
             cache_epoch=cache_epoch(),
         )
 
-    have_cache = ensure_cache_loaded()
+    have_cache = _ensure_cache_ready()
     card_rows = (
         db.session.query(
             Card.id,
@@ -3163,7 +3178,7 @@ def _rarity_options() -> List[Dict[str, str]]:
 
 
 def _set_options_with_names(codes: Iterable[str]) -> List[Dict[str, str]]:
-    ensure_cache_loaded()
+    _ensure_cache_ready()
     options: List[Dict[str, str]] = []
     seen: Set[str] = set()
     for code in codes or []:

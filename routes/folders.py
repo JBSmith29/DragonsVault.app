@@ -15,10 +15,10 @@ from flask_login import login_required, current_user
 from sqlalchemy import case, func
 from sqlalchemy.orm import load_only
 
-from extensions import cache, db
+from extensions import cache, db, limiter
 from models import Card, Folder, FolderShare, User
 from services import scryfall_cache as sc
-from services.scryfall_cache import cache_epoch, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
+from services.scryfall_cache import cache_epoch, cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
 from services.commander_utils import (
     CommanderSlot,
@@ -56,6 +56,7 @@ from .base import (
     _prices_for_print,
     _safe_commit,
     compute_folder_color_identity,
+    limiter_key_user_or_ip,
     views,
 )
 
@@ -378,7 +379,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         .one()
     )
 
-    have_cache = ensure_cache_loaded()
+    have_cache = cache_ready() or ensure_cache_loaded()
 
     BASE_TYPES = ["Artifact", "Battle", "Creature", "Enchantment", "Instant", "Land", "Planeswalker", "Sorcery"]
 
@@ -714,13 +715,15 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             if folder.id:
                 store_cached_bracket(folder.id, signature, epoch_val, commander_ctx)
 
-    sc.ensure_cache_loaded()
+    if not sc.cache_ready():
+        sc.ensure_cache_loaded()
     image_map, display_name_map, type_line_map, rarity_map, color_icons_map = {}, {}, {}, {}, {}
     cmc_map = {}
     cmc_bucket_map: Dict[int, str] = {}
     color_letters_map = {}
     total_value_usd = 0.0
-    print_map = _bulk_print_lookup(deck_cards)
+    cache_key = f"folder:{folder.id}" if getattr(folder, "id", None) else None
+    print_map = _bulk_print_lookup(deck_cards, cache_key=cache_key, epoch=cache_epoch())
 
     commander_media: Optional[Dict[str, Any]] = None
 
@@ -967,12 +970,14 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
 
 
 @views.get("/commander-brackets")
+@limiter.limit("30 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 def commander_brackets_info():
     focus_level = request.args.get("focus", type=int)
     if focus_level not in BRACKET_REFERENCE_BY_LEVEL:
         focus_level = None
 
-    ensure_cache_loaded()
+    if not cache_ready():
+        ensure_cache_loaded()
     epoch = cache_epoch()
     game_changers = [dict(_commander_card_snapshot(name, epoch)) for name in sorted(GAME_CHANGERS)]
     mass_land_cards = [dict(_commander_card_snapshot(name, epoch)) for name in _MASS_LAND_FEATURED]
@@ -1591,6 +1596,7 @@ def clear_commander(folder_id):
 
 
 @views.route("/folders/<int:folder_id>/sharing", methods=["GET", "POST"])
+@limiter.limit("30 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def folder_sharing(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)

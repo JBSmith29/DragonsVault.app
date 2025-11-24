@@ -136,7 +136,7 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 - **Create users**  run `docker compose exec web flask users create USERNAME EMAIL --admin` (or use the Admin ? Create User form). Usernames must be unique and logins accept either email or username; passwords are prompted interactively.
 - **Sign in**  visit `/login` to access Import/Admin links plus the account menu.
 - **Generate tokens**  use the `/account/api-token` page or `docker compose exec web flask users token you@example.com` to print a new Bearer token (shown once).
-- **Use tokens**  add `Authorization: Bearer <token>` (or `?api_token=...`) when calling protected endpoints from scripts/CI pipelines.
+- **Use tokens**  add `Authorization: Bearer <token>` when calling protected endpoints from scripts/CI pipelines (query params are rejected).
 - **Audit trail**  logins, admin actions, imports, and token rotations are stored in `audit_logs` for traceability.
 
 ## ?? Command Reference
@@ -225,7 +225,6 @@ DragonsVault/
 ## ?? License
 
 This project is released under the [Unlicense](https://unlicense.org/), which dedicates it to the public domain. Card data and imagery are provided courtesy of [Scryfall](https://scryfall.com/) and remain  Wizards of the Coast.
-
 
 
 

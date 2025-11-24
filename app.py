@@ -28,7 +28,7 @@ from sqlalchemy.orm import with_loader_criteria
 from dotenv import load_dotenv; load_dotenv()
 
 from config import Config, INSTANCE_DIR as CONFIG_INSTANCE_DIR
-from extensions import db, migrate, cache, limiter, login_manager
+from extensions import db, migrate, cache, csrf, limiter, login_manager, generate_csrf
 from flask_login import current_user
 
 # Scryfall helpers
@@ -132,7 +132,7 @@ def _configure_login_manager(app: Flask) -> None:
         auth_header = req.headers.get("Authorization", "")
         if auth_header.lower().startswith("bearer "):
             return auth_header.split(" ", 1)[1].strip()
-        return req.args.get("api_token")
+        return None
 
     @login_manager.user_loader
     def _load_user(user_id: str):
@@ -562,7 +562,22 @@ def create_app():
     _safe_init_migrate(app)
     _safe_init_cache(app)
     _configure_login_manager(app)
+    csrf.init_app(app)
+    app.jinja_env.globals["csrf_token"] = generate_csrf
     Compress(app)
+
+    @app.before_request
+    def _reject_querystring_api_token():
+        if "api_token" not in request.args:
+            return
+        detail = "API tokens must be sent using the Authorization: Bearer header; query parameters are not accepted."
+        wants_json = request.path.startswith("/api/") or request.headers.get("HX-Request") or (
+            request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
+        )
+        payload = {"error": "api_token_query_not_supported", "detail": detail}
+        if wants_json:
+            return jsonify(payload), 400
+        return detail, 400
 
     public_endpoints = {
         "views.landing_page",

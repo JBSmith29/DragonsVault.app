@@ -37,6 +37,7 @@ from services.edhrec import (
 from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from services.authz import require_admin
 from services.audit import record_audit_event
+from .base import limiter_key_user_or_ip
 from .auth import MIN_PASSWORD_LENGTH
 from .base import DEFAULT_COLLECTION_FOLDERS, _safe_commit, views
 
@@ -471,18 +472,22 @@ def _handle_delete_user(target_endpoint: str):
 
 
 @views.route("/admin/folder-categories", methods=["GET", "POST"])
+@limiter.limit("20 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def admin_folder_categories():
     return _folder_categories_page(admin_mode=True)
 
 
 @views.route("/account/folders", methods=["GET", "POST"])
+@limiter.limit("20 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def manage_folder_preferences():
     return _folder_categories_page(admin_mode=False)
 
 
 @views.route("/admin", methods=["GET", "POST"])
+@limiter.limit("8 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("30 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @limiter.limit("15 per minute", methods=["POST"]) if limiter else (lambda f: f)
 @login_required
 def admin_console():
@@ -1103,4 +1108,3 @@ def legacy_imports_ws():
 
 
 __all__ = ["admin_console", "admin_folder_categories", "admin_manage_users", "admin_requests"]
-

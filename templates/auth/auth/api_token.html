@@ -11,6 +11,9 @@
           Use API tokens for CLI scripts or automation that needs to hit protected endpoints like <code>/import</code> or <code>/admin</code>.
           Tokens act as passwords&mdash;store them securely and rotate them if leaked.
         </p>
+        <p class="text-muted mb-4">
+          Send tokens via the <code>Authorization: Bearer &lt;token&gt;</code> header; querystring tokens are rejected for safety.
+        </p>
 
         {% if issued_token %}
           <div class="alert alert-warning">

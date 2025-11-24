@@ -1,3 +1,4 @@
+Flask-WTF==1.2.1
 pytest
 ruff
 coverage

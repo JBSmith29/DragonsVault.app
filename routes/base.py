@@ -9,18 +9,23 @@ import time
 import unicodedata
 
 from flask import Blueprint, current_app, redirect, render_template, request, url_for, flash
+from flask_login import current_user
+try:
+    from flask_limiter.util import get_remote_address  # type: ignore
+except Exception:  # pragma: no cover
+    get_remote_address = None  # type: ignore
 from sqlalchemy import Integer, case, cast, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import load_only
 
-from extensions import db
+from extensions import cache, db
 from models import Card, Folder, SiteRequest
 from services import scryfall_cache as sc
 from services.pricing import (
     format_price_text as _format_price_text,
     prices_for_print as _prices_for_print,
 )
-from services.scryfall_cache import ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
+from services.scryfall_cache import cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
 
 views = Blueprint("views", __name__)
 
@@ -33,6 +38,21 @@ DEFAULT_COLLECTION_FOLDERS = {"lands", "common", "uncommon", "rare", "mythic", "
 ALLOWED_WISHLIST_STATUSES = {"open", "to_fetch", "ordered", "acquired", "removed"}
 
 _NO_VALUE = object()
+
+
+def limiter_key_user_or_ip() -> str:
+    """Use the authenticated user id when present; otherwise fall back to IP."""
+    user_id = getattr(current_user, "id", None) or current_user.get_id()
+    if user_id:
+        return f"user:{user_id}"
+    addr = None
+    if get_remote_address:
+        try:
+            addr = get_remote_address()
+        except Exception:
+            addr = None
+    addr = addr or request.remote_addr or "unknown"
+    return f"ip:{addr}"
 
 
 # ---------------------------------------------------------------------------
@@ -265,8 +285,35 @@ def _lookup_print_data(set_code, collector_number, name, oracle_id) -> dict:
     return pr or {}
 
 
-def _bulk_print_lookup(cards: list[Card]) -> dict[int, dict]:
+def _cards_fingerprint(cards: list[Card]) -> str:
+    """Build a deterministic signature for a set of cards."""
+    parts: list[str] = []
+    for card in sorted(cards, key=lambda c: getattr(card, "id", 0) or 0):
+        parts.append(
+            "|".join(
+                [
+                    str(getattr(card, "id", "")),
+                    str(getattr(card, "set_code", "")).lower(),
+                    str(getattr(card, "collector_number", "")).lower(),
+                    str(getattr(card, "oracle_id", "")).lower(),
+                    str(getattr(card, "lang", "")).lower(),
+                    "1" if getattr(card, "is_foil", False) else "0",
+                ]
+            )
+        )
+    return ";".join(parts)
+
+
+def _bulk_print_lookup(cards: list[Card], *, cache_key: str | None = None, epoch: int | None = None) -> dict[int, dict]:
     """Resolve Scryfall print metadata for all cards, reusing cache entries."""
+    use_cache = bool(cache_key and cache)
+    cached_key = None
+    if use_cache:
+        cached_key = f"prints:{cache_key}:{epoch or ''}:{_cards_fingerprint(cards)}"
+        cached = cache.get(cached_key)
+        if isinstance(cached, dict):
+            return cached
+
     out: dict[int, dict] = {}
     for card in cards:
         out[card.id] = _lookup_print_data(
@@ -275,6 +322,11 @@ def _bulk_print_lookup(cards: list[Card]) -> dict[int, dict]:
             getattr(card, "name", None),
             getattr(card, "oracle_id", None),
         )
+    if use_cache and cached_key:
+        try:
+            cache.set(cached_key, out, timeout=600)
+        except Exception:
+            pass
     return out
 
 
@@ -359,7 +411,8 @@ def _commander_candidates_for_folder(folder_id: int, limit: int = 60):
     Likely commander candidates for a folder:
     Legendary permanents, enriched with image + print info.
     """
-    sc.ensure_cache_loaded()
+    if not sc.cache_ready():
+        sc.ensure_cache_loaded()
     qs = (
         Card.query.filter(Card.folder_id == folder_id)
         .options(
@@ -528,7 +581,7 @@ def compute_folder_color_identity(folder_id: int):
     Return (letters, label) for the folder's color identity using Scryfall cache.
     letters: e.g., "WUG" or "" (colorless). label: friendly name.
     """
-    have_cache = ensure_cache_loaded()
+    have_cache = cache_ready() or ensure_cache_loaded()
     rows = (
         db.session.query(Card.set_code, Card.collector_number, Card.name, Card.oracle_id)
         .filter(Card.folder_id == folder_id)

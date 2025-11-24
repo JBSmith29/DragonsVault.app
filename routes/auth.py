@@ -13,7 +13,7 @@ from extensions import db, limiter
 from models import User
 from services.audit import record_audit_event
 
-from .base import views
+from .base import views, limiter_key_user_or_ip
 
 MIN_PASSWORD_LENGTH = 8
 MAX_USERNAME_LENGTH = 80
@@ -148,6 +148,8 @@ def register():
 
 
 @views.route("/account/api-token", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("20 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def manage_api_token():
     issued_token = None

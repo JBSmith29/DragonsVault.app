@@ -27,7 +27,7 @@ from services.scryfall_cache import (
 
 from werkzeug.utils import secure_filename
 
-from .base import _collector_number_numeric, _move_folder_choices, _name_sort_expr, views
+from .base import _collector_number_numeric, _move_folder_choices, _name_sort_expr, limiter_key_user_or_ip, views
 
 ALLOWED_IMPORT_EXTS = {".csv", ".xlsx", ".xls"}
 MAX_IMPORT_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
@@ -220,6 +220,7 @@ def _export_context() -> dict:
 
 @views.route("/import", methods=["GET", "POST"])
 @limiter.limit("5 per minute", methods=["POST"]) if limiter else (lambda f: f)
+@limiter.limit("20 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def import_csv():
     """Upload route that powers CSV/XLS collection imports and dry-run previews."""

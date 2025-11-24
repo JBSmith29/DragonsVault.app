@@ -122,6 +122,11 @@ def ensure_cache_loaded(path: str | None = None, force: bool = False) -> bool:
     _cache_loaded = bool(ok and _cache)
     return _cache_loaded
 
+
+def cache_ready() -> bool:
+    """Fast check: is the in-memory default_cards cache already available?"""
+    return bool(_cache_loaded and _cache)
+
 # -----------------------------------------------------------------------------
 # Paths & helpers
 # -----------------------------------------------------------------------------

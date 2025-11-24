@@ -13,11 +13,11 @@ from flask_login import current_user, login_required
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
-from extensions import db
+from extensions import db, limiter
 from models import Card, Folder
 from services.deck_synergy import analyze_deck
 from services.deck_tags import DECK_TAG_GROUPS
-from services.scryfall_cache import ensure_cache_loaded, prints_for_oracle, unique_oracle_by_name
+from services.scryfall_cache import cache_ready, ensure_cache_loaded, prints_for_oracle, unique_oracle_by_name
 from services.commander_utils import primary_commander_oracle_id, split_commander_oracle_ids
 
 from .base import (
@@ -26,9 +26,12 @@ from .base import (
     views,
     color_identity_name,
     compute_folder_color_identity,
+    limiter_key_user_or_ip,
 )
 
 _FALLBACK_SET_CODE = "CSTM"
+
+build_post_limit = limiter.limit("60 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 
 
 def _folder_name_exists(name: str, *, exclude_id: Optional[int] = None) -> bool:
@@ -92,7 +95,8 @@ def _parse_bulk_card_lines(text: str) -> List[tuple[str, int]]:
 
 
 def _resolve_card_payload_exact(card_name: str, *, original_name: str) -> Dict[str, Any]:
-    ensure_cache_loaded()
+    if not cache_ready():
+        ensure_cache_loaded()
 
     oracle_id: Optional[str] = None
     try:
@@ -389,6 +393,7 @@ def _start_new_build() -> Any:
 
 
 @views.route("/build-a-deck", methods=["GET", "POST"])
+@build_post_limit
 def build_a_deck():
     if request.method == "POST":
         return _start_new_build()
@@ -812,6 +817,7 @@ def build_a_deck():
 
 
 @views.post("/build-a-deck/<int:folder_id>/update-commander")
+@build_post_limit
 def build_update_commander(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -845,6 +851,7 @@ def build_update_commander(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/add-card")
+@build_post_limit
 def build_add_card(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -878,6 +885,7 @@ def build_add_card(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/queue-add")
+@build_post_limit
 def build_queue_add_cards(folder_id: int):
     """AJAX endpoint to add a batch of cards without reloading the page."""
     folder = Folder.query.get_or_404(folder_id)
@@ -937,6 +945,7 @@ def build_queue_add_cards(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/bulk-add")
+@build_post_limit
 def build_bulk_add_cards(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -979,6 +988,7 @@ def build_bulk_add_cards(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/remove-card")
+@build_post_limit
 def build_remove_card(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -1009,6 +1019,7 @@ def build_remove_card(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/update-card-quantity")
+@build_post_limit
 def build_update_card_quantity(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -1057,6 +1068,7 @@ def build_update_card_quantity(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/upgrade-plan")
+@build_post_limit
 def build_update_upgrade_plan(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -1098,6 +1110,7 @@ def build_update_upgrade_plan(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/rename")
+@build_post_limit
 def build_rename_deck(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     new_name = (request.form.get("name") or "").strip()
@@ -1117,6 +1130,7 @@ def build_rename_deck(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/set-tag")
+@build_post_limit
 def build_set_tag(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.is_collection:
@@ -1139,6 +1153,7 @@ def build_set_tag(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/promote")
+@build_post_limit
 def build_promote(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     if folder.category == Folder.CATEGORY_DECK:
@@ -1157,6 +1172,7 @@ def build_promote(folder_id: int):
 
 
 @views.post("/build-a-deck/<int:folder_id>/delete")
+@build_post_limit
 def build_delete(folder_id: int):
     folder = Folder.query.get_or_404(folder_id)
     name = folder.name or "Deck"
