@@ -23,11 +23,6 @@
     </div>
   </div>
 
-  <div class="alert alert-warning" role="alert">
-    <strong>Heads up:</strong> Clear &amp; import wipes every card before processing your file.
-    Only use it when the spreadsheet represents your full, current inventory.
-  </div>
-
   {% if manual_seed %}
     <div class="alert alert-info" role="alert">
       Skipped cards from your last import were sent to the Manual Import wizard.
@@ -142,11 +137,23 @@
           </label>
         </div>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-purge" value="purge"
-                 {% if selected_mode == 'purge' %}checked{% endif %}>
+          <input
+            class="form-check-input"
+            type="radio"
+            name="quantity_mode"
+            id="mode-purge"
+            value="purge"
+            {% if selected_mode == 'purge' %}checked{% endif %}
+            data-bs-toggle="collapse"
+            data-bs-target="#purge-warning"
+            aria-controls="purge-warning"
+            aria-expanded="{{ 'true' if selected_mode == 'purge' else 'false' }}"
+          >
           <label class="form-check-label" for="mode-purge">
             Clear then import everything – wipes your current cards first, then loads this file as the new source of truth.
           </label>
+        </div>
+        <div class="collapse {% if selected_mode == 'purge' %}show{% endif %}" id="purge-warning">
           <div class="form-text text-warning">
             Warning: this deletes all existing cards before importing; only use when this file is your complete collection.
           </div>
@@ -173,19 +180,16 @@
         Paste a public MTGGoldfish or Archidekt deck link and we’ll pull the list directly into a new deck folder.
       </p>
       <form class="row gy-3 gx-3 align-items-end" method="post" action="{{ url_for('views.create_proxy_deck') }}">
-        <div class="col-12 col-xl-9">
+        <div class="col-12 col-xl-8">
           <label for="deck_url" class="form-label">Deck URL</label>
           <input type="url" class="form-control" id="deck_url" name="deck_url" placeholder="https://archidekt.com/decks/1234/..." required>
-          <div class="form-text">
-            Supports MTGGoldfish and Archidekt public deck links.
-          </div>
         </div>
-        <div class="col-12 col-xl-2">
+        <div class="col-12 col-xl-3">
           <label for="deck_name" class="form-label">Deck name (optional)</label>
           <input type="text" class="form-control" id="deck_name" name="deck_name" placeholder="Use site name if blank">
         </div>
-        <div class="col-12 col-xl-1 d-grid">
-          <button type="submit" class="btn btn-primary">Import deck</button>
+        <div class="col-12 col-xl-1 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100 h-100 d-flex align-items-center justify-content-center">Import</button>
         </div>
       </form>
     </div>
