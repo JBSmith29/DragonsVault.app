@@ -50,6 +50,13 @@ except Exception:
     pass
 
 
+@click.command("seed-roles")
+def seed_roles():
+    from seeds.seed_roles import seed_roles_and_subroles
+
+    seed_roles_and_subroles()
+
+
 class RequestIdFilter(logging.Filter):
     """Inject request-scoped metadata into log records."""
 

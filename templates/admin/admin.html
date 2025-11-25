@@ -55,23 +55,6 @@
   <div class="card mb-4">
     <div class="card-body d-flex flex-wrap align-items-center gap-3">
       <div>
-        <h5 class="card-title mb-1">Manage Users</h5>
-        <div class="text-muted small mb-0">
-          {{ user_stats.total }} total user{{ '' if user_stats.total == 1 else 's' }},
-          {{ user_stats.admins }} admin{{ '' if user_stats.admins == 1 else 's' }}.
-        </div>
-      </div>
-      <div class="ms-auto">
-        <a class="btn btn-primary" href="{{ url_for('views.admin_manage_users') }}">
-          Open User Manager
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <div class="card mb-4">
-    <div class="card-body d-flex flex-wrap align-items-center gap-3">
-      <div>
         <h5 class="card-title mb-1">Bug &amp; Feature Requests</h5>
         <div class="text-muted small mb-2">
           {{ request_counts.total }} total in the queue.
@@ -86,6 +69,46 @@
         <a class="btn btn-outline-primary" href="{{ url_for('views.admin_requests') }}">
           Review Requests
         </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <h5 class="card-title mb-0">Manage Users</h5>
+            <span class="badge text-bg-secondary">{{ user_stats.total }} users</span>
+            <span class="badge text-bg-primary">{{ user_stats.admins }} admins</span>
+          </div>
+          <div class="text-muted small mb-3">Create, reset, or remove accounts.</div>
+          <a class="btn btn-primary" href="{{ url_for('views.admin_manage_users') }}">
+            Open User Manager
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <h5 class="card-title mb-0">Oracle Role Mapping</h5>
+            <span class="badge text-bg-secondary">Scryfall Defaults</span>
+          </div>
+          <div class="text-muted small mb-3">
+            Refresh and review primary/core/sub-roles for all oracle IDs from the Scryfall default cards dataset.
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{{ url_for('views.admin_oracle_roles') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-primary" type="submit">Refresh Oracle Roles</button>
+            </form>
+            <a class="btn btn-outline-primary" href="{{ url_for('views.admin_oracle_roles') }}">
+              Open Oracle Roles
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -347,8 +370,3 @@
 </div>
 <script src="{{ url_for('static', filename='js/job-monitor.js') }}" defer></script>
 {% endblock %}
-
-
-
-
-

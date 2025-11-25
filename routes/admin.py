@@ -40,6 +40,9 @@ from services.audit import record_audit_event
 from .base import limiter_key_user_or_ip
 from .auth import MIN_PASSWORD_LENGTH
 from .base import DEFAULT_COLLECTION_FOLDERS, _safe_commit, views
+from models.card import Card
+from models.role import Role, SubRole, CardRole, CardSubRole, OracleRole
+from worker.tasks import recompute_oracle_roles
 
 
 def _folder_categories_page(admin_mode: bool):
@@ -967,6 +970,57 @@ def admin_console():
         edhrec=edhrec_stats,
         user_stats=user_context["user_stats"],
         request_counts=request_counts,
+    )
+
+
+@views.route("/admin/card-roles")
+@login_required
+def admin_card_roles():
+    require_admin()
+    q = request.args.get("q") or ""
+    query = Card.query
+    if q:
+        query = query.filter(Card.name.ilike(f"%{q}%"))
+    cards = query.order_by(Card.name).all()
+
+    def get_primary(card: Card):
+        primary_entry = (
+            db.session.query(Role)
+            .join(CardRole, CardRole.role_id == Role.id)
+            .filter(CardRole.card_id == card.id, CardRole.primary.is_(True))
+            .first()
+        )
+        return primary_entry.label or getattr(primary_entry, "name", None) or primary_entry.key if primary_entry else None
+
+    return render_template(
+        "admin/card_roles.html",
+        cards=cards,
+        q=q,
+        get_primary=get_primary,
+    )
+
+
+@views.route("/admin/oracle-roles", methods=["GET", "POST"])
+@login_required
+def admin_oracle_roles():
+    require_admin()
+    if request.method == "POST":
+        recompute_oracle_roles()
+        flash("Oracle roles refreshed from Scryfall cache.", "success")
+        return redirect(url_for("views.admin_oracle_roles"))
+
+    q = (request.args.get("q") or "").strip()
+    query = OracleRole.query
+    if q:
+        query = query.filter(
+            (OracleRole.name.ilike(f"%{q}%")) | (OracleRole.primary_role.ilike(f"%{q}%")) | (OracleRole.oracle_id.ilike(f"%{q}%"))
+        )
+    oracle_roles = query.order_by(OracleRole.name).limit(500).all()
+
+    return render_template(
+        "admin/oracle_roles.html",
+        oracle_roles=oracle_roles,
+        q=q,
     )
 
 

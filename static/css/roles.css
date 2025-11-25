@@ -1,0 +1,35 @@
+.badge {
+  transition: transform 0.15s ease;
+}
+
+.badge:hover {
+  transform: scale(1.08);
+}
+
+.icon {
+  height: 14px;
+  width: 14px;
+  vertical-align: middle;
+}
+
+.role-ramp { background-color: #2ecc71 !important; }
+.role-draw { background-color: #3498db !important; }
+.role-removal { background-color: #e74c3c !important; }
+.role-protection { background-color: #f1c40f !important; }
+.role-token { background-color: #9b59b6 !important; }
+.role-recursion { background-color: #8e44ad !important; }
+.role-tutor { background-color: #1abc9c !important; }
+.role-lifegain { background-color: #f39c12 !important; }
+.role-counter { background-color: #2980b9 !important; }
+.role-discard { background-color: #c0392b !important; }
+.role-sacrifice { background-color: #7f8c8d !important; }
+.role-combat { background-color: #d35400 !important; }
+.role-stax { background-color: #95a5a6 !important; }
+.role-utility { background-color: #bdc3c7 !important; }
+
+/* Handle alternate role labels/slugs */
+.role-counterspell,
+.role-counterspells { background-color: #2980b9 !important; }
+.role-tokens { background-color: #9b59b6 !important; }
+.role-sacrifice-outlet { background-color: #7f8c8d !important; }
+.role-life-gain { background-color: #f39c12 !important; }

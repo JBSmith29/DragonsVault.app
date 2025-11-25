@@ -31,7 +31,7 @@ _REQUEST_HEADERS = {
 _ALLOWED_GOLDFISH_HOSTS = {"mtggoldfish.com", "www.mtggoldfish.com"}
 _ALLOWED_GOLDFISH_PORTS = {None, 80, 443}
 _ALLOWED_SCHEMES = {"http", "https"}
-_ALLOWED_ARCHIDEKT_HOSTS = {"archidekt.com", "www.archidekt.com"}
+# ARCHIDEKT REMOVED — replaced by internal role engine
 
 
 @dataclass(slots=True)
@@ -309,80 +309,4 @@ def fetch_goldfish_deck(deck_url: str) -> Tuple[str | None, str | None, str | No
     return deck_name, owner, commander_name, filtered_lines, errors
 
 
-def _normalize_archidekt_url(deck_url: str) -> str:
-    parsed = urlsplit((deck_url or "").strip())
-    scheme = (parsed.scheme or "https").lower()
-    if scheme not in _ALLOWED_SCHEMES:
-        scheme = "https"
-    netloc = (parsed.netloc or "archidekt.com").lower()
-    return urlunsplit((scheme, netloc, parsed.path or "/", parsed.query, ""))
-
-
-def _extract_archidekt_id(deck_url: str) -> str | None:
-    cleaned = _normalize_archidekt_url(deck_url)
-    parts = urlsplit(cleaned)
-    if (parts.hostname or "").lower() not in _ALLOWED_ARCHIDEKT_HOSTS:
-        return None
-    segments = [seg for seg in (parts.path or "").split("/") if seg]
-    try:
-        idx = segments.index("decks")
-    except ValueError:
-        return None
-    if idx + 1 >= len(segments):
-        return None
-    deck_id = segments[idx + 1]
-    return deck_id if deck_id.isdigit() else None
-
-
-def fetch_archidekt_deck(deck_url: str) -> Tuple[str | None, str | None, str | None, List[str], List[str]]:
-    """
-    Fetch deck metadata and list from an Archidekt deck URL.
-
-    Returns (deck_name, owner_name, commander_name, lines, errors).
-    """
-    deck_id = _extract_archidekt_id(deck_url)
-    if not deck_id:
-        return None, None, None, [], ["Only archidekt.com deck URLs are supported."]
-
-    api_url = f"https://archidekt.com/api/decks/{deck_id}/"
-    try:
-        resp = requests.get(api_url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:  # pragma: no cover - network/archidekt availability
-        return None, None, None, [], [f"Failed to fetch deck from Archidekt: {exc}"]
-
-    deck_name = (data.get("name") or "").strip() or None
-    owner = None
-    try:
-        owner = (data.get("owner") or {}).get("username") or None
-    except Exception:
-        owner = None
-
-    commander_name = None
-    deck_lines: list[str] = []
-
-    for entry in data.get("cards") or []:
-        qty = int(entry.get("quantity") or 0)
-        if qty <= 0:
-            continue
-        cats = [c.lower() for c in entry.get("categories") or [] if isinstance(c, str)]
-        if any("maybeboard" in c for c in cats):
-            continue
-
-        card = entry.get("card") or {}
-        name = (
-            ((card.get("oracleCard") or {}).get("name"))
-            or card.get("displayName")
-            or ""
-        ).strip()
-        if not name:
-            continue
-        deck_lines.append(f"{qty} {name}")
-        if not commander_name and any("commander" in c for c in cats):
-            commander_name = name
-
-    return deck_name, owner, commander_name, deck_lines, []
-
-
-__all__ = ["ResolvedCard", "parse_decklist", "resolve_proxy_cards", "fetch_goldfish_deck", "fetch_archidekt_deck"]
+__all__ = ["ResolvedCard", "parse_decklist", "resolve_proxy_cards", "fetch_goldfish_deck"]

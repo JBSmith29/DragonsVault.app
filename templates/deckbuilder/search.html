@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Deckbuilder Search · DragonsVault{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Deckbuilder Card Search</h1>
+      <p class="text-muted mb-0">Filter by roles, mana value, colors, and more to find the perfect additions.</p>
+    </div>
+    {% if deck_id %}
+      <span class="badge text-bg-secondary">Deck ID: {{ deck_id }}</span>
+    {% endif %}
+  </div>
+
+  <form method="get" class="card card-body mb-4">
+    {% if deck_id %}
+      <input type="hidden" name="deck_id" value="{{ deck_id }}">
+    {% endif %}
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Text search</label>
+        <input type="search" name="q" class="form-control" placeholder="Search card text or name" value="{{ q_text }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Card Type</label>
+        <input type="text" name="card_type" class="form-control" placeholder="Creature, Instant, etc." value="{{ card_type }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Core Roles</label>
+        <select name="roles" id="roles" multiple class="form-select">
+          {% for role in all_roles %}
+            {% set rlabel = role.label or role.key %}
+            <option value="{{ rlabel }}" {% if rlabel in selected_roles %}selected{% endif %}>{{ rlabel }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Sub-Roles</label>
+        <select name="subroles" id="subroles" multiple class="form-select">
+          {% for sr in all_subroles %}
+            {% set sr_label = sr.label or sr.key %}
+            <option value="{{ sr_label }}" {% if sr_label in selected_subroles %}selected{% endif %}>{{ sr_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label d-block">Mana Value Range</label>
+        <div class="input-group">
+          <input type="number" name="mv_min" value="{{ mv_min|default(0) }}" class="form-control" min="0" step="1">
+          <span class="input-group-text">to</span>
+          <input type="number" name="mv_max" value="{{ mv_max|default(12) }}" class="form-control" min="0" step="1">
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label d-block">Colors</label>
+        <div class="d-flex flex-wrap gap-2">
+          {% for c in ["W","U","B","R","G","C"] %}
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="color-{{ c }}" name="colors" value="{{ c }}" {% if c in selected_colors %}checked{% endif %}>
+              <label class="form-check-label" for="color-{{ c }}">{{ c }}</label>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Sort</label>
+        <select name="sort" class="form-select">
+          <option value="name" {% if sort == "name" %}selected{% endif %}>Name</option>
+          <option value="mv" {% if sort == "mv" %}selected{% endif %}>Mana Value</option>
+          <option value="color" {% if sort == "color" %}selected{% endif %}>Color</option>
+          <option value="role" {% if sort == "role" %}selected{% endif %}>Primary Role</option>
+        </select>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        {% set clear_url = url_for('views.deckbuilder_search', deck_id=deck_id) if deck_id else url_for('views.deckbuilder_search') %}
+        <a class="btn btn-outline-secondary" href="{{ clear_url }}">Clear</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-body">
+      {% if results %}
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th class="text-center">Mana Value</th>
+                <th>Colors</th>
+                <th>Type</th>
+                <th>Roles</th>
+                <th>Sub-Roles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in results %}
+                {% set card = row.card %}
+                <tr>
+                  <td class="fw-semibold">{{ card.name }}</td>
+                  <td class="text-center">{{ row.mana_value if row.mana_value is not none else "—" }}</td>
+                  <td>
+                    {% set colors = row.colors or "C" %}
+                    <span class="badge text-bg-secondary">{{ colors }}</span>
+                  </td>
+                  <td>{{ row.type_line }}</td>
+                  <td>
+                    {% for role in row.roles %}
+                      {% set rslug = role|lower|replace(' ', '-')|replace('/', '-') %}
+                      <span class="badge role-{{ rslug }}">{{ role }}</span>
+                    {% endfor %}
+                  </td>
+                  <td>
+                    {% for sub in row.subroles %}
+                      <span class="badge text-bg-secondary">{{ sub }}</span>
+                    {% endfor %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">No cards match the current filters.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

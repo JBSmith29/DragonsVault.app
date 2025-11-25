@@ -10,11 +10,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from extensions import db, limiter
 from models import Card, Folder
+from models.role import Role, SubRole
 from services.deck_synergy import analyze_deck
 from services.deck_tags import DECK_TAG_GROUPS
 from services.scryfall_cache import cache_ready, ensure_cache_loaded, prints_for_oracle, unique_oracle_by_name
@@ -30,6 +32,8 @@ from .base import (
 )
 
 _FALLBACK_SET_CODE = "CSTM"
+_COLOR_BIT_MAP = {"W": 1, "U": 2, "B": 4, "R": 8, "G": 16}
+_COLOR_ORDER = ("W", "U", "B", "R", "G")
 
 build_post_limit = limiter.limit("60 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 
@@ -816,6 +820,223 @@ def build_a_deck():
     )
 
 
+@views.route("/analysis/<int:folder_id>")
+def deckbuilder_analysis(folder_id: int):
+    folder = Folder.query.get_or_404(folder_id)
+
+    try:
+        analysis = analyze_deck(folder_id)
+    except ValueError:
+        return jsonify({"error": "Deck not found"}), 404
+    except Exception as exc:
+        current_app.logger.exception("Deck analysis failed for %s", folder_id, exc_info=True)
+        return jsonify({"error": "Unable to analyze this deck"}), 500
+
+    counts = {}
+    labels = {}
+    for role in analysis.get("roles") or []:
+        key = str(role.get("key") or "").strip()
+        label = str(role.get("label") or key).strip()
+        current = int(role.get("current") or 0)
+        if not key:
+            continue
+        counts[key] = current
+        labels[key] = label
+
+    return jsonify({"counts": counts, "labels": labels})
+
+
+@views.get("/deckbuilder/search")
+def deckbuilder_search():
+    deck_id = request.args.get("deck_id", type=int)
+    q_text = (request.args.get("q") or request.args.get("text") or "").strip()
+    card_type = (request.args.get("card_type") or request.args.get("type") or "").strip()
+    roles_param = (request.args.get("roles") or "").strip()
+    subroles_param = (request.args.get("subroles") or "").strip()
+    roles_params = request.args.getlist("roles")
+    subroles_params = request.args.getlist("subroles")
+    mv_min_raw = request.args.get("mv_min")
+    mv_max_raw = request.args.get("mv_max")
+    mv_min = request.args.get("mv_min", default=0, type=float)
+    mv_max = request.args.get("mv_max", default=12, type=float)
+    mv_filter_active = (mv_min_raw is not None) or (mv_max_raw is not None)
+    selected_colors = [c.upper() for c in request.args.getlist("colors") if c]
+    sort = (request.args.get("sort") or "name").lower()
+
+    def _normalize_list(raw: List[str], extra: str) -> List[str]:
+        values: List[str] = []
+        if extra:
+            values.extend(extra.split(","))
+        values.extend(raw or [])
+        cleaned = []
+        seen = set()
+        for val in values:
+            item = val.strip()
+            if not item or item in seen:
+                continue
+            cleaned.append(item)
+            seen.add(item)
+        return cleaned
+
+    role_list = _normalize_list(roles_params, roles_param)
+    subrole_list = _normalize_list(subroles_params, subroles_param)
+
+    query = Card.query
+    if deck_id:
+        query = query.filter(Card.folder_id == deck_id)
+    if role_list:
+        query = query.join(Card.roles).filter(Role.label.in_(role_list))
+    if subrole_list:
+        query = query.join(Card.subroles).filter(SubRole.label.in_(subrole_list))
+    if card_type:
+        like_val = f"%{card_type.lower()}%"
+        query = query.filter(func.lower(func.coalesce(Card.type_line, "")).like(like_val))
+    if q_text:
+        for tok in [t for t in q_text.split() if t]:
+            query = query.filter(func.lower(Card.name).like(f"%{tok.lower()}%"))
+
+    # Color filter based on color_identity_mask when available
+    if selected_colors and hasattr(Card, "color_identity_mask"):
+        mask = 0
+        has_colorless = "C" in selected_colors
+        for c in selected_colors:
+            mask |= _COLOR_BIT_MAP.get(c, 0)
+        if mask and has_colorless:
+            query = query.filter(
+                or_(
+                    (Card.color_identity_mask.op("&")(mask)) == mask,
+                    Card.color_identity_mask == 0,
+                    Card.color_identity_mask.is_(None),
+                )
+            )
+        elif mask:
+            query = query.filter((Card.color_identity_mask.op("&")(mask)) == mask)
+        if has_colorless and mask == 0:
+            query = query.filter(or_(Card.color_identity_mask == 0, Card.color_identity_mask.is_(None)))
+
+    if role_list or subrole_list:
+        query = query.distinct()
+
+    # Base ordering by name before in-memory sorting
+    query = query.order_by(func.lower(Card.name))
+    cards = (
+        query.options(selectinload(Card.roles), selectinload(Card.subroles))
+        .limit(400)
+        .all()
+    )
+
+    def _colors_from_mask(mask: Optional[int]) -> str:
+        if mask is None:
+            return ""
+        letters = [ltr for ltr in _COLOR_ORDER if mask & _COLOR_BIT_MAP[ltr]]
+        return "".join(letters)
+
+    def _meta_for_card(card: Card) -> Dict[str, Any]:
+        meta = _lookup_print_data(card.set_code, card.collector_number, card.name, getattr(card, "oracle_id", None)) or {}
+        mv_raw = meta.get("mana_value", meta.get("cmc"))
+        mana_value = None
+        try:
+            mana_value = float(mv_raw)
+        except (TypeError, ValueError):
+            mana_value = getattr(card, "mana_value", None)
+            try:
+                mana_value = float(mana_value) if mana_value is not None else None
+            except (TypeError, ValueError):
+                mana_value = None
+        color_identity = meta.get("color_identity") or meta.get("colors") or []
+        colors_str = "".join(str(c or "").upper() for c in color_identity if c)
+        if not colors_str:
+            colors_str = getattr(card, "color_identity", None) or ""
+        if not colors_str and hasattr(card, "color_identity_mask"):
+            colors_str = _colors_from_mask(getattr(card, "color_identity_mask", None))
+        type_line = card.type_line or meta.get("type_line") or ""
+        return {"mana_value": mana_value, "colors": colors_str, "type_line": type_line}
+
+    def _matches_colors(color_letters: str) -> bool:
+        if not selected_colors:
+            return True
+        letters_set = set(color_letters or "")
+        include_colorless = "C" in selected_colors
+        non_c = [c for c in selected_colors if c != "C"]
+        has_all_non_c = set(non_c).issubset(letters_set)
+        if include_colorless and not non_c:
+            return not letters_set
+        if include_colorless and not letters_set:
+            return True
+        if non_c:
+            return has_all_non_c
+        return include_colorless or True
+
+    results: List[Dict[str, Any]] = []
+    for card in cards:
+        meta = _meta_for_card(card)
+        mana_value = meta["mana_value"]
+        colors_str = meta["colors"]
+        type_line_val = meta["type_line"]
+
+        if mana_value is not None:
+            if mana_value < mv_min or mana_value > mv_max:
+                continue
+        elif mv_filter_active:
+            continue
+        if card_type and card_type.lower() not in type_line_val.lower():
+            continue
+        if not _matches_colors(colors_str):
+            continue
+        if q_text:
+            haystack = f"{card.name} {type_line_val}".lower()
+            if not all(tok in haystack for tok in [t.lower() for t in q_text.split() if t]):
+                continue
+
+        role_labels = [r.label or r.key for r in (card.roles or [])]
+        subrole_labels = [sr.label or sr.key for sr in (card.subroles or [])]
+        primary_role = role_labels[0] if role_labels else None
+
+        results.append(
+            {
+                "card": card,
+                "mana_value": mana_value,
+                "colors": colors_str,
+                "type_line": type_line_val,
+                "roles": role_labels,
+                "subroles": subrole_labels,
+                "primary_role": primary_role,
+            }
+        )
+
+    def _sort_key(row: Dict[str, Any]):
+        name_key = (row["card"].name or "").lower()
+        if sort == "mv":
+            mv = row.get("mana_value")
+            return (mv is None, mv if mv is not None else 0, name_key)
+        if sort == "color":
+            return (row.get("colors") or "", name_key)
+        if sort == "role":
+            return ((row.get("primary_role") or "").lower(), name_key)
+        return name_key
+
+    results.sort(key=_sort_key)
+
+    all_roles = Role.query.order_by(Role.label).all()
+    all_subroles = SubRole.query.order_by(SubRole.label).all()
+
+    return render_template(
+        "deckbuilder/search.html",
+        results=results,
+        all_roles=all_roles,
+        all_subroles=all_subroles,
+        selected_roles=role_list,
+        selected_subroles=subrole_list,
+        selected_colors=selected_colors,
+        mv_min=mv_min,
+        mv_max=mv_max,
+        card_type=card_type,
+        q_text=q_text,
+        sort=sort,
+        deck_id=deck_id,
+    )
+
+
 @views.post("/build-a-deck/<int:folder_id>/update-commander")
 @build_post_limit
 def build_update_commander(folder_id: int):
@@ -1189,6 +1410,8 @@ def build_delete(folder_id: int):
 
 __all__ = [
     "build_a_deck",
+    "deckbuilder_search",
+    "deckbuilder_analysis",
     "build_add_card",
     "build_bulk_add_cards",
     "build_delete",

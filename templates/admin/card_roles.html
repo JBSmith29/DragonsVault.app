@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Card Roles &amp; Sub-Roles{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+      <h1 class="mb-0">Card Roles &amp; Sub-Roles</h1>
+      <div class="text-muted small">Browse assigned primary roles, core roles, and sub-roles.</div>
+    </div>
+    <form class="d-flex" method="get" role="search">
+      <input type="search"
+             class="form-control"
+             name="q"
+             placeholder="Search cards..."
+             value="{{ q or '' }}">
+      <button class="btn btn-primary ms-2" type="submit">Search</button>
+    </form>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Card Name</th>
+            <th>Primary Role</th>
+            <th>Core Roles</th>
+            <th>Sub-Roles</th>
+            <th>Type Line</th>
+            <th>Mana Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for card in cards %}
+            {% set primary_role = get_primary(card) %}
+            <tr>
+              <td class="fw-semibold">{{ card.name }}</td>
+              <td>
+                {% if primary_role %}
+                  <span class="badge bg-primary">{{ primary_role }}</span>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if card.roles %}
+                  {% for role in card.roles %}
+                    <span class="badge bg-info text-dark">{{ role.label or role.key or role.name }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">None</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if card.subroles %}
+                  {% for sub in card.subroles %}
+                    <span class="badge bg-secondary">{{ sub.label or sub.key or sub.name }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">None</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ card.type_line or '' }}</td>
+              <td class="text-muted small">{{ card.mana_cost or '' }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-4">No cards found.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

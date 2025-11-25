@@ -39,6 +39,8 @@ class Card(db.Model):
 
     # Relationship side
     folder = db.relationship("Folder", back_populates="cards")
+    roles = db.relationship("Role", secondary="card_roles", backref="cards")
+    subroles = db.relationship("SubRole", secondary="card_subroles", backref="cards")
 
     @property
     def is_owned(self) -> bool:

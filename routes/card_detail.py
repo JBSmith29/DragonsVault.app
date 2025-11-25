@@ -6,6 +6,7 @@ from flask import redirect, render_template, url_for
 
 from extensions import db
 from models import Card
+from models.role import Role, CardRole
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded, find_by_set_cn, prints_for_oracle, rulings_for_oracle, set_name_for_code
 from services.symbols_cache import colors_to_icons, ensure_symbols_cache, render_mana_html, render_oracle_html
@@ -209,6 +210,15 @@ def card_detail(card_id):
     )
     oracle_id = oid
     display_name = info.get("name") or card.name
+    role_labels = [(r.label or getattr(r, "name", None) or r.key) for r in (card.roles or [])]
+    subrole_labels = [(s.label or getattr(s, "name", None) or s.key) for s in (card.subroles or [])]
+    primary_role = (
+        db.session.query(Role)
+        .join(CardRole, CardRole.role_id == Role.id)
+        .filter(CardRole.card_id == card.id, CardRole.primary.is_(True))
+        .first()
+    )
+    primary_role_label = primary_role.label or getattr(primary_role, "name", None) or primary_role.key if primary_role else None
 
     return render_template(
         "cards/card_detail.html",
@@ -223,6 +233,9 @@ def card_detail(card_id):
         main_img_url=main_img_url,
         name=display_name,
         collection_folders=collection_folder_names,
+        primary_role_label=primary_role_label,
+        role_labels=role_labels,
+        subrole_labels=subrole_labels,
     )
 
 

@@ -182,6 +182,43 @@
       {% endif %}
 
       <div class="mb-3">
+        <h4 class="mt-4">Card Roles</h4>
+        {% if primary_role_label %}
+          {% set primary_role_slug = primary_role_label|lower|replace(' ', '-')|replace('/', '-') %}
+          <div class="mb-2">
+            <span class="badge role-{{ primary_role_slug }}">
+              <img src="{{ url_for('static', filename='img/roles/' ~ primary_role_slug ~ '.svg') }}" class="icon me-1" alt="">
+              Primary: {{ primary_role_label }}
+            </span>
+          </div>
+        {% endif %}
+        <div class="mb-2">
+          <h6 class="mt-3 mb-1">Core Roles:</h6>
+          {% if role_labels %}
+            {% for role in role_labels %}
+              {% set role_slug = role|lower|replace(' ', '-')|replace('/', '-') %}
+              <span class="badge role-{{ role_slug }}">
+                <img src="{{ url_for('static', filename='img/roles/' ~ role_slug ~ '.svg') }}" class="icon me-1" alt="">
+                {{ role }}
+              </span>
+            {% endfor %}
+          {% else %}
+            <span class="text-muted small">None</span>
+          {% endif %}
+        </div>
+        <div>
+          <h6 class="mt-3 mb-1">Sub-Roles:</h6>
+          {% if subrole_labels %}
+            {% for sub in subrole_labels %}
+              <span class="badge bg-secondary">{{ sub }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="text-muted small">None</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="mb-3">
         <div class="d-flex flex-wrap gap-2">
           {% set has_scry = info.scryfall_uri %}
           <a id="detail-scry-link"

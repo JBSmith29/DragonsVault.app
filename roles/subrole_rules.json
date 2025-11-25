@@ -1,0 +1,370 @@
+{
+  "ramp": {
+    "mana dork": [
+      "add {g}",
+      "add {w}",
+      "add {u}",
+      "add {b}",
+      "add {r}",
+      "tap: add",
+      "dork",
+      "elves of deep shadow",
+      "llanowar elves",
+      "birds of paradise",
+      "noble hierarch",
+      "ignoble hierarch",
+      "utopia tree",
+      "paradise druid"
+    ],
+    "mana rock": [
+      "artifact taps for",
+      "tap: add",
+      "mana rock",
+      "signet",
+      "talisman",
+      "arcane signet",
+      "chromatic lantern",
+      "fellwar stone",
+      "mind stone",
+      "thought vessel",
+      "caged sun",
+      "gilded lotus",
+      "mana crypt",
+      "sol ring"
+    ],
+    "land ramp": [
+      "search your library for a basic land",
+      "search your library for a land card",
+      "put a land card from your library",
+      "put onto the battlefield tapped",
+      "rampant growth",
+      "kodama's reach",
+      "cultivate",
+      "farseek",
+      "nature's lore",
+      "three visits",
+      "harrow",
+      "skyshroud claim",
+      "sakura-tribe elder",
+      "explosive vegetation",
+      "primal growth",
+      "land tax",
+      "smothering tithe into land"
+    ],
+    "treasure": [
+      "create a treasure",
+      "treasure token",
+      "make a treasure",
+      "treasures you control",
+      "dockside extortionist",
+      "goldspan dragon",
+      "prosper tonebound",
+      "magda, brazen outlaw"
+    ],
+    "ritual": [
+      "add {r}{r}{r}",
+      "add {b}{b}{b}",
+      "add {g}{g}{g}",
+      "add {u}{u}{u}",
+      "add {w}{w}{w}",
+      "add three mana",
+      "ritual",
+      "dark ritual",
+      "cabal ritual",
+      "seething song",
+      "desperate ritual",
+      "pyretic ritual",
+      "high tide",
+      "mana geyser"
+    ]
+  },
+  "land types": {
+    "fetchland": [
+      "sacrifice this land: search your library for a",
+      "fetch land",
+      "flooded strand",
+      "polluted delta",
+      "bloodstained mire",
+      "windswept heath",
+      "wooded foothills",
+      "arid mesa",
+      "verdant catacombs",
+      "misty rainforest",
+      "marsh flats",
+      "prismatic vista",
+      "fabled passage",
+      "evolving wilds",
+      "terramorphic expanse"
+    ],
+    "shockland": [
+      "as it enters, you may pay 2 life",
+      "if you don't, it enters tapped",
+      "sacrifice unless you pay 2 life",
+      "hallowed fountain",
+      "watery grave",
+      "steam vents",
+      "blood crypt",
+      "stomping ground",
+      "breeding pool",
+      "godless shrine",
+      "sacred foundry",
+      "temple garden",
+      "overgrown tomb"
+    ],
+    "triome": [
+      "forest island mountain",
+      "forest island swamp",
+      "forest plains mountain",
+      "forest plains swamp",
+      "island mountain swamp",
+      "plains island swamp",
+      "plains island mountain",
+      "plains swamp mountain",
+      "cycling",
+      "enters the battlefield tapped",
+      "triome",
+      "spara's headquarters",
+      "jetmir's garden",
+      "ziatora's proving ground",
+      "xander's lounge",
+      "rafine's tower",
+      "indatha triome",
+      "ketria triome",
+      "raugrin triome",
+      "savai triome",
+      "zagoth triome"
+    ]
+  },
+  "draw": {
+    "wheel": [
+      "each player discards",
+      "each player draws",
+      "wheel",
+      "windfall",
+      "wheel of fortune",
+      "reforge the soul",
+      "time spiral",
+      "days undoing",
+      "time twister",
+      "whispering madness"
+    ],
+    "looting": [
+      "draw then discard",
+      "discard then draw",
+      "faithless looting",
+      "thrill of possibility",
+      "cathartic reunion",
+      "big score",
+      "careful study",
+      "merfolk looter",
+      "loot",
+      "connive",
+      "loot trigger"
+    ],
+    "impulse draw": [
+      "exile the top card of your library. you may play it",
+      "until the end of your next turn, you may play that card",
+      "impulse draw",
+      "light up the stage",
+      "reckless impulse",
+      "outpost siege",
+      "chandra, torch of defiance",
+      "prosper tonebound"
+    ]
+  },
+  "removal": {
+    "spot removal": [
+      "destroy target creature",
+      "exile target creature",
+      "exile target permanent",
+      "destroy target permanent",
+      "target creature gets -",
+      "path to exile",
+      "swords to plowshares",
+      "rapid hybridization",
+      "beast within",
+      "abrupt decay"
+    ],
+    "board wipe": [
+      "destroy all creatures",
+      "destroy all permanents",
+      "destroy all artifacts and enchantments",
+      "exile all creatures",
+      "sweep",
+      "wrath",
+      "damnation",
+      "supreme verdict",
+      "blasphemous act",
+      "toxic deluge",
+      "austere command",
+      "cyclonic rift",
+      "farewell",
+      "merciless eviction"
+    ],
+    "artifact/enchantment removal": [
+      "destroy target artifact",
+      "destroy target enchantment",
+      "exile target artifact",
+      "exile target enchantment",
+      "naturalize",
+      "return to nature",
+      "disenchant",
+      "wear // tear",
+      "force of vigor",
+      "nature's claim"
+    ]
+  },
+  "protection": {
+    "hexproof": [
+      "hexproof",
+      "can't be the target of spells or abilities",
+      "asceticism",
+      "privileged position",
+      "veil of summer",
+      "snake skin veil"
+    ],
+    "indestructible": [
+      "indestructible",
+      "gains indestructible",
+      "cannot be destroyed",
+      "teferi's protection",
+      "heroic intervention",
+      "boros charm",
+      "metallic mimic shield"
+    ],
+    "fog": [
+      "prevent all combat damage",
+      "creatures deal no combat damage",
+      "fog",
+      "constant mists",
+      "moment's peace",
+      "spore frog"
+    ]
+  },
+  "tokens": {
+    "artifact tokens": [
+      "create a clue",
+      "create a treasure",
+      "create a food",
+      "create a blood token",
+      "create a map token",
+      "investigate",
+      "artifact token"
+    ],
+    "creature tokens": [
+      "create a 1/1",
+      "create a token creature",
+      "army token",
+      "incubate",
+      "copy a creature token",
+      "populate",
+      "germ token",
+      "myr token",
+      "thopter token",
+      "spirit token",
+      "zombie token",
+      "goblin token",
+      "saproling token",
+      "servo token"
+    ]
+  },
+  "tutor": {
+    "creature tutor": [
+      "search your library for a creature card",
+      "green sun's zenith",
+      "finale of devastation",
+      "worldly tutor",
+      "chord of calling",
+      "natural order"
+    ],
+    "artifact tutor": [
+      "search your library for an artifact",
+      "fabricate",
+      "steelshaper's gift",
+      "enlightened tutor",
+      "kuldotha forgemaster",
+      "whir of invention"
+    ],
+    "enchantment tutor": [
+      "search your library for an enchantment",
+      "idyllic tutor",
+      "enlightened tutor",
+      "sterling grove",
+      "hall of heliod's generosity"
+    ],
+    "land tutor": [
+      "search your library for a land",
+      "expedition map",
+      "crop rotation",
+      "sylvan scrying",
+      "elvish reclaimer",
+      "temple of the false god search"
+    ]
+  },
+  "stax": {
+    "tax effects": [
+      "spells cost",
+      "players can't cast more than one spell",
+      "sphere of resistance",
+      "thorn of amethyst",
+      "trinisphere",
+      "grand arbiter",
+      "archon of emeria",
+      "deafening silence"
+    ],
+    "resource denial": [
+      "skip your untap step",
+      "don't untap during their untap step",
+      "winter orb",
+      "static orb",
+      "stasis",
+      "root maze",
+      "overburden",
+      "orbs of warding"
+    ],
+    "hatebears": [
+      "opponents can't search",
+      "creatures your opponents control enter tapped",
+      "players can't",
+      "collector oophe",
+      "drannith magistrate",
+      "opposition agent",
+      "hushbringer",
+      "linvala"
+    ]
+  },
+  "utility": {
+    "graveyard hate": [
+      "exile target card from a graveyard",
+      "exile all cards from target player's graveyard",
+      "graveyard hate",
+      "rest in peace",
+      "leyline of the void",
+      "soul-guide lantern",
+      "tormod's crypt",
+      "nihil spellbomb",
+      "bojuka bog"
+    ],
+    "haste enablers": [
+      "creatures you control have haste",
+      "gain haste until end of turn",
+      "fervor",
+      "haste anthem",
+      "anger",
+      "hammer of purphoros",
+      "rhythm of the wild",
+      "crashing drawbridge"
+    ],
+    "blink/flicker": [
+      "exile target creature, then return it",
+      "flicker",
+      "blink",
+      "flickerwisp",
+      "ephemerate",
+      "cloudshift",
+      "soulherder",
+      "teleportation circle",
+      "conjurer's closet"
+    ]
+  }
+}

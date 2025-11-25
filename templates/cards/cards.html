@@ -145,6 +145,26 @@
     {% endif %}
     {% set reset_url = url_for('views.list_cards', **reset_args.params) %}
     <div class="filter-wrap">
+    <div class="row g-2 mb-2">
+      <div class="col-12 col-lg-6">
+        <label class="form-label" for="roles">Filter by Core Roles:</label>
+        <select name="roles" id="roles" class="form-select" multiple>
+          {% for role in all_roles or [] %}
+            {% set label = role.label or role.name or role.key %}
+            <option value="{{ label }}" {% if label in role_list %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-lg-6">
+        <label class="form-label" for="subroles">Filter by Sub-Roles:</label>
+        <select name="subroles" id="subroles" class="form-select" multiple>
+          {% for sr in all_subroles or [] %}
+            {% set label = sr.label or sr.name or sr.key %}
+            <option value="{{ label }}" {% if label in subrole_list %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
     <div class="filter-row row g-2 align-items-end">
         <div class="col-12 col-xl-4">
           <label class="form-label visually-hidden" for="filterName">Search by card name</label>
@@ -154,6 +174,15 @@
                  type="text"
                  placeholder="Search by name..."
                  value="{{ q or '' }}">
+        </div>
+        <div class="col-12 col-xl-4">
+          <label class="form-label" for="roleQuery">Search by role keywords</label>
+          <input id="roleQuery"
+                 class="form-control"
+                 name="role_q"
+                 type="text"
+                 placeholder="Primary / core / sub-role keywords"
+                 value="{{ role_query_text or '' }}">
         </div>
         <div class="col-6 col-md-4 col-xl-2">
           <label class="form-label visually-hidden" for="filterSet">Set</label>

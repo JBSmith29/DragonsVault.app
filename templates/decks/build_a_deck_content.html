@@ -1297,6 +1297,17 @@
           </div>
         </div>
 
+        <div id="role-analysis-panel" class="card mb-4">
+          <div class="card-header">Role Analysis</div>
+          <div class="card-body">
+            <table class="table small mb-0">
+              <tbody id="role-analysis-table">
+                <tr><td colspan="2" class="text-muted">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {% if analysis_error %}
           <div class="alert alert-danger">{{ analysis_error }}</div>
         {% endif %}
@@ -1965,6 +1976,10 @@
                   {% set theme_source = card.theme_source %}
                   {% set theme_synergy = theme_source.synergy_percent if theme_source else None %}
                   {% set deck_role_keys = card.normalized_roles if card.normalized_roles is defined else (card.roles or []) %}
+                  {% set role_names = card.roles if card.roles is defined else deck_role_keys %}
+                  {% set subrole_names = card.subroles if card.subroles is defined else (card.subrole_names if card.subrole_names is defined else []) %}
+                  {% set primary_role = card.primary_role if card.primary_role is defined else (role_names[0] if role_names else None) %}
+                  {% set primary_role_slug = primary_role|lower|replace(' ', '-')|replace('/', '-') if primary_role else None %}
                   {% set type_line = card.type_line if card.type_line is defined and card.type_line else (
                     card.card_type if card.card_type is defined and card.card_type else (
                       card.type if card.type is defined else none
@@ -1999,7 +2014,19 @@
                     </div>
                     <div class="deck-card__body">
                       <div class="fw-semibold d-flex flex-wrap justify-content-center gap-2">
+                        {% if primary_role_slug %}
+                          <img class="icon me-1"
+                               src="{{ url_for('static', filename='img/roles/' ~ primary_role_slug ~ '.svg') }}"
+                               alt="{{ primary_role }} role icon">
+                        {% endif %}
                         {{ synergy_card_link(card.name, card_hover, card_id, classes='text-reset text-decoration-none') }}
+                        {% if primary_role %}
+                          <span class="badge role-{{ primary_role_slug }}"
+                                data-bs-toggle="tooltip"
+                                title="Roles: {{ role_names|join(', ') }} | Sub-Roles: {{ subrole_names|join(', ') }}">
+                            {{ primary_role }}
+                          </span>
+                        {% endif %}
                         {% if card.quantity and card.quantity > 1 %}
                           <span class="badge rounded-pill bg-secondary-subtle text-secondary">x{{ card.quantity }}</span>
                         {% endif %}
@@ -2214,6 +2241,19 @@
     </div>
   {% endif %}
 </div>
+
+{% if selected_folder %}
+  <script src="{{ url_for('static', filename='js/deckbuilder_analysis.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const deckRoot = document.getElementById('buildDeckRoot');
+      const deckId = deckRoot ? parseInt(deckRoot.dataset.folderId || '0', 10) : 0;
+      if (deckId && window.initRoleAnalysis) {
+        window.initRoleAnalysis(deckId);
+      }
+    });
+  </script>
+{% endif %}
 
 <script>
   const buildDeckState = window.__buildDeckState || (window.__buildDeckState = {});

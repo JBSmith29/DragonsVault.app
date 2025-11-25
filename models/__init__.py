@@ -16,6 +16,7 @@ from .folder import Folder, FolderShare  # type: ignore F401
 from .wishlist import WishlistItem  # type: ignore F401
 from .user import User, AuditLog  # type: ignore F401
 from .site_request import SiteRequest  # type: ignore F401
+from .role import Role, SubRole, CardRole, CardSubRole, OracleRole  # type: ignore F401
 
 __all__ = [
     "db",
@@ -27,4 +28,9 @@ __all__ = [
     "User",
     "AuditLog",
     "SiteRequest",
+    "Role",
+    "SubRole",
+    "CardRole",
+    "CardSubRole",
+    "OracleRole",
 ]

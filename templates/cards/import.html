@@ -177,12 +177,12 @@
     </div>
     <div class="card-body">
       <p class="text-muted mb-3">
-        Paste a public MTGGoldfish or Archidekt deck link and we’ll pull the list directly into a new deck folder.
+        Paste a public MTGGoldfish deck link and we’ll pull the list directly into a new deck folder.
       </p>
       <form class="row gy-3 gx-3 align-items-end" method="post" action="{{ url_for('views.create_proxy_deck') }}">
         <div class="col-12 col-xl-8">
           <label for="deck_url" class="form-label">Deck URL</label>
-          <input type="url" class="form-control" id="deck_url" name="deck_url" placeholder="https://archidekt.com/decks/1234/..." required>
+          <input type="url" class="form-control" id="deck_url" name="deck_url" placeholder="https://www.mtggoldfish.com/deck/1234" required>
         </div>
         <div class="col-12 col-xl-3">
           <label for="deck_name" class="form-label">Deck name (optional)</label>

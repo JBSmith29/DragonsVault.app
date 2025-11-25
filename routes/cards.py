@@ -17,9 +17,10 @@ from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db, limiter
 from models import Card, Folder, FolderShare, User
+from models.role import Role, SubRole, OracleRole
 from services import scryfall_cache as sc
 from services.deck_synergy import analyze_deck
-from services.proxy_decks import fetch_archidekt_deck, fetch_goldfish_deck, resolve_proxy_cards
+from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
 from services.deck_tags import DECK_TAG_GROUPS, TAG_CATEGORY_MAP
@@ -738,10 +739,8 @@ def create_proxy_deck():
         fetched_lines: list[str] = []
         errors: list[str] = []
 
-        # Try Archidekt first, then fall back to MTGGoldfish
-        fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_archidekt_deck(deck_url)
-        if errors:
-            fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_goldfish_deck(deck_url)
+        # ARCHIDEKT REMOVED — replaced by internal role engine
+        fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_goldfish_deck(deck_url)
         fetched_errors.extend(errors)
         if fetched_lines:
             decklist_text = decklist_text or "\n".join(fetched_lines)
@@ -1304,6 +1303,20 @@ def list_cards():
     if rarity == "any":
         rarity = ""
 
+    role_query_text = (request.args.get("role_q") or "").strip()
+    roles_param_vals = request.args.getlist("roles")
+    subroles_param_vals = request.args.getlist("subroles")
+    roles_param = (request.args.get("roles") or "").strip()
+    subroles_param = (request.args.get("subroles") or "").strip()
+    role_list = [r.strip() for r in roles_param.split(",") if r.strip()] if roles_param else []
+    subrole_list = [s.strip() for s in subroles_param.split(",") if s.strip()] if subroles_param else []
+    if roles_param_vals:
+        role_list.extend([r.strip() for r in roles_param_vals if r.strip()])
+    if subroles_param_vals:
+        subrole_list.extend([s.strip() for s in subroles_param_vals if s.strip()])
+    role_list = [r for r in role_list if r]
+    subrole_list = [s for s in subrole_list if s]
+
     type_mode = (request.args.get("type_mode") or "contains").lower()
     raw_types_any = [t for t in request.args.getlist("type_any") if t]
     raw_types = [t for t in request.args.getlist("type") if t]
@@ -1356,6 +1369,27 @@ def list_cards():
     include_proxies_flag = include_proxies
     if not include_proxies:
         query = query.filter(Card.is_proxy.is_(False))
+    if role_list:
+        query = query.join(Card.roles).filter(Role.label.in_(role_list))
+    if subrole_list:
+        query = query.join(Card.subroles).filter(SubRole.label.in_(subrole_list))
+    if role_query_text:
+        role_query = f"%{role_query_text}%"
+        query = query.join(OracleRole, OracleRole.oracle_id == Card.oracle_id).filter(
+            func.lower(
+                func.coalesce(OracleRole.primary_role, "")
+                + " "
+                + func.coalesce(func.cast(OracleRole.roles, db.Text), "")
+                + " "
+                + func.coalesce(func.cast(OracleRole.subroles, db.Text), "")
+            ).ilike(func.lower(role_query))
+        )
+    if role_list or subrole_list:
+        query = query.distinct()
+    if role_list:
+        query = query.join(Card.roles).filter(Role.label.in_(role_list))
+    if subrole_list:
+        query = query.join(Card.subroles).filter(SubRole.label.in_(subrole_list))
     if q_text:
         for tok in [t for t in q_text.split() if t]:
             query = query.filter(Card.name.ilike(f"%{tok}%"))
@@ -1601,6 +1635,8 @@ def list_cards():
     set_options = _set_options_with_names(sets)
     rarity_options = _rarity_options()
     move_folder_options = _move_folder_choices()
+    all_roles = Role.query.order_by(Role.label).all()
+    all_subroles = SubRole.query.order_by(SubRole.label).all()
 
     return render_template(
         "cards/cards.html",
@@ -1623,6 +1659,8 @@ def list_cards():
         tribe=typal,
         foil_only=foil_only,
         rarity=rarity,
+        role_list=role_list,
+        subrole_list=subrole_list,
         selected_types=selected_types,
         selected_colors=selected_colors,
         color_mode=color_mode,
@@ -1634,6 +1672,9 @@ def list_cards():
         langs=langs,
         set_options=set_options,
         rarity_options=rarity_options,
+        all_roles=all_roles,
+        all_subroles=all_subroles,
+        role_query_text=role_query_text,
         image_map=image_map,
         type_line_map=type_line_map,
         type_map=type_map,

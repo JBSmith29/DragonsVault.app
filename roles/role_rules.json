@@ -1,0 +1,275 @@
+{
+  "ramp": {
+    "keywords": [
+      "add {",
+      "mana pool",
+      "untap target land",
+      "search your library for a land",
+      "treasure token",
+      "clue treasure food",
+      "create a treasure",
+      "land enters tapped unless",
+      "landfall — add",
+      "ritual",
+      "double your mana",
+      "untap all lands",
+      "mana dork",
+      "rampant growth",
+      "cultivate",
+      "kodama's reach",
+      "farseek",
+      "nature's lore",
+      "three visits",
+      "signet",
+      "talisman",
+      "chromatic lantern",
+      "sol ring",
+      "mana rock",
+      "guardian idol",
+      "costs {1} less",
+      "mana cost reduced",
+      "affinity for artifacts"
+    ]
+  },
+  "removal": {
+    "keywords": [
+      "destroy target",
+      "exile target",
+      "sacrifice target",
+      "deal damage to any target",
+      "return target permanent to its owner's hand",
+      "bounce target",
+      "edict effect",
+      "fight target",
+      "sacrifice a creature",
+      "board wipe",
+      "destroy all creatures",
+      "destroy all artifacts",
+      "destroy all enchantments",
+      "sweep",
+      "wrath",
+      "wipe the board",
+      "mass removal",
+      "plague wind",
+      "cyclonic rift",
+      "swords to plowshares",
+      "path to exile",
+      "beast within",
+      "anguished unmaking",
+      "mortify",
+      "assassin's trophy"
+    ]
+  },
+  "draw": {
+    "keywords": [
+      "draw a card",
+      "draw two cards",
+      "draw X cards",
+      "loot",
+      "connive",
+      "cycling",
+      "cantrip",
+      "impulse draw",
+      "exile the top",
+      "wheel",
+      "each player discards and draws",
+      "windfall",
+      "faithless looting",
+      "brainstorm",
+      "ponder",
+      "preordain",
+      "rhystic study",
+      "guardian project",
+      "beast whisperer",
+      "whenever you cast a creature spell, draw",
+      "whenever you attack, draw",
+      "whenever you deal combat damage, draw"
+    ]
+  },
+  "tutor": {
+    "keywords": [
+      "search your library",
+      "tutor",
+      "demain tutor",
+      "vampiric tutor",
+      "enlightened tutor",
+      "worldly tutor",
+      "mystical tutor",
+      "expedition map",
+      "fabricate",
+      "transmute",
+      "wish card",
+      "fetchland",
+      "search for a land card"
+    ]
+  },
+  "recursion": {
+    "keywords": [
+      "return target creature card from your graveyard",
+      "return target permanent card from your graveyard",
+      "reanimate",
+      "unearth",
+      "eternalize",
+      "embalm",
+      "flashback",
+      "buyback",
+      "escape",
+      "regrowth",
+      "return target card from your graveyard to your hand",
+      "return target card from your graveyard to the battlefield",
+      "mass reanimation",
+      "living death",
+      "patriarch's bidding"
+    ]
+  },
+  "protection": {
+    "keywords": [
+      "hexproof",
+      "shroud",
+      "indestructible",
+      "phase out",
+      "ward",
+      "protection from",
+      "prevent all damage",
+      "fog",
+      "counter target spell that targets",
+      "teferi's protection",
+      "heroic intervention",
+      "boros charm",
+      "shield counter"
+    ]
+  },
+  "discard": {
+    "keywords": [
+      "target player discards",
+      "each opponent discards",
+      "discard a card",
+      "madness",
+      "hellbent",
+      "specter",
+      "mind rot",
+      "hymn to tourach",
+      "wheel and discard",
+      "opponents discard",
+      "megrim",
+      "waste not",
+      "ravens crime"
+    ]
+  },
+  "lifegain": {
+    "keywords": [
+      "you gain life",
+      "gain life equal",
+      "lifelink",
+      "extort",
+      "soul warden",
+      "soul sister",
+      "whenever you gain life",
+      "drain life",
+      "ayara",
+      "sanguine bond",
+      "exquisite blood",
+      "life gain and drain"
+    ]
+  },
+  "tokens": {
+    "keywords": [
+      "create a 1/1",
+      "create a token",
+      "create that many",
+      "populate",
+      "copy token",
+      "make a token",
+      "army token",
+      "treasure token",
+      "clue token",
+      "food token",
+      "blood token",
+      "map token",
+      "incubate",
+      "germ token",
+      "thopter token",
+      "spirit token",
+      "zombie token",
+      "goblin token",
+      "saproling token"
+    ]
+  },
+  "sacrifice outlet": {
+    "keywords": [
+      "sacrifice a creature:",
+      "sacrifice another creature:",
+      "sacrifice an artifact:",
+      "sacrifice a permanent:",
+      "as an additional cost, sacrifice",
+      "sacrifice a treasure:",
+      "free sac outlet",
+      "devour",
+      "aristocrats",
+      "blood artist",
+      "viscera seer",
+      "altar of dementia",
+      "phyrexian altar",
+      "ashnod's altar"
+    ]
+  },
+  "counterspells": {
+    "keywords": [
+      "counter target spell",
+      "unless its controller pays",
+      "negate",
+      "counter unless",
+      "daze",
+      "force of will",
+      "force of negation",
+      "mana leak",
+      "spell pierce",
+      "swan song",
+      "stifle",
+      "flusterstorm"
+    ]
+  },
+  "combat": {
+    "keywords": [
+      "attack phase",
+      "extra combat",
+      "double strike",
+      "first strike",
+      "vigilance",
+      "trample",
+      "menace",
+      "go wide",
+      "go tall",
+      "exalted",
+      "anthem",
+      "creatures you control get",
+      "prowess",
+      "battle cry",
+      "melee",
+      "on attack trigger",
+      "when this creature attacks"
+    ]
+  },
+  "stax": {
+    "keywords": [
+      "each player can't",
+      "players can't cast more than",
+      "skip your untap step",
+      "skip their untap step",
+      "lands don't untap",
+      "stax",
+      "taxing",
+      "sphere of resistance",
+      "thorn of amethyst",
+      "trinisphere",
+      "smokestack",
+      "winter orb",
+      "stasis",
+      "rule of law",
+      "archon of emeria",
+      "deafening silence",
+      "opposition agent",
+      "drannith magistrate"
+    ]
+  }
+}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import load_only
 
 from extensions import cache, db
 from models import Card, Folder
+from models.role import Role, CardRole
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded, set_name_for_code, find_by_set_cn, cache_epoch
 from services.commander_utils import primary_commander_oracle_id, split_commander_oracle_ids, split_commander_names
@@ -307,6 +308,32 @@ def api_card(card_id):
 
     card = Card.query.get_or_404(card_id)
     have_cache = ensure_cache_loaded()
+    role_names = []
+    subrole_names = []
+    primary_role = None
+    try:
+        role_names = [
+            (r.label or getattr(r, "name", None) or r.key)
+            for r in (card.roles or [])
+            if (r.label or getattr(r, "name", None) or r.key)
+        ]
+        subrole_names = [
+            (s.label or getattr(s, "name", None) or s.key)
+            for s in (card.subroles or [])
+            if (s.label or getattr(s, "name", None) or s.key)
+        ]
+        primary_entry = (
+            db.session.query(Role)
+            .join(CardRole, CardRole.role_id == Role.id)
+            .filter(CardRole.card_id == card.id, CardRole.primary.is_(True))
+            .first()
+        )
+        if primary_entry:
+            primary_role = primary_entry.label or getattr(primary_entry, "name", None) or primary_entry.key
+    except Exception:
+        role_names = role_names or []
+        subrole_names = subrole_names or []
+        primary_role = primary_role or None
 
     # Representative print
     best = _lookup_print_data(card.set_code, card.collector_number, card.name, card.oracle_id) if have_cache else {}
@@ -371,7 +398,14 @@ def api_card(card_id):
 
     return jsonify(
         {
-            "card": {"id": card.id, "quantity": card.quantity, "folder": card.folder.name if card.folder else None},
+            "card": {
+                "id": card.id,
+                "quantity": card.quantity,
+                "folder": card.folder.name if card.folder else None,
+                "roles": role_names,
+                "subroles": subrole_names,
+                "primary_role": primary_role,
+            },
             "info": info,
             "images": images,
         }

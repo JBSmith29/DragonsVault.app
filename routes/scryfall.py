@@ -13,6 +13,7 @@ from sqlalchemy import func
 
 from extensions import db
 from models import Card, Folder
+from models.role import OracleRole
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded, rulings_for_oracle, set_name_for_code, all_set_codes
 from services.scryfall_search import build_query, search_cards
@@ -62,6 +63,7 @@ def scryfall_browser():
 
     base_types = [t for t in args.getlist("type") if t]
     typal = (args.get("typal") or "").strip()
+    role_query_text = (args.get("role_q") or "").strip()
 
     color_filters = [c for c in args.getlist("color") if c]
     selected_colors = [c.upper() for c in color_filters]
@@ -204,6 +206,7 @@ def scryfall_browser():
             {
                 "id": pr.get("id"),
                 "name": pr.get("name"),
+                "primary_role": None,
                 "set": (pr.get("set") or "").upper(),
                 "set_name": pr.get("set_name"),
                 "collector_number": pr.get("collector_number"),
@@ -232,6 +235,30 @@ def scryfall_browser():
                 "collector_sort": collector_sort,
             }
         )
+
+    if role_query_text:
+        role_query = f"%{role_query_text}%"
+        matching_oids = [
+            oid
+            for (oid,) in db.session.query(OracleRole.oracle_id)
+            .filter(
+                func.lower(
+                    func.coalesce(OracleRole.primary_role, "")
+                    + " "
+                    + func.coalesce(func.cast(OracleRole.roles, db.Text), "")
+                    + " "
+                    + func.coalesce(func.cast(OracleRole.subroles, db.Text), "")
+                ).ilike(func.lower(role_query))
+            )
+            .all()
+            if oid
+        ]
+        if matching_oids:
+            results = [r for r in results if r.get("oracle_id") in matching_oids]
+            total_cards = len(results)
+        else:
+            results = []
+            total_cards = 0
 
     collection_ids, _, collection_lower = _collection_metadata()
     oids = [r.get("oracle_id") for r in results if r.get("oracle_id")]
@@ -287,6 +314,8 @@ def scryfall_browser():
         base_args['set'] = set_code
     if typal:
         base_args['typal'] = typal
+    if role_query_text:
+        base_args['role_q'] = role_query_text
     if base_types:
         base_args['type'] = base_types
     if color_filters:
@@ -325,6 +354,7 @@ def scryfall_browser():
         next_url=next_url,
         page_urls=page_urls,
         query=name,
+        role_query_text=role_query_text,
         set_code=set_code,
         base_types=base_types,
         typal=typal,

@@ -128,6 +128,15 @@
                  placeholder="Search by name..."
                  value="{{ query or '' }}">
         </div>
+        <div class="col-12 col-xl-4">
+          <label class="form-label" for="roleQuery">Search by role keywords</label>
+          <input id="roleQuery"
+                 class="form-control"
+                 name="role_q"
+                 type="text"
+                 placeholder="Primary / core / sub-role keywords"
+                 value="{{ request.args.get('role_q','') }}">
+        </div>
         <div class="col-6 col-md-4 col-xl-2">
           <label class="form-label visually-hidden" for="sfbSet">Set</label>
           <div class="dropdown dv-select w-100" data-dv-select="sfb-set">
