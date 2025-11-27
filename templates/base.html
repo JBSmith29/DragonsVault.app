@@ -119,7 +119,7 @@
         width: var(--sidebar-w);
         background: linear-gradient(160deg, rgba(17, 24, 39, .94), rgba(15, 23, 42, .82));
         border-right: 1px solid rgba(255, 255, 255, 0.06);
-        padding: 1.5rem 1.25rem 2rem;
+        padding: 1.1rem 1rem 1.5rem;
         display: flex;
         flex-direction: column;
         overflow-y: auto;
@@ -135,9 +135,10 @@
         color: rgba(255, 255, 255, 0.85) !important;
         background: transparent;
         border-radius: 14px;
-        padding: .65rem .85rem;
-        margin-bottom: .35rem;
-        font-weight: 500;
+        padding: .55rem .7rem;
+        margin-bottom: .25rem;
+        font-weight: 600;
+        font-size: .95rem;
         letter-spacing: .01em;
         transition: background-color .2s var(--dv-ease-soft),
                     color .2s var(--dv-ease-soft),
@@ -145,7 +146,7 @@
         position: relative;
       }
       #sidebar .nav-link i {
-        font-size: 1.1rem;
+        font-size: 1rem;
       }
       #sidebar .nav-link:hover,
       #sidebar .nav-link:focus-visible {
@@ -167,8 +168,8 @@
         color: #0f172a !important;
       }
       .sidebar-title {
-        font-size: 1.2rem;
-        font-weight: 600;
+        font-size: 1.05rem;
+        font-weight: 700;
         letter-spacing: .04em;
         color: #f8fafc;
       }
@@ -987,7 +988,7 @@
       </nav>
       {% endif %}
 
-      <div id="content" class="flex-grow-1 position-relative{% if not sidebar_active %} w-100{% endif %}">
+      <div id="content" class="flex-grow-1 position-relative{% if not sidebar_active %} w-100{% else %} has-mobile-toolbar{% endif %}">
         {% if sidebar_active %}
         <header class="content-toolbar d-lg-none">
           <button
@@ -1008,7 +1009,7 @@
         <!-- Explicit ID + hx-history-elt for better back/forward snapshots -->
         <main
           id="main"
-          class="{% if sidebar_active %}container-fluid mt-4 dv-scroll-region{% else %}container py-5{% endif %}"
+          class="{% if sidebar_active %}container-fluid mt-4 dv-scroll-region with-toolbar{% else %}container py-5{% endif %}"
           hx-history-elt
           data-active-endpoint="{{ current_endpoint }}"
           data-legal-visible="{{ '1' if legal_links_visible else '0' }}"

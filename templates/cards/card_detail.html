@@ -265,6 +265,31 @@
           <span>{{ info.type_line or '—' }}</span>
         </div>
         <div class="list-group-item d-flex justify-content-between">
+          <span class="fw-semibold text-muted">Core Roles</span>
+          <span class="text-end">
+            {% if role_labels %}
+              {% for role in role_labels %}
+                {% set role_slug = role|lower|replace(' ', '-')|replace('/', '-') %}
+                <span class="badge role-{{ role_slug }}">{{ role }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="list-group-item d-flex justify-content-between">
+          <span class="fw-semibold text-muted">Sub-Roles</span>
+          <span class="text-end">
+            {% if subrole_labels %}
+              {% for sub in subrole_labels %}
+                <span class="badge text-bg-secondary">{{ sub }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="list-group-item d-flex justify-content-between">
           <span class="fw-semibold text-muted">Mana Cost</span>
           <span class="text-end">{{ info.mana_cost_html|safe if info.mana_cost_html else '—' }}</span>
         </div>

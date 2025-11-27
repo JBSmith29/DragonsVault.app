@@ -9,5 +9,9 @@
 </nav>
 {% endblock %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/role-icons.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/deckbuilder-modern.css') }}">
 {% include "decks/build_a_deck_content.html" %}
+<script src="{{ url_for('static', filename='js/scroll_preserve.js') }}"></script>
+<script src="{{ url_for('static', filename='js/deckbuilder_ui.js') }}"></script>
 {% endblock %}

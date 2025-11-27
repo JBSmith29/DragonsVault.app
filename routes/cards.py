@@ -1915,6 +1915,93 @@ def bulk_move_cards():
     return redirect(redirect_target)
 
 
+@views.post("/folders/<int:folder_id>/cards/bulk-delete")
+@login_required
+def bulk_delete_cards(folder_id: int):
+    """Delete one or more cards from a folder (deck or collection)."""
+    folder = Folder.query.get_or_404(folder_id)
+    ensure_folder_access(folder, write=True)
+
+    json_payload = request.get_json(silent=True) or {}
+    wants_json = request.is_json or bool(json_payload) or "application/json" in (request.headers.get("Accept") or "")
+
+    redirect_target = (
+        request.form.get("redirect_to")
+        or request.referrer
+        or url_for("views.folder_detail", folder_id=folder_id)
+    )
+
+    def _gather_raw_ids() -> list[str]:
+        raw: list[str] = []
+
+        def _extend(value):
+            if value is None:
+                return
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    _extend(item)
+            else:
+                raw.append(str(value))
+
+        _extend(json_payload.get("card_ids") or json_payload.get("cardIds"))
+        if not raw:
+            _extend(request.form.getlist("card_ids"))
+            _extend(request.form.getlist("card_ids[]"))
+        if not raw:
+            single = request.form.get("card_id")
+            if single:
+                raw.append(single)
+        return raw
+
+    card_ids: list[int] = []
+    for raw_value in _gather_raw_ids():
+        text = (raw_value or "").strip()
+        if not text:
+            continue
+        try:
+            card_ids.append(int(text))
+        except (TypeError, ValueError):
+            continue
+
+    card_ids = list(dict.fromkeys(card_ids))
+    if not card_ids:
+        message = "Select at least one card to delete."
+        if wants_json:
+            return jsonify({"success": False, "message": message}), 400
+        flash(message, "warning")
+        return redirect(redirect_target)
+
+    cards = (
+        Card.query.filter(Card.id.in_(card_ids), Card.folder_id == folder.id)
+        .order_by(Card.id.asc())
+        .all()
+    )
+    if not cards:
+        message = "No matching cards were found in this folder."
+        if wants_json:
+            return jsonify({"success": False, "message": message}), 404
+        flash(message, "warning")
+        return redirect(redirect_target)
+
+    deleted_qty = 0
+    for card in cards:
+        deleted_qty += card.quantity or 0
+        db.session.delete(card)
+
+    _safe_commit()
+    record_audit_event(
+        "cards_bulk_delete",
+        {"folder": folder.id, "card_ids": card_ids[:50], "qty": deleted_qty},
+    )
+
+    message = f"Deleted {len(cards)} card{'s' if len(cards) != 1 else ''} ({deleted_qty} cop{'ies' if deleted_qty != 1 else 'y'})."
+    if wants_json:
+        return jsonify({"success": True, "message": message, "deleted": len(cards), "deleted_qty": deleted_qty})
+
+    flash(message, "success")
+    return redirect(redirect_target)
+
+
 @views.get("/api/card/<int:card_id>/printing-options")
 @login_required
 def api_card_printing_options(card_id: int):
@@ -3064,16 +3151,62 @@ def deck_synergy():
         db.session.query(
             Folder.id,
             Folder.name,
+            Folder.commander_name,
+            Folder.commander_oracle_id,
+            Folder.deck_tag,
             func.coalesce(func.sum(Card.quantity), 0).label("qty"),
         )
         .outerjoin(Card, Card.folder_id == Folder.id)
         .filter(func.coalesce(Folder.category, Folder.CATEGORY_DECK) == Folder.CATEGORY_DECK)
-        .group_by(Folder.id, Folder.name)
+        .group_by(Folder.id, Folder.name, Folder.commander_name, Folder.commander_oracle_id, Folder.deck_tag)
         .order_by(func.lower(Folder.name))
         .all()
     )
 
-    deck_options = [{"id": fid, "name": name, "qty": int(qty or 0)} for fid, name, qty in deck_rows]
+    deck_options = [
+        {
+            "id": fid,
+            "name": name,
+            "qty": int(qty or 0),
+            "commander": commander,
+            "commander_oid": commander_oid,
+            "tag": deck_tag,
+        }
+        for fid, name, commander, commander_oid, deck_tag, qty in deck_rows
+    ]
+
+    if deck_options:
+        folder_map = {
+            f.id: f
+            for f in Folder.query.filter(Folder.id.in_([d["id"] for d in deck_options])).all()
+        }
+        for deck in deck_options:
+            folder = folder_map.get(deck["id"])
+            commander_name = deck.get("commander")
+            commander_oid = deck.get("commander_oid")
+            pr = _lookup_print_data(
+                getattr(folder, "commander_set_code", None),
+                getattr(folder, "commander_collector_number", None),
+                commander_name,
+                primary_commander_oracle_id(commander_oid),
+            )
+            if not pr and commander_oid:
+                try:
+                    pr_list = prints_for_oracle(commander_oid) or []
+                    pr = pr_list[0] if pr_list else None
+                except Exception:
+                    pr = None
+            if not pr and commander_name:
+                try:
+                    oid = commander_oid or unique_oracle_by_name(commander_name)
+                    if oid:
+                        pr_list = prints_for_oracle(oid) or []
+                        pr = pr_list[0] if pr_list else None
+                except Exception:
+                    pr = None
+
+            imgs = _image_from_print(pr) if pr else {}
+            deck["commander_hover"] = imgs.get("large") or imgs.get("normal") or imgs.get("small")
 
     analysis = None
     errors: list[str] = []
@@ -3251,6 +3384,7 @@ __all__ = [
     "create_proxy_deck",
     "create_proxy_deck_bulk",
     "bulk_move_cards",
+    "bulk_delete_cards",
     "api_card_printing_options",
     "api_update_card_printing",
     "api_deck_analysis",

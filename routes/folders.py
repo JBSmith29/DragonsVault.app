@@ -966,6 +966,10 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         synergy_summary=synergy_summary,
         commander_media=commander_media,
         synergy_error=synergy_error,
+        move_targets=Folder.query.filter(
+            Folder.owner_user_id == folder.owner_user_id,
+            Folder.id != folder.id
+        ).order_by(Folder.name).all() if folder.owner_user_id else [],
     )
 
 

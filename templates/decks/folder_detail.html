@@ -109,6 +109,33 @@
     color: var(--bs-secondary-color);
   }
 
+  /* Bulk action bar */
+  .card-action-bar {
+    position:fixed;
+    bottom:1rem;
+    left:0;
+    right:0;
+    z-index:2100;
+    display:flex;
+    justify-content:center;
+    pointer-events:none;
+  }
+  .card-action-bar .bar-surface {
+    pointer-events:auto;
+    margin:0 auto;
+    max-width:1200px;
+    width:calc(100% - 2rem);
+    border-radius:1rem;
+    background:rgba(15,23,42,.9);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 16px 40px rgba(0,0,0,.35);
+    padding:.85rem 1rem;
+  }
+  .card-action-bar .bar-title { font-weight:600; font-size:.95rem; }
+  .card-action-bar .muted { color:var(--bs-secondary-color); }
+  .card-action-bar .bar-grid { row-gap:.5rem; }
+  .page-section-with-bar { padding-bottom:180px; }
+
   .commander-summary{
     display:flex;
     flex-wrap:wrap;
@@ -1572,8 +1599,8 @@
 
   <!-- Stats -->
   <div class="stats-grid mb-3">
-    <div class="stat-card"><div class="label">Unique Cards</div><div class="value">{{ total_rows }}</div></div>
-    <div class="stat-card"><div class="label">Total Quantity</div><div class="value">{{ total_qty }}</div></div>
+    <div class="stat-card"><div class="label">Unique Cards</div><div class="value" data-stat-unique>{{ total_rows }}</div></div>
+    <div class="stat-card"><div class="label">Total Quantity</div><div class="value" data-stat-total>{{ total_qty }}</div></div>
     <div class="stat-card"><div class="label">Total Value</div><div class="value">${{ '{:,.2f}'.format(total_value_usd or 0) }}</div></div>
   </div>
 
@@ -1747,6 +1774,9 @@
     <table class="table table-sm align-middle cards-table" id="folderCardsTable">
       <thead>
         <tr>
+          <th class="text-center" style="width:40px;">
+            <input class="form-check-input" type="checkbox" id="folderSelectAll">
+          </th>
           <th class="col-art">Art</th>
           <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='name',  dir=name_dir) }}">Name</a></th>
           <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='ctype', dir=ctyp_dir) }}">Type</a></th>
@@ -1781,10 +1811,13 @@
                 data-img-small="{{ art or '' }}"
                 data-img-normal="{{ (art or '')|replace('/small/','/normal/') }}"
                 data-img-large="{{ (art or '')|replace('/small/','/large/') }}"
-                data-ignore-hover="true"
-                role="button"
+              data-ignore-hover="true"
+              role="button"
                 aria-label="View {{ display_name_map.get(c.id) or c.name }} details"
             >
+              <td class="text-center">
+                <input class="form-check-input card-select" type="checkbox" value="{{ c.id }}">
+              </td>
               <td class="col-art">
                 {% if art %}
                   <img src="{{ art }}"
@@ -1846,13 +1879,48 @@
             </tr>
           {% endfor %}
           <tr id="cardFilterEmptyRow" class="d-none">
-            <td colspan="10" class="py-4 text-center text-muted">No cards match that search.</td>
+            <td colspan="11" class="py-4 text-center text-muted">No cards match that search.</td>
           </tr>
         {% else %}
-          <tr><td colspan="10" class="text-muted">No cards in this folder.</td></tr>
+          <tr><td colspan="11" class="text-muted">No cards in this folder.</td></tr>
         {% endif %}
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="card-action-bar d-none" id="folderActionBar">
+  <div class="bar-surface">
+    <div class="row align-items-center bar-grid">
+      <div class="col-12 col-md-4 d-flex flex-column">
+        <div class="bar-title">Bulk actions</div>
+        <div class="small muted" id="folderActionSummary">Select cards to enable actions</div>
+      </div>
+      <div class="col-12 col-md-5">
+        <label class="form-label mb-1" for="folderActionMove">Move to</label>
+        <div class="dropdown dv-select w-100" data-dv-select="folder-move" data-allow-reselect="true">
+          <input type="hidden" id="folderActionMove" data-dv-select-input value="">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="folderActionMoveToggle" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="folderActionMoveToggle">
+            <span data-dv-select-label>Choose destination…</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="folderActionMoveToggle">
+            <li>
+              <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Choose destination…">Choose destination…</button>
+            </li>
+            {% for dest in move_targets %}
+              <li>
+                <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ dest.id }}" data-label="{{ dest.name }}">{{ dest.name }}</button>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-3 d-flex gap-2 justify-content-end flex-wrap mt-2 mt-md-0">
+        <button type="button" class="btn btn-outline-danger btn-sm" id="folderActionDelete" disabled>Delete selected</button>
+        <button type="button" class="btn btn-primary btn-sm" id="folderActionMoveBtn" disabled>Move selected</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2141,7 +2209,7 @@
   }
 
   // Card name filter
-  const rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row'));
+  let rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row'));
   const emptyRow = document.getElementById('cardFilterEmptyRow');
   const nameFilterInput = document.getElementById('cardNameFilter');
   const typePills = Array.from(document.querySelectorAll('.type-pill'));
@@ -2156,6 +2224,156 @@
   const roleDetailSections = Array.from(document.querySelectorAll('[data-role-detail]'));
   const roleDetailPlaceholder = document.getElementById('roleDetailPlaceholder');
   const copyDeckListBtn = document.getElementById('copyDeckListBtn');
+  const bulkBar = document.getElementById('folderActionBar');
+  const bulkSummary = document.getElementById('folderActionSummary');
+  const bulkMoveSelect = document.getElementById('folderActionMove');
+  const bulkMoveBtn = document.getElementById('folderActionMoveBtn');
+  const bulkDeleteBtn = document.getElementById('folderActionDelete');
+  const selectAllToggle = document.getElementById('folderSelectAll');
+  const statUniqueEl = document.querySelector('[data-stat-unique]');
+  const statTotalEl = document.querySelector('[data-stat-total]');
+  let rowCheckboxes = Array.from(document.querySelectorAll('#folderCardsTable .card-select'));
+  const csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.content || '';
+
+  function selectedCheckboxes() {
+    return Array.from(rowCheckboxes).filter(cb => cb.checked);
+  }
+
+  function refreshRows() {
+    rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row'));
+  }
+
+  function refreshCheckboxes() {
+    rowCheckboxes = Array.from(document.querySelectorAll('#folderCardsTable .card-select'));
+  }
+
+  function updateStatsFromRows() {
+    rows = rows.filter(r => r.isConnected);
+    const visibleRows = rows.filter(r => r.id !== 'cardFilterEmptyRow');
+    const uniqueCount = visibleRows.length;
+    const totalQty = visibleRows.reduce((sum, row) => {
+      const parsed = parseInt(row.getAttribute('data-qty'), 10);
+      const qty = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+      return sum + qty;
+    }, 0);
+    if (statUniqueEl) statUniqueEl.textContent = uniqueCount;
+    if (statTotalEl) statTotalEl.textContent = totalQty;
+    if (emptyRow) {
+      emptyRow.classList.toggle('d-none', uniqueCount > 0);
+    }
+  }
+
+  function updateBulkBar() {
+    if (!bulkBar) return;
+    const sels = selectedCheckboxes();
+    const count = sels.length;
+    bulkBar.classList.toggle('d-none', count === 0);
+    document.getElementById('main')?.classList.toggle('page-section-with-bar', count > 0);
+    if (bulkSummary) {
+      bulkSummary.textContent = count ? `${count} card${count > 1 ? 's' : ''} selected` : 'Select cards to enable actions';
+    }
+    const targetSet = (bulkMoveSelect?.value || '').trim();
+    if (bulkMoveBtn) bulkMoveBtn.disabled = !count || !targetSet;
+    if (bulkDeleteBtn) bulkDeleteBtn.disabled = !count;
+    if (selectAllToggle) {
+      const allBoxes = Array.from(rowCheckboxes);
+      selectAllToggle.checked = count && count === allBoxes.length;
+      selectAllToggle.indeterminate = count > 0 && count < allBoxes.length;
+    }
+  }
+
+  if (bulkBar) {
+    // Allow clicking rows to toggle selection (except on interactive elements)
+    document.querySelectorAll('#folderCardsTable tbody tr.deck-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('a') || e.target.closest('button') || e.target.closest('input[type=\"checkbox\"]')) return;
+        const cb = row.querySelector('.card-select');
+        if (!cb) return;
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+
+    rowCheckboxes.forEach(chk => {
+      chk.addEventListener('change', () => {
+        updateBulkBar();
+      });
+      chk.addEventListener('click', evt => evt.stopPropagation());
+    });
+
+    selectAllToggle?.addEventListener('change', () => {
+      const checked = !!selectAllToggle.checked;
+      rowCheckboxes.forEach(cb => {
+        cb.checked = checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+
+    bulkMoveSelect?.addEventListener('change', updateBulkBar);
+
+    bulkDeleteBtn?.addEventListener('click', async () => {
+      const ids = selectedCheckboxes().map(cb => cb.value);
+      if (!ids.length) return;
+      bulkDeleteBtn.disabled = true;
+      try {
+        const res = await fetch("{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+          },
+          body: JSON.stringify({ card_ids: ids }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        ids.forEach(id => {
+          const row = document.querySelector(`[data-card-id="${id}"]`);
+          row?.remove();
+        });
+        refreshRows();
+        refreshCheckboxes();
+        updateStatsFromRows();
+        applyFilters();
+        updateBulkBar();
+      } catch (err) {
+        console.error("Bulk delete failed", err);
+        bulkDeleteBtn.disabled = false;
+      }
+    });
+
+    bulkMoveBtn?.addEventListener('click', async () => {
+      const ids = selectedCheckboxes().map(cb => cb.value);
+      const target = (bulkMoveSelect?.value || '').trim();
+      if (!ids.length || !target) return;
+      bulkMoveBtn.disabled = true;
+      try {
+        const res = await fetch("{{ url_for('views.bulk_move_cards') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+          },
+          body: JSON.stringify({ card_ids: ids, target_folder_id: target }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        ids.forEach(id => {
+          const row = document.querySelector(`[data-card-id="${id}"]`);
+          row?.remove();
+        });
+        refreshRows();
+        refreshCheckboxes();
+        updateStatsFromRows();
+        applyFilters();
+        updateBulkBar();
+      } catch (err) {
+        console.error("Bulk move failed", err);
+        bulkMoveBtn.disabled = false;
+      }
+    });
+
+    // Initialize state after paint
+    setTimeout(updateBulkBar, 30);
+  }
+
   let activeType = '';
   let activeCmc = '';
   let activeRole = '';
@@ -2300,6 +2518,7 @@
   }
 
   function applyFilters() {
+    rows = rows.filter(r => r.isConnected);
     const query = (nameFilterInput?.value || '').trim().toLowerCase();
     let visibleCount = 0;
 
@@ -2320,6 +2539,7 @@
     if (emptyRow) {
       emptyRow.classList.toggle('d-none', visibleCount > 0);
     }
+    updateStatsFromRows();
   }
 
   if (nameFilterInput) {
@@ -2397,6 +2617,7 @@
   updateRoleUI();
   updateRoleDetails();
   applyFilters();
+  updateStatsFromRows();
 
 })();
 </script>
