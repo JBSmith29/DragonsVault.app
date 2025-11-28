@@ -786,7 +786,7 @@
       {% set account_endpoints = ["views.login", "views.register"] %}
     {% endif %}
     {% set sidebar_active = not (disable_sidebar | default(false)) %}
-    <header class="app-header">
+    <header class="app-header d-none d-md-flex">
       <a class="app-header__branding text-reset text-decoration-none" href="{{ url_for('views.dashboard') }}" data-hx-boost="false">
         <div class="app-header__title">DragonsVault</div>
         <p class="app-header__motto">Collect &bull; Vault &bull; Conquer</p>
@@ -809,6 +809,32 @@
         </a>
       </div>
     </header>
+    {% if is_mobile %}
+      <div id="mobile-wrapper" class="d-block d-md-none">
+        <div class="mobile-header">
+          <button
+            id="mobileNavToggle"
+            class="mobile-nav-toggle"
+            type="button"
+            aria-label="Open navigation"
+            aria-expanded="false"
+            aria-controls="mobileNavOverlay">
+            <i class="bi bi-list" aria-hidden="true"></i>
+          </button>
+          <div class="mobile-header__brand">DragonsVault</div>
+          <button
+            class="theme-toggle btn-soft"
+            type="button"
+            aria-label="Toggle color theme"
+            aria-pressed="true"
+            data-theme-toggle>
+            <i class="bi bi-sun theme-toggle__icon theme-toggle__icon--sun"></i>
+            <i class="bi bi-moon theme-toggle__icon theme-toggle__icon--moon"></i>
+          </button>
+        </div>
+        {% include "_mobile_nav.html" %}
+      </div>
+    {% endif %}
     {# Layout shell: fixed sidebar + scrolling content column. #}
     {% set current_endpoint = request.endpoint or "" %}
     {% set legal_links_visible = current_endpoint in ["views.dashboard", "views.account_center", "views.import_csv"] %}
@@ -989,7 +1015,7 @@
       {% endif %}
 
       <div id="content" class="flex-grow-1 position-relative{% if not sidebar_active %} w-100{% else %} has-mobile-toolbar{% endif %}">
-        {% if sidebar_active %}
+        {% if sidebar_active and not is_mobile %}
         <header class="content-toolbar d-lg-none">
           <button
             id="sidebarMobileToggle"
@@ -1512,5 +1538,9 @@
     <script src="{{ url_for('static', filename='js/prints-cycler.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/face-flip.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/card-hover.js') }}" defer></script>
+    {% if is_mobile %}
+      <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+      <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+    {% endif %}
   </body>
 </html>

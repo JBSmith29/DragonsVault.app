@@ -1,7 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
-  const toggleBtn = document.getElementById("themeToggleBtn");
-  if (!html || !toggleBtn) return;
+  if (!html) return;
+
+  const toggles = Array.from(
+    document.querySelectorAll("[data-theme-toggle], #themeToggleBtn")
+  );
+  if (!toggles.length) return;
 
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   let stored = null;
@@ -11,9 +15,15 @@ document.addEventListener("DOMContentLoaded", () => {
     stored = null;
   }
   const initial = stored || (prefersDark ? "dark" : "light");
+
   const applyTheme = (theme) => {
     html.setAttribute("data-bs-theme", theme);
-    toggleBtn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+    toggles.forEach((btn) => {
+      btn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+      if (btn.classList.contains("animate-toggle")) {
+        btn.classList.remove("animate-toggle");
+      }
+    });
     try {
       localStorage.setItem("dv-theme", theme);
     } catch (_) {
@@ -23,10 +33,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   applyTheme(initial);
 
-  toggleBtn.addEventListener("click", () => {
-    const next = html.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
-    applyTheme(next);
-    toggleBtn.classList.add("animate-toggle");
-    setTimeout(() => toggleBtn.classList.remove("animate-toggle"), 300);
+  toggles.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = html.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
+      applyTheme(next);
+      btn.classList.add("animate-toggle");
+      setTimeout(() => btn.classList.remove("animate-toggle"), 300);
+    });
   });
 });

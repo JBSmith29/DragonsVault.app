@@ -703,6 +703,11 @@ def create_app():
     from routes import views
     app.register_blueprint(views)
 
+    @app.context_processor
+    def inject_device_type():
+        user_agent = (request.headers.get("User-Agent") or "").lower()
+        return {"is_mobile": "mobi" in user_agent}
+
     # ------------------------------------------------------------------
     # CLI COMMANDS
     # ------------------------------------------------------------------

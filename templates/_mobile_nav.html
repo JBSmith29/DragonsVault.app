@@ -1,0 +1,23 @@
+<div id="mobileNavOverlay" class="mobile-nav-overlay d-none">
+  <div class="mobile-nav-surface">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="fw-semibold text-uppercase">Menu</div>
+      <button type="button" class="btn-close btn-close-white" aria-label="Close menu" data-mobile-close></button>
+    </div>
+    <div class="mobile-nav-list">
+      <a class="mobile-nav-item" href="{{ url_for('views.dashboard') }}" data-mobile-nav-link>Dashboard</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.list_cards') }}" data-mobile-nav-link>Cards</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.collection_overview') }}" data-mobile-nav-link>Collection</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.decks_overview') }}" data-mobile-nav-link>Decks</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.sets_overview') }}" data-mobile-nav-link>Sets</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.shared_folders') }}" data-mobile-nav-link>Folders</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.import_csv') }}" data-mobile-nav-link>Import / Export</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.wishlist') }}" data-mobile-nav-link>Wishlist</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.list_checker') }}" data-mobile-nav-link>List Checker</a>
+      <a class="mobile-nav-item" href="{{ url_for('views.scryfall_browser') }}" data-mobile-nav-link>Scryfall Cards</a>
+      {% if user_is_admin %}
+      <a class="mobile-nav-item" href="{{ url_for('views.admin_console') }}" data-mobile-nav-link>Admin</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
