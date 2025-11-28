@@ -29,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {
       /* ignore */
     }
+    document.dispatchEvent(new Event("theme-change"));
   };
 
   applyTheme(initial);

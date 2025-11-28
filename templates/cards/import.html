@@ -30,6 +30,10 @@
     </div>
   {% endif %}
 
+  {% if is_mobile %}
+    {% include "_mobile_import_modal.html" %}
+  {% endif %}
+
   <style>
     .folder-export-grid {
       display: grid;

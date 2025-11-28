@@ -1,0 +1,32 @@
+{# Reusable mobile-only card tile. Expects fields: image, name, set_code, rarity, mana_cost_html, price, owned_count, missing_count, details (HTML). #}
+<div class="mobile-card-tile" data-mobile-card>
+  <div class="mobile-card-media">
+    <img src="{{ image or url_for('static', filename='img/card-placeholder.svg') }}"
+         alt="{{ name }}"
+         loading="lazy"
+         data-mobile-card-img>
+  </div>
+  <div class="mobile-card-body">
+    <div class="mobile-card-title">{{ name }}</div>
+    <div class="mobile-card-meta">
+      <span class="badge text-bg-secondary">{{ (set_code or '')|upper }}</span>
+      {% if rarity %}<span class="badge text-bg-dark">{{ rarity|capitalize }}</span>{% endif %}
+      {% if mana_cost_html %}<span class="mana-inline" data-mobile-cost>{{ mana_cost_html|safe }}</span>{% endif %}
+    </div>
+    {% if price %}
+      <div class="mobile-card-price">Price: {{ price }}</div>
+    {% endif %}
+    {% if owned_count is not none or missing_count is not none %}
+      <div class="mobile-card-counts">
+        {% if owned_count is not none %}<span class="badge text-bg-success">Owned {{ owned_count }}</span>{% endif %}
+        {% if missing_count is not none %}<span class="badge text-bg-warning text-dark">Missing {{ missing_count }}</span>{% endif %}
+      </div>
+    {% endif %}
+    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" data-mobile-toggle>
+      Details
+    </button>
+    <div class="mobile-card-detail collapse mt-2">
+      {{ details or "" }}
+    </div>
+  </div>
+</div>

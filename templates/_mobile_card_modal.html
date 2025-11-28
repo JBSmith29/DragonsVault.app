@@ -1,0 +1,49 @@
+<div class="modal fade mobile-card-modal" id="mobileCardModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header sticky-top border-0 bg-dark">
+        <h5 class="modal-title">Card Details</h5>
+        <button type="button" class="btn-close btn-close-white mobile-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="mobile-card-hero">
+          <img id="mobileCardHeroImg" src="{{ url_for('static', filename='img/card-placeholder.svg') }}" alt="Card art" class="w-100">
+        </div>
+        <div class="p-3">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div>
+              <h4 class="mb-1" id="mobileCardName">Card Name</h4>
+              <div class="text-muted small" id="mobileCardSet">Set · Rarity</div>
+            </div>
+            <div class="d-flex gap-2" id="mobileCardVariants"></div>
+          </div>
+          <div class="mb-3" id="mobileCardMana"></div>
+          <div class="mobile-card-text" id="mobileCardText">Oracle text</div>
+
+          <div class="accordion mt-3" id="mobileRulingsAccordion">
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="rulingHeading">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#mobileRulings" aria-expanded="false" aria-controls="mobileRulings">
+                  Rulings
+                </button>
+              </h2>
+              <div id="mobileRulings" class="accordion-collapse collapse" aria-labelledby="rulingHeading" data-bs-parent="#mobileRulingsAccordion">
+                <div class="accordion-body" id="mobileRulingsBody">
+                  <div class="text-muted small">No rulings available.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-grid gap-2 mt-3">
+            <button type="button" class="btn btn-primary btn-lg" data-mobile-action="add">Add to deck</button>
+            <button type="button" class="btn btn-outline-primary btn-lg" data-mobile-action="move">Move</button>
+            <button type="button" class="btn btn-outline-secondary btn-lg" data-mobile-action="tags">Edit tags</button>
+            <button type="button" class="btn btn-outline-secondary btn-lg" data-mobile-action="language">Edit language</button>
+            <button type="button" class="btn btn-outline-secondary btn-lg" data-mobile-action="printings">View printings</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

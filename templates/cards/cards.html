@@ -519,6 +519,10 @@
                 data-cn="{{ card.collector_number }}"
                 data-lang="{{ card.lang }}"
                 data-foil="{{ 1 if card.is_foil else 0 }}"
+                data-rarity="{{ (rarity_map.get(card.id) or '') }}"
+                data-type="{{ (raw_types if raw_types is string else (raw_types|join(' '))) if raw_types else '' }}"
+                data-img-small="{{ (image_map.get(card.id) or '') }}"
+                data-img-large="{{ (hover_src or '') }}"
                 data-name="{{ display_name }}"
                 data-ignore-hover="true">
               {% if move_folder_options %}
@@ -694,69 +698,76 @@
   </div>
 </div>
 
-<div class="modal fade" id="editPrintingModal" tabindex="-1" aria-labelledby="editPrintingLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content bg-body text-body border border-secondary-subtle rounded-4">
-      <div class="modal-header border-secondary-subtle">
-        <div>
-          <p class="text-muted small mb-1">Update printing</p>
-          <h5 class="modal-title" id="editPrintingLabel">Edit printing</h5>
+{% if is_mobile %}
+  {% include "_mobile_card_modal.html" %}
+  {% include "_mobile_edit_printing.html" %}
+  {% include "_mobile_edit_foil.html" %}
+  {% include "_mobile_edit_tags.html" %}
+{% else %}
+  <div class="modal fade" id="editPrintingModal" tabindex="-1" aria-labelledby="editPrintingLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content bg-body text-body border border-secondary-subtle rounded-4">
+        <div class="modal-header border-secondary-subtle">
+          <div>
+            <p class="text-muted small mb-1">Update printing</p>
+            <h5 class="modal-title" id="editPrintingLabel">Edit printing</h5>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <form id="editPrintingForm">
+          <div class="modal-body">
+            <div id="editPrintingAlert" class="alert alert-warning d-none mb-3"></div>
+            <div class="border rounded-3 p-3 bg-body-tertiary mb-3">
+              <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div>
+                  <div class="small text-muted">Card</div>
+                  <div class="fw-semibold" id="editPrintingCardName">Loading…</div>
+                </div>
+                <div class="vr d-none d-md-block"></div>
+                <div>
+                  <div class="small text-muted">Owned quantity</div>
+                  <div class="fw-semibold" id="editPrintingOwnedQty">—</div>
+                </div>
+              </div>
+            </div>
+            <input type="hidden" id="editPrintingCardId" name="card_id" value="">
+            <div class="mb-3">
+              <label class="form-label">Printing</label>
+              <input type="hidden" id="printingSelectInput" value="">
+              <div id="printingGridEmpty" class="text-muted small d-none">No printings found for this card.</div>
+              <div class="printing-grid" id="printingOptionsGrid"></div>
+              <div class="form-text">Pick the exact set, collector number, language, and variant.</div>
+            </div>
+            <div class="mb-3">
+              <label for="foilingSelectToggle" class="form-label">Foiling</label>
+              <div class="dropdown dv-select w-100" data-dv-select="card-foiling" id="foilingSelectWrapper">
+                <input type="hidden" id="foilingSelectInput" data-dv-select-input value="nonfoil">
+                <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="foilingSelectToggle" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span data-dv-select-label>Nonfoil</span>
+                  <i class="bi bi-chevron-down"></i>
+                </button>
+                <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="foilingSelectToggle">
+                  <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="nonfoil" data-label="Nonfoil">Nonfoil</button></li>
+                  <li><button class="dropdown-item" type="button" data-dv-select-option data-value="foil" data-label="Foil">Foil</button></li>
+                </ul>
+              </div>
+              <div class="form-text" id="foilingAvailability">Select a printing to see available finishes.</div>
+            </div>
+            <div class="mb-3">
+              <label for="editPrintingQty" class="form-label">Quantity</label>
+              <input type="number" min="1" step="1" class="form-control" id="editPrintingQty" value="1">
+              <div class="form-text" id="editPrintingQtyHelp">Defaulting to 1 copy.</div>
+            </div>
+          </div>
+          <div class="modal-footer border-secondary-subtle">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="editPrintingSubmit">Save</button>
+          </div>
+        </form>
       </div>
-      <form id="editPrintingForm">
-        <div class="modal-body">
-          <div id="editPrintingAlert" class="alert alert-warning d-none mb-3"></div>
-          <div class="border rounded-3 p-3 bg-body-tertiary mb-3">
-            <div class="d-flex align-items-center gap-3 flex-wrap">
-              <div>
-                <div class="small text-muted">Card</div>
-                <div class="fw-semibold" id="editPrintingCardName">Loading…</div>
-              </div>
-              <div class="vr d-none d-md-block"></div>
-              <div>
-                <div class="small text-muted">Owned quantity</div>
-                <div class="fw-semibold" id="editPrintingOwnedQty">—</div>
-              </div>
-            </div>
-          </div>
-          <input type="hidden" id="editPrintingCardId" name="card_id" value="">
-          <div class="mb-3">
-            <label class="form-label">Printing</label>
-            <input type="hidden" id="printingSelectInput" value="">
-            <div id="printingGridEmpty" class="text-muted small d-none">No printings found for this card.</div>
-            <div class="printing-grid" id="printingOptionsGrid"></div>
-            <div class="form-text">Pick the exact set, collector number, language, and variant.</div>
-          </div>
-          <div class="mb-3">
-            <label for="foilingSelectToggle" class="form-label">Foiling</label>
-            <div class="dropdown dv-select w-100" data-dv-select="card-foiling" id="foilingSelectWrapper">
-              <input type="hidden" id="foilingSelectInput" data-dv-select-input value="nonfoil">
-              <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="foilingSelectToggle" data-bs-toggle="dropdown" aria-expanded="false">
-                <span data-dv-select-label>Nonfoil</span>
-                <i class="bi bi-chevron-down"></i>
-              </button>
-              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="foilingSelectToggle">
-                <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="nonfoil" data-label="Nonfoil">Nonfoil</button></li>
-                <li><button class="dropdown-item" type="button" data-dv-select-option data-value="foil" data-label="Foil">Foil</button></li>
-              </ul>
-            </div>
-            <div class="form-text" id="foilingAvailability">Select a printing to see available finishes.</div>
-          </div>
-          <div class="mb-3">
-            <label for="editPrintingQty" class="form-label">Quantity</label>
-            <input type="number" min="1" step="1" class="form-control" id="editPrintingQty" value="1">
-            <div class="form-text" id="editPrintingQtyHelp">Defaulting to 1 copy.</div>
-          </div>
-        </div>
-        <div class="modal-footer border-secondary-subtle">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="editPrintingSubmit">Save</button>
-        </div>
-      </form>
     </div>
   </div>
-</div>
+{% endif %}
 
 <script>
 (function () {
