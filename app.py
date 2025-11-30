@@ -610,6 +610,11 @@ def create_app():
     @app.before_request
     def require_authentication():
         if current_user.is_authenticated:
+            # If a prior login requested a full refresh (to update sidebar/admin links), clear the flag.
+            if session.pop("force_full_refresh", False):
+                # For HX requests, ask the client to hard-redirect; for normal requests, just continue.
+                if request.headers.get("HX-Request"):
+                    return jsonify({"redirect": request.path}), 200, {"HX-Redirect": request.path}
             return
 
         endpoint = request.endpoint or ""

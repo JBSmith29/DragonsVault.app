@@ -17,9 +17,21 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/roles.css') }}">
 
-    {# Progressive enhancement scripts (instant page for prefetching). #}
-    <!-- Perf helpers -->
-    <script defer type="module" src="https://instant.page/5.2.0"></script>
+  {# Progressive enhancement scripts (instant page for prefetching). #}
+  <!-- Perf helpers -->
+  <script defer type="module" src="https://instant.page/5.2.0"></script>
+  <script>
+    (function(){
+      document.addEventListener('htmx:afterOnLoad', function (evt) {
+        const xhr = evt.detail && evt.detail.xhr;
+        if (!xhr || !xhr.getResponseHeader) return;
+        const redirect = xhr.getResponseHeader('HX-Redirect');
+        if (redirect) {
+          window.location.assign(redirect);
+        }
+      });
+    })();
+  </script>
 
     {# HTMX powers dynamic fragments throughout the app. #}
     <!-- HTMX 2.x (CDN) -->
