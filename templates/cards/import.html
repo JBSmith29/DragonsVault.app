@@ -408,6 +408,72 @@
   </div>
 </div>
 
+{% set import_success = request.args.get('import_success') %}
+{% if import_success and folder_export_options %}
+<div class="modal fade" id="postImportFolderModal" tabindex="-1" aria-labelledby="postImportFolderLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="postImportFolderLabel">Confirm folder types</h5>
+          <p class="small text-muted mb-0">Mark each folder as a deck, collection, or build queue to keep stats accurate.</p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info small">
+          Choose <strong>Deck</strong> for playable decks, <strong>Collection</strong> for inventory/bulk, or <strong>Build Queue</strong> for works in progress.
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th style="width:260px;">Category</th>
+                <th class="text-center" style="width:100px;">Proxy</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for folder in folder_export_options %}
+              <tr data-folder-row data-folder-id="{{ folder.id }}">
+                <td class="fw-semibold">{{ folder.name }}</td>
+                <td>
+                  <div class="d-flex flex-wrap gap-3">
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-deck" value="{{ deck_category }}" {% if folder.category == deck_category %}checked{% endif %}>
+                      <label class="form-check-label" for="cat-{{ folder.id }}-deck">Deck</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-collection" value="{{ collection_category }}" {% if folder.category == collection_category %}checked{% endif %}>
+                      <label class="form-check-label" for="cat-{{ folder.id }}-collection">Collection</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-build" value="{{ build_category }}" {% if folder.category == build_category %}checked{% endif %}>
+                      <label class="form-check-label" for="cat-{{ folder.id }}-build">Build Queue</label>
+                    </div>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <span class="badge {% if folder.is_proxy %}text-bg-warning text-dark{% else %}text-bg-secondary{% endif %}">
+                    {% if folder.is_proxy %}Proxy{% else %}Owned{% endif %}
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="me-auto small text-muted" id="postImportFolderStatus"></div>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Skip</button>
+        <button type="button" class="btn btn-primary" id="postImportFolderSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
   (function () {
     const form = document.getElementById("import-form");
@@ -603,5 +669,60 @@
     }
   })();
 </script>
+
+{% if import_success and folder_export_options %}
+<script>
+(function(){
+  const modalEl = document.getElementById('postImportFolderModal');
+  if (!modalEl || !window.bootstrap) return;
+  const modal = new bootstrap.Modal(modalEl);
+  const saveBtn = document.getElementById('postImportFolderSave');
+  const statusEl = document.getElementById('postImportFolderStatus');
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  function setStatus(msg, variant){
+    if (!statusEl) return;
+    statusEl.textContent = msg || '';
+    statusEl.className = 'me-auto small';
+    if (variant) statusEl.classList.add('text-' + variant);
+    else statusEl.classList.add('text-muted');
+  }
+
+  async function handleSave(){
+    const rows = Array.from(modalEl.querySelectorAll('[data-folder-row]'));
+    const payload = rows.map((row) => {
+      const id = row.dataset.folderId;
+      const selected = row.querySelector('input[type="radio"]:checked');
+      return { id, category: selected ? selected.value : '{{ deck_category }}' };
+    }).filter(entry => entry.id);
+    setStatus('Saving…', 'muted');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const resp = await fetch('{{ url_for("views.api_update_folder_categories") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
+        body: JSON.stringify({ folders: payload }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.ok === false){
+        throw new Error(data.error || 'Unable to save folder categories.');
+      }
+      setStatus(`Saved ${data.updated || 0} folder categories.`, 'success');
+      setTimeout(() => modal.hide(), 600);
+    } catch (err){
+      setStatus(err.message || 'Unable to save folder categories.', 'danger');
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  }
+
+  if (saveBtn) saveBtn.addEventListener('click', handleSave);
+  modal.show();
+})();
+</script>
+{% endif %}
 
 {% endblock %}

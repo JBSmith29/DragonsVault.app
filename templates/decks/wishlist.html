@@ -4,6 +4,53 @@
 
 <h1 class="mb-3">Wishlist</h1>
 
+<style>
+  .wishlist-view-toggle .btn {
+    min-width: 80px;
+  }
+  .wishlist-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+  .wishlist-card {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    height: 100%;
+  }
+  .wishlist-card .thumb {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.05);
+  }
+  .wishlist-card .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .wishlist-card .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+  }
+  .wishlist-card .status {
+    min-width: 110px;
+  }
+  .wishlist-card .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+</style>
+
 {# Safe fallbacks if counts are missing from the view #}
 {% set total_items = total if total is defined else (items|length) %}
 {% set open_cnt = open_count if open_count is defined else (items|selectattr('status','equalto','open')|list|length) %}
@@ -25,7 +72,12 @@
 
   <div class="d-flex align-items-center gap-2">
     <a href="{{ url_for('views.list_checker') }}" class="btn btn-outline-light btn-sm">List Checker</a>
-    <a href="{{ url_for('views.wishlist_export') }}" class="btn btn-outline-secondary btn-sm">Export CSV</a>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="wishlistExportBtn" data-export-url="{{ url_for('views.wishlist_export') }}">Export CSV</button>
+    <button type="button" class="btn btn-outline-primary btn-sm" id="wishlistCopyBtn">Copy All to Clipboard</button>
+    <div class="btn-group btn-group-sm wishlist-view-toggle" role="group" aria-label="Wishlist view toggle">
+      <button type="button" class="btn btn-outline-light active" data-view-mode="list">List</button>
+      <button type="button" class="btn btn-outline-light" data-view-mode="gallery">Gallery</button>
+    </div>
   </div>
 </div>
 
@@ -61,8 +113,8 @@
   </div>
 </div>
 
-<!-- Table -->
-<div class="table-responsive">
+<!-- List view -->
+<div class="table-responsive" id="wl-list-view">
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
     <div class="text-muted small">
       {% if total_items > 0 %}
@@ -104,7 +156,7 @@
     </thead>
     <tbody>
       {% for it in items %}
-      <tr class="wishlist-row" data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
+      <tr class="wishlist-row" data-wl-item data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
         <td class="text-center">
           <input
             type="checkbox"
@@ -116,48 +168,32 @@
           >
         </td>
         <td>
-          <div class="d-flex gap-2">
-            <div class="wishlist-thumb rounded overflow-hidden">
-              <img
-                src=""
-                alt="{{ it.name }}"
-                class="wishlist-thumb-img"
-                loading="lazy"
-                data-scry-id="{{ it.scryfall_id or '' }}"
-                data-name="{{ it.name }}"
-              >
-            </div>
-            <div class="d-flex flex-column">
-              {% set back_to = request.full_path %}
-              {% set wl_href = (
-                url_for('views.scryfall_print_detail', sid=it.scryfall_id, return_to=back_to)
-                if it.scryfall_id
-                else url_for('views.scryfall_resolve_by_name', name=it.name, return_to=back_to)
-              ) %}
-
-              <a
-                class="link-light link-underline-opacity-25 wl-card-link"
-                href="{{ wl_href }}"
-                data-scry-id="{{ it.scryfall_id or '' }}"
-                data-name="{{ it.name }}"
-              ><strong>{{ it.name }}</strong></a>
-
-              <div class="small text-muted">
-                {% if it.created_at %}Added {{ it.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
-              </div>
-              {% set folder_list = it.source_folders_list %}
-              {% if folder_list %}
-                <div class="small text-muted d-flex flex-wrap gap-1 mt-1">
-                  <span class="fw-semibold text-secondary">Fetch:</span>
-                  {% for entry in folder_list %}
-                    <span class="badge bg-secondary-subtle text-secondary">
-                      {{ entry.name }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
-                    </span>
-                  {% endfor %}
-                </div>
-              {% endif %}
-            </div>
+          {% set back_to = request.full_path %}
+          {% set wl_href = (
+            url_for('views.scryfall_print_detail', sid=it.scryfall_id, return_to=back_to)
+            if it.scryfall_id
+            else url_for('views.scryfall_resolve_by_name', name=it.name, return_to=back_to)
+          ) %}
+          <a
+            class="link-light link-underline-opacity-25 wl-card-link fw-semibold"
+            href="{{ wl_href }}"
+            data-scry-id="{{ it.scryfall_id or '' }}"
+            data-name="{{ it.name }}"
+          >{{ it.name }}</a>
+          <div class="small text-muted">
+            {% if it.created_at %}Added {{ it.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
           </div>
+          {% set folder_list = it.source_folders_list %}
+          {% if folder_list %}
+            <div class="small text-muted d-flex flex-wrap gap-1 mt-1">
+              <span class="fw-semibold text-secondary">Fetch:</span>
+              {% for entry in folder_list %}
+                <span class="badge bg-secondary-subtle text-secondary" data-folder-badge>
+                  {{ entry.name }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
+                </span>
+              {% endfor %}
+            </div>
+          {% endif %}
         </td>
 
         <td class="text-center">
@@ -239,6 +275,54 @@
   </table>
 </div>
 
+<!-- Gallery view -->
+<div id="wl-gallery-view" class="d-none">
+  <div class="wishlist-gallery">
+    {% for it in items %}
+    <div class="wishlist-card" data-wl-item data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
+      <div class="thumb">
+        <img
+          src="{{ (it.image_url or url_for('static', filename='img/card-placeholder.svg')) | e }}"
+          alt="{{ it.name }}"
+          class="wishlist-thumb-img"
+          data-scry-id="{{ it.scryfall_id or '' }}"
+          data-name="{{ it.name }}"
+          loading="lazy"
+        >
+      </div>
+      <div class="meta">
+        <div class="fw-semibold text-truncate">{{ it.name }}</div>
+        <span class="badge text-bg-secondary status">{{ it.status|default('Open')|title }}</span>
+      </div>
+      <div class="text-muted small">Requested: {{ it.requested_qty or it.quantity or 1 }}</div>
+      {% set folder_list = it.source_folders_list %}
+      {% if folder_list %}
+      <div class="text-muted small">Fetch:
+        {% for entry in folder_list %}
+          <span class="badge bg-secondary-subtle text-secondary">
+            {{ entry.name }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
+          </span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="actions">
+        <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline">
+          <input type="hidden" name="status" value="open">
+          <button class="btn btn-outline-primary btn-sm" type="submit">Mark Open</button>
+        </form>
+        <form method="post" action="{{ url_for('views.wishlist_mark', item_id=it.id) }}" class="d-inline">
+          <input type="hidden" name="status" value="acquired">
+          <button class="btn btn-outline-success btn-sm" type="submit">Acquired</button>
+        </form>
+        <form method="post" action="{{ url_for('views.wishlist_delete', item_id=it.id) }}" class="d-inline" data-confirm='Delete "{{ it.name }}"?'>
+          <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <style>
   #wl-filters .nav-link { cursor: pointer; }
 
@@ -268,17 +352,17 @@
 
   // -------- Filter + search --------
   const table = document.getElementById('wl-table');
+  const gallery = document.getElementById('wl-gallery-view');
   const search = document.getElementById('wl-search');
   const clearBtn = document.getElementById('wl-clear');
   const filters = document.getElementById('wl-filters');
 
   function applyFilter() {
-    if (!table) return;
     const active = filters.querySelector('.nav-link.active');
     const mode = active ? active.dataset.filter : 'all'; // all | open | to_fetch | ordered | acquired | removed
     const q = (search?.value || '').trim().toLowerCase();
 
-    table.querySelectorAll('tbody tr').forEach(tr => {
+    document.querySelectorAll('[data-wl-item]').forEach(tr => {
       const status = tr.getAttribute('data-status') || 'open';
       const name = tr.getAttribute('data-name') || '';
       const statusOk = (mode === 'all') || (status === mode);
@@ -344,6 +428,97 @@
   }
 
   document.querySelectorAll('.wishlist-thumb-img').forEach((img) => hydrateThumb(img));
+
+  // Copy wishlist names to clipboard
+  (function(){
+    const btn = document.getElementById('wishlistCopyBtn');
+    if (!btn) return;
+    const original = btn.textContent;
+    btn.addEventListener('click', async () => {
+      const items = Array.from(document.querySelectorAll('[data-wl-item]'));
+      const lines = items.map(row => {
+        const name = (row.dataset.name || '').trim();
+        const fetchBadges = Array.from(row.querySelectorAll('[data-folder-badge]')).map(b => b.textContent.trim()).filter(Boolean);
+        if (!name) return null;
+        return fetchBadges.length ? `${name} — ${fetchBadges.join(', ')}` : name;
+      }).filter(Boolean);
+      if (!lines.length) {
+        btn.textContent = 'Nothing to copy';
+        setTimeout(() => btn.textContent = original, 1200);
+        return;
+      }
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(lines.join('\n'));
+        } else {
+          throw new Error('Clipboard unavailable');
+        }
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = original, 1000);
+      } catch (err) {
+        btn.textContent = 'Copy failed';
+        setTimeout(() => btn.textContent = original, 1300);
+      }
+    });
+  })();
+
+  // Export CSV via fetch (stay on page)
+  (function(){
+    const btn = document.getElementById('wishlistExportBtn');
+    if (!btn) return;
+    const exportUrl = btn.dataset.exportUrl;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = 'Exporting...';
+      try {
+        const resp = await fetch(exportUrl, { method: 'GET' });
+        if (!resp.ok) throw new Error('Export failed');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'wishlist.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        btn.textContent = 'Exported';
+        setTimeout(() => btn.textContent = original, 1200);
+      } catch (err) {
+        btn.textContent = 'Export failed';
+        setTimeout(() => btn.textContent = original, 1400);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
+
+  // View toggle
+  (function(){
+    const buttons = Array.from(document.querySelectorAll('[data-view-mode]'));
+    if (!buttons.length) return;
+    const listView = document.getElementById('wl-list-view');
+    const galleryView = document.getElementById('wl-gallery-view');
+    const STORAGE_KEY = 'dv:wishlist:view';
+
+    function applyView(mode){
+      buttons.forEach(btn => btn.classList.toggle('active', btn.dataset.viewMode === mode));
+      if (listView) listView.classList.toggle('d-none', mode !== 'list');
+      if (galleryView) galleryView.classList.toggle('d-none', mode !== 'gallery');
+      try { localStorage.setItem(STORAGE_KEY, mode); } catch (_) {}
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        applyView(btn.dataset.viewMode || 'list');
+      });
+    });
+
+    let saved = 'list';
+    try { saved = localStorage.getItem(STORAGE_KEY) || 'list'; } catch (_) {}
+    applyView(saved);
+  })();
 
   // -------- Bulk selection + actions --------
   const selectAll = document.getElementById('wlSelectAll');

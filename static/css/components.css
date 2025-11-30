@@ -168,6 +168,7 @@ select.form-select-sm option {
   max-height: 320px;
   overflow-y: auto;
   position: relative;
+  z-index: 1100;
 }
 
 .dv-select-menu .dropdown-item {

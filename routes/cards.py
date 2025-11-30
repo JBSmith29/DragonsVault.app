@@ -438,6 +438,8 @@ def _folder_name_exists(name: str, *, exclude_id: int | None = None) -> bool:
     if not normalized:
         return False
     query = Folder.query.filter(func.lower(Folder.name) == normalized)
+    if current_user and getattr(current_user, "is_authenticated", False):
+        query = query.filter(Folder.owner_user_id == current_user.id)
     if exclude_id:
         query = query.filter(Folder.id != exclude_id)
     return db.session.query(query.exists()).scalar()
@@ -538,6 +540,7 @@ def _create_proxy_deck_from_lines(
         name=final_name,
         category=Folder.CATEGORY_DECK,
         owner=owner.strip() if owner else None,
+        owner_user_id=current_user.id if current_user.is_authenticated else None,
         is_proxy=True,
     )
 

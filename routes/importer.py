@@ -9,7 +9,7 @@ from io import BytesIO, StringIO
 from pathlib import Path
 import re
 
-from flask import Response, current_app, flash, redirect, render_template, request, send_file, url_for, session
+from flask import Response, current_app, flash, redirect, render_template, request, send_file, url_for, session, jsonify
 from flask_login import current_user, login_required
 from sqlalchemy import case, func
 
@@ -27,7 +27,7 @@ from services.scryfall_cache import (
 
 from werkzeug.utils import secure_filename
 
-from .base import _collector_number_numeric, _move_folder_choices, _name_sort_expr, limiter_key_user_or_ip, views
+from .base import _collector_number_numeric, _move_folder_choices, _name_sort_expr, limiter_key_user_or_ip, views, _safe_commit
 
 ALLOWED_IMPORT_EXTS = {".csv", ".xlsx", ".xls"}
 MAX_IMPORT_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
@@ -184,6 +184,7 @@ def _export_context() -> dict:
         {
             "id": folder.id,
             "name": folder.name,
+            "category": folder.category or Folder.CATEGORY_DECK,
             "category_label": folder_category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
             "is_proxy": bool(folder.is_proxy),
             "is_public": bool(folder.is_public),
@@ -246,6 +247,9 @@ def import_csv():
             "cards/import.html",
             quantity_mode="delta",
             notification=notification,
+            deck_category=Folder.CATEGORY_DECK,
+            collection_category=Folder.CATEGORY_COLLECTION,
+            build_category=Folder.CATEGORY_BUILD,
             **_export_context(),
         )
 
@@ -784,4 +788,39 @@ def manual_import():
     )
 
 
-__all__ = ["export_cards", "import_csv", "import_template_csv"]
+@views.post("/api/folders/categories")
+@login_required
+def api_update_folder_categories():
+    """Update folder categories for the current user (used post-import)."""
+    payload = request.get_json(silent=True) or {}
+    entries = payload.get("folders") or []
+    if not isinstance(entries, list):
+        return jsonify({"ok": False, "error": "Invalid payload"}), 400
+
+    allowed = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION, Folder.CATEGORY_BUILD}
+    updated = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        fid = entry.get("id")
+        cat = (entry.get("category") or "").strip().lower()
+        if not fid or cat not in allowed:
+            continue
+        try:
+            fid_int = int(fid)
+        except (TypeError, ValueError):
+            continue
+        folder = Folder.query.filter(
+            Folder.id == fid_int,
+            Folder.owner_user_id == current_user.id,
+        ).first()
+        if not folder:
+            continue
+        if folder.category != cat:
+            folder.category = cat
+            updated += 1
+    _safe_commit()
+    return jsonify({"ok": True, "updated": updated})
+
+
+__all__ = ["export_cards", "import_csv", "import_template_csv", "api_update_folder_categories"]

@@ -667,11 +667,11 @@ def build_a_deck():
             )
 
         leftover_cards: List[Dict[str, Any]] = []
-        for rem_key in sorted(remaining_keys):
-            leftover_cards.extend(type_buckets.get(rem_key, []))
-        if leftover_cards:
-            leftover_cards.sort(key=_goldfish_sort_key)
-            deck_goldfish_groups.append(
+    for rem_key in sorted(remaining_keys):
+        leftover_cards.extend(type_buckets.get(rem_key, []))
+    if leftover_cards:
+        leftover_cards.sort(key=_goldfish_sort_key)
+        deck_goldfish_groups.append(
                 {
                     "key": "other",
                     "label": "Other",
@@ -681,6 +681,10 @@ def build_a_deck():
             )
 
     deck_type_chart = ((analysis or {}).get("deck_type_chart") or {}).get("content") or []
+    type_breakdown = (analysis or {}).get("type_breakdown") or []
+    mana_pip_dist = (analysis or {}).get("mana_pip_dist") or []
+    land_mana_sources = (analysis or {}).get("land_mana_sources") or []
+    curve_rows = (analysis or {}).get("curve_rows") or []
     deck_list_lines: List[str] = []
     for item in deck_cards:
         name = item.get("name")
@@ -789,6 +793,8 @@ def build_a_deck():
     for _, items in edhrec_category_rows:
         _collect_hover(items)
 
+    deck_color_letters = letters_value or ""
+
     return render_template(
         template_name,
         build_decks=build_decks,
@@ -801,6 +807,7 @@ def build_a_deck():
         role_summaries=role_summaries,
         role_lookup=role_lookup,
         deck_type_chart=deck_type_chart,
+        deck_color_letters=deck_color_letters,
         coverage=coverage,
         theme_options=theme_options,
         tag_synergy=tag_synergy,
@@ -811,6 +818,10 @@ def build_a_deck():
         edhrec_chart=edhrec_chart,
         edhrec_category_rows=edhrec_category_rows,
         deck_list_text=deck_list_text,
+        type_breakdown=type_breakdown,
+        mana_pip_dist=mana_pip_dist,
+        land_mana_sources=land_mana_sources,
+        curve_rows=curve_rows,
         disable_hx=bool(selected_folder),
         upgrade_plan=upgrade_plan,
         playground_origin=playground_origin,

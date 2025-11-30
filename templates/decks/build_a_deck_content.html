@@ -195,6 +195,8 @@
     width: 148px;
     min-height: 210px;
   }
+  .build-tag-card { position: relative; overflow: visible; z-index: 1200; }
+  .build-tag-card .dropdown-menu { z-index: 1301; }
 
   #buildDeckRoot .card.shadow-sm {
     background: rgba(15, 23, 42, 0.5);
@@ -878,6 +880,9 @@
                     <i class="bi bi-chevron-down"></i>
                   </button>
                   <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="newDeckTagToggle">
+                    <li class="dv-select-search-wrapper">
+                      <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                    </li>
                     <li>
                       <button
                         class="dropdown-item active"
@@ -1032,8 +1037,95 @@
         {% set deck_name = deck_summary.name or selected_folder.name %}
         {% set commander_name = deck_summary.commander.name if deck_summary.commander else selected_folder.commander_name %}
         {% set commander_data = deck_summary.commander if deck_summary and deck_summary.commander else None %}
-        {% set commander_hover = commander_data.hover_image if commander_data and commander_data.hover_image else hover_lookup.get((commander_name or '')|lower) %}
+        {% set commander_hover = commander_data.image if commander_data and commander_data.image else (commander_data.hover_image if commander_data and commander_data.hover_image else hover_lookup.get((commander_name or '')|lower)) %}
         {% set commander_card_id = commander_data.card_id if commander_data and commander_data.card_id else None %}
+        {% set current_tag = selected_folder.deck_tag %}
+        {% set current_tag_label = deck_summary.tag_label if deck_summary and deck_summary.tag_label else current_tag %}
+        {% set ci_obj = deck_summary.color_identity if deck_summary else None %}
+        {% set ci_label = (ci_obj.label if ci_obj is mapping else ci_obj) or '' %}
+        {% set ci_html = (ci_obj.html if ci_obj is mapping else deck_summary.color_identity_html if deck_summary else '') %}
+
+        {% if selected_folder %}
+        <div class="card shadow-sm mb-4 build-tag-card">
+          <div class="card-body d-flex flex-wrap align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
+              <div class="commander-panel-preview rounded overflow-hidden">
+                <img
+                  src="{{ commander_hover or url_for('static', filename='img/card-placeholder.svg') }}"
+                  alt="{{ commander_name or 'Commander not set' }}"
+                  style="width:84px; height:120px; object-fit:cover;"
+                >
+              </div>
+              <div class="min-w-0">
+                <div class="h5 mb-1 text-truncate">{{ commander_name or 'Commander not set' }}</div>
+                {% if commander_data and commander_data.type_line %}
+                  <div class="text-muted small text-truncate">{{ commander_data.type_line }}</div>
+                {% endif %}
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                  {% if ci_html %}
+                    <span class="badge text-bg-secondary" title="{{ ci_label }}">{{ ci_html|safe }}</span>
+                  {% elif ci_label %}
+                    <span class="badge text-bg-secondary">{{ ci_label }}</span>
+                  {% endif %}
+                  {% if commander_card_id %}
+                    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.card_detail', card_id=commander_card_id) }}">
+                      View commander card
+                    </a>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="ms-auto">
+              <form method="post"
+                    class="d-flex align-items-center gap-2 flex-wrap"
+                    action="{{ url_for('views.set_folder_tag', folder_id=selected_folder.id) }}">
+                <div class="dropdown dv-select dv-select-sm" data-dv-select="build-deck-tag-update">
+                  <input type="hidden" name="tag" value="{{ current_tag or '' }}" data-dv-select-input>
+                  <button class="btn dv-select-toggle btn-sm d-inline-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-dv-select-label>{{ current_tag_label or 'Set deck tag' }}</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu" aria-labelledby="newDeckTagToggle">
+                    <li class="dv-select-search-wrapper">
+                      <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                    </li>
+                    <li>
+                      <button class="dropdown-item {% if not current_tag %}active{% endif %}"
+                              type="button"
+                              data-dv-select-option
+                              data-value=""
+                              data-label="No starting tag">
+                        No starting tag
+                      </button>
+                    </li>
+                    {% for category, tags in (deck_tag_groups|default({}, true)).items() %}
+                      <li>
+                        <h6 class="dropdown-header text-uppercase small text-muted" data-dv-select-category>
+                          {{ category }}
+                        </h6>
+                      </li>
+                      {% for tag in tags %}
+                        <li>
+                          <button
+                            class="dropdown-item {% if current_tag == tag %}active{% endif %}"
+                            type="button"
+                            data-dv-select-option
+                            data-value="{{ tag }}"
+                            data-label="{{ tag }}">
+                            {{ tag }}
+                          </button>
+                        </li>
+                      {% endfor %}
+                    {% endfor %}
+                  </ul>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Update Tag</button>
+              </form>
+              <div class="text-muted small mt-1">Set a commander and deck tag to load EDHREC data.</div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
 
 
 {% if edhrec_loaded and edhrec_category_rows %}
@@ -1272,8 +1364,168 @@
             {% endif %}
               </div>
             </div>
+        </div>
+        </div>
+        </div>
+
+        {% set synergy_recs = (tag_synergy.support.recommendations if tag_synergy and tag_synergy.support is mapping else []) %}
+        {% if synergy_recs %}
+        {% set synergy_id = 'dvSynergyPicks' %}
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-body-secondary d-flex align-items-center justify-content-between">
+            <span class="fw-semibold">DragonsVault Synergy Picks</span>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge text-bg-primary">{{ synergy_recs|length }}</span>
+              <button class="btn btn-outline-secondary btn-sm collapse-toggle"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#{{ synergy_id }}"
+                      aria-expanded="true"
+                      aria-controls="{{ synergy_id }}">
+                <i class="bi bi-chevron-up"></i>
+                <span class="visually-hidden">Toggle synergy picks</span>
+              </button>
             </div>
           </div>
+          <div id="{{ synergy_id }}" class="collapse show" data-persist-collapse="dv-synergy-picks">
+            <div class="card-body">
+              <p class="text-muted small mb-3">
+                Curated cards for the current deck tag. Add directly to your build.
+              </p>
+              <div class="accordion" id="dvSynergyAccordion">
+                {% for rec in synergy_recs %}
+                  {% set rec_name = rec.name or rec.get('name') %}
+                  {% set rec_reason = rec.reason or rec.get('reason') %}
+                  {% set rec_synergy = rec.synergy_percent if rec.synergy_percent is defined else rec.get('synergy_percent') %}
+                  {% set rec_card_id = rec.card_id if rec.card_id is defined else rec.get('card_id') %}
+                  {% set rec_hover = rec.hover_image or rec.get('hover_image') %}
+                  {% set rec_idx = loop.index0 %}
+                  {% set rec_collapse = 'dvSynergyRec' ~ rec_idx %}
+                  <div class="accordion-item">
+                    <h2 class="accordion-header" id="{{ rec_collapse }}-header">
+                      <button class="accordion-button collapsed d-flex align-items-center gap-2" type="button" data-bs-toggle="collapse" data-bs-target="#{{ rec_collapse }}" aria-expanded="false" aria-controls="{{ rec_collapse }}">
+                        <div class="fw-semibold text-truncate" title="{{ rec_name }}">{{ rec_name }}</div>
+                        {% if rec_synergy is not none %}
+                          <span class="badge text-bg-primary">Synergy {{ rec_synergy }}%</span>
+                        {% endif %}
+                      </button>
+                    </h2>
+                    <div id="{{ rec_collapse }}" class="accordion-collapse collapse" aria-labelledby="{{ rec_collapse }}-header" data-bs-parent="#dvSynergyAccordion">
+                      <div class="accordion-body">
+                        {% if rec_hover %}
+                          <div class="mb-2">
+                            <img src="{{ rec_hover }}" alt="{{ rec_name }}" class="img-fluid rounded" style="max-height: 180px; object-fit: cover;">
+                          </div>
+                        {% endif %}
+                        {% if rec_reason %}
+                          <div class="text-muted small mb-2">{{ rec_reason }}</div>
+                        {% endif %}
+                        <div class="d-flex gap-2">
+                          {% if rec_card_id %}
+                            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.card_detail', card_id=rec_card_id) }}" target="_blank">View</a>
+                          {% else %}
+                            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.scryfall_browser', q=rec_name, commander='legal') }}" target="_blank">View</a>
+                          {% endif %}
+                          <form method="post"
+                                action="{{ url_for('views.build_add_card', folder_id=selected_folder.id) }}"
+                                data-preserve-scroll
+                                class="flex-grow-1">
+                            <input type="hidden" name="card_name" value="{{ rec_name }}">
+                            <button class="btn btn-primary btn-sm w-100" type="submit">Add to deck</button>
+                          </form>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if type_breakdown or mana_pip_dist or land_mana_sources or curve_rows %}
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <div class="row g-4 align-items-start">
+              <div class="col-12 col-lg-4">
+                {% if type_breakdown %}
+                  <div class="section-title text-center mb-2">Type Breakdown</div>
+                  <div class="d-flex flex-wrap justify-content-center gap-2">
+                    {% for t, n in type_breakdown %}
+                      <span class="badge text-bg-secondary px-3 py-2">{{ t }} <span class="ms-1 badge text-bg-light">{{ n }}</span></span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <div class="text-muted small text-center">Type breakdown unavailable.</div>
+                {% endif %}
+              </div>
+              <div class="col-12 col-lg-4">
+                {% if mana_pip_dist %}
+                  <div class="section-title text-center mb-2">Color Distribution (Mana Costs)</div>
+                  <div class="d-flex flex-wrap justify-content-center gap-2">
+                    {% for c, pip, n in mana_pip_dist %}
+                      <span class="badge text-bg-secondary px-3 py-2 d-inline-flex align-items-center gap-1">
+                        {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;">{% else %}{{ c }}{% endif %}
+                        <span class="fw-semibold">{{ n }}</span>
+                      </span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if land_mana_sources %}
+                  <div class="section-title text-center mt-3 mb-2">Mana Sources</div>
+                  <div class="d-flex flex-wrap justify-content-center gap-2">
+                    {% for c, pip, n in land_mana_sources %}
+                      <span class="badge text-bg-secondary px-3 py-2 d-inline-flex align-items-center gap-1">
+                        {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;">{% else %}{{ c }}{% endif %}
+                        <span class="fw-semibold">{{ n }}</span>
+                      </span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-12 col-lg-4">
+                {% if curve_rows %}
+                  <div class="section-title text-center mb-2">Mana Curve</div>
+                  <div class="d-flex justify-content-center gap-2 flex-wrap">
+                    {% for row in curve_rows %}
+                      <div class="text-center" style="width:58px;">
+                        <div class="curve-bar" style="height:120px; border:1px solid rgba(255,255,255,0.1); border-radius:.65rem; position:relative; overflow:hidden; background:rgba(255,255,255,0.04);">
+                          <div class="fill" style="position:absolute; bottom:0; left:0; right:0; height: {{ row.pct }}%; background: rgba(var(--bs-primary-rgb), .35);"></div>
+                          <div class="curve-count" style="position:absolute; top:.35rem; left:50%; transform:translateX(-50%); font-weight:700; font-size:.85rem;">{{ row.count }}</div>
+                        </div>
+                        <div class="curve-label mt-1 small">{{ row.label }}</div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <div class="text-muted small text-center">Curve unavailable.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="card shadow-sm mb-4">
+          <form class="card-body row g-2 align-items-center" method="get" action="{{ url_for('views.scryfall_browser') }}" target="_blank">
+            <div class="col-12 col-lg-6">
+              <label class="form-label small text-uppercase text-muted mb-1">Search Scryfall (deck colors)</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="search" class="form-control" name="q" placeholder="e.g. keyword, type, mechanic">
+                <button class="btn btn-primary" type="submit">Search</button>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6 d-flex align-items-center gap-2 flex-wrap">
+              {% set letters = (deck_color_letters or '')|lower %}
+              {% for ch in letters %}
+                <input type="hidden" name="color" value="{{ ch }}">
+              {% endfor %}
+              <input type="hidden" name="color_mode" value="contains">
+              <input type="hidden" name="commander" value="legal">
+            </div>
+          </form>
         </div>
 
         <div class="card shadow-sm">
@@ -1358,7 +1610,8 @@
                 {% for card in deck_card_rows %}
                   {% set card_id = card.card_id %}
                   {% set card_hover = card.hover_image or hover_lookup.get(card.name|default('', true)|lower) %}
-                  {% set image_src = card_hover or url_for('static', filename='img/card-placeholder.svg') %}
+                  {% set base_image = card.image if card.image is defined else (card.image_url if card.image_url is defined else None) %}
+                  {% set image_src = base_image or card_hover or url_for('static', filename='img/card-placeholder.svg') %}
                   {% set commander_source = card.commander_source %}
                   {% set commander_synergy = commander_source.synergy_percent if commander_source else None %}
                   {% set theme_source = card.theme_source %}
@@ -2357,11 +2610,11 @@
       .then((data) => {
         let uri = null;
         if (data.image_uris) {
-          uri = data.image_uris.art_crop || data.image_uris.large || data.image_uris.normal;
+          uri = data.image_uris.normal || data.image_uris.large || data.image_uris.art_crop;
         }
         if (!uri && Array.isArray(data.card_faces) && data.card_faces[0]?.image_uris) {
           const faces = data.card_faces[0].image_uris;
-          uri = faces.art_crop || faces.large || faces.normal;
+          uri = faces.normal || faces.large || faces.art_crop;
         }
         if (!uri) throw new Error('No image');
         if (imgEl) {
