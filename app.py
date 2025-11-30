@@ -39,6 +39,7 @@ from services.scryfall_cache import (
     candidates_by_set_and_name, find_by_set_cn_loose,
     normalize_set_code, unique_oracle_by_name,
 )
+from services.deck_utils import BASIC_LANDS
 
 # FTS helpers
 from services.fts import ensure_fts, reindex_fts
@@ -707,6 +708,10 @@ def create_app():
     def inject_device_type():
         user_agent = (request.headers.get("User-Agent") or "").lower()
         return {"is_mobile": "mobi" in user_agent}
+
+    @app.context_processor
+    def inject_basic_lands():
+        return {"BASIC_LANDS": BASIC_LANDS}
 
     # ------------------------------------------------------------------
     # CLI COMMANDS

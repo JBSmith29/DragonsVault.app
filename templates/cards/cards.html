@@ -704,16 +704,19 @@
   {% include "_mobile_edit_foil.html" %}
   {% include "_mobile_edit_tags.html" %}
 {% else %}
-  <div class="modal fade" id="editPrintingModal" tabindex="-1" aria-labelledby="editPrintingLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-      <div class="modal-content bg-body text-body border border-secondary-subtle rounded-4">
-        <div class="modal-header border-secondary-subtle">
-          <div>
-            <p class="text-muted small mb-1">Update printing</p>
-            <h5 class="modal-title" id="editPrintingLabel">Edit printing</h5>
-          </div>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade" id="editPrintingModal" tabindex="-1" aria-labelledby="editPrintingLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content bg-body text-body border border-secondary-subtle rounded-4">
+      <div class="modal-header border-secondary-subtle">
+        <div>
+          <p class="text-muted small mb-1">Update printing</p>
+          <h5 class="modal-title" id="editPrintingLabel">Edit printing</h5>
         </div>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
         <form id="editPrintingForm">
           <div class="modal-body">
             <div id="editPrintingAlert" class="alert alert-warning d-none mb-3"></div>
@@ -762,11 +765,12 @@
           <div class="modal-footer border-secondary-subtle">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="submit" class="btn btn-primary" id="editPrintingSubmit">Save</button>
-          </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   </div>
+</div>
+{% endcall %}
 {% endif %}
 
 <script>

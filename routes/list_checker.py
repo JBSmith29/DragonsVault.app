@@ -14,12 +14,16 @@ from sqlalchemy import func, or_
 from extensions import db
 from models import Card, Folder, FolderShare
 from services.scryfall_cache import ensure_cache_loaded
+from services.deck_utils import BASIC_LANDS
+from services.edhrec import normalize_card_key
 
 from .base import (
     _collection_metadata,
     _normalize_name,
-    views,
+views,
 )
+
+BASIC_LAND_SLUGS = {_normalize_name(name) for name in BASIC_LANDS}
 
 
 def _parse_card_list(text: str) -> "OrderedDict[str, dict]":
@@ -191,6 +195,10 @@ def _compute_list_checker(pasted: str):
 
     rep_card_map = {nkey: best_card_for_name[nkey][1] for nkey in best_card_for_name}
     for nkey in keys:
+        if nkey in BASIC_LAND_SLUGS:
+            # Treat basics as infinitely owned/available.
+            available_count[nkey] = max(available_count[nkey], 9999)
+    for nkey in keys:
         if per_folder_counts[nkey] or available_count[nkey]:
             continue
 
@@ -327,19 +335,27 @@ def _compute_list_checker(pasted: str):
         requested = spec["qty"]
         display = spec["display"]
 
+        is_basic_land = nkey in BASIC_LAND_SLUGS
         total_owned = sum(per_folder_counts[nkey].values())
         available = available_count[nkey]
         missing_qty = max(0, requested - available)
 
-        if available >= requested:
+        if is_basic_land:
+            available = max(available, requested)
+            total_owned = max(total_owned, requested)
+            missing_qty = 0
             status = "have_all"
             have_all += 1
-        elif available == 0:
-            status = "missing"
-            missing += 1
         else:
-            status = "partial"
-            partial += 1
+            if available >= requested:
+                status = "have_all"
+                have_all += 1
+            elif available == 0:
+                status = "missing"
+                missing += 1
+            else:
+                status = "partial"
+                partial += 1
 
         folder_breakdown = sorted(per_folder_counts[nkey].items(), key=lambda kv: _rank_folder(kv[0]))
         collection_breakdown = sorted(collection_counts[nkey].items(), key=lambda kv: _rank_folder(kv[0]))

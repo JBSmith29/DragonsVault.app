@@ -225,6 +225,9 @@ def _export_context() -> dict:
 def import_csv():
     """Upload route that powers CSV/XLS collection imports and dry-run previews."""
 
+    def _store_import_notification(level: str, message: str) -> None:
+        session["last_import_notification"] = {"level": level, "message": message}
+
     def _normalize_quantity_mode(raw: str | None) -> str:
         value = (raw or "delta").strip().lower()
         if value in {"absolute", "replace", "overwrite"}:
@@ -238,7 +241,13 @@ def import_csv():
         return "delta"
 
     if request.method == "GET":
-        return render_template("cards/import.html", quantity_mode="delta", **_export_context())
+        notification = session.pop("last_import_notification", None)
+        return render_template(
+            "cards/import.html",
+            quantity_mode="delta",
+            notification=notification,
+            **_export_context(),
+        )
 
     action = (request.form.get("action") or "").strip().lower()
 
@@ -333,6 +342,7 @@ def import_csv():
                     details += f", {stats.errors} error(s)"
                 level = "warning" if stats.errors else "success"
                 flash(f"Import applied immediately ({details}).", level)
+                _store_import_notification(level, f"Import completed: {details}")
                 if getattr(stats, "skipped_details", None):
                     samples = stats.skipped_details[:10]
                     sample_text = "; ".join(
@@ -369,11 +379,12 @@ def import_csv():
                         "updated": stats.updated,
                         "skipped": stats.skipped,
                         "skipped_details": getattr(stats, "skipped_details", []),
-                        "errors": stats.errors,
-                    },
-                )
+                            "errors": stats.errors,
+                        },
+                    )
             else:
                 flash("Import applied immediately.", "success")
+                _store_import_notification("success", "Import completed immediately.")
                 record_audit_event(
                     "import_completed_inline",
                     {
@@ -383,10 +394,9 @@ def import_csv():
                     },
                 )
         else:
-            flash(
-                f"Import queued ({mode_note}). Job ID: {job_id}. Track progress from the Import Monitor.",
-                "info",
-            )
+            message = f"Import queued ({mode_note}). Job ID: {job_id}. Leave this page open for completion updates."
+            flash(message, "info")
+            _store_import_notification("info", message)
             record_audit_event(
                 "import_queued",
                 {

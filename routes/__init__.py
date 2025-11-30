@@ -10,6 +10,7 @@ from . import (
     auth,           # noqa: F401
     card_detail,    # noqa: F401
     build,          # noqa: F401
+    build_commander,# noqa: F401
     cards,          # noqa: F401
     dashboard,      # noqa: F401
     folders,        # noqa: F401

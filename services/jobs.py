@@ -7,6 +7,7 @@ import os
 import shutil
 import uuid
 from contextlib import nullcontext
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +53,12 @@ def _create_app():
     return create_app()
 
 
+def _get_logger():
+    if has_app_context() and current_app:
+        return current_app.logger
+    return logging.getLogger(__name__)
+
+
 def enqueue_csv_import(
     filepath: str,
     quantity_mode: str,
@@ -60,11 +67,23 @@ def enqueue_csv_import(
     owner_user_id: Optional[int] = None,
     owner_username: Optional[str] = None,
 ) -> dict:
-    inline_pref = bool(current_app.config.get("IMPORT_RUN_INLINE"))
-    inline_mode = inline_pref or not _jobs_available
+    # Force inline imports so users aren't blocked by a missing/idle queue.
+    inline_pref = bool(current_app.config.get("IMPORT_RUN_INLINE", True))
+    inline_mode = True  # always inline to avoid hangs when workers are unavailable
     job_id = uuid.uuid4().hex
     # Validate headers before queuing the job to surface errors immediately.
     validate_import_file(filepath)
+    log = _get_logger()
+    log.info(
+        "Import enqueue requested",
+        extra={
+            "job_id": job_id,
+            "inline_mode": inline_mode,
+            "quantity_mode": quantity_mode,
+            "overwrite": overwrite,
+            "filepath": filepath,
+        },
+    )
 
     if inline_mode:
         stats, per_folder = run_csv_import_inline(
@@ -95,14 +114,30 @@ def enqueue_csv_import(
             job_id=f"import-{job_id}",
             description=f"csv-import:{os.path.basename(filepath)}",
         )
+        return {
+            "job_id": job_id,
+            "ran_inline": False,
+            "stats": None,
+            "per_folder": None,
+        }
     except Exception as exc:  # pragma: no cover - relies on external redis service
-        raise RuntimeError(f"Unable to queue CSV import: {exc}") from exc
-    return {
-        "job_id": job_id,
-        "ran_inline": False,
-        "stats": None,
-        "per_folder": None,
-    }
+        # Fall back to inline if the queue/Redis is unavailable so imports don't silently hang.
+        if has_app_context():
+            current_app.logger.warning("Queue unavailable; running import inline: %s", exc)
+        stats, per_folder = run_csv_import_inline(
+            filepath=filepath,
+            quantity_mode=quantity_mode,
+            overwrite=overwrite,
+            owner_user_id=owner_user_id,
+            owner_username=owner_username,
+            job_id=job_id,
+        )
+        return {
+            "job_id": job_id,
+            "ran_inline": True,
+            "stats": stats,
+            "per_folder": per_folder,
+        }
 
 
 def run_csv_import_job(
@@ -116,6 +151,18 @@ def run_csv_import_job(
     app = _create_app()
     with app.app_context():
         job = get_current_job()
+        log = _get_logger()
+        log.info(
+            "Import job started",
+            extra={
+                "job_id": import_job_id,
+                "quantity_mode": quantity_mode,
+                "overwrite": overwrite,
+                "owner_user_id": owner_user_id,
+                "owner_username": owner_username,
+                "filepath": filepath,
+            },
+        )
         try:
             _process_csv_import(
                 filepath=filepath,
@@ -125,6 +172,10 @@ def run_csv_import_job(
                 owner_user_id=owner_user_id,
                 owner_username=owner_username,
                 job_ref=job,
+            )
+            log.info(
+                "Import job completed",
+                extra={"job_id": import_job_id, "quantity_mode": quantity_mode, "overwrite": overwrite},
             )
         finally:
             _cleanup_temp_file(filepath, app.logger)
@@ -149,7 +200,18 @@ def run_csv_import_inline(
         app_logger = app.logger
     with ctx:
         try:
-            return _process_csv_import(
+            app_logger.info(
+                "Import inline start",
+                extra={
+                    "job_id": job_id,
+                    "quantity_mode": quantity_mode,
+                    "overwrite": overwrite,
+                    "owner_user_id": owner_user_id,
+                    "owner_username": owner_username,
+                    "filepath": filepath,
+                },
+            )
+            stats, per_folder = _process_csv_import(
                 filepath=filepath,
                 quantity_mode=quantity_mode,
                 overwrite=overwrite,
@@ -158,6 +220,19 @@ def run_csv_import_inline(
                 owner_username=owner_username,
                 job_ref=None,
             )
+            app_logger.info(
+                "Import inline complete",
+                extra={
+                    "job_id": job_id,
+                    "quantity_mode": quantity_mode,
+                    "overwrite": overwrite,
+                    "added": getattr(stats, "added", None) if stats else None,
+                    "updated": getattr(stats, "updated", None) if stats else None,
+                    "skipped": getattr(stats, "skipped", None) if stats else None,
+                    "errors": getattr(stats, "errors", None) if stats else None,
+                },
+            )
+            return stats, per_folder
         finally:
             _cleanup_temp_file(filepath, app_logger)
 

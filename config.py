@@ -46,7 +46,8 @@ class BaseConfig:
     REDIS_URL = os.getenv("REDIS_URL", os.getenv("RATELIMIT_STORAGE_URI", "redis://localhost:6379/0"))
     SCRYFALL_OFFLINE_FIRST = os.getenv("SCRYFALL_OFFLINE_FIRST", "1").lower() in {"1","true","yes","on"}
     SCRYFALL_REFRESH_INLINE = os.getenv("SCRYFALL_REFRESH_INLINE", "0").lower() in {"1","true","yes","on"}
-    IMPORT_RUN_INLINE = os.getenv("IMPORT_RUN_INLINE", "0").lower() in {"1","true","yes","on"}
+    # Default to inline imports so users aren't stuck waiting for a background worker.
+    IMPORT_RUN_INLINE = os.getenv("IMPORT_RUN_INLINE", "1").lower() in {"1","true","yes","on"}
     TYPE_FILTER_USE_DB = os.getenv("TYPE_FILTER_USE_DB", "0").lower() in {"1","true","yes","on"}
     HCAPTCHA_ENABLED = os.getenv("HCAPTCHA_ENABLED", "0").lower() in {"1","true","yes","on"}
     HCAPTCHA_SITE_KEY = os.getenv("HCAPTCHA_SITE_KEY")

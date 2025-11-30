@@ -206,6 +206,8 @@
       content.appendChild(closeBtn);
     }
     content.dataset.mobileCloseInjected = "1";
+    // Add fullscreen class for mobile wrapper behavior
+    content.classList.add("mobile-full-modal");
   });
 
   // Cleanup orphaned backdrops on load

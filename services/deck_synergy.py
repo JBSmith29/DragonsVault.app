@@ -31,11 +31,13 @@ from services.edhrec import (
     theme_cardviews,
 )
 from services.pricing import format_price_text, prices_for_print
+from services.deck_utils import BASIC_LANDS
 from services.symbols_cache import render_mana_html
 
 __all__ = ["analyze_deck", "calculate_tag_synergy", "classify_roles", "detect_themes_for_text"]
 
 WUBRG_ORDER = "WUBRG"
+BASIC_LAND_SLUGS = {normalize_card_key(name) for name in BASIC_LANDS}
 CI_NAME_BY_SET = {
     frozenset(): "Colorless",
     frozenset({"W"}): "White",
@@ -1109,7 +1111,11 @@ def _cardview_to_payload(
         commander_colors = {str(c).upper() for c in deck_colors if c}
         matches = identity is not None and identity.issubset(commander_colors)
         payload["matches_deck_colors"] = matches
-    payload["owned"] = bool(owned_slugs and normalize_card_key(view.name) in owned_slugs)
+    slug = normalize_card_key(view.name)
+    if slug in BASIC_LAND_SLUGS:
+        payload["owned"] = True
+    else:
+        payload["owned"] = bool(owned_slugs and slug in owned_slugs)
     return payload
 
 
@@ -1564,6 +1570,8 @@ def analyze_deck(folder_id: int) -> Dict[str, Any]:
         for (name,) in db.session.query(Card.name).distinct()
         if name
     }
+    basic_slugs = {normalize_card_key(name) for name in BASIC_LANDS}
+    owned_card_slugs.update(basic_slugs)
 
     color_letters, color_label = _color_identity_label(deck_colors)
     color_html = None

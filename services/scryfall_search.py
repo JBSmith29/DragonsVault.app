@@ -74,7 +74,7 @@ def search_cards(q, *, unique="cards", page=1, order="name", direction="asc"):
     if direction and direction.lower() == "desc":
         params["dir"] = "desc"
     url = f"{BASE}/cards/search?{urllib.parse.urlencode(params)}"
-    r = sess.get(url, timeout=30, verify=False)
+    r = sess.get(url, timeout=30)
     if r.status_code == 404:
         return {"data": [], "total_cards": 0, "has_more": False, "next_page": None, "warnings": []}
     r.raise_for_status()

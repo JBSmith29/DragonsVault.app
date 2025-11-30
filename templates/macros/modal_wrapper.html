@@ -1,0 +1,9 @@
+{% macro wrap_modal() -%}
+  {% if is_mobile %}
+    {% with modal_content=caller() %}
+      {% include "mobile/mobile_full_modal.html" %}
+    {% endwith %}
+  {% else %}
+    {{ caller() }}
+  {% endif %}
+{%- endmacro %}

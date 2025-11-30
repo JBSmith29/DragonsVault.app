@@ -399,6 +399,9 @@
                     data-commander-trigger="true"
                     data-folder-id="{{ d.id }}"
                     data-deck-name="{{ d.name }}"
+                    data-set-url="{{ set_url }}"
+                    data-clear-url="{{ clear_url }}"
+                    data-candidate-url="{{ candidate_url }}"
                     {% if cmd_name %}data-commander-name="{{ cmd_name }}"{% endif %}
                     {% if cmd_large %}data-hover-src="{{ cmd_large }}"{% endif %}>
                     {% if cmd_small %}
@@ -522,7 +525,9 @@
 {% endif %}
 </div>
 
-<div class="modal fade" id="commanderQuickModal" tabindex="-1" aria-labelledby="commanderQuickModalLabel" aria-hidden="true">
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade" id="commanderQuickModal" tabindex="-1" aria-labelledby="commanderQuickModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
@@ -530,6 +535,7 @@
           <h5 class="modal-title" id="commanderQuickModalLabel">Set Commander</h5>
           <div class="small text-muted" id="commanderQuickDeckName">Select a deck below</div>
         </div>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close mobile-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -558,13 +564,16 @@
     </div>
   </div>
 </div>
+{% endcall %}
 
-<div class="modal fade" id="bulkProxyModal" tabindex="-1" aria-labelledby="bulkProxyModalLabel" aria-hidden="true">
+{% call wrap_modal() %}
+<div class="modal fade" id="bulkProxyModal" tabindex="-1" aria-labelledby="bulkProxyModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <form method="post" action="{{ url_for('views.create_proxy_deck_bulk') }}">
         <div class="modal-header">
           <h5 class="modal-title" id="bulkProxyModalLabel">Bulk Import Proxy Decks</h5>
+          {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -586,13 +595,16 @@
     </div>
   </div>
 </div>
+{% endcall %}
 
-<div class="modal fade" id="proxyDeckModal" tabindex="-1" aria-labelledby="proxyDeckModalLabel" aria-hidden="true">
+{% call wrap_modal() %}
+<div class="modal fade" id="proxyDeckModal" tabindex="-1" aria-labelledby="proxyDeckModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <form id="proxyDeckForm" method="post" action="{{ url_for('views.create_proxy_deck') }}">
         <div class="modal-header">
           <h5 class="modal-title" id="proxyDeckModalLabel">Import Proxy Deck</h5>
+          {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -640,8 +652,10 @@
     </div>
   </div>
 </div>
+{% endcall %}
 
 <script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 (function(){
   const drawerEl = document.getElementById('deckDrawer');
   const bodyEl = document.getElementById('deckDrawerBody');
@@ -1045,17 +1059,21 @@
     try {
       const resp = await fetch('/folders/' + activeFolderId + '/tag/set', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
         body: JSON.stringify({ tag })
       });
       const data = await resp.json();
-        if (data && data.ok) {
-          setStatus('Tag saved.', 'success');
-          if (activeButton) {
-            activeButton.dataset.currentTag = tag;
+      if (data && data.ok) {
+        setStatus('Tag saved.', 'success');
+        if (activeButton) {
+          activeButton.dataset.currentTag = tag;
           activeButton.dataset.currentLabel = tag;
           activeButton.textContent = tag;
-          }
+        }
         setCurrentLabel(activeButton?.dataset.currentLabel || tag);
         setActiveTag(tag);
         if (clearBtn) clearBtn.classList.remove('d-none');
@@ -1120,18 +1138,22 @@
       try {
         const resp = await fetch('/folders/' + activeFolderId + '/tag/clear', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+          },
           body: JSON.stringify({})
         });
         const data = await resp.json();
-      if (data && data.ok) {
-        setStatus('Tag cleared.', 'success');
-        if (activeButton) {
-          activeButton.dataset.currentTag = '';
-          activeButton.textContent = 'Set deck tag';
-        }
-        setCurrentLabel('');
-        setActiveTag('');
+        if (data && data.ok) {
+          setStatus('Tag cleared.', 'success');
+          if (activeButton) {
+            activeButton.dataset.currentTag = '';
+            activeButton.textContent = 'Set deck tag';
+          }
+          setCurrentLabel('');
+          setActiveTag('');
           clearBtn.classList.add('d-none');
           const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
           setTimeout(() => bsModal.hide(), 250);
@@ -1187,7 +1209,10 @@
     try {
       const response = await fetch('/api/decks/proxy/fetch', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
         body: JSON.stringify({deck_url: deckUrl}),
       });
       const data = await response.json();
@@ -1257,6 +1282,7 @@
         headers: {
           'X-Requested-With': 'XMLHttpRequest',
           'Accept': 'application/json',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
         },
       });
 
@@ -1350,6 +1376,9 @@
         method: form.method || 'POST',
         body: new FormData(form),
         credentials: 'same-origin',
+        headers: {
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
       });
 
       if (response.redirected) {
@@ -1546,6 +1575,7 @@
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
       },
       credentials: 'same-origin',
       body: JSON.stringify(payload || {}),

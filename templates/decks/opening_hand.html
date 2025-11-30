@@ -466,11 +466,14 @@
 </div>
 
 
-<div class="modal fade" id="deckPickerModal" tabindex="-1" aria-labelledby="deckPickerLabel" aria-hidden="true">
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade" id="deckPickerModal" tabindex="-1" aria-labelledby="deckPickerLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content bg-dark text-light border border-secondary">
       <div class="modal-header border-secondary-subtle">
         <h5 class="modal-title" id="deckPickerLabel">Pick a deck</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -513,6 +516,7 @@
     </div>
   </div>
 </div>
+{% endcall %}
 
 <template id="handCardTemplate">
   <div class="hand-card">
@@ -525,11 +529,13 @@
   </div>
 </template>
 
-<div class="modal fade" id="fetchCardModal" tabindex="-1" aria-labelledby="fetchCardModalLabel" aria-hidden="true">
+{% call wrap_modal() %}
+<div class="modal fade" id="fetchCardModal" tabindex="-1" aria-labelledby="fetchCardModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-dark text-light border border-secondary">
       <div class="modal-header border-secondary-subtle">
         <h5 class="modal-title" id="fetchCardModalLabel">Fetch a Card</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form id="fetchCardForm" class="modal-body">
@@ -618,13 +624,16 @@
     </form>
   </div>
 </div>
+{% endcall %}
 </div>
 
-<div class="modal fade" id="tokenPickerModal" tabindex="-1" aria-labelledby="tokenPickerLabel" aria-hidden="true">
+{% call wrap_modal() %}
+<div class="modal fade" id="tokenPickerModal" tabindex="-1" aria-labelledby="tokenPickerLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-dark text-light border border-secondary">
       <div class="modal-header border-secondary-subtle">
         <h5 class="modal-title" id="tokenPickerLabel">Add a Token</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -639,6 +648,7 @@
     </div>
   </div>
 </div>
+{% endcall %}
 
 <script>
 (function () {
@@ -2379,7 +2389,3 @@
 </script>
 
 {% endblock %}
-
-
-
-

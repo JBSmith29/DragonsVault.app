@@ -9,6 +9,7 @@ import re
 from collections import defaultdict
 from math import ceil
 from typing import Dict, Iterable, List, Optional, Set
+from sqlalchemy.exc import IntegrityError
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
@@ -557,7 +558,15 @@ def _create_proxy_deck_from_lines(
         folder.commander_oracle_id = ",".join(oracle_ids) if oracle_ids else None
 
     db.session.add(folder)
-    db.session.flush()
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        final_name = _generate_unique_folder_name(final_name)
+        folder.name = final_name
+        db.session.add(folder)
+        db.session.flush()
+        info_messages.append(f'Deck name in use. Created as "{final_name}".')
 
     aggregated: dict[tuple[str | None, str, str, str], dict] = {}
     for card in resolved_cards:

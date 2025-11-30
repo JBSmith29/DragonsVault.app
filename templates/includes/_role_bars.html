@@ -1,0 +1,18 @@
+{# Display role coverage strength as horizontal bars. #}
+{% set strengths = role_strengths or {} %}
+<div class="role-bars">
+  {% for key, val in strengths.items() %}
+    {% set pct = (val or 0) * 10 %}
+    <div class="mb-2">
+      <div class="d-flex justify-content-between align-items-center small text-muted mb-1">
+        <span class="text-capitalize">{{ key|replace('_', ' ') }}</span>
+        <span>{{ "%.0f"|format(pct) }}%</span>
+      </div>
+      <div class="progress" style="height: 8px;">
+        <div class="progress-bar bg-gradient" role="progressbar" style="width: {{ pct }}%;"
+             aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+

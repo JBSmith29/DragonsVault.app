@@ -5,14 +5,13 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass, asdict, field
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Iterable
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from flask import current_app, has_request_context
 from extensions import db, cache
 from models import Card, Folder
 from pathlib import Path
-from typing import Iterable
 from services.scryfall_cache import cache_exists, load_cache, find_by_set_cn, metadata_from_print
 from services.live_updates import emit_import_event
 
@@ -259,11 +258,69 @@ def _norm_folder_category(raw: Optional[str]) -> Optional[str]:
 
 
 def _folder_query_for_owner(name: str, owner_user_id: Optional[int]):
-    """Return a query restricted to the owning user's folder namespace."""
-    query = Folder.query.filter(Folder.name == name)
+    """Return a query restricted to the owning user's folder namespace (case-insensitive)."""
+    query = Folder.query.filter(func.lower(Folder.name) == func.lower(name))
     if owner_user_id is not None:
         query = query.filter(Folder.owner_user_id == owner_user_id)
     return query
+
+
+def _ensure_folder_for_owner(
+    folder_name: str,
+    folder_category: Optional[str],
+    owner_user_id: Optional[int],
+    owner_name: Optional[str],
+) -> Folder | None:
+    """
+    Return an existing folder for this owner/name or create one safely.
+    Handles duplicate names by reusing or generating a unique variant.
+    """
+    folder = _folder_query_for_owner(folder_name, owner_user_id).first()
+    if folder:
+        if folder_category and folder.category != folder_category:
+            folder.category = folder_category
+        if owner_user_id and not folder.owner_user_id:
+            folder.owner_user_id = owner_user_id
+        if owner_name and (not folder.owner or folder.owner_user_id == owner_user_id):
+            folder.owner = owner_name
+        return folder
+
+    folder = Folder(name=folder_name)
+    if folder_category:
+        folder.category = folder_category
+    if owner_user_id:
+        folder.owner_user_id = owner_user_id
+    if owner_name:
+        folder.owner = owner_name
+    db.session.add(folder)
+    try:
+        db.session.flush()
+        return folder
+    except IntegrityError:
+        db.session.rollback()
+        existing = _folder_query_for_owner(folder_name, owner_user_id).first()
+        if existing:
+            return existing
+        suffix = 2
+        base = folder_name
+        while True:
+            candidate = f"{base} ({suffix})"
+            conflict = _folder_query_for_owner(candidate, owner_user_id).first()
+            if not conflict:
+                alt = Folder(name=candidate)
+                if folder_category:
+                    alt.category = folder_category
+                if owner_user_id:
+                    alt.owner_user_id = owner_user_id
+                if owner_name:
+                    alt.owner = owner_name
+                db.session.add(alt)
+                db.session.flush()
+                return alt
+            suffix += 1
+    except Exception:
+        db.session.rollback()
+        raise
 
 def _read_text(filepath: str) -> str:
     with open(filepath, "r", encoding="utf-8-sig", errors="replace") as f:
@@ -418,29 +475,11 @@ def process_csv(
             is_foil = _to_bool(row.get(mapping.get("is_foil")))
 
             # ensure folder
-            folder = _folder_query_for_owner(folder_name, owner_user_id).first()
-            if not folder and not dry_run:
-                folder = Folder(name=folder_name)
-                if folder_category:
-                    folder.category = folder_category
-                if owner_user_id:
-                    folder.owner_user_id = owner_user_id
-                if owner_name:
-                    folder.owner = owner_name
-                db.session.add(folder)
-                db.session.flush()
-            elif folder:
-                if folder_category and not dry_run and folder.category != folder_category:
-                    folder.category = folder_category
-                if not dry_run:
-                    if owner_user_id and not folder.owner_user_id:
-                        folder.owner_user_id = owner_user_id
-                    if owner_name and (
-                        not folder.owner
-                        or (owner_user_id and folder.owner_user_id == owner_user_id)
-                        or (folder.owner_user_id is None and owner_user_id)
-                    ):
-                        folder.owner = owner_name
+            folder = None
+            if not dry_run:
+                folder = _ensure_folder_for_owner(folder_name, folder_category, owner_user_id, owner_name)
+            else:
+                folder = _folder_query_for_owner(folder_name, owner_user_id).first()
 
             key = dict(
                 name=name,

@@ -1,3 +1,4 @@
+{% from "macros/modal_wrapper.html" import wrap_modal %}
 {# Folder management page (admin + personal). #}
 {% extends "base.html" %}
 {% block content %}
@@ -242,11 +243,13 @@
   </form>
 </div>
 
-<div class="modal fade" id="bulkEditModal" tabindex="-1" aria-labelledby="bulkEditLabel" aria-hidden="true">
+{% call wrap_modal() %}
+<div class="modal fade" id="bulkEditModal" tabindex="-1" aria-labelledby="bulkEditLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="bulkEditLabel">Bulk edit folders</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" id="bulkEditForm">
@@ -301,13 +304,16 @@
     </div>
   </div>
 </div>
+{% endcall %}
 
 {% if allow_share_controls %}
-<div class="modal fade" id="bulkShareModal" tabindex="-1" aria-labelledby="bulkShareLabel" aria-hidden="true">
+{% call wrap_modal() %}
+<div class="modal fade" id="bulkShareModal" tabindex="-1" aria-labelledby="bulkShareLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="bulkShareLabel">Share selected decks</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" id="bulkShareForm">
@@ -339,6 +345,7 @@
     </div>
   </div>
 </div>
+{% endcall %}
 {% endif %}
 <script>
   (() => {

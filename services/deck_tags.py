@@ -136,6 +136,7 @@ DECK_TAG_GROUPS: DeckTagGroups = OrderedDict(
                 "Drakes",
                 "Druids",
                 "Dwarves",
+                "Eggs",
                 "Elders",
                 "Eldrazi",
                 "Elementals",

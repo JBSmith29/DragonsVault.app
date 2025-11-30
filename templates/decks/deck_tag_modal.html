@@ -1,8 +1,11 @@
-<div class="modal fade tag-picker-modal" id="deckTagModal" tabindex="-1" aria-labelledby="deckTagModalLabel" aria-hidden="true">
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade tag-picker-modal" id="deckTagModal" tabindex="-1" aria-labelledby="deckTagModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="deckTagModalLabel">Select a Deck Tag</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -47,3 +50,4 @@
     </div>
   </div>
 </div>
+{% endcall %}

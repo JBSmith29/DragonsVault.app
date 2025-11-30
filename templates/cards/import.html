@@ -29,6 +29,12 @@
       <a href="{{ url_for('views.manual_import') }}" class="alert-link">Open manual import</a>.
     </div>
   {% endif %}
+  {% if notification %}
+    <div class="alert alert-{{ notification.level or 'info' }} alert-dismissible fade show" role="alert">
+      {{ notification.message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  {% endif %}
 
   {% if is_mobile %}
     {% include "_mobile_import_modal.html" %}
@@ -171,6 +177,16 @@
         </span>
         <span class="btn-progress__label">Import</span>
       </button>
+      <div class="mt-3 d-none" id="importProgress">
+        <div class="d-flex align-items-center justify-content-between mb-1">
+          <span class="small text-muted">Uploading &amp; processing your file...</span>
+          <span class="small fw-semibold" id="importProgressLabel">Working</span>
+        </div>
+        <div class="progress progress-striped" role="progressbar" aria-label="Import progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 35%;"></div>
+        </div>
+        <div class="small text-muted mt-1">This may take a minute for larger binders. Please keep this tab open.</div>
+      </div>
     </div>
   </form>
 
@@ -397,6 +413,8 @@
     const form = document.getElementById("import-form");
     const btn = document.getElementById("btn-import");
     const STORAGE_KEY = "dv-import-progress";
+    const progressWrap = document.getElementById("importProgress");
+    const progressLabel = document.getElementById("importProgressLabel");
 
     function setBtnState(state) {
       if (!btn) return;
@@ -407,6 +425,17 @@
         btn.disabled = true;
       } else if (state === "complete") {
         btn.classList.add("is-complete");
+      }
+      if (progressWrap) {
+        if (state === "loading") {
+          progressWrap.classList.remove("d-none");
+          if (progressLabel) progressLabel.textContent = "Working";
+        } else if (state === "complete") {
+          progressWrap.classList.remove("d-none");
+          if (progressLabel) progressLabel.textContent = "Done";
+        } else {
+          progressWrap.classList.add("d-none");
+        }
       }
     }
 
