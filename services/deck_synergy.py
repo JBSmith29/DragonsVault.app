@@ -494,6 +494,7 @@ def calculate_tag_synergy(
     *,
     core_limit: int = 6,
     support_limit: int = 6,
+    owned_slugs: Optional[Set[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not deck_tag:
         return None
@@ -515,7 +516,11 @@ def calculate_tag_synergy(
             present_card_ids=present_card_ids,
             core_limit=core_limit,
             support_limit=support_limit,
+            owned_slugs=owned_slugs,
         )
+
+    owned_slugs = owned_slugs or set()
+    owned_lookup = {slug.lower() for slug in owned_slugs}
 
     eligible_core_cards = [card for card in package.core_cards if card.matches_colors(deck_color_set)]
     total_weight = sum(card.weight for card in eligible_core_cards)
@@ -1185,7 +1190,9 @@ def _theme_tag_fallback(
     present_card_ids: Optional[Dict[str, int]],
     core_limit: int,
     support_limit: int,
+    owned_slugs: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
+    owned_lookup = {slug.lower() for slug in (owned_slugs or set())}
     payload = None
     error = None
     slug = None
@@ -1242,6 +1249,10 @@ def _theme_tag_fallback(
     for view in remaining_views:
         if _in_deck(view):
             continue
+        slug_lower = (view.slug or "").lower()
+        name_lower = view.name.lower()
+        if owned_lookup and (slug_lower not in owned_lookup) and (name_lower not in owned_lookup):
+            continue
         card_id = None
         if present_card_ids:
             card_id = present_card_ids.get(view.slug) or present_card_ids.get(view.name.lower())
@@ -1252,7 +1263,7 @@ def _theme_tag_fallback(
                 roles=_roles_for_card_name(view.name),
                 deck_card_id=card_id,
                 deck_colors=deck_color_set,
-                owned_slugs=None,
+                owned_slugs=owned_lookup,
             )
         )
         if len(support_recommendations) >= support_limit:
@@ -1567,7 +1578,12 @@ def analyze_deck(folder_id: int) -> Dict[str, Any]:
 
     owned_card_slugs: Set[str] = {
         normalize_card_key(name)
-        for (name,) in db.session.query(Card.name).distinct()
+        for (name,) in (
+            db.session.query(Card.name)
+            .join(Folder, Folder.id == Card.folder_id)
+            .filter(func.coalesce(Folder.category, Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION)
+            .distinct()
+        )
         if name
     }
     basic_slugs = {normalize_card_key(name) for name in BASIC_LANDS}
@@ -1592,6 +1608,7 @@ def analyze_deck(folder_id: int) -> Dict[str, Any]:
         present_names,
         theme_counts,
         present_card_ids=present_card_ids_map,
+        owned_slugs=owned_card_slugs,
     )
     tag_value = getattr(folder, "deck_tag", None)
     tag_category = TAG_CATEGORY_MAP.get(tag_value) if tag_value else None

@@ -291,6 +291,10 @@ def _resolve_card_payload(card_name: str) -> Dict[str, Any]:
 
 
 def _add_card_to_folder(folder: Folder, card_name: str, quantity: int = 1) -> Tuple[Card, bool]:
+    # Ensure the folder has a primary key so the card FK is valid.
+    if folder.id is None:
+        db.session.flush([folder])
+
     info = _resolve_card_payload(card_name)
     existing: Optional[Card] = None
     if info["oracle_id"]:
@@ -323,7 +327,7 @@ def _start_new_build() -> Any:
     commander_name = (request.form.get("commander_name") or "").strip()
     deck_name = (request.form.get("deck_name") or "").strip()
     deck_tag = (request.form.get("deck_tag") or "").strip()
-    include_commander = request.form.get("include_commander") == "1"
+    include_commander = "1" in request.form.getlist("include_commander")
 
     if not commander_name:
         flash("Commander name is required to start a build.", "warning")
@@ -597,6 +601,7 @@ def build_a_deck():
         card["normalized_roles"] = normalized_roles
 
     deck_goldfish_groups: List[Dict[str, Any]] = []
+    remaining_keys: set[str] = set()
     if deck_card_rows:
         def _normalize_name(value: Optional[str]) -> str:
             return str(value or "").strip().lower()
@@ -667,11 +672,11 @@ def build_a_deck():
             )
 
         leftover_cards: List[Dict[str, Any]] = []
-    for rem_key in sorted(remaining_keys):
-        leftover_cards.extend(type_buckets.get(rem_key, []))
-    if leftover_cards:
-        leftover_cards.sort(key=_goldfish_sort_key)
-        deck_goldfish_groups.append(
+        for rem_key in sorted(remaining_keys):
+            leftover_cards.extend(type_buckets.get(rem_key, []))
+        if leftover_cards:
+            leftover_cards.sort(key=_goldfish_sort_key)
+            deck_goldfish_groups.append(
                 {
                     "key": "other",
                     "label": "Other",
@@ -685,6 +690,84 @@ def build_a_deck():
     mana_pip_dist = (analysis or {}).get("mana_pip_dist") or []
     land_mana_sources = (analysis or {}).get("land_mana_sources") or []
     curve_rows = (analysis or {}).get("curve_rows") or []
+
+    if not type_breakdown and deck_type_chart:
+        type_breakdown = [(item.get("label"), item.get("value")) for item in deck_type_chart if item.get("label")]
+
+    def _fallback_mana_pips(cards: List[Dict[str, Any]]) -> List[Tuple[str, str, int]]:
+        counts: Dict[str, int] = {}
+        sym_re = re.compile(r"\{([WUBRG]|C)\}", re.IGNORECASE)
+        for card in cards or []:
+            cost = (card.get("mana_cost") or "").upper()
+            qty = max(int(card.get("quantity") or 0), 1)
+            for match in sym_re.findall(cost):
+                letter = match.upper()
+                counts[letter] = counts.get(letter, 0) + qty
+        ordered = []
+        for letter in ["W", "U", "B", "R", "G", "C"]:
+            val = counts.get(letter, 0)
+            if val:
+                ordered.append((letter, f"/static/symbols/{letter}.svg", val))
+        return ordered
+
+    def _fallback_land_sources(cards: List[Dict[str, Any]]) -> List[Tuple[str, str, int]]:
+        counts: Dict[str, int] = {}
+        for card in cards or []:
+            primary_type = (card.get("primary_type") or "").lower()
+            if "land" not in primary_type:
+                continue
+            qty = max(int(card.get("quantity") or 0), 1)
+            colors = card.get("color_identity") or []
+            if colors:
+                for c in colors:
+                    letter = str(c).upper()
+                    counts[letter] = counts.get(letter, 0) + qty
+            else:
+                counts["C"] = counts.get("C", 0) + qty
+        ordered = []
+        for letter in ["W", "U", "B", "R", "G", "C"]:
+            val = counts.get(letter, 0)
+            if val:
+                ordered.append((letter, f"/static/symbols/{letter}.svg", val))
+        return ordered
+
+    def _fallback_curve(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        buckets = [0, 0, 0, 0, 0, 0, 0]  # 0,1,2,3,4,5,6+
+        total = 0
+        for card in cards or []:
+            try:
+                mv = float(card.get("mana_value"))
+            except (TypeError, ValueError):
+                continue
+            qty = max(int(card.get("quantity") or 0), 1)
+            total += qty
+            if mv < 1:
+                buckets[0] += qty
+            elif mv < 2:
+                buckets[1] += qty
+            elif mv < 3:
+                buckets[2] += qty
+            elif mv < 4:
+                buckets[3] += qty
+            elif mv < 5:
+                buckets[4] += qty
+            elif mv < 6:
+                buckets[5] += qty
+            else:
+                buckets[6] += qty
+        labels = ["0", "1", "2", "3", "4", "5", "6+"]
+        out: List[Dict[str, Any]] = []
+        for idx, count in enumerate(buckets):
+            pct = int(round((count * 100) / total)) if total else 0
+            out.append({"label": labels[idx], "count": count, "pct": pct})
+        return out
+
+    if not mana_pip_dist and deck_card_rows:
+        mana_pip_dist = _fallback_mana_pips(deck_card_rows)
+    if not land_mana_sources and deck_card_rows:
+        land_mana_sources = _fallback_land_sources(deck_card_rows)
+    if not curve_rows and deck_card_rows:
+        curve_rows = _fallback_curve(deck_card_rows)
     deck_list_lines: List[str] = []
     for item in deck_cards:
         name = item.get("name")
@@ -708,6 +791,7 @@ def build_a_deck():
     edhrec_category_rows: List[Tuple[str, List[Dict[str, Any]]]] = []
 
     allowed_colors: set[str] = set()
+    letters_value = ""
     if selected_folder:
         letters_value = None
         ci_obj = (deck_summary.get("color_identity") if deck_summary else {}) or {}
@@ -1057,7 +1141,7 @@ def build_update_commander(folder_id: int):
         return redirect(url_for("views.build_a_deck", folder_id=folder_id))
 
     commander_name = (request.form.get("commander_name") or "").strip()
-    include_card = request.form.get("include_commander") == "1"
+    include_card = "1" in request.form.getlist("include_commander")
     if not commander_name:
         flash("Commander name cannot be empty.", "warning")
         return redirect(url_for("views.build_a_deck", folder_id=folder_id))

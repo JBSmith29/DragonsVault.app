@@ -26,4 +26,25 @@
       }
     });
   }
+
+  // Shared view toggle for EDHREC / Upgrade Plan / Synergy Picks
+  const sharedContainer = document.getElementById('sharedViewContainer');
+  const sharedToggle = document.querySelector('[data-shared-view-toggle]');
+  if (sharedContainer && sharedToggle) {
+    const buttons = sharedToggle.querySelectorAll('button[data-shared-view-mode]');
+    const applyMode = (mode) => {
+      sharedContainer.classList.remove('shared-view-gallery', 'shared-view-list');
+      sharedContainer.classList.add(`shared-view-${mode}`);
+      buttons.forEach((btn) => {
+        const isActive = btn.dataset.sharedViewMode === mode;
+        btn.classList.toggle('view-mode-active', isActive);
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+    };
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => applyMode(btn.dataset.sharedViewMode || 'gallery'));
+    });
+    applyMode('gallery');
+  }
 })();

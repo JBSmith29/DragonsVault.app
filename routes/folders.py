@@ -1296,6 +1296,29 @@ def set_folder_tag(folder_id: int):
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
     folder.deck_tag = tag
+
+    # Keep the commander card present when changing tags in build decks.
+    commander_name = (folder.commander_name or "").strip()
+    if commander_name and (folder.category == Folder.CATEGORY_BUILD or not folder.category):
+        existing_cmd = (
+            Card.query.filter(Card.folder_id == folder.id, func.lower(Card.name) == func.lower(commander_name))
+            .options(load_only(Card.id))
+            .first()
+        )
+        if not existing_cmd:
+            try:
+                # Import lazily to avoid circular imports at module load.
+                from .build import _add_card_to_folder  # type: ignore
+
+                _add_card_to_folder(folder, commander_name)
+            except Exception as exc:  # pragma: no cover - best-effort guard
+                current_app.logger.warning(
+                    "Unable to re-add commander card '%s' after tag update for folder %s: %s",
+                    commander_name,
+                    folder.id,
+                    exc,
+                )
+
     _safe_commit()
 
     category = TAG_CATEGORY_MAP.get(tag)
