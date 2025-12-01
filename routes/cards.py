@@ -2907,7 +2907,11 @@ def deck_tokens_overview():
 @views.route("/opening-hand", methods=["GET"])
 def opening_hand():
     decks = (
-        Folder.query.filter(func.coalesce(Folder.category, Folder.CATEGORY_DECK) == Folder.CATEGORY_DECK)
+        Folder.query.filter(
+            func.coalesce(Folder.category, Folder.CATEGORY_DECK).in_(
+                [Folder.CATEGORY_DECK, Folder.CATEGORY_BUILD]
+            )
+        )
         .order_by(Folder.name.asc())
         .all()
     )
@@ -3058,8 +3062,8 @@ def opening_hand():
 @views.post("/opening-hand/shuffle")
 def opening_hand_shuffle():
     payload = request.get_json(silent=True) or {}
-    deck_id = payload.get("deck_id")
-    deck_list_text = payload.get("deck_list")
+    deck_id_raw = payload.get("deck_id")
+    deck_list_text = (payload.get("deck_list") or "").strip()
     commander_hint = (payload.get("commander_name") or "").strip()
 
     deck_name = None
@@ -3068,16 +3072,19 @@ def opening_hand_shuffle():
 
     commander_cards: list[dict] = []
 
-    if deck_list_text:
-        deck_name, entries, warnings, commander_cards = _deck_entries_from_list(deck_list_text, commander_hint)
-    elif deck_id:
+    deck_id = None
+    if deck_id_raw not in (None, "", False):
         try:
-            deck_id_int = int(deck_id)
+            deck_id = int(deck_id_raw)
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Invalid deck selection."}), 400
-        deck_name, entries, warnings, commander_cards = _deck_entries_from_folder(deck_id_int)
+
+    if deck_id:
+        deck_name, entries, warnings, commander_cards = _deck_entries_from_folder(deck_id)
         if deck_name is None:
             return jsonify({"ok": False, "error": "Deck not found."}), 404
+    elif deck_list_text:
+        deck_name, entries, warnings, commander_cards = _deck_entries_from_list(deck_list_text, commander_hint)
     else:
         return jsonify({"ok": False, "error": "Select a deck or paste a deck list first."}), 400
 

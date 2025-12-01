@@ -693,6 +693,7 @@
   const placeholderImage = "{{ url_for('static', filename='img/card-placeholder.svg') }}";
   const deckCardLookup = {{ deck_card_lookup | tojson | safe }} || {};
   const deckTokenLookup = {{ deck_token_lookup | tojson | safe }} || {};
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),
@@ -2185,14 +2186,22 @@
       showMessage('Shuffling...', 'info');
 
       try {
+        const payload = {
+          deck_id: deckId || null,
+          deck_list: deckList || null,
+          commander_name: commander
+        };
+        if (csrfToken) {
+          payload.csrf_token = csrfToken;
+        }
         const response = await fetch('{{ url_for("views.opening_hand_shuffle") }}', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            deck_id: deckList ? null : deckId,
-            deck_list: deckList,
-            commander_name: commander
-          })
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
         });
         const data = await response.json();
 
@@ -2253,10 +2262,18 @@
       drawBtn.disabled = true;
 
       try {
+        const payload = { state: state };
+        if (csrfToken) {
+          payload.csrf_token = csrfToken;
+        }
         const response = await fetch('{{ url_for("views.opening_hand_draw") }}', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ state: state })
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
         });
         const data = await response.json();
 
