@@ -52,13 +52,15 @@ class BaseConfig:
     HCAPTCHA_ENABLED = os.getenv("HCAPTCHA_ENABLED", "0").lower() in {"1","true","yes","on"}
     HCAPTCHA_SITE_KEY = os.getenv("HCAPTCHA_SITE_KEY")
     HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET")
+    # CSP tuned for our CDN dependencies (Bootstrap, icons, HTMX) and external APIs (Scryfall, hCaptcha).
     CONTENT_SECURITY_POLICY = {
         "default-src": "'self'",
-        "img-src": "'self' data: https://c1.scryfall.com https://cards.scryfall.io",
-        "script-src": "'self'",
-        "style-src": "'self' 'unsafe-inline'",
-        "connect-src": "'self'",
-        "font-src": "'self' data:",
+        "img-src": "'self' data: https://c1.scryfall.com https://cards.scryfall.io https://svgs.scryfall.io",
+        "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://instant.page https://js.hcaptcha.com",
+        "style-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+        "connect-src": "'self' https://api.scryfall.com https://js.hcaptcha.com",
+        "font-src": "'self' data: https://cdn.jsdelivr.net",
+        "frame-src": "https://js.hcaptcha.com",
     }
 
 class DevelopmentConfig(BaseConfig):
