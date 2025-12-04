@@ -702,6 +702,16 @@ def create_app():
         _ensure_folder_share_table()
         _ensure_wishlist_columns()
 
+        # Ensure role/subrole tables exist even if migrations weren't applied (fresh DB restore).
+        try:
+            inspector = inspect(db.engine)
+            existing_tables = set(inspector.get_table_names())
+            required_role_tables = {"roles", "sub_roles", "card_roles", "card_subroles"}
+            if required_role_tables - existing_tables:
+                db.create_all()
+        except Exception as e:  # pragma: no cover - defensive bootstrapping
+            app.logger.warning("Role table bootstrap skipped: %s", e)
+
         # Ensure FTS5 virtual table + triggers exist (fixes the cards_fts error)
         ensure_fts()
 
