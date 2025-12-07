@@ -45,15 +45,25 @@ docker info
 
 > If you get an error, make sure Docker Desktop or your Docker service is running.
 
-### 3. Deploy the DragonsVault Server with Docker
+### 3. Deploy the DragonsVault Server with Docker (Postgres + PgBouncer)
 
 ```bash
-docker compose up --build
+# prepare env (edit POSTGRES_PASSWORD if you like)
+cp env.postgres.example .env
+
+# start infra with env file
+docker compose --env-file .env up -d postgres pgbouncer pgbackup pgmaintenance
+
+# initialize schema
+docker compose --env-file .env run --rm web flask db upgrade
+
+# start app services
+docker compose --env-file .env up -d web worker nginx redis
 ```
 
 ### 4. Access DragonsVault through your Web Browser
 
-Within a web browser, navigate to [http://localhost:8000](http://localhost:8000) to access your vault! The Flask debug reloader is enabled, so code changes on your host refresh automatically.
+Within a web browser, navigate to [http://localhost](http://localhost) (or your LAN IP / Cloudflare hostname) to access your vault. Code changes on your host refresh automatically in the container.
 
 ### 5. Interacting with your DragonsVault Instance after it's Launched 
 
@@ -63,6 +73,8 @@ Within a web browser, navigate to [http://localhost:8000](http://localhost:8000)
 - **Restarting your Container**: To restart your existing DragonsVault instance, run `docker compose up`.
 
 ### 6. Configure your DragonsVault Instance 
+
+> **Database**: The default stack now uses Postgres (via PgBouncer). Daily plain-text dumps are written to the `pgbackups` volume with 30-day retention. Set a strong `POSTGRES_PASSWORD` in `.env` before starting.
 
 ### 6.1 Download the Scryfall Bulk Data Collection
 
@@ -178,14 +190,16 @@ Key environment variables (defaults in parentheses):
 | `SECRET_KEY` | `"dev"` | Flask session/CSRF signing key. Replace in production. |
 | `SECRET_KEY_FILE` | `""` | Path to a file containing the secret key (used when `SECRET_KEY` is unset). |
 | `FLASK_ENV` | `production` | Set to `development` for debug mode + auto reload. |
-| `WEB_TIMEOUT` | `300` | Gunicorn worker timeout in seconds (increase if startup is slow). |
-| `DATABASE_URL` | `sqlite:///instance/database.db` | SQLAlchemy database URI. |
+| `WEB_TIMEOUT` | `180` | Gunicorn worker timeout in seconds (adjust if workloads need longer). |
+| `WEB_CONCURRENCY` | `12` | Gunicorn worker processes (tune per CPU). |
+| `WEB_THREADS` | `3` | Threads per worker (tune per workload). |
+| `DATABASE_URL` | `postgresql+psycopg2://dvapp:<password>@pgbouncer:6432/dragonsvault` | SQLAlchemy database URI (PgBouncer in front of Postgres). |
 | `SCRYFALL_DATA_DIR` | `instance/data` | Storage path for Scryfall bulk cache. |
 | `UPLOAD_FOLDER` | `instance/uploads` | Temp directory for uploaded spreadsheets. |
 | `MAX_CONTENT_LENGTH` | `64 * 1024 * 1024` | Upload limit in bytes (default 64 MB). |
 | `SESSION_COOKIE_SECURE` | `0` | Set to `1` behind HTTPS. |
 | `ALLOW_RUNTIME_INDEX_BOOTSTRAP` | `0` | Enable only if you want runtime DB bootstrap in production. |
-| `CACHE_TYPE` | `SimpleCache` | Cache backend (`SimpleCache`, `RedisCache`, `FileSystemCache`, etc.). |
+| `CACHE_TYPE` | `RedisCache` | Cache backend (`RedisCache` recommended; set `CACHE_REDIS_URL`). |
 | `CACHE_DEFAULT_TIMEOUT` | `600` | Cache TTL in seconds. |
 | `CACHE_REDIS_URL` | `""` | Redis connection string (used when `CACHE_TYPE=RedisCache`). |
 | `CACHE_DIR` | `instance/cache` | Filesystem cache directory (used when `CACHE_TYPE=FileSystemCache`). |
@@ -229,4 +243,3 @@ DragonsVault/
 ## ?? License
 
 This project is released under the [Unlicense](https://unlicense.org/), which dedicates it to the public domain. Card data and imagery are provided courtesy of [Scryfall](https://scryfall.com/) and remain  Wizards of the Coast.
-

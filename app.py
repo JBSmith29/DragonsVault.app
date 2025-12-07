@@ -546,6 +546,11 @@ def create_app():
     app.config.from_object(Config)
     _configure_logging(app)
 
+    # Honor X-Forwarded-* headers from our reverse proxy (nginx/Cloudflare).
+    # This prevents Flask-Talisman from forcing HTTPS redirects on plain HTTP health checks.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
     # Ensure instance subdirs exist
     os.makedirs(app.instance_path, exist_ok=True)
     data_dir = os.path.join(app.instance_path, "data")

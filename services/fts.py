@@ -5,6 +5,9 @@ from extensions import db
 def ensure_fts() -> None:
     """Create FTS5 table and triggers if missing."""
     bind = db.engine
+    if bind.dialect.name != "sqlite":
+        # FTS5 helpers are only applicable to SQLite.
+        return
     insp = inspect(bind)
     if "cards" not in insp.get_table_names():
         return
@@ -43,6 +46,8 @@ def ensure_fts() -> None:
 
 def reindex_fts() -> None:
     """Rebuild/populate the FTS index from current cards content."""
+    if db.engine.dialect.name != "sqlite":
+        return
     with db.engine.begin() as conn:
         # Preferred: fts5 'rebuild' command (works with external content)
         try:

@@ -3,7 +3,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     command:
@@ -11,7 +11,7 @@ services:
         "redis-server",
         "--save", "60", "1",
         "--loglevel", "warning",
-        "--maxmemory", "128mb",
+        "--maxmemory", "1gb",
         "--maxmemory-policy", "allkeys-lru"
       ]
 
@@ -22,26 +22,36 @@ services:
       --bind 0.0.0.0:5000
       --workers ${WEB_CONCURRENCY:-1}
       --threads ${WEB_THREADS:-1}
+      --worker-class gthread
       --worker-tmp-dir /dev/shm
       --timeout ${WEB_TIMEOUT:-300}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "app:create_app()"
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     restart: unless-stopped
     environment:
       FLASK_ENV: production
       FLASK_DEBUG: "0"
       INSTANCE_DIR: /app/instance
-      CACHE_TYPE: SimpleCache
       CACHE_DEFAULT_TIMEOUT: "600"
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      WEB_CONCURRENCY: "12"
+      WEB_THREADS: "3"
+      WEB_TIMEOUT: "180"
       REDIS_URL: redis://redis:6379/0
       RATELIMIT_STORAGE_URI: redis://redis:6379/1
       SCRYFALL_REFRESH_INLINE: "0"
       IMPORT_RUN_INLINE: "0"
-      ENABLE_TALISMAN: "0"
-      TALISMAN_FORCE_HTTPS: "0"
-      SESSION_COOKIE_SECURE: "0"
-      PREFERRED_URL_SCHEME: http
+      ENABLE_TALISMAN: "1"
+      TALISMAN_FORCE_HTTPS: "1"
+      SESSION_COOKIE_SECURE: "1"
+      PREFERRED_URL_SCHEME: https
       SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
     volumes:
       - .:/app
@@ -49,8 +59,16 @@ services:
       - flask_secret_key
     depends_on:
       - redis
+      - postgres
+      - pgbouncer
     init: true
     mem_limit: 32g
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   nginx:
     image: nginx:1.26-alpine
@@ -74,16 +92,117 @@ services:
       IMPORT_ENABLE_SCRYFALL_LOOKUPS: "0"
       REDIS_URL: redis://redis:6379/0
       RATELIMIT_STORAGE_URI: redis://redis:6379/1
-      ENABLE_TALISMAN: "0"
-      TALISMAN_FORCE_HTTPS: "0"
+      ENABLE_TALISMAN: "1"
+      TALISMAN_FORCE_HTTPS: "1"
       SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      WEB_CONCURRENCY: "12"
+      WEB_THREADS: "3"
+      WEB_TIMEOUT: "180"
     volumes:
       - .:/app
     secrets:
       - flask_secret_key
     depends_on:
       - redis
+      - postgres
+      - pgbouncer
     init: true
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dragonsvault
+      POSTGRES_USER: dvapp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dvapp -d dragonsvault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ["-c", "config_file=/etc/postgresql/postgresql.conf"]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      DATABASE_URL: postgresql://dvapp:${POSTGRES_PASSWORD}@postgres:5432/dragonsvault
+      LISTEN_ADDR: 0.0.0.0
+      LISTEN_PORT: 6432
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 500
+      DEFAULT_POOL_SIZE: 20
+      LOG_LEVEL: warning
+      ADMIN_USERS: pgbouncer
+      SERVER_IDLE_TIMEOUT: 60
+      AUTH_TYPE: plain
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:6432:6432"
+    restart: unless-stopped
+
+  pgbackup:
+    image: postgres:16-alpine
+    depends_on:
+      - postgres
+    environment:
+      PGHOST: postgres
+      PGUSER: dvapp
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      PGDATABASE: dragonsvault
+      BACKUP_INTERVAL: 86400
+      RETENTION_DAYS: 30
+    volumes:
+      - pgbackups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /backups && chmod 700 /backups && chown postgres:postgres /backups
+        while true; do
+          ts=$(date +%F)
+          su postgres -c "pg_dump --format=plain --no-owner --no-privileges > /backups/dragonsvault-$${ts}.sql" && \
+          find /backups -type f -name 'dragonsvault-*.sql' -mtime +$${RETENTION_DAYS:-30} -delete
+          sleep $${BACKUP_INTERVAL:-86400}
+        done
+    restart: unless-stopped
+    user: "999:999"
+
+  pgmaintenance:
+    image: postgres:16-alpine
+    depends_on:
+      - postgres
+    environment:
+      PGHOST: postgres
+      PGUSER: dvapp
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      PGDATABASE: dragonsvault
+      VACUUM_INTERVAL: 604800
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "Running weekly VACUUM (ANALYZE)..." >&2
+          su postgres -c "vacuumdb --all --analyze-in-stages"
+          sleep $${VACUUM_INTERVAL:-604800}
+        done
+    restart: unless-stopped
+    user: "999:999"
 
 secrets:
   flask_secret_key:
@@ -91,3 +210,5 @@ secrets:
 
 volumes:
   redis-data:
+  pgdata:
+  pgbackups:
