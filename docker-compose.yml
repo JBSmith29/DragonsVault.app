@@ -23,7 +23,7 @@ services:
       --workers ${WEB_CONCURRENCY:-1}
       --threads ${WEB_THREADS:-1}
       --worker-tmp-dir /dev/shm
-      --timeout ${WEB_TIMEOUT:-60}
+      --timeout ${WEB_TIMEOUT:-300}
       "app:create_app()"
     ports:
       - "5000:5000"
@@ -38,13 +38,17 @@ services:
       RATELIMIT_STORAGE_URI: redis://redis:6379/1
       SCRYFALL_REFRESH_INLINE: "0"
       IMPORT_RUN_INLINE: "0"
-      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in your environment (e.g., via .env)}
+      ENABLE_TALISMAN: "0"
+      TALISMAN_FORCE_HTTPS: "0"
+      SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
     volumes:
       - .:/app
+    secrets:
+      - flask_secret_key
     depends_on:
       - redis
     init: true
-    mem_limit: 8g
+    mem_limit: 32g
 
   nginx:
     image: nginx:1.26-alpine
@@ -68,12 +72,20 @@ services:
       IMPORT_ENABLE_SCRYFALL_LOOKUPS: "0"
       REDIS_URL: redis://redis:6379/0
       RATELIMIT_STORAGE_URI: redis://redis:6379/1
-      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in your environment (e.g., via .env)}
+      ENABLE_TALISMAN: "0"
+      TALISMAN_FORCE_HTTPS: "0"
+      SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
     volumes:
       - .:/app
+    secrets:
+      - flask_secret_key
     depends_on:
       - redis
     init: true
+
+secrets:
+  flask_secret_key:
+    file: ./.secrets/secret_key
 
 volumes:
   redis-data:

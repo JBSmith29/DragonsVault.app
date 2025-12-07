@@ -1,9 +1,15 @@
 from sqlalchemy import text
+from sqlalchemy import inspect
 from extensions import db
 
 def ensure_fts() -> None:
     """Create FTS5 table and triggers if missing."""
-    with db.engine.begin() as conn:
+    bind = db.engine
+    insp = inspect(bind)
+    if "cards" not in insp.get_table_names():
+        return
+
+    with bind.begin() as conn:
         # 1) External-content FTS tied to cards.id
         conn.execute(text("""
             CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts

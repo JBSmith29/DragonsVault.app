@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from extensions import db
 
 
@@ -10,6 +12,8 @@ class Role(db.Model):
     key = db.Column(db.String(64), unique=True, nullable=False, index=True)
     label = db.Column(db.String(128), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
 
     subroles = db.relationship("SubRole", back_populates="role", cascade="all, delete-orphan")
 
@@ -25,6 +29,8 @@ class SubRole(db.Model):
     key = db.Column(db.String(64), nullable=False)
     label = db.Column(db.String(128), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
 
     role = db.relationship("Role", back_populates="subroles")
 

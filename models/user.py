@@ -25,7 +25,10 @@ class User(UserMixin, db.Model):
     api_token_hint = db.Column(db.String(12), nullable=True)
     api_token_created_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login_at = db.Column(db.DateTime, nullable=True)
+    last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
+    archived_at = db.Column(db.DateTime, nullable=True, index=True)
 
     folders = db.relationship("Folder", back_populates="owner_user", lazy="dynamic")
     shared_folders = db.relationship("FolderShare", back_populates="shared_user", lazy="dynamic")

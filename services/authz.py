@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import hashlib
 
 from flask import abort
 from flask_login import current_user
@@ -30,12 +31,21 @@ def ensure_folder_access(folder, *, write: bool = False, allow_shared: bool = Fa
     if getattr(folder, "is_public", False):
         return
 
-    if share_token and getattr(folder, "share_token", None):
-        try:
-            if hmac.compare_digest(folder.share_token, share_token):
-                return
-        except Exception:
-            pass
+    if share_token:
+        token_hash = hashlib.sha256(share_token.encode("utf-8")).hexdigest()
+        if getattr(folder, "share_token_hash", None):
+            try:
+                if hmac.compare_digest(folder.share_token_hash, token_hash):
+                    return
+            except Exception:
+                pass
+        # legacy fallback if plaintext column still exists
+        if getattr(folder, "share_token", None):
+            try:
+                if hmac.compare_digest(folder.share_token, share_token):
+                    return
+            except Exception:
+                pass
 
     share = (
         FolderShare.query.filter_by(folder_id=folder.id, shared_user_id=current_user.id).first()

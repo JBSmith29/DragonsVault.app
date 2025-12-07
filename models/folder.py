@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 import secrets
 
@@ -7,6 +8,14 @@ class Folder(db.Model):
     __tablename__ = "folder"  # keep singular to match your existing table
     __table_args__ = (
         db.UniqueConstraint("owner_user_id", "name", name="uq_folder_owner_name"),
+        db.CheckConstraint(
+            "category in ('deck','collection','build')",
+            name="ck_folder_category",
+        ),
+        db.UniqueConstraint("share_token_hash", name="uq_folder_share_token_hash"),
+        db.Index("ix_folder_created_at", "created_at"),
+        db.Index("ix_folder_updated_at", "updated_at"),
+        db.Index("ix_folder_archived_at", "archived_at"),
     )
 
     CATEGORY_DECK = "deck"
@@ -43,7 +52,10 @@ class Folder(db.Model):
         server_default=db.text("0"),
         index=True,
     )
-    share_token = db.Column(db.String(128), unique=True, nullable=True)
+    share_token_hash = db.Column(db.String(64), unique=True, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    archived_at = db.Column(db.DateTime, nullable=True, index=True)
 
     # Relationship to Card
     cards = db.relationship(
@@ -83,13 +95,19 @@ class Folder(db.Model):
     def is_proxy_deck(self) -> bool:
         return bool(self.is_proxy)
 
+    @staticmethod
+    def _hash_share_token(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
     def ensure_share_token(self) -> str:
-        if not self.share_token:
-            self.share_token = secrets.token_urlsafe(24)
-        return self.share_token
+        token = secrets.token_urlsafe(24)
+        self.share_token_hash = self._hash_share_token(token)
+        # Remember for this request; not persisted.
+        self._share_token_preview = token  # type: ignore[attr-defined]
+        return token
 
     def revoke_share_token(self) -> None:
-        self.share_token = None
+        self.share_token_hash = None
 
     def __repr__(self):
         name = self.name or "Folder"

@@ -50,6 +50,10 @@ try:
 except Exception:
     pass
 
+def _fallback_enabled() -> bool:
+    """Guard legacy schema fallbacks; disabled unless explicitly opted-in."""
+    return os.getenv("ENABLE_ROLE_TABLE_FALLBACK", "0").lower() in {"1", "true", "yes", "on"}
+
 
 @click.command("seed-roles")
 def seed_roles():
@@ -324,6 +328,8 @@ def _ensure_folder_notes_column():
 
 def _ensure_folder_sharing_columns():
     """Add sharing-related columns to folder if missing."""
+    if not _fallback_enabled():
+        return
     try:
         engine = db.engine
     except Exception:
@@ -340,6 +346,8 @@ def _ensure_folder_sharing_columns():
         adds.append(("is_public", "INTEGER NOT NULL DEFAULT 0"))
     if "share_token" not in columns:
         adds.append(("share_token", "VARCHAR(128)"))
+    if "share_token_hash" not in columns:
+        adds.append(("share_token_hash", "VARCHAR(64)"))
 
     if not adds:
         return
@@ -354,6 +362,8 @@ def _ensure_folder_sharing_columns():
 
 def _ensure_folder_share_table():
     """Create folder_share table for per-user sharing if it is missing."""
+    if not _fallback_enabled():
+        return
     try:
         engine = db.engine
     except Exception:
@@ -677,6 +687,8 @@ def create_app():
 
     app.config["TEMPLATES_AUTO_RELOAD"] = bool(app.debug)
 
+    fallback = _fallback_enabled()
+
     # Warm caches, create tables, ensure FTS
     with app.app_context():
         _validate_sqlite_database(app)
@@ -689,28 +701,29 @@ def create_app():
         from models import Card, Folder, WishlistItem  # noqa: F401
         _register_visibility_filters(Card, Folder)
 
-        should_bootstrap = app.debug or app.config.get("ALLOW_RUNTIME_INDEX_BOOTSTRAP")
-        if should_bootstrap:
+        if fallback and (app.debug or app.config.get("ALLOW_RUNTIME_INDEX_BOOTSTRAP")):
             # Create DB objects if missing (safe even with Alembic)
             db.create_all()
             _ensure_folder_deck_tag_column()
             _ensure_folder_owner_user_column()
             _ensure_card_metadata_columns()
         # Ensure legacy columns exist even outside bootstrap
-        _ensure_folder_notes_column()
-        _ensure_folder_sharing_columns()
-        _ensure_folder_share_table()
-        _ensure_wishlist_columns()
+        if fallback:
+            _ensure_folder_notes_column()
+            _ensure_folder_sharing_columns()
+            _ensure_folder_share_table()
+            _ensure_wishlist_columns()
 
-        # Ensure role/subrole tables exist even if migrations weren't applied (fresh DB restore).
-        try:
-            inspector = inspect(db.engine)
-            existing_tables = set(inspector.get_table_names())
-            required_role_tables = {"roles", "sub_roles", "card_roles", "card_subroles"}
-            if required_role_tables - existing_tables:
-                db.create_all()
-        except Exception as e:  # pragma: no cover - defensive bootstrapping
-            app.logger.warning("Role table bootstrap skipped: %s", e)
+        # Optional legacy safety net (disabled by default).
+        if fallback:
+            try:
+                inspector = inspect(db.engine)
+                existing_tables = set(inspector.get_table_names())
+                required_role_tables = {"roles", "sub_roles", "card_roles", "card_subroles"}
+                if required_role_tables - existing_tables:
+                    db.create_all()
+            except Exception as e:  # pragma: no cover - defensive bootstrapping
+                app.logger.warning("Role table bootstrap skipped: %s", e)
 
         # Ensure FTS5 virtual table + triggers exist (fixes the cards_fts error)
         ensure_fts()

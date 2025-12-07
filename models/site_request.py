@@ -7,6 +7,16 @@ from extensions import db
 
 class SiteRequest(db.Model):
     __tablename__ = "site_requests"
+    __table_args__ = (
+        db.CheckConstraint(
+            "request_type in ('bug','feature')",
+            name="ck_site_requests_request_type",
+        ),
+        db.CheckConstraint(
+            "status in ('not_started','working','completed')",
+            name="ck_site_requests_status",
+        ),
+    )
 
     TYPE_BUG = "bug"
     TYPE_FEATURE = "feature"

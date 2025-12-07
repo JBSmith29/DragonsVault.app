@@ -34,6 +34,7 @@ instance/
 # Secrets
 .env
 .env.*
+.secrets/
 
 # Runtime caches
 data/archidekt/

@@ -8,13 +8,23 @@ from sqlalchemy.ext.hybrid import hybrid_property
 
 class WishlistItem(db.Model):
     __tablename__ = "wishlist_items"
+    __table_args__ = (
+        db.CheckConstraint(
+            "status in ('open','to_fetch','ordered','acquired','removed')",
+            name="ck_wishlist_items_status",
+        ),
+        db.CheckConstraint("requested_qty >= 0", name="ck_wishlist_items_requested_qty_nonneg"),
+        db.CheckConstraint("missing_qty >= 0", name="ck_wishlist_items_missing_qty_nonneg"),
+        db.Index("ix_wishlist_items_oracle_status", "oracle_id", "status"),
+        db.Index("ix_wishlist_items_name_status", "name", "status"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
     # Optional linkage to a known Card row (nullable)
     card_id = db.Column(
         db.Integer,
-        db.ForeignKey("cards.id", ondelete="SET NULL"),
+        db.ForeignKey("cards.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )

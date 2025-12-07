@@ -10,7 +10,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Set, Optional, Sequence
 from urllib.parse import quote_plus
 
-from flask import abort, flash, jsonify, redirect, render_template, request, url_for, current_app
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import case, func
 from sqlalchemy.orm import load_only
@@ -1641,8 +1641,9 @@ def folder_sharing(folder_id: int):
             flash("Public sharing enabled." if folder.is_public else "Public sharing disabled.", "success")
             return redirect(url_for("views.folder_sharing", folder_id=folder_id))
         if action == "regenerate_token":
-            folder.ensure_share_token()
+            token = folder.ensure_share_token()
             db.session.commit()
+            session["share_token_preview"] = token
             flash("Share link updated.", "success")
             return redirect(url_for("views.folder_sharing", folder_id=folder_id))
         if action == "clear_token":
@@ -1689,7 +1690,8 @@ def folder_sharing(folder_id: int):
         .order_by(func.lower(User.email))
         .all()
     )
-    share_link = url_for("views.shared_folder_by_token", share_token=folder.share_token, _external=True) if folder.share_token else None
+    token = session.pop("share_token_preview", None)
+    share_link = url_for("views.shared_folder_by_token", share_token=token, _external=True) if token else None
     return render_template("decks/folder_sharing.html", folder=folder, shares=share_entries, share_link=share_link)
 
 
@@ -1708,7 +1710,12 @@ def shared_folder_detail(folder_id):
 @views.route("/shared/<string:share_token>")
 @login_required
 def shared_folder_by_token(share_token: str):
-    folder = Folder.query.filter(Folder.share_token == share_token).first_or_404()
+    token_hash = Folder._hash_share_token(share_token)
+    folder = Folder.query.filter(Folder.share_token_hash == token_hash).first()
+    if not folder:
+        folder = getattr(Folder, "share_token", None) and Folder.query.filter_by(share_token=share_token).first()
+    if not folder:
+        abort(404)
     return _folder_detail_impl(folder.id, allow_shared=True, share_token=share_token)
 
 

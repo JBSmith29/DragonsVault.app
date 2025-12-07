@@ -176,7 +176,9 @@ Key environment variables (defaults in parentheses):
 | **Variable** | **Default** | **Description** |
 | -- | - | -- |
 | `SECRET_KEY` | `"dev"` | Flask session/CSRF signing key. Replace in production. |
+| `SECRET_KEY_FILE` | `""` | Path to a file containing the secret key (used when `SECRET_KEY` is unset). |
 | `FLASK_ENV` | `production` | Set to `development` for debug mode + auto reload. |
+| `WEB_TIMEOUT` | `300` | Gunicorn worker timeout in seconds (increase if startup is slow). |
 | `DATABASE_URL` | `sqlite:///instance/database.db` | SQLAlchemy database URI. |
 | `SCRYFALL_DATA_DIR` | `instance/data` | Storage path for Scryfall bulk cache. |
 | `UPLOAD_FOLDER` | `instance/uploads` | Temp directory for uploaded spreadsheets. |
@@ -218,6 +220,8 @@ DragonsVault/
 | OperationalError: no such column: folder.category | Run `flask db upgrade`. If upgrading from a very old DB, stamp to the latest seen revision before running upgrade. |
 | Scryfall-owned counts show zero | Ensure collection folders are marked as `collection` in Admin ? Folder Categories. |
 | Mana symbols missing from card text | Run `flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` or use the Admin button to re-fetch symbology. |
+| Migration history references missing revisions | The repo is rebased to a single `0001_initial` migration. Delete your local DB (`instance/*.db`) and rerun `docker compose run --rm web ./scripts/bootstrap.sh` (or `flask db upgrade`). |
+| Gunicorn worker timeout on startup | Pre-warm inside a container: `docker compose run --rm web ./scripts/bootstrap.sh`. If still slow, raise `WEB_TIMEOUT` (default 300) before `docker compose up`. |
 | CSV import fails with Unsupported file type | Confirm the file is `.csv`, `.xlsx`, or `.xlsm`. The importer checks extensions. |
 | FTS search returns stale results | Run `flask fts-reindex`. |
 | SQLite locks / slow queries | Limit concurrent writers, run `flask analyze`/`flask vacuum`, and consider migrating to PostgreSQL if concurrency needs grow. |
@@ -225,7 +229,4 @@ DragonsVault/
 ## ?? License
 
 This project is released under the [Unlicense](https://unlicense.org/), which dedicates it to the public domain. Card data and imagery are provided courtesy of [Scryfall](https://scryfall.com/) and remain  Wizards of the Coast.
-
-
-
 

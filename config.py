@@ -2,14 +2,32 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+def _load_secret_key() -> str | None:
+    """Load the Flask secret key from env or an optional file path."""
+    secret = os.getenv("SECRET_KEY")
+    if secret:
+        return secret
+    secret_file = os.getenv("SECRET_KEY_FILE")
+    if secret_file:
+        try:
+            secret = Path(secret_file).read_text(encoding="utf-8").strip()
+            if secret:
+                return secret
+        except OSError:
+            # Fall back to default handling if the secret file cannot be read.
+            pass
+    return None
+
+
 # Absolute project dir
 BASE_DIR = Path(__file__).resolve().parent
 # Absolute instance dir (defaults to <project>/instance)
 INSTANCE_DIR = Path(os.getenv("INSTANCE_DIR", BASE_DIR / "instance")).resolve()
+SECRET_KEY_VALUE = _load_secret_key()
 
 class BaseConfig:
     # Flask basics
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev")  # override in prod!
+    SECRET_KEY = SECRET_KEY_VALUE or "dev"  # override in prod!
     TEMPLATES_AUTO_RELOAD = False
 
     # Database (absolute sqlite path; forward slashes are fine on Windows)
@@ -76,9 +94,11 @@ def _select_config():
     env = os.getenv("FLASK_ENV")
     if env == "development":
         return DevelopmentConfig
-    secret = os.getenv("SECRET_KEY", "dev")
+    secret = SECRET_KEY_VALUE or "dev"
     if not secret or secret == "dev":
-        raise RuntimeError("SECRET_KEY must be set to a non-default value in production.")
+        raise RuntimeError(
+            "SECRET_KEY must be provided via SECRET_KEY or SECRET_KEY_FILE in production."
+        )
     return ProductionConfig
 
 

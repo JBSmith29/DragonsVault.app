@@ -1,7 +1,23 @@
+from datetime import datetime
+
 from extensions import db
 
 class Card(db.Model):
     __tablename__ = "cards"
+    __table_args__ = (
+        db.CheckConstraint("quantity >= 0", name="ck_cards_quantity_nonneg"),
+        db.Index(
+            "ix_cards_oracle_print",
+            "oracle_id",
+            "set_code",
+            "collector_number",
+            "is_foil",
+            "lang",
+        ),
+        db.Index("ix_cards_created_at", "created_at"),
+        db.Index("ix_cards_updated_at", "updated_at"),
+        db.Index("ix_cards_archived_at", "archived_at"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -36,6 +52,9 @@ class Card(db.Model):
     type_line = db.Column(db.Text, nullable=True)
     rarity = db.Column(db.String(16), nullable=True)
     color_identity_mask = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    archived_at = db.Column(db.DateTime, nullable=True, index=True)
 
     # Relationship side
     folder = db.relationship("Folder", back_populates="cards")
