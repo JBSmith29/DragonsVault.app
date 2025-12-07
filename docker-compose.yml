@@ -40,6 +40,8 @@ services:
       IMPORT_RUN_INLINE: "0"
       ENABLE_TALISMAN: "0"
       TALISMAN_FORCE_HTTPS: "0"
+      SESSION_COOKIE_SECURE: "0"
+      PREFERRED_URL_SCHEME: http
       SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
     volumes:
       - .:/app

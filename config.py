@@ -87,7 +87,8 @@ class DevelopmentConfig(BaseConfig):
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
-    SESSION_COOKIE_SECURE = True
+    # Respect environment override instead of forcing secure cookies (can be re-enabled via env).
+    SESSION_COOKIE_SECURE = BaseConfig.SESSION_COOKIE_SECURE
 
 
 def _select_config():
