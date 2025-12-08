@@ -2,6 +2,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+def _default_cache_type() -> str:
+    """Prefer Redis cache when a Redis URL is configured; fall back to SimpleCache."""
+    if os.getenv("CACHE_TYPE"):
+        return os.getenv("CACHE_TYPE", "SimpleCache")
+    if os.getenv("CACHE_REDIS_URL") or os.getenv("REDIS_URL"):
+        return "RedisCache"
+    return "SimpleCache"
+
 def _load_secret_key() -> str | None:
     """Load the Flask secret key from env or an optional file path."""
     secret = os.getenv("SECRET_KEY")
@@ -49,11 +57,11 @@ class BaseConfig:
 
     # Cache configuration (defaults to in-process SimpleCache)
     CACHE_DEFAULT_TIMEOUT = int(os.getenv("CACHE_DEFAULT_TIMEOUT", 600))
-    CACHE_TYPE = os.getenv("CACHE_TYPE", "SimpleCache")
+    CACHE_TYPE = _default_cache_type()
     CACHE_REDIS_HOST = os.getenv("CACHE_REDIS_HOST")
     CACHE_REDIS_PORT = int(os.getenv("CACHE_REDIS_PORT", 6379))
     CACHE_REDIS_DB = int(os.getenv("CACHE_REDIS_DB", 0))
-    CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL")
+    CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL") or os.getenv("REDIS_URL")
     RATELIMIT_STORAGE_URI = os.getenv(
         "RATELIMIT_STORAGE_URI",
         os.getenv("RATELIMIT_REDIS_URI") or os.getenv("REDIS_URL") or "memory://",

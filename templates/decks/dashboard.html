@@ -191,13 +191,18 @@
         {% set cmd = dashboard_cmdr.get(d.id) %}
         <div class="col-12 col-sm-12 col-md-6 col-lg-6" data-deck-name="{{ (d.name or '')|lower }}">
           <a class="tile d-block h-100 deck-tile hover-lift card-hover-shadow"
-             href="{{ url_for('views.folder_detail', folder_id=d.id) }}"
-             {% if cmd and cmd.large %}data-hover-src="{{ cmd.large }}"{% endif %}>
+             href="{{ url_for('views.folder_detail', folder_id=d.id) }}">
             <div class="d-flex align-items-center justify-content-between gap-3">
               <div class="d-flex align-items-center gap-3 min-w-0">
-                {{ commander_chip(cmd, 80) }}
+                <span class="deck-hover-target" {% if cmd and cmd.large %}data-hover-src="{{ cmd.large }}"{% endif %}>
+                  {{ commander_chip(cmd, 80) }}
+                </span>
                 <div class="min-w-0">
-                  <div class="deck-name text-truncate" title="{{ d.name }}">{{ d.name }}</div>
+                  <div class="deck-name text-truncate deck-hover-target"
+                       title="{{ d.name }}"
+                       {% if cmd and cmd.large %}data-hover-src="{{ cmd.large }}"{% endif %}>
+                    {{ d.name }}
+                  </div>
                   <div class="small text-muted">
                     {% if deck_ci_html is defined and deck_ci_html.get(d.id) %}
                       <span class="pip-row">{{ deck_ci_html.get(d.id) | safe }}</span>
@@ -234,6 +239,44 @@
       const name = col.getAttribute('data-deck-name') || '';
       col.style.display = !term || name.includes(term) ? '' : 'none';
     });
+  });
+
+  // Hover preview only on commander chip or deck name
+  const preview = document.createElement('div');
+  preview.id = 'deckHoverPreview';
+  preview.style.position = 'fixed';
+  preview.style.pointerEvents = 'none';
+  preview.style.zIndex = '1080';
+  preview.style.display = 'none';
+  preview.innerHTML = '<img alt="Commander art" style="max-width:260px; max-height:360px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); background:#111;">';
+  document.body.appendChild(preview);
+
+  const imgEl = preview.querySelector('img');
+  function hidePreview() { preview.style.display = 'none'; imgEl.src = ''; }
+  function showPreview(src, evt) {
+    if (!src) return;
+    imgEl.src = src;
+    preview.style.display = 'block';
+    positionPreview(evt);
+  }
+  function positionPreview(evt) {
+    const pad = 16;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const rect = preview.getBoundingClientRect();
+    let x = evt.clientX + pad;
+    let y = evt.clientY + pad;
+    if (x + rect.width + pad > vw) x = evt.clientX - rect.width - pad;
+    if (y + rect.height + pad > vh) y = vh - rect.height - pad;
+    preview.style.left = `${x}px`;
+    preview.style.top = `${y}px`;
+  }
+
+  document.querySelectorAll('.deck-hover-target[data-hover-src]').forEach(el => {
+    const src = el.getAttribute('data-hover-src');
+    el.addEventListener('mouseenter', (e) => showPreview(src, e));
+    el.addEventListener('mousemove', positionPreview);
+    el.addEventListener('mouseleave', hidePreview);
   });
 })();
 </script>

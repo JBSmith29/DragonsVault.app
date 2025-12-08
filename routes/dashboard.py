@@ -306,7 +306,14 @@ def api_card(card_id):
     """Lightweight JSON used by hover/quick-view."""
     ensure_symbols_cache(force=False)
 
-    card = Card.query.get_or_404(card_id)
+    card = (
+        Card.query.options(
+            selectinload(Card.folder),
+            selectinload(Card.roles),
+            selectinload(Card.subroles),
+        )
+        .get_or_404(card_id)
+    )
     have_cache = ensure_cache_loaded()
     role_names = []
     subrole_names = []
@@ -396,7 +403,7 @@ def api_card(card_id):
     images.append({"small": im["small"], "normal": im["normal"], "large": im["large"]})
     info["scryfall_id"] = (best or {}).get("id")
 
-    return jsonify(
+    resp = jsonify(
         {
             "card": {
                 "id": card.id,
@@ -410,6 +417,9 @@ def api_card(card_id):
             "images": images,
         }
     )
+    resp.cache_control.public = True
+    resp.cache_control.max_age = 60
+    return resp
 
 
 # --- Faces helper ------------------------------------------------------------
