@@ -26,16 +26,16 @@ def test_import_confirm_runs_inline(client, create_user, app):
         follow_redirects=True,
     )
     csv_bytes = io.BytesIO(b"Card Name,Set,Collector Number,Quantity\nSol Ring,2XM,1,1")
-    response = client.post(
-        "/import",
-        data={
-            "action": "confirm",
-            "quantity_mode": "delta",
-            "file": (csv_bytes, "inline.csv"),
-        },
-        content_type="multipart/form-data",
-        follow_redirects=True,
-    )
+        response = client.post(
+            "/import",
+            data={
+                "action": "confirm",
+                "quantity_mode": "new_only",
+                "file": (csv_bytes, "inline.csv"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
     assert response.status_code == 200
     assert b"Import applied immediately" in response.data
     with app.app_context():
@@ -58,7 +58,7 @@ def test_process_csv_sets_folder_owner_username(app, create_user, tmp_path):
             str(csv_path),
             default_folder="Unsorted",
             dry_run=False,
-            quantity_mode="delta",
+            quantity_mode="new_only",
             owner_user_id=user.id,
             owner_username=user.username,
         )
@@ -83,7 +83,7 @@ def test_process_csv_allows_duplicate_folder_names_per_user(app, create_user, tm
             str(csv_path),
             default_folder="Unsorted",
             dry_run=False,
-            quantity_mode="delta",
+            quantity_mode="new_only",
             owner_user_id=user_one.id,
             owner_username=user_one.username,
         )
@@ -93,7 +93,7 @@ def test_process_csv_allows_duplicate_folder_names_per_user(app, create_user, tm
             str(csv_path),
             default_folder="Unsorted",
             dry_run=False,
-            quantity_mode="delta",
+            quantity_mode="new_only",
             owner_user_id=user_two.id,
             owner_username=user_two.username,
         )

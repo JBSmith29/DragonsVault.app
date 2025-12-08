@@ -769,8 +769,13 @@ def create_app():
                   help="Folder to use when file lacks a folder column.")
     @click.option("--overwrite", is_flag=True,
                   help="Delete ALL cards first (keep folders/commanders), then import.")
-    @click.option("--quantity-mode", type=click.Choice(["delta", "new_only"]), default="delta", show_default=True,
-                  help="delta: add to existing totals; new_only: create only brand-new rows.")
+    @click.option(
+        "--quantity-mode",
+        type=click.Choice(["new_only"]),
+        default="new_only",
+        show_default=True,
+        help="new_only: create only brand-new rows.",
+    )
     def import_csv_cmd(filepath, dry_run, default_folder, overwrite, quantity_mode):
         """Import CSV or Excel file (xlsx/xlsm supported)."""
         p = Path(filepath).expanduser()

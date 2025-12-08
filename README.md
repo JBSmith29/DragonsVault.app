@@ -132,7 +132,7 @@ Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `qu
    ```
 
 - Excel (`.xlsx`, `.xlsm`) files are supported; only the first worksheet is read.
-- `quantity_mode` option (`delta` or `new_only`) controls whether imports add to existing totals or only create brand-new rows. Combine with `--overwrite` when you need to wipe everything and rebuild from a fresh spreadsheet.
+- `quantity_mode` option (`new_only`) creates only brand-new rows. Combine with `--overwrite` when you need to wipe everything and rebuild from a fresh spreadsheet.
 
 ### Collection Export
 

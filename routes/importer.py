@@ -230,22 +230,22 @@ def import_csv():
         session["last_import_notification"] = {"level": level, "message": message}
 
     def _normalize_quantity_mode(raw: str | None) -> str:
-        value = (raw or "delta").strip().lower()
+        value = (raw or "new_only").strip().lower()
         if value in {"absolute", "replace", "overwrite"}:
             return "absolute"
         if value in {"delta", "add", "increment"}:
-            return "delta"
+            return "new_only"
         if value in {"new_only", "new", "add_new"}:
             return "new_only"
         if value in {"purge", "clear", "reset"}:
             return "purge"
-        return "delta"
+        return "new_only"
 
     if request.method == "GET":
         notification = session.pop("last_import_notification", None)
         return render_template(
             "cards/import.html",
-            quantity_mode="delta",
+            quantity_mode="new_only",
             notification=notification,
             deck_category=Folder.CATEGORY_DECK,
             collection_category=Folder.CATEGORY_COLLECTION,

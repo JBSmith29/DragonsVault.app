@@ -409,7 +409,7 @@ def process_csv(
     filepath: str,
     default_folder: str = "Unsorted",
     dry_run: bool = False,
-    quantity_mode: str = "delta",  # "delta", "new_only", "purge", plus legacy "absolute"
+    quantity_mode: str = "new_only",  # default: add only new rows; legacy modes remain for backwards compatibility
     *,
     job_id: Optional[str] = None,
     owner_user_id: Optional[int] = None,
@@ -417,8 +417,8 @@ def process_csv(
 ) -> Tuple[ImportStats, Dict[str, int]]:
     """
     Reads a CSV or Excel file and upserts Cards. Returns (stats, by_folder_counts).
-    - quantity_mode="delta": add CSV qty onto existing.
-    - quantity_mode="new_only": skip existing matches, add only new prints.
+    - quantity_mode="new_only": skip existing matches, add only new prints (default).
+    - quantity_mode="delta": add CSV qty onto existing (legacy; not exposed in UI).
     - quantity_mode="purge": same as delta, but the caller cleared cards first.
     - quantity_mode="absolute": legacy replace mode (set quantity to CSV value).
     """

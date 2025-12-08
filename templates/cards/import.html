@@ -1,16 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container py-4">
-{% set selected_mode = (quantity_mode or 'delta') if quantity_mode is defined else 'delta' %}
+{% set selected_mode = (quantity_mode or 'new_only') if quantity_mode is defined else 'new_only' %}
   {% set manual_seed = session.get('manual_import_seed') %}
 
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-2">
     <div>
       <h1 class="mb-1">Import / Export Cards</h1>
       <p class="text-muted mb-0">
-        Upload a CSV or Excel export of your collection and choose how it should update your counts.
-        Imports default to adding on top of what you already own. Use <em>Add new cards only</em> to skip duplicates
-        or <em>Clear &amp; import</em> when you have a full, up-to-date spreadsheet that should replace everything.
+        Upload a CSV or Excel export and pick how to apply it. By default we only add new cards, so you won't accidentally
+        bump quantities you already have. Use <em>Clear &amp; import</em> if this file is your entire collection and should replace what's stored now.
       </p>
     </div>
     <div class="d-flex flex-wrap gap-2">
@@ -133,17 +132,10 @@
       <div class="mb-3">
         <label class="form-label">Import mode</label>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="quantity_mode" id="mode-add" value="delta"
-                 {% if selected_mode == 'delta' %}checked{% endif %}>
-          <label class="form-check-label" for="mode-add">
-            Add to existing totals (default) – use this for ongoing updates; increases quantities when the card already exists.
-          </label>
-        </div>
-        <div class="form-check">
           <input class="form-check-input" type="radio" name="quantity_mode" id="mode-newonly" value="new_only"
                  {% if selected_mode == 'new_only' %}checked{% endif %}>
           <label class="form-check-label" for="mode-newonly">
-            Add new cards only – insert cards you don't have yet; skip anything already in your folders.
+            Add new cards only — insert anything not already in your folders; leave existing counts alone.
           </label>
         </div>
         <div class="form-check">
@@ -160,7 +152,7 @@
             aria-expanded="{{ 'true' if selected_mode == 'purge' else 'false' }}"
           >
           <label class="form-check-label" for="mode-purge">
-            Clear then import everything – wipes your current cards first, then loads this file as the new source of truth.
+            Clear &amp; import everything — wipe current cards first, then load this file as the source of truth.
           </label>
         </div>
         <div class="collapse {% if selected_mode == 'purge' %}show{% endif %}" id="purge-warning">
