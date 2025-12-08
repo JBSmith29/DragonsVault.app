@@ -123,6 +123,7 @@ After performing a large import, execute `docker compose exec web flask fts-rein
 Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `quantity`, `lang`, `foil`. Case and spacing are forgiving; the importer normalizes common variants.
 
 - ManaBox exports are supported: `Binder Name` maps to folders and `Binder Type` (Deck/Binder) automatically sets each folder to `deck` or `collection`. An example `csv` file is listed below.
+- Moxfield exports are supported: `Count` -> quantity, `Name` -> card name, `Edition` -> set code, `Language`, `Foil`, and `Proxy` are respected. Unused columns (Tags, Alter, Purchase Price, etc.) are ignored.
 
    ```csv
    folder,name,set_code,collector_number,quantity,foil,lang

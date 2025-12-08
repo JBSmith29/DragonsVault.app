@@ -81,7 +81,7 @@ EXPECTED = {
         "quantity", "qty", "trade quantity", "count", "copies",
     ],
     "set_code": [
-        "set code", "set_code", "set", "expansion", "setcode",
+        "set code", "set_code", "set", "expansion", "setcode", "edition",
     ],
     "collector_number": [
         "collector number", "collector_number", "collector #",
@@ -93,6 +93,9 @@ EXPECTED = {
     ],
     "is_foil": [
         "printing", "foil", "is foil", "foil?", "is_foil",
+    ],
+    "is_proxy": [
+        "proxy", "is proxy", "is_proxy",
     ],
 }
 
@@ -118,6 +121,13 @@ def _norm_lang(v: Optional[str]) -> str:
         return "en"
     s = str(v).strip().lower()
     return _LANG_MAP.get(s, s[:5]) or "en"
+
+
+def _is_moxfield_headers(headers: Iterable[str]) -> bool:
+    """Heuristically detect a Moxfield export."""
+    lowers = {h.strip().lower() for h in headers if isinstance(h, str)}
+    required = {"count", "name", "edition"}
+    return required.issubset(lowers) and ("purchase price" in lowers or "alter" in lowers)
 
 _POSITIVE_FOIL_VALUES = {
     "1",
@@ -437,6 +447,8 @@ def process_csv(
     per_folder: Dict[str, int] = {}
 
     rows_iter, headers, _delimiter = _open_table(filepath)  # CHANGED: unified loader
+    is_moxfield = _is_moxfield_headers(headers or [])
+    default_folder_local = "Collection" if is_moxfield else default_folder
     processed = 0
     mapping = _normalize_headers(headers or [])
 
@@ -454,10 +466,13 @@ def process_csv(
 
     for row in rows_iter:
         try:
-            folder_name = (row.get(mapping.get("folder")) or default_folder).strip()
-            folder_category = _norm_folder_category(
-                row.get(mapping["folder_category"]) if "folder_category" in mapping else None
-            )
+            folder_name = (row.get(mapping.get("folder")) or default_folder_local).strip()
+            if is_moxfield:
+                folder_category = Folder.CATEGORY_COLLECTION
+            else:
+                folder_category = _norm_folder_category(
+                    row.get(mapping["folder_category"]) if "folder_category" in mapping else None
+                )
             name = (row.get(mapping["name"]) or "").strip()
             if not name:
                 stats.skipped += 1
@@ -473,6 +488,7 @@ def process_csv(
             lang_raw = row.get(mapping.get("lang"), "en")
             lang = _norm_lang(lang_raw)
             is_foil = _to_bool(row.get(mapping.get("is_foil")))
+            is_proxy = _to_bool(row.get(mapping.get("is_proxy")))
 
             # ensure folder
             folder = None
@@ -488,6 +504,7 @@ def process_csv(
                 collector_number=collector_number,
                 lang=lang,
                 is_foil=is_foil,
+                is_proxy=is_proxy,
             )
 
             found = None
@@ -499,6 +516,16 @@ def process_csv(
                 metadata = metadata_from_print(found)
                 if found:
                     key["oracle_id"] = found.get("oracle_id")
+                else:
+                    current_app.logger.warning(
+                        "Import: no Scryfall match for %s [%s %s] (lang=%s, foil=%s, proxy=%s)",
+                        name,
+                        set_code,
+                        collector_number,
+                        lang,
+                        is_foil,
+                        is_proxy,
+                    )
 
             # DRY-RUN path computes what would happen
             if dry_run:
@@ -611,6 +638,7 @@ def process_csv(
                     "type_line": metadata.get("type_line"),
                     "rarity": metadata.get("rarity"),
                     "color_identity_mask": metadata.get("color_identity_mask"),
+                    "is_proxy": is_proxy,
                 }
                 card = Card(**card_kwargs)
                 db.session.add(card)

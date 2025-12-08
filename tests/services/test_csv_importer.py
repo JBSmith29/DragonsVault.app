@@ -59,3 +59,31 @@ def test_validate_import_file_raises_user_friendly_error(tmp_path):
     details = excinfo.value.details
     assert any("Card name" in detail for detail in details)
     assert any("Collector number" in detail for detail in details)
+
+
+def test_process_csv_moxfield_headers(monkeypatch, tmp_path, db_session):  # noqa: ARG001
+    csv_path = _write_csv(
+        tmp_path,
+        "moxfield.csv",
+        "Count,Name,Edition,Condition,Language,Foil,Tags,Collector Number,Alter,Proxy,Purchase Price\n"
+        "2,Lightning Bolt,M11,NM,English,Yes,,146,,TRUE,0.25\n",
+    )
+
+    monkeypatch.setattr(csv_importer, "_ensure_cache_loaded", lambda: False)
+    monkeypatch.setattr(csv_importer, "find_by_set_cn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(csv_importer, "metadata_from_print", lambda *_args, **_kwargs: {})
+
+    stats, _ = csv_importer.process_csv(str(csv_path), default_folder="Unsorted", dry_run=False, quantity_mode="new_only")
+
+    assert stats.added == 1
+    card = Card.query.one()
+    assert card.name == "Lightning Bolt"
+    assert card.set_code == "m11"
+    assert card.collector_number == "146"
+    assert card.quantity == 2
+    assert card.is_foil is True
+    assert card.is_proxy is True
+    assert card.lang == "en"
+    folder = Folder.query.one()
+    assert folder.name == "Collection"
+    assert folder.category == Folder.CATEGORY_COLLECTION
