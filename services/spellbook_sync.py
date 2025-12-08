@@ -6,7 +6,9 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 import requests
 from requests import Session
@@ -22,14 +24,21 @@ __all__ = [
     "collect_relevant_spellbook_variants",
     "generate_spellbook_combo_dataset",
     "write_dataset_to_file",
+    "DEFAULT_SPELLBOOK_CONCURRENCY",
 ]
 
 API_BASE_URL = "https://backend.commanderspellbook.com/variants/"
 PAGE_SIZE = 100
 DEFAULT_QUERY_SUFFIX = " legal:commander"
 SPELLBOOK_TIMEOUT = int(os.getenv("COMMANDER_SPELLBOOK_TIMEOUT", "120"))
+try:
+    DEFAULT_SPELLBOOK_CONCURRENCY = int(os.getenv("COMMANDER_SPELLBOOK_CONCURRENCY", "6") or "6")
+except ValueError:
+    DEFAULT_SPELLBOOK_CONCURRENCY = 6
 _RETRY_STATUS = (408, 429, 500, 502, 503, 504)
-_spellbook_session: Session | None = None
+_thread_local = threading.local()
+
+ProgressCallback = Callable[[int, Optional[int]], None]
 
 INSTANT_WIN_RESULTS: List[str] = [
     "Win the game",
@@ -57,10 +66,9 @@ class SpellbookVariantRecord:
     results: set[str]
     categories: set[str]
 
-
-def _iter_variants(params: Optional[Dict[str, str]] = None) -> Iterator[Dict[str, any]]:
-    global _spellbook_session
-    if _spellbook_session is None:
+def _get_spellbook_session() -> Session:
+    session = getattr(_thread_local, "session", None)
+    if session is None:
         retry = Retry(
             total=4,
             backoff_factor=1.5,
@@ -71,13 +79,23 @@ def _iter_variants(params: Optional[Dict[str, str]] = None) -> Iterator[Dict[str
         session = requests.Session()
         session.mount("https://", adapter)
         session.mount("http://", adapter)
-        _spellbook_session = session
+        _thread_local.session = session
+    return session
 
+
+def _iter_variants(
+    params: Optional[Dict[str, str]] = None,
+    progress_callback: Optional[ProgressCallback] = None,
+    total_callback: Optional[Callable[[int], None]] = None,
+) -> Iterator[Dict[str, any]]:
     next_url: Optional[str] = API_BASE_URL
     query = dict(params) if params else {"limit": PAGE_SIZE}
+    fetched = 0
+    total_count: Optional[int] = None
+    session = _get_spellbook_session()
 
     while next_url:
-        response = _spellbook_session.get(
+        response = session.get(
             next_url,
             params=query if next_url == API_BASE_URL else None,
             timeout=SPELLBOOK_TIMEOUT,
@@ -85,43 +103,127 @@ def _iter_variants(params: Optional[Dict[str, str]] = None) -> Iterator[Dict[str
         response.raise_for_status()
         payload = response.json()
 
+        if total_count is None:
+            total_raw = payload.get("count")
+            if isinstance(total_raw, int):
+                total_count = total_raw
+                if total_callback:
+                    try:
+                        total_callback(total_count)
+                    except Exception:
+                        # Total reporting is best-effort.
+                        pass
+
         for item in payload.get("results", []):
+            fetched += 1
+            if progress_callback:
+                try:
+                    progress_callback(fetched, total_count)
+                except Exception:
+                    # Progress reporting is best-effort; ignore callback errors
+                    pass
             yield item
 
         next_url = payload.get("next")
         query = None
 
 
-def collect_instant_win_variants() -> Dict[str, SpellbookVariantRecord]:
-    return _collect_variants_by_queries([("instant_win", query) for query in RESULT_QUERY_GROUPS["instant_win"]])
+def collect_instant_win_variants(
+    progress_callback: Optional[ProgressCallback] = None,
+    *,
+    concurrency: Optional[int] = None,
+) -> Dict[str, SpellbookVariantRecord]:
+    return _collect_variants_by_queries(
+        [("instant_win", query) for query in RESULT_QUERY_GROUPS["instant_win"]],
+        progress_callback=progress_callback,
+        concurrency=concurrency,
+    )
 
 
-def _collect_variants_by_queries(query_specs: Iterable[Tuple[str, str]]) -> Dict[str, SpellbookVariantRecord]:
-    variants: Dict[str, SpellbookVariantRecord] = {}
-    for category, query in query_specs:
+def _collect_variants_by_queries(
+    query_specs: Iterable[Tuple[str, str]],
+    *,
+    progress_callback: Optional[ProgressCallback] = None,
+    concurrency: Optional[int] = None,
+) -> Dict[str, SpellbookVariantRecord]:
+    max_workers = max(1, int(concurrency or DEFAULT_SPELLBOOK_CONCURRENCY))
+    progress_lock = threading.Lock()
+    total_lock = threading.Lock()
+    global_total = 0
+    global_fetched = 0
+
+    def _register_total(count: int) -> None:
+        nonlocal global_total
+        with total_lock:
+            global_total += count
+
+    def _safe_progress(_: int, __: Optional[int]) -> None:
+        nonlocal global_fetched
+        with progress_lock:
+            global_fetched += 1
+            total_snapshot = max(global_total, global_fetched)
+        if not progress_callback:
+            return
+        try:
+            progress_callback(global_fetched, total_snapshot or None)
+        except Exception:
+            # Progress reporting is best-effort.
+            pass
+
+    def _fetch_for_query(category: str, query: str) -> Dict[str, SpellbookVariantRecord]:
         params = {
             "limit": str(PAGE_SIZE),
             "q": f"{query}{DEFAULT_QUERY_SUFFIX}",
         }
-        for variant in _iter_variants(params):
-            entry = variants.get(variant["id"])
+        local_variants: Dict[str, SpellbookVariantRecord] = {}
+        for variant in _iter_variants(
+            params,
+            progress_callback=_safe_progress,
+            total_callback=_register_total,
+        ):
+            entry = local_variants.get(variant["id"])
             if entry is None:
                 entry = SpellbookVariantRecord(variant=variant, results=set(), categories=set())
-                variants[variant["id"]] = entry
+                local_variants[variant["id"]] = entry
             entry.categories.add(category)
             for produced in variant.get("produces", []):
                 name = (produced.get("feature") or {}).get("name")
                 if name:
                     entry.results.add(name)
+        return local_variants
+
+    variants: Dict[str, SpellbookVariantRecord] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {
+            executor.submit(_fetch_for_query, category, query): (category, query)
+            for category, query in query_specs
+        }
+        for future in as_completed(future_map):
+            local_variants = future.result()
+            for vid, entry in local_variants.items():
+                existing = variants.get(vid)
+                if existing is None:
+                    variants[vid] = entry
+                else:
+                    existing.categories.update(entry.categories)
+                    existing.results.update(entry.results)
     return variants
 
 
-def collect_relevant_spellbook_variants() -> Dict[str, SpellbookVariantRecord]:
+def collect_relevant_spellbook_variants(
+    progress_callback: Optional[ProgressCallback] = None,
+    *,
+    concurrency: Optional[int] = None,
+) -> Dict[str, SpellbookVariantRecord]:
     specs: List[Tuple[str, str]] = []
     for category, queries in RESULT_QUERY_GROUPS.items():
         for query in queries:
             specs.append((category, query))
-    return _collect_variants_by_queries(specs)
+    return _collect_variants_by_queries(
+        specs,
+        progress_callback=progress_callback,
+        concurrency=concurrency,
+    )
 
 
 def _combo_requirements(variant: Dict[str, any]) -> Dict[str, int]:
@@ -148,9 +250,16 @@ def generate_spellbook_combo_dataset(
     early_threshold: int = EARLY_MANA_VALUE_THRESHOLD,
     late_threshold: int = LATE_MANA_VALUE_THRESHOLD,
     card_count_targets: Iterable[int] | None = None,
+    progress_callback: Optional[ProgressCallback] = None,
+    concurrency: Optional[int] = None,
+    existing_ids: Optional[Iterable[str]] = None,
 ) -> Dict[str, any]:
     targets = tuple(sorted(set(card_count_targets or (2, 3))))
-    fetched_variants = collect_relevant_spellbook_variants()
+    existing_id_set = {str(i) for i in (existing_ids or [])}
+    fetched_variants = collect_relevant_spellbook_variants(
+        progress_callback=progress_callback,
+        concurrency=concurrency,
+    )
     early_game: List[Dict[str, any]] = []
     late_game: List[Dict[str, any]] = []
 
@@ -159,6 +268,10 @@ def generate_spellbook_combo_dataset(
         variant = record.variant
         requirements = _combo_requirements(variant)
         stats["total_variants"] += 1
+
+        if existing_id_set and variant["id"] in existing_id_set:
+            stats["skipped_existing"] += 1
+            continue
 
         if targets and len(requirements) not in targets:
             stats["skipped_wrong_card_count"] += 1

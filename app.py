@@ -606,6 +606,9 @@ def create_app():
         "views.landing_page",
         "views.login",
         "views.register",
+        "views.healthz",
+        "views.readyz",
+        "views.metrics",
         "views.terms_of_service",
         "views.privacy_policy",
         "views.accessibility_statement",
@@ -754,6 +757,7 @@ def create_app():
     from services.spellbook_sync import (
         EARLY_MANA_VALUE_THRESHOLD,
         LATE_MANA_VALUE_THRESHOLD,
+        DEFAULT_SPELLBOOK_CONCURRENCY,
         generate_spellbook_combo_dataset,
         write_dataset_to_file,
     )
@@ -845,18 +849,84 @@ def create_app():
         multiple=True,
         help="Restrict combos to the given card counts (repeat flag to include multiple). Defaults to 2 and 3 cards.",
     )
-    def sync_spellbook_combos(output, early_threshold, late_threshold, card_counts):
+    @click.option(
+        "--progress/--no-progress",
+        default=True,
+        show_default=True,
+        help="Show a progress bar while downloading combos.",
+    )
+    @click.option(
+        "--concurrency",
+        default=DEFAULT_SPELLBOOK_CONCURRENCY,
+        show_default=True,
+        type=int,
+        help="Parallel download workers for Commander Spellbook API (lower if the API rate limits).",
+    )
+    @click.option(
+        "--skip-existing/--no-skip-existing",
+        default=False,
+        show_default=True,
+        help="Skip combos already present in the output file (faster, but may miss updated data).",
+    )
+    def sync_spellbook_combos(output, early_threshold, late_threshold, card_counts, progress, concurrency, skip_existing):
         """Download instant-win combos from Commander Spellbook and persist them locally."""
-
-        dataset = generate_spellbook_combo_dataset(
-            early_threshold=early_threshold,
-            late_threshold=late_threshold,
-            card_count_targets=card_counts or (2, 3),
-        )
-
+        workers = max(1, int(concurrency or 1))
+        existing_ids = set()
         output_path = Path(output)
         if not output_path.is_absolute():
             output_path = Path(app.root_path) / output_path
+
+        if skip_existing and output_path.exists():
+            try:
+                payload = json.loads(output_path.read_text(encoding="utf-8"))
+                for entry in payload.get("early_game", []):
+                    vid = entry.get("id")
+                    if vid:
+                        existing_ids.add(str(vid))
+                for entry in payload.get("late_game", []):
+                    vid = entry.get("id")
+                    if vid:
+                        existing_ids.add(str(vid))
+            except Exception as exc:  # pragma: no cover - defensive
+                click.echo(f"Warning: unable to read existing dataset ({exc}); not skipping existing combos.", err=True)
+                existing_ids.clear()
+
+        def _run_sync(with_progress: bool):
+            if not with_progress:
+                return generate_spellbook_combo_dataset(
+                    early_threshold=early_threshold,
+                    late_threshold=late_threshold,
+                    card_count_targets=card_counts or (2, 3),
+                    concurrency=workers,
+                    existing_ids=existing_ids if skip_existing else None,
+                )
+
+            with click.progressbar(
+                iterable=range(0),  # manual updates; start at 0 so position shows count/? until total is known
+                length=0,
+                label="Downloading Commander Spellbook combos",
+                show_eta=False,
+                show_percent=False,
+                show_pos=True,
+            ) as bar:
+
+                def _progress_callback(_, total):
+                    if total and (bar.length or 0) == 0:
+                        bar.length = total
+                        bar.show_percent = True
+                        bar.show_eta = True
+                    bar.update(1)
+
+                return generate_spellbook_combo_dataset(
+                    early_threshold=early_threshold,
+                    late_threshold=late_threshold,
+                    card_count_targets=card_counts or (2, 3),
+                    progress_callback=_progress_callback,
+                    concurrency=workers,
+                    existing_ids=existing_ids if skip_existing else None,
+                )
+
+        dataset = _run_sync(progress)
 
         write_dataset_to_file(dataset, output_path)
 

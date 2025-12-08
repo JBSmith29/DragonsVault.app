@@ -49,7 +49,7 @@ def test_generate_spellbook_combo_dataset_categorises_variants(monkeypatch):
     monkeypatch.setattr(
         spellbook_sync,
         "collect_relevant_spellbook_variants",
-        lambda: sample,
+        lambda **_: sample,
     )
 
     dataset = spellbook_sync.generate_spellbook_combo_dataset(card_count_targets=(2, 3))
