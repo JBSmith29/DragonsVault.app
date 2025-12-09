@@ -596,6 +596,41 @@ def find_by_set_cn_loose(set_code: str, collector_number: str, name_hint: Option
             return c
     return candidates[0]
 
+
+def fetch_live_print(set_code: str, collector_number: str, name_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Fetch a single print directly from Scryfall when it's missing from the local cache.
+    Attempts a direct /cards/{set}/{cn} lookup, then a set-scoped name search.
+    """
+    scode = (set_code or "").strip().lower()
+    cn = str(collector_number or "").strip()
+    if not scode or not cn:
+        return None
+    sess = _http_session()
+    try:
+        resp = sess.get(f"https://api.scryfall.com/cards/{scode}/{cn}", timeout=8)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+
+    if name_hint:
+        try:
+            resp = sess.get(
+                "https://api.scryfall.com/cards/search",
+                params={"q": f'!"{name_hint}" set:{scode} cn:{cn}'},
+                timeout=8,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("data") or []
+                if items:
+                    return items[0]
+        except Exception:
+            pass
+    return None
+
+
 @lru_cache(maxsize=32768)
 def prints_for_oracle(oracle_id: Optional[str]) -> Tuple[Dict[str, Any], ...]:
     if not oracle_id:

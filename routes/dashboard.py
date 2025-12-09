@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import jsonify, redirect, render_template, session, url_for
 from sqlalchemy import func
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db
 from models import Card, Folder

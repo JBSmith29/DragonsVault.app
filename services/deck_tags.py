@@ -159,6 +159,7 @@ DECK_TAG_GROUPS: DeckTagGroups = OrderedDict(
                 "Hydras",
                 "Illusions",
                 "Insects",
+                "Jellyfish",
                 "Kaheera Companion",
                 "Keruga Companion",
                 "Knights",

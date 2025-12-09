@@ -8,7 +8,14 @@ from extensions import db
 from models import Card
 from models.role import Role, CardRole
 from services import scryfall_cache as sc
-from services.scryfall_cache import ensure_cache_loaded, find_by_set_cn, prints_for_oracle, rulings_for_oracle, set_name_for_code
+from services.scryfall_cache import (
+    ensure_cache_loaded,
+    find_by_set_cn,
+    prints_for_oracle,
+    rulings_for_oracle,
+    set_name_for_code,
+    fetch_live_print,
+)
 from services.symbols_cache import colors_to_icons, ensure_symbols_cache, render_mana_html, render_oracle_html
 
 from .base import (
@@ -50,6 +57,16 @@ def card_detail(card_id):
         fetched = find_by_set_cn(card.set_code, card.collector_number, card.name)
         if fetched:
             prints = [fetched]
+            oid = oid or fetched.get("oracle_id")
+
+    if not prints:
+        live = sc.fetch_live_print(card.set_code, card.collector_number, card.name)
+        if live:
+            prints = [live]
+            oid = oid or live.get("oracle_id") or oid
+            if live.get("oracle_id") and not card.oracle_id:
+                card.oracle_id = live.get("oracle_id")
+                db.session.commit()
 
     owned_set = (card.set_code or "").lower()
     owned_cn = str(card.collector_number) if card.collector_number is not None else ""

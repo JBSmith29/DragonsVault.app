@@ -465,6 +465,7 @@
             <th><a href="{{ keep_params('ctype', ctyp_dir) }}">Type</a></th>
             <th><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
             <th>Set</th>
+            <th>Owned/Proxy</th>
             <th class="text-end"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
             <th class="col-colors"><a href="{{ keep_params('colors', col_dir) }}">Colors</a></th>
             <th><a href="{{ keep_params('rar', rar_dir) }}">Rarity</a></th>
@@ -524,6 +525,7 @@
                 data-img-small="{{ (image_map.get(card.id) or '') }}"
                 data-img-large="{{ (hover_src or '') }}"
                 data-name="{{ display_name }}"
+                data-proxy="{{ 1 if card.is_proxy else 0 }}"
                 data-ignore-hover="true">
               {% if move_folder_options %}
                 <td class="col-select">
@@ -567,6 +569,16 @@
                 {% endif %}
               </td>
               <td class="text-uppercase">{{ card.set_code }}</td>
+              <td>
+                <button
+                  type="button"
+                  class="btn btn-sm card-proxy-toggle {% if card.is_proxy %}btn-warning text-dark{% else %}btn-outline-secondary{% endif %}"
+                  data-card-id="{{ card.id }}"
+                  data-state="{{ 'proxy' if card.is_proxy else 'owned' }}"
+                >
+                  {{ 'Proxy' if card.is_proxy else 'Owned' }}
+                </button>
+              </td>
               <td class="text-end">{{ card.quantity }}</td>
               <td class="col-colors">
                 {% set cols = (color_map.get(card.id) if color_map else []) %}
@@ -1090,6 +1102,9 @@
     }
   }
 
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const csrfHeader = csrfToken ? {'X-CSRFToken': csrfToken} : {};
+
   const actionBar = document.getElementById('cardActionBar');
   if (actionBar) {
     const cardCheckboxes = Array.from(document.querySelectorAll('.card-select'));
@@ -1107,12 +1122,23 @@
     const selectedCards = () => cardCheckboxes.filter(cb => cb.checked);
     const findRow = (cb) => cb?.closest('tr.card-row');
     const selectedRows = () => selectedCards().map(cb => findRow(cb)).filter(Boolean);
+    const getMoveTarget = () => {
+      const raw = (() => {
+        const viaInput = (moveInput?.value || '').trim();
+        const viaDataset = (moveWrapper?.dataset.selected || moveWrapper?.dataset.dvSelectValue || '').trim();
+        const viaHidden = (moveWrapper?.querySelector('[data-dv-select-input]')?.value || '').trim();
+        const viaActive = (document.querySelector('#cardActionMoveWrapper [data-dv-select-option].active')?.getAttribute('data-value') || '').trim();
+        return viaInput || viaDataset || viaHidden || viaActive || '';
+      })();
+      const num = raw ? Number(raw) : NaN;
+      return Number.isFinite(num) ? num : null;
+    };
 
     function updateActionUI() {
       const sel = selectedCards();
       const rows = selectedRows();
       const count = sel.length;
-      const targetValue = (moveInput?.value || '').trim();
+      const targetValue = getMoveTarget();
       const singleRow = count === 1 ? rows[0] : null;
       const maxQty = singleRow ? parseInt(singleRow.dataset.quantity || '1', 10) || 1 : 1;
 
@@ -1170,10 +1196,31 @@
       });
     }
 
-    if (moveWrapper) {
-      moveWrapper.addEventListener('dv-select:change', updateActionUI);
-      moveWrapper.addEventListener('dv-select:ready', updateActionUI);
-    }
+      if (moveWrapper) {
+        moveWrapper.addEventListener('dv-select:change', (ev) => {
+          const val = ev?.detail?.value || '';
+          if (moveInput) moveInput.value = val;
+          moveWrapper.dataset.selected = val;
+          moveWrapper.dataset.dvSelectValue = val;
+          updateActionUI();
+        });
+        moveWrapper.addEventListener('dv-select:ready', () => {
+          const val = document.querySelector('#cardActionMoveWrapper [data-dv-select-option].active')?.getAttribute('data-value') || '';
+          if (moveInput) moveInput.value = val;
+          moveWrapper.dataset.selected = val;
+          moveWrapper.dataset.dvSelectValue = val;
+          updateActionUI();
+        });
+        moveWrapper.querySelectorAll('[data-dv-select-option]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const val = btn.getAttribute('data-value') || '';
+            if (moveInput) moveInput.value = val;
+            moveWrapper.dataset.selected = val;
+            moveWrapper.dataset.dvSelectValue = val;
+            updateActionUI();
+          });
+        });
+      }
 
     const showToast = (message, isError = false) => {
       const alert = document.getElementById('editPrintingAlert');
@@ -1199,10 +1246,15 @@
     async function performMove() {
       const ids = selectedCards().map(cb => cb.value);
       if (!ids.length) return;
+      const targetVal = getMoveTarget();
       const payload = {
         card_ids: ids,
-        target_folder_id: moveInput?.value || null,
+        target_folder_id: targetVal,
       };
+      if (!payload.target_folder_id) {
+        showToast("Choose a destination folder before moving.", true);
+        return;
+      }
       if (ids.length === 1 && qtyInput && !qtyInput.disabled) {
         const row = selectedRows()[0];
         const maxQty = parseInt(row?.dataset.quantity || '1', 10) || 1;
@@ -1213,7 +1265,7 @@
       try {
         const res = await fetch("{{ url_for('views.bulk_move_cards') }}", {
           method: "POST",
-          headers: {"Content-Type": "application/json"},
+          headers: {"Content-Type": "application/json", ...csrfHeader},
           body: JSON.stringify(payload),
         });
         const data = await res.json().catch(() => ({}));
@@ -1227,7 +1279,7 @@
         showToast(data?.message || "Move failed", true);
       } catch (err) {
         console.error("Move failed", err);
-        showToast("Move failed. Please try again.", true);
+        showToast(err?.message || "Move failed. Please try again.", true);
       } finally {
         moveBtn.disabled = false;
       }
@@ -1414,7 +1466,7 @@
         try {
           const res = await fetch(`/api/card/${cardId}/update-printing`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', ...csrfHeader},
             body: JSON.stringify({
               printing: printingValue,
               finish: finishValue,
@@ -1439,24 +1491,75 @@
       });
     }
 
+    const proxyToggles = Array.from(document.querySelectorAll('.card-proxy-toggle'));
+    const applyProxyState = (btn, isProxy) => {
+      btn.dataset.state = isProxy ? 'proxy' : 'owned';
+      btn.textContent = isProxy ? 'Proxy' : 'Owned';
+      btn.classList.toggle('btn-warning', isProxy);
+      btn.classList.toggle('text-dark', isProxy);
+      btn.classList.toggle('btn-outline-secondary', !isProxy);
+      const row = btn.closest('tr.card-row');
+      if (row) row.dataset.proxy = isProxy ? '1' : '0';
+    };
+
+    proxyToggles.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const cardId = btn.dataset.cardId;
+        const desired = btn.dataset.state !== 'proxy';
+        btn.disabled = true;
+        btn.classList.add('opacity-75');
+        try {
+          const res = await fetch(`/api/card/${cardId}/proxy`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', ...csrfHeader},
+            body: JSON.stringify({is_proxy: desired}),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+          applyProxyState(btn, data.is_proxy);
+          if (typeof showToast === 'function') {
+            showToast(data.is_proxy ? 'Marked as proxy.' : 'Marked as owned.');
+          }
+        } catch (err) {
+          console.error('Proxy toggle failed', err);
+          if (typeof showToast === 'function') {
+            showToast('Failed to toggle proxy flag.', true);
+          }
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75');
+        }
+      });
+    });
+
     updateActionUI();
   }
 
-  document.addEventListener('click', function (e) {
-    if (e.target.closest('a.card-link')) return;
-    if (e.target.closest('.card-select')) return;
-    if (e.target.closest('#cardActionBar')) return;
-    const row = e.target.closest('tr.card-row');
-    if (!row) return;
-    if (window.getSelection && window.getSelection().toString()) return;
-
-    const id = row.getAttribute('data-card-id');
-    const href = row.querySelector('a.card-link')?.getAttribute('href') || null;
-    if (id) openCardDrawer(id, href);
-  });
+  function shouldIgnoreClick(target) {
+    return (
+      target.closest('a.card-link') ||
+      target.closest('.card-select') ||
+      target.closest('#cardActionBar') ||
+      target.closest('.card-proxy-toggle') ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select')
+    );
+  }
 
   document.querySelectorAll('tr.card-row').forEach(tr => {
     tr.setAttribute('tabindex', '0');
+
+    tr.addEventListener('click', (e) => {
+      if (shouldIgnoreClick(e.target)) return;
+      if (window.getSelection && window.getSelection().toString()) return;
+      const id = tr.getAttribute('data-card-id');
+      const href = tr.querySelector('a.card-link')?.getAttribute('href') || null;
+      if (id) openCardDrawer(id, href);
+    });
+
     tr.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         const id = tr.getAttribute('data-card-id');

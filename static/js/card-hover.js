@@ -129,7 +129,8 @@
   function isTarget(el) {
     if (!el || el === document.body) return false;
     if (el.dataset && el.dataset.ignoreHover === 'true') return false;
-    const classList = el.classList || [];
+    const classList = el.classList;
+    if (!classList || typeof classList.contains !== 'function') return false;
     if (classList.contains('mana') || classList.contains('mana-symbol') || classList.contains('mana-cost')) return false;
     if (el.tagName === 'IMG') {
       const src = el.getAttribute('src') || '';
@@ -143,6 +144,10 @@
   }
 
   async function handleEnter(evt) {
+    const rawTarget = evt.target;
+    if (rawTarget && (rawTarget.dataset?.ignoreHover === 'true' || rawTarget.closest?.('[data-ignore-hover="true"]'))) {
+      return;
+    }
     const target = evt.target.closest ? evt.target.closest('*') : evt.target;
     const hoverTarget = target && target.closest ? target.closest('[data-card-id],[data-scry-id],[data-scryfall-id],[data-hover-src],[data-img],a[href*="/cards/"],img') : target;
     if (!hoverTarget || !isTarget(hoverTarget)) return;

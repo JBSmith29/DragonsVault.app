@@ -890,7 +890,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
                 break
         return (int(digits) if digits else 10**9, s_val)
 
-    if sort in {"name", "ctype", "colors", "rar", "set", "cn", "foil", "qty", "cmc"}:
+    if sort in {"name", "ctype", "colors", "rar", "set", "cn", "foil", "proxy", "qty", "cmc"}:
         if sort == "name":
             deck_cards.sort(key=lambda x: ((display_name_map.get(x.id) or x.name or "").lower()), reverse=reverse)
         elif sort == "ctype":
@@ -905,6 +905,11 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             deck_cards.sort(key=lambda x: _cn_key(x.collector_number), reverse=reverse)
         elif sort == "foil":
             deck_cards.sort(key=lambda x: (1 if getattr(x, "is_foil", False) else 0), reverse=reverse)
+        elif sort == "proxy":
+            def _proxy_key(card):
+                flag = 1 if getattr(card, "is_proxy", False) else 0
+                return -flag if reverse else flag
+            deck_cards.sort(key=_proxy_key)
         elif sort == "qty":
             deck_cards.sort(key=lambda x: (getattr(x, "quantity", 1) or 1), reverse=reverse)
         elif sort == "cmc":
@@ -1699,6 +1704,20 @@ def folder_sharing(folder_id: int):
 @login_required
 def folder_detail(folder_id):
     return _folder_detail_impl(folder_id)
+
+
+@views.get("/api/folder/<int:folder_id>/counts")
+@login_required
+def folder_counts(folder_id: int):
+    """Return lightweight unique/quantity counts for a folder (used to refresh stats)."""
+    folder = Folder.query.get_or_404(folder_id)
+    ensure_folder_access(folder, write=False, allow_shared=True)
+    unique_count, total_qty = (
+        db.session.query(func.count(Card.id), func.coalesce(func.sum(Card.quantity), 0))
+        .filter(Card.folder_id == folder_id)
+        .one()
+    )
+    return jsonify({"ok": True, "unique": int(unique_count or 0), "total": int(total_qty or 0)})
 
 
 @views.route("/shared/folder/<int:folder_id>")

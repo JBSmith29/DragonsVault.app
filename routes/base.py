@@ -381,12 +381,10 @@ def _name_sort_expr():
 def _collector_number_numeric():
     """
     Naturalize collector_number for sorting:
-      - Leading digits cast to int (e.g., '12a' -> 12), else None.
+      - Cast only when the entire collector_number is digits; otherwise None.
     """
-    return case(
-        (func.substr(Card.collector_number, 1, 1).between("0", "9"), cast(Card.collector_number, Integer)),
-        else_=None,
-    )
+    is_numeric = Card.collector_number.op("~")(r"^[0-9]+$")
+    return case((is_numeric, cast(Card.collector_number, Integer)), else_=None)
 
 
 def _small_thumb_for_print(pr: dict | None) -> str | None:

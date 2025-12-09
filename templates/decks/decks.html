@@ -287,6 +287,9 @@
       <a class="btn btn-outline-light btn-sm" href="{{ url_for('views.deck_tokens_overview') }}">
         All Deck Tokens
       </a>
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.deck_from_collection') }}">
+        Create Deck from Collection
+      </a>
       <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#proxyDeckModal">
         Import Proxy Deck
       </button>
@@ -655,8 +658,8 @@
 {% endcall %}
 
 <script>
-const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 (function(){
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const drawerEl = document.getElementById('deckDrawer');
   const bodyEl = document.getElementById('deckDrawerBody');
   if (!drawerEl || !bodyEl) return;

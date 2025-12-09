@@ -86,6 +86,7 @@ services:
     command: rq worker default
     restart: unless-stopped
     environment:
+      PYTHONWARNINGS: "ignore::UserWarning:click.core"
       FLASK_ENV: production
       FLASK_DEBUG: "0"
       INSTANCE_DIR: /app/instance

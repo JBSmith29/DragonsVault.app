@@ -45,7 +45,20 @@
   <!-- ---------- Heading ---------- -->
   {% set is_external = came_from_scry or not (card and card.id) %}
   {# Title and quick metadata for the owned print. #}
-  <h2 class="mb-1">{{ info.name or card.name }}</h2>
+  <h2 class="mb-1 d-flex align-items-center gap-2 flex-wrap">
+    <span>{{ info.name or card.name }}</span>
+    {% if card %}
+      <button
+        type="button"
+        id="detailProxyToggle"
+        class="btn btn-sm {% if card.is_proxy %}btn-warning text-dark{% else %}btn-outline-secondary{% endif %}"
+        data-card-id="{{ card.id }}"
+        data-state="{{ 'proxy' if card.is_proxy else 'owned' }}"
+      >
+        {{ 'Proxy' if card.is_proxy else 'Owned' }}
+      </button>
+    {% endif %}
+  </h2>
   <div class="text-muted mb-2">
     {{ (info.set or card.set_code or "")|upper }} #{{ info.collector_number or card.collector_number }}
     {% if card is defined and card is not none %}
@@ -798,6 +811,43 @@
       prepareFlipForActive();
     });
   }
+})();
+
+// Proxy toggle on detail view
+(function(){
+  const btn = document.getElementById('detailProxyToggle');
+  if (!btn) return;
+  const cardId = btn.dataset.cardId;
+
+  const apply = (isProxy) => {
+    btn.dataset.state = isProxy ? 'proxy' : 'owned';
+    btn.textContent = isProxy ? 'Proxy' : 'Owned';
+    btn.classList.toggle('btn-warning', isProxy);
+    btn.classList.toggle('text-dark', isProxy);
+    btn.classList.toggle('btn-outline-secondary', !isProxy);
+  };
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const desired = btn.dataset.state !== 'proxy';
+    btn.disabled = true;
+    btn.classList.add('opacity-75');
+    try {
+      const res = await fetch(`/api/card/${cardId}/proxy`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({is_proxy: desired}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      apply(data.is_proxy);
+    } catch (err) {
+      console.error('Proxy toggle failed', err);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('opacity-75');
+    }
+  });
 })();
 </script>
 {% endblock %}

@@ -19,6 +19,18 @@ __all__ = [
 ]
 
 
+def _normalize_epoch(epoch: int) -> int:
+    """
+    Keep cache_epoch within 32-bit signed integer to satisfy DB schema.
+    """
+    try:
+        val = int(epoch or 0)
+    except Exception:
+        val = 0
+    max_int = 2_147_483_647
+    return abs(val) % max_int
+
+
 def compute_bracket_signature(
     cards: Iterable[Dict[str, Any]] | None,
     commander: Optional[Dict[str, Any]],
@@ -64,7 +76,7 @@ def compute_bracket_signature(
     }
 
     payload = {
-        "epoch": int(epoch or 0),
+        "epoch": _normalize_epoch(epoch),
         "commander": commander_payload,
         "cards": normalized_cards,
     }
@@ -84,7 +96,7 @@ def get_cached_bracket(folder_id: Optional[int], signature: str, epoch: int) -> 
         return None
     if not entry:
         return None
-    if entry.cache_epoch != int(epoch or 0):
+    if entry.cache_epoch != _normalize_epoch(epoch):
         return None
     if entry.card_signature != signature:
         return None
@@ -107,7 +119,7 @@ def store_cached_bracket(folder_id: Optional[int], signature: str, epoch: int, p
         db.session.add(entry)
 
     entry.card_signature = signature
-    entry.cache_epoch = int(epoch or 0)
+    entry.cache_epoch = _normalize_epoch(epoch)
     entry.payload = payload
     entry.updated_at = datetime.utcnow()
 

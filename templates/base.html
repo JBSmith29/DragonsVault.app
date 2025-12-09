@@ -665,10 +665,10 @@
 
       const measureViewport = () => {
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-        document.documentElement.style.setProperty('--vh', viewportHeight . 'px');
+        document.documentElement.style.setProperty('--vh', viewportHeight + 'px');
         const header = document.querySelector('.app-header');
         const headerHeight = header ? header.getBoundingClientRect().height : 96;
-        document.documentElement.style.setProperty('--header-height', headerHeight . 'px');
+        document.documentElement.style.setProperty('--header-height', headerHeight + 'px');
       };
 
       window.addEventListener('resize', measureViewport, { passive: true });

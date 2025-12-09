@@ -454,6 +454,47 @@ def _generate_unique_folder_name(base_name: str, *, exclude_id: int | None = Non
     return candidate
 
 
+def _parse_collection_lines(raw_text: str) -> tuple[list[dict], list[str]]:
+    """
+    Parse lines like:
+      - '1 Annie Joins Up (OTJ) 191' -> qty, name, set_code, collector_number
+      - '2 Sol Ring' -> qty, name (set/collector optional, will prompt to choose)
+    """
+    entries: list[dict] = []
+    errors: list[str] = []
+    if not raw_text:
+        return entries, ["Enter at least one card line."]
+    # qty, name, optional (SET), optional collector number
+    pattern = re.compile(r"^\s*(\d+)\s*(?:x)?\s+(.+?)(?:\s*\(([^)]+)\))?(?:\s+(\S+))?\s*$")
+    for idx, line in enumerate(raw_text.splitlines(), start=1):
+        stripped = (line or "").strip()
+        if not stripped:
+            continue
+        m = pattern.match(stripped)
+        if not m:
+            errors.append(
+                f"Line {idx}: Could not parse '{stripped}'. Expected formats like '1 Card Name (SET) 123' or '2 Card Name'."
+            )
+            continue
+        qty = max(int(m.group(1) or 0), 0)
+        name = m.group(2).strip()
+        set_code = (m.group(3) or "").strip().lower()
+        cn = (m.group(4) or "").strip()
+        if qty <= 0:
+            errors.append(f"Line {idx}: Quantity must be positive.")
+            continue
+        entries.append(
+            {
+                "index": idx,
+                "qty": qty,
+                "name": name,
+                "set_code": set_code,
+                "collector_number": cn,
+            }
+        )
+    return entries, errors
+
+
 def _clone_deck_to_playground(source: Folder) -> Folder:
     """Clone an existing deck into a Build-A-Deck playground (proxy) folder."""
     if not source or not isinstance(source, Folder):
@@ -2104,6 +2145,32 @@ def api_card_printing_options(card_id: int):
     )
 
 
+@views.post("/api/card/<int:card_id>/proxy")
+@login_required
+def api_card_proxy(card_id: int):
+    """Toggle or set proxy status for a single owned card."""
+    card = Card.query.get_or_404(card_id)
+    ensure_folder_access(card.folder, write=True)
+
+    payload = request.get_json(silent=True) or {}
+    raw_flag = payload.get("is_proxy")
+    if raw_flag is None:
+        raw_flag = request.form.get("is_proxy")
+    if raw_flag is None:
+        desired = not bool(card.is_proxy)
+    else:
+        desired = str(raw_flag).strip().lower() in {"1", "true", "yes", "on"}
+
+    card.is_proxy = desired
+    _safe_commit()
+    record_audit_event(
+        "card_proxy_toggle",
+        {"card_id": card.id, "folder": card.folder_id, "is_proxy": desired},
+    )
+
+    return jsonify({"ok": True, "card_id": card.id, "is_proxy": desired})
+
+
 @views.post("/api/card/<int:card_id>/update-printing")
 @login_required
 def api_update_card_printing(card_id: int):
@@ -2673,6 +2740,326 @@ def decks_overview():
         owner_names=_owner_names(decks),
         proxy_count=sum(1 for deck in decks if deck.get("is_proxy")),
         deck_tag_groups=DECK_TAG_GROUPS,
+    )
+
+
+@views.route("/decks/from-collection", methods=["GET", "POST"])
+@login_required
+def deck_from_collection():
+    form = {
+        "deck_name": (request.form.get("deck_name") or "").strip(),
+        "commander": (request.form.get("commander") or "").strip(),
+        "deck_tag": (request.form.get("deck_tag") or "").strip(),
+        "deck_lines": request.form.get("deck_lines") or "",
+    }
+
+    def _fmt_entry(entry: dict) -> str:
+        card = entry.get("card")
+        set_code = entry.get("set_code") or (card.set_code if card else None) or "?"
+        cn = entry.get("collector_number") or (card.collector_number if card else None) or "?"
+        set_part = set_code.upper() if isinstance(set_code, str) else str(set_code)
+        cn_part = cn
+        return f"{entry['qty']}x {entry['name']} [{set_part} {cn_part}]"
+
+    stage = request.form.get("stage") or "input"
+    warnings: list[str] = []
+    errors: list[str] = []
+    infos: list[str] = []
+    conflicts: list[dict] = []
+    summary: dict | None = None
+
+    if request.method == "POST":
+        entries, parse_errors = _parse_collection_lines(form["deck_lines"])
+        if parse_errors:
+            errors.extend(parse_errors)
+            return render_template(
+                "decks/deck_from_collection.html",
+                form=form,
+                errors=errors,
+                warnings=warnings,
+                infos=infos,
+                conflicts=conflicts,
+                summary=summary,
+                deck_tag_groups=DECK_TAG_GROUPS,
+                stage="input",
+            )
+        if not form["deck_name"]:
+            errors.append("Deck name is required.")
+        if errors:
+            return render_template(
+                "decks/deck_from_collection.html",
+                form=form,
+                errors=errors,
+                warnings=warnings,
+                infos=infos,
+                conflicts=conflicts,
+                summary=summary,
+                deck_tag_groups=DECK_TAG_GROUPS,
+                stage="input",
+            )
+
+        resolved_entries: list[dict] = []
+        total_requested = sum(e["qty"] for e in entries)
+        resolved_count = 0
+        resolve_needed = False
+
+        for entry in entries:
+            needs_choice = not entry["set_code"] or not entry["collector_number"]
+            resolve_choice = request.form.get(f"resolve_{entry['index']}")
+            base_query = (
+                Card.query.join(Folder)
+                .filter(
+                    func.lower(Card.name) == entry["name"].strip().lower(),
+                    func.coalesce(Folder.category, Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION,
+                    Folder.owner_user_id == current_user.id,
+                )
+            )
+            if entry["set_code"]:
+                base_query = base_query.filter(func.lower(Card.set_code) == entry["set_code"])
+            if entry["collector_number"]:
+                base_query = base_query.filter(
+                    func.lower(Card.collector_number) == entry["collector_number"].lower()
+                )
+            candidates = base_query.all()
+
+            if not candidates:
+                warnings.append(f"Line {entry['index']}: {_fmt_entry(entry)} not found in your collection.")
+                resolved_entries.append({**entry, "card": None})
+                continue
+
+            if resolve_choice:
+                chosen = next((c for c in candidates if str(c.id) == str(resolve_choice)), None)
+                if not chosen:
+                    errors.append(
+                        f"Line {entry['index']}: Selected printing not found. Please choose again."
+                    )
+                    resolve_needed = True
+                    conflicts.append(
+                        {
+                            "index": entry["index"],
+                            "display": _fmt_entry(entry),
+                            "options": [
+                                {
+                                    "id": c.id,
+                                    "name": c.name,
+                                    "set_code": c.set_code,
+                                    "collector_number": c.collector_number,
+                                    "quantity": c.quantity or 0,
+                                    "lang": c.lang or "en",
+                                    "is_foil": bool(c.is_foil),
+                                    "is_proxy": bool(c.is_proxy),
+                                    "folder": c.folder.name if c.folder else None,
+                                }
+                                for c in candidates
+                            ],
+                            "selected": resolve_choice,
+                        }
+                    )
+                    continue
+                resolved_entries.append({**entry, "card": chosen})
+                resolved_count += 1
+                continue
+
+            if len(candidates) == 1:
+                if needs_choice:
+                    resolve_needed = True
+                    conflicts.append(
+                        {
+                            "index": entry["index"],
+                            "display": _fmt_entry(entry),
+                            "options": [
+                                {
+                                    "id": c.id,
+                                    "name": c.name,
+                                    "set_code": c.set_code,
+                                    "collector_number": c.collector_number,
+                                    "quantity": c.quantity or 0,
+                                    "lang": c.lang or "en",
+                                    "is_foil": bool(c.is_foil),
+                                    "is_proxy": bool(c.is_proxy),
+                                    "folder": c.folder.name if c.folder else None,
+                                }
+                                for c in candidates
+                            ],
+                            "selected": None,
+                        }
+                    )
+                else:
+                    resolved_entries.append({**entry, "card": candidates[0]})
+                    resolved_count += 1
+            else:
+                resolve_needed = True
+                conflicts.append(
+                    {
+                        "index": entry["index"],
+                        "display": _fmt_entry(entry),
+                        "options": [
+                            {
+                                "id": c.id,
+                                "name": c.name,
+                                "set_code": c.set_code,
+                                "collector_number": c.collector_number,
+                                "quantity": c.quantity or 0,
+                                "lang": c.lang or "en",
+                                "is_foil": bool(c.is_foil),
+                                "is_proxy": bool(c.is_proxy),
+                                "folder": c.folder.name if c.folder else None,
+                            }
+                            for c in candidates
+                        ],
+                        "selected": None,
+                    }
+                )
+
+        summary = {
+            "requested": len(entries),
+            "resolved": resolved_count,
+            "total_move": total_requested,
+        }
+
+        if resolve_needed or conflicts:
+            stage = "resolve"
+            return render_template(
+                "decks/deck_from_collection.html",
+                form=form,
+                errors=errors,
+                warnings=warnings,
+                infos=infos,
+                conflicts=conflicts,
+                summary=summary,
+                deck_tag_groups=DECK_TAG_GROUPS,
+                stage=stage,
+            )
+
+        deck_name = _generate_unique_folder_name(form["deck_name"])
+        folder = Folder(
+            name=deck_name,
+            category=Folder.CATEGORY_DECK,
+            deck_tag=form["deck_tag"] or None,
+            owner=current_user.username or current_user.email or None,
+            owner_user_id=current_user.id,
+            is_proxy=False,
+        )
+        commander_warnings: list[str] = []
+        commander_oid = None
+        commander_clean = form["commander"]
+        if commander_clean:
+            try:
+                commander_oid = unique_oracle_by_name(commander_clean)
+            except Exception as exc:
+                commander_warnings.append(f"Commander lookup failed: {exc}")
+            folder.commander_name = commander_clean
+            folder.commander_oracle_id = commander_oid
+        db.session.add(folder)
+        db.session.flush()
+
+        moved_total = 0
+        for entry in resolved_entries:
+            card = entry.get("card")
+            desired_qty = entry["qty"]
+            remaining_qty = desired_qty
+            moved_from_collection = 0
+
+            if card:
+                available_qty = card.quantity or 0
+                move_qty = min(desired_qty, available_qty)
+                remaining_qty = desired_qty - move_qty
+                if move_qty > 0:
+                    target = (
+                        Card.query.filter(
+                            Card.folder_id == folder.id,
+                            Card.name == card.name,
+                            Card.set_code == card.set_code,
+                            Card.collector_number == card.collector_number,
+                            Card.lang == card.lang,
+                            Card.is_foil == card.is_foil,
+                            Card.is_proxy == card.is_proxy,
+                        )
+                        .order_by(Card.id.asc())
+                        .first()
+                    )
+                    if target:
+                        target.quantity = (target.quantity or 0) + move_qty
+                    else:
+                        db.session.add(
+                            Card(
+                                name=card.name,
+                                set_code=card.set_code,
+                                collector_number=card.collector_number,
+                                folder_id=folder.id,
+                                quantity=move_qty,
+                                oracle_id=card.oracle_id,
+                                lang=card.lang,
+                                is_foil=card.is_foil,
+                                is_proxy=card.is_proxy,
+                                type_line=card.type_line,
+                                rarity=card.rarity,
+                                color_identity_mask=card.color_identity_mask,
+                            )
+                        )
+                    card.quantity = (card.quantity or 0) - move_qty
+                    if card.quantity is not None and card.quantity <= 0:
+                        db.session.delete(card)
+                    moved_from_collection = move_qty
+
+            if moved_from_collection < desired_qty:
+                proxy_qty = remaining_qty if remaining_qty > 0 else 0
+                if proxy_qty > 0:
+                    proxy_target = (
+                        Card.query.filter(
+                            Card.folder_id == folder.id,
+                            Card.name == (card.name if card else entry["name"]),
+                            Card.set_code == (card.set_code if card else entry["set_code"]),
+                            Card.collector_number == (card.collector_number if card else entry["collector_number"]),
+                            Card.lang == (card.lang if card else "en"),
+                            Card.is_foil == (card.is_foil if card else False),
+                            Card.is_proxy.is_(True),
+                        )
+                        .order_by(Card.id.asc())
+                        .first()
+                    )
+                    if proxy_target:
+                        proxy_target.quantity = (proxy_target.quantity or 0) + proxy_qty
+                    else:
+                        db.session.add(
+                            Card(
+                                name=(card.name if card else entry["name"]),
+                                set_code=(card.set_code if card else entry["set_code"]),
+                                collector_number=(card.collector_number if card else entry["collector_number"]),
+                                folder_id=folder.id,
+                                quantity=proxy_qty,
+                                oracle_id=card.oracle_id if card else None,
+                                lang=card.lang if card else "en",
+                                is_foil=card.is_foil if card else False,
+                                is_proxy=True,
+                                type_line=getattr(card, "type_line", None),
+                                rarity=getattr(card, "rarity", None),
+                                color_identity_mask=getattr(card, "color_identity_mask", None),
+                            )
+                        )
+                warnings.append(
+                    f"Line {entry['index']}: Added {proxy_qty} proxy copy(ies) for {_fmt_entry(entry)} (requested {desired_qty}, moved {moved_from_collection} from collection)."
+                )
+            moved_total += moved_from_collection
+
+        if commander_warnings:
+            warnings.extend(commander_warnings)
+
+        db.session.commit()
+        infos.append(f"Created deck '{deck_name}' and moved {moved_total} card(s).")
+        form["deck_lines"] = ""
+        stage = "done"
+
+    return render_template(
+        "decks/deck_from_collection.html",
+        form=form,
+        errors=errors,
+        warnings=warnings,
+        infos=infos,
+        conflicts=conflicts,
+        summary=summary,
+        deck_tag_groups=DECK_TAG_GROUPS,
+        stage=stage,
     )
 
 
