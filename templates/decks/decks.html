@@ -659,7 +659,7 @@
 
 <script>
 (function(){
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
   const drawerEl = document.getElementById('deckDrawer');
   const bodyEl = document.getElementById('deckDrawerBody');
   if (!drawerEl || !bodyEl) return;

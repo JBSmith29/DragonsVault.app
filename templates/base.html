@@ -6,6 +6,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script>
+      // Provide a global CSRF token helper for all inline scripts
+      (function(){
+        const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        window.csrfToken = token;
+        window.csrfHeader = token ? {'X-CSRFToken': token} : {};
+      })();
+    </script>
 
     <title>{% block title %}DragonsVault{% endblock %}</title>
 
@@ -1106,6 +1114,42 @@
       Loading...
     </div>
 
+    {% block scripts %}
+      {% set _dv_scroll_allowed = [
+        "build_a_deck_content",
+        "folder_details",
+        "views.build_a_deck",
+        "views.folder_detail",
+        "views.shared_folder_detail"
+      ] %}
+      {% if request.endpoint in _dv_scroll_allowed
+            and (request.endpoint not in ["folder_details", "views.folder_detail", "views.shared_folder_detail"] or is_deck_folder|default(false)) %}
+      <script>
+        (function(){
+          const key = "scroll_" + window.location.pathname;
+          let saveTimer = null;
+          const savePos = () => {
+            try { localStorage.setItem(key, String(window.scrollY || 0)); } catch (_e) { /* ignore */ }
+          };
+          const throttledSave = () => {
+            if (saveTimer) return;
+            saveTimer = setTimeout(() => { saveTimer = null; savePos(); }, 100);
+          };
+          try {
+            const saved = localStorage.getItem(key);
+            if (saved !== null) {
+              const y = parseInt(saved, 10);
+              if (!Number.isNaN(y)) {
+                window.scrollTo(0, y);
+              }
+            }
+          } catch (_e) { /* ignore */ }
+          window.addEventListener("scroll", throttledSave, { passive: true });
+          window.addEventListener("beforeunload", savePos);
+        })();
+      </script>
+      {% endif %}
+
     <script>
       (function () {
         const header = document.querySelector(".app-header");
@@ -1565,5 +1609,6 @@
       <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
       <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
     {% endif %}
+    {% endblock %}
   </body>
 </html>

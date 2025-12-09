@@ -14,7 +14,7 @@ from services.scryfall_cache import ensure_cache_loaded, set_name_for_code, find
 from services.commander_utils import primary_commander_oracle_id, split_commander_oracle_ids, split_commander_names
 from services.symbols_cache import ensure_symbols_cache, render_mana_html, render_oracle_html
 
-from .base import _collection_metadata, _lookup_print_data, color_identity_name, views
+from .base import _collection_metadata, _lookup_print_data, color_identity_name, compute_folder_color_identity, views
 from .cards import _commander_thumbnail_payload
 
 
@@ -248,7 +248,24 @@ def dashboard():
         for fid in folder_ids:
             f = folder_map.get(fid)
             cmd_card = commander_cards.get(fid) if f else None
+            oracle_ids = []
+            if f:
+                oracle_ids = [oid.strip() for oid in split_commander_oracle_ids(f.commander_oracle_id) if oid.strip()]
             pr = exact_print_for_card(cmd_card) if cmd_card else None
+            images = []
+
+            def add_image_from_print(pr_obj, name_hint=None):
+                if not pr_obj:
+                    return
+                small, large = image_urls_from_print(pr_obj)
+                name_val = name_hint or getattr(f, "commander_name", None) or (cmd_card.name if cmd_card else pr_obj.get("name"))
+                images.append({
+                    "name": name_val,
+                    "small": small or large or placeholder_thumb,
+                    "large": large or small or placeholder_thumb,
+                    "alt": name_val or "Commander",
+                })
+
             if not pr and f:
                 pr = _lookup_print_data(
                     getattr(f, "commander_set_code", None),
@@ -256,17 +273,19 @@ def dashboard():
                     getattr(f, "commander_name", None),
                     primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)),
                 )
-
             if pr:
-                small, large = image_urls_from_print(pr)
-                name = getattr(f, "commander_name", None) or (cmd_card.name if cmd_card else pr.get("name"))
-                dashboard_cmdr[fid] = {
-                    "name": name,
-                    "small": small or large or placeholder_thumb,
-                    "large": large or small or placeholder_thumb,
-                    "alt": name or "Commander",
-                }
-            else:
+                add_image_from_print(pr)
+
+            if oracle_ids:
+                for oid in oracle_ids:
+                    try:
+                        prints = prints_for_oracle(oid) or []
+                    except Exception:
+                        prints = []
+                    if prints:
+                        add_image_from_print(prints[0])
+
+            if not images:
                 target_oid = primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)) if f else None
                 thumb_payload = _commander_thumbnail_payload(
                     fid,
@@ -276,9 +295,22 @@ def dashboard():
                     next((d["qty"] for d in decks if d["id"] == fid), 0),
                     epoch,
                 )
-                dashboard_cmdr[fid] = thumb_payload
+                images.append({
+                    "name": thumb_payload.get("name"),
+                    "small": thumb_payload.get("small") or placeholder_thumb,
+                    "large": thumb_payload.get("large") or placeholder_thumb,
+                    "alt": thumb_payload.get("alt") or (thumb_payload.get("name") or "Commander"),
+                })
 
-            letters = ci_letters_from_print(pr or {})
+            # Use the first image as primary but include all for dual commanders
+            primary = images[0] if images else None
+            if primary:
+                payload = dict(primary)
+                payload["images"] = images
+                dashboard_cmdr[fid] = payload
+
+            letters, _label = compute_folder_color_identity(fid)
+            letters = letters or ""
             deck_ci_letters[fid] = letters
             deck_ci_name[fid] = color_identity_name(letters)
             deck_ci_html[fid] = ci_html_from_letters(letters)

@@ -670,7 +670,7 @@
   const modal = new bootstrap.Modal(modalEl);
   const saveBtn = document.getElementById('postImportFolderSave');
   const statusEl = document.getElementById('postImportFolderStatus');
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
 
   function setStatus(msg, variant){
     if (!statusEl) return;

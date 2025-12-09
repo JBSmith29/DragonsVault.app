@@ -89,28 +89,6 @@
         </div>
       </div>
     </div>
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <h5 class="card-title mb-0">Oracle Role Mapping</h5>
-            <span class="badge text-bg-secondary">Scryfall Defaults</span>
-          </div>
-          <div class="text-muted small mb-3">
-            Refresh and review primary/core/sub-roles for all oracle IDs from the Scryfall default cards dataset.
-          </div>
-          <div class="d-flex flex-wrap gap-2">
-            <form method="post" action="{{ url_for('views.admin_oracle_roles') }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-primary" type="submit">Refresh Oracle Roles</button>
-            </form>
-            <a class="btn btn-outline-primary" href="{{ url_for('views.admin_oracle_roles') }}">
-              Open Oracle Roles
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <div class="row g-3">

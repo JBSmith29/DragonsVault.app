@@ -19,6 +19,10 @@
      data-counts-url="{{ url_for('views.folder_counts', folder_id=folder.id) }}">
 
 <style>
+  :root {
+    /* Adjustable spacing to keep modal above Bulk bar */
+    --bulk-bar-height: 220px;
+  }
   .cards-table { table-layout:auto; width:100%; }
   .cards-table > :not(caption) > * > * { padding-top:.85rem; padding-bottom:.85rem; }
   .cards-table thead th { border-bottom:1px solid var(--bs-border-color); background:transparent !important; }
@@ -480,10 +484,10 @@
     overflow-y:auto;
     padding-right:.25rem;
   }
-  /* Raise the modal top and leave some margin above the bulk bar */
+  /* Ensure modal never overlaps the Bulk Action bar */
   #editPrintingModal .modal-dialog {
     margin-top: max(0px, calc(var(--bs-modal-margin, 1.75rem) - 100px));
-    margin-bottom: 160px;
+    margin-bottom: var(--bulk-bar-height, 220px);
   }
   #editPrintingModal .modal-content {
     max-height: calc(100vh - 20px);
@@ -931,13 +935,19 @@
     <div class="card synergy-card mb-3">
       <div class="card-body">
         <div class="commander-summary mb-3">
-          <div class="commander-portrait">
+            <div class="commander-portrait">
             <div class="commander-portrait-frame card-hover-shadow hover-lift">
-              {% if commander_media %}
-                <img src="{{ commander_media.image }}"
-                     alt="{{ commander_media.name or 'Commander art' }}"
-                     class="commander-img"
-                     {% if commander_media.hover %}data-hover-src="{{ commander_media.hover }}"{% endif %}>
+              {% set commander_media_list = commander_media_list if commander_media_list is defined else ([commander_media] if commander_media else []) %}
+              {% if commander_media_list and commander_media_list|length %}
+                <div class="d-flex justify-content-center gap-2">
+                  {% for cm in commander_media_list %}
+                    <img src="{{ cm.image }}"
+                         alt="{{ cm.name or 'Commander art' }}"
+                         class="commander-img"
+                         style="max-width: 180px;"
+                         {% if cm.hover %}data-hover-src="{{ cm.hover }}"{% endif %}>
+                  {% endfor %}
+                </div>
               {% else %}
                 <div class="commander-portrait-placeholder">
                   <div class="fw-semibold mb-1">{{ folder.commander_name or 'Commander not set' }}</div>
@@ -2050,6 +2060,9 @@
       </tbody>
     </table>
   </div>
+  <div class="mt-3 d-flex justify-content-end">
+    <button type="button" class="btn btn-outline-danger btn-sm" id="folderBottomDelete" disabled>Delete</button>
+  </div>
 </div>
 
 <div class="card-action-bar d-none" id="folderActionBar">
@@ -2372,13 +2385,14 @@
   const bulkMoveSelect = document.getElementById('folderActionMove');
   const bulkMoveBtn = document.getElementById('folderActionMoveBtn');
   const bulkDeleteBtn = document.getElementById('folderActionDelete');
+  const bottomDeleteBtn = document.getElementById('folderBottomDelete');
   const bulkEditBtn = document.getElementById('folderActionEditBtn');
   const selectAllToggle = document.getElementById('folderSelectAll');
   const statUniqueEl = document.querySelector('[data-stat-unique]');
 const statTotalEl = document.querySelector('[data-stat-total]');
 let rowCheckboxes = Array.from(document.querySelectorAll('#folderCardsTable .card-select'));
-const csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.content || '';
-const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
+const csrfToken = window.csrfToken || document.querySelector('meta[name=\"csrf-token\"]')?.content || '';
+const csrfHeader = window.csrfHeader || (csrfToken ? {"X-CSRFToken": csrfToken} : {});
 
   function selectedCheckboxes() {
     return Array.from(rowCheckboxes).filter(cb => cb.checked);
@@ -2412,15 +2426,25 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
     if (!bulkBar) return;
     const sels = selectedCheckboxes();
     const count = sels.length;
+    const singleRow = count === 1 ? sels[0].closest('tr.deck-row') : null;
+    const ownedQty = singleRow ? parseInt(singleRow?.dataset?.qty || '1', 10) || 1 : null;
     bulkBar.classList.toggle('d-none', count === 0);
     document.getElementById('main')?.classList.toggle('page-section-with-bar', count > 0);
     if (bulkSummary) {
-      bulkSummary.textContent = count ? `${count} card${count > 1 ? 's' : ''} selected` : 'Select cards to enable actions';
+      if (count === 0) {
+        bulkSummary.textContent = 'Select cards to enable actions';
+      } else if (count === 1 && ownedQty !== null) {
+        bulkSummary.textContent = `1 card selected (${ownedQty} owned)`;
+      } else {
+        bulkSummary.textContent = `${count} cards selected`;
+      }
     }
     const targetSet = (bulkMoveSelect?.value || '').trim();
     if (bulkMoveBtn) bulkMoveBtn.disabled = !count || !targetSet;
     if (bulkDeleteBtn) bulkDeleteBtn.disabled = !count;
+    if (bottomDeleteBtn) bottomDeleteBtn.disabled = !count;
     if (bulkEditBtn) bulkEditBtn.disabled = count !== 1;
+    if (bulkEditBtn) bulkEditBtn.classList.toggle('d-none', count !== 1);
     if (selectAllToggle) {
       const allBoxes = Array.from(rowCheckboxes);
       selectAllToggle.checked = count && count === allBoxes.length;
@@ -2428,17 +2452,41 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
     }
   }
 
+  async function deleteSelectedCards() {
+    const ids = selectedCheckboxes().map(cb => cb.value);
+    if (!ids.length) return;
+    if (bulkDeleteBtn) bulkDeleteBtn.disabled = true;
+    if (bottomDeleteBtn) bottomDeleteBtn.disabled = true;
+    try {
+      const res = await fetch("{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+        },
+        body: JSON.stringify({ card_ids: ids }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      ids.forEach(id => {
+        const row = document.querySelector(`[data-card-id="${id}"]`);
+        row?.remove();
+      });
+      refreshRows();
+      refreshCheckboxes();
+      updateStatsFromRows();
+      applyFilters();
+      updateBulkBar();
+    } catch (err) {
+      console.error("Bulk delete failed", err);
+      if (bulkDeleteBtn) bulkDeleteBtn.disabled = false;
+      if (bottomDeleteBtn) bottomDeleteBtn.disabled = false;
+    }
+  }
+
   if (bulkBar) {
     rowCheckboxes.forEach(chk => {
       chk.addEventListener('change', () => {
         updateBulkBar();
-        const checked = selectedCheckboxes();
-        if (checked.length === 1 && chk.checked) {
-          const row = chk.closest('tr.deck-row');
-          // Keep the bulk bar visible and launch edit printing for single selection
-          bulkBar.classList.remove('d-none');
-          openEditModalForRow(row);
-        }
       });
       chk.addEventListener('click', evt => evt.stopPropagation());
     });
@@ -2447,40 +2495,14 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
       const checked = !!selectAllToggle.checked;
       rowCheckboxes.forEach(cb => {
         cb.checked = checked;
-        cb.dispatchEvent(new Event('change'));
       });
+      updateBulkBar();
     });
 
     bulkMoveSelect?.addEventListener('change', updateBulkBar);
 
-    bulkDeleteBtn?.addEventListener('click', async () => {
-      const ids = selectedCheckboxes().map(cb => cb.value);
-      if (!ids.length) return;
-      bulkDeleteBtn.disabled = true;
-      try {
-        const res = await fetch("{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
-          },
-          body: JSON.stringify({ card_ids: ids }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        ids.forEach(id => {
-          const row = document.querySelector(`[data-card-id="${id}"]`);
-          row?.remove();
-        });
-        refreshRows();
-        refreshCheckboxes();
-        updateStatsFromRows();
-        applyFilters();
-        updateBulkBar();
-      } catch (err) {
-        console.error("Bulk delete failed", err);
-        bulkDeleteBtn.disabled = false;
-      }
-    });
+    bulkDeleteBtn?.addEventListener('click', deleteSelectedCards);
+    bottomDeleteBtn?.addEventListener('click', deleteSelectedCards);
 
     bulkMoveBtn?.addEventListener('click', async () => {
       const ids = selectedCheckboxes().map(cb => cb.value);
@@ -3162,6 +3184,24 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
 </div>
 {% endcall %}
 
+<script>
+// Automatically adjust modal bottom margin based on Bulk bar height
+(function () {
+  const bar = document.getElementById('folderActionBar');
+  if (!bar) return;
+
+  const root = document.documentElement;
+
+  function updateBarHeight() {
+    const height = bar.offsetHeight || 0;
+    root.style.setProperty('--bulk-bar-height', (height + 100) + 'px');
+  }
+
+  updateBarHeight();
+  window.addEventListener('resize', updateBarHeight);
+})();
+</script>
+
 <script data-hx-preserve="true">
 /* Deck tag picker: quick filter + reset on close */
 (function(){
@@ -3224,9 +3264,3 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
 </script>
 </div>
 {% endblock %}
-    bulkEditBtn?.addEventListener('click', () => {
-      const checked = selectedCheckboxes();
-      if (checked.length !== 1) return;
-      const row = checked[0].closest('tr.deck-row');
-      openEditModalForRow(row);
-    });

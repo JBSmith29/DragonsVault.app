@@ -149,6 +149,7 @@ DECK_TAG_GROUPS: DeckTagGroups = OrderedDict(
                 "Giants",
                 "Gnomes",
                 "Goblins",
+                "Gods",
                 "Golems",
                 "Gorgons",
                 "Griffins",

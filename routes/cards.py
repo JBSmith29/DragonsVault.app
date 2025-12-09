@@ -2663,6 +2663,7 @@ def decks_overview():
                 )
             return None, None
 
+        images = []
         pr = None
         final_name = cmd_name
         if cmd_card:
@@ -2673,16 +2674,42 @@ def decks_overview():
                 pr = None
             if not pr:
                 pr = _lookup_print_data(cmd_card.set_code, cmd_card.collector_number, cmd_card.name, cmd_card.oracle_id)
+            if pr:
+                small, large = _img_from_print(pr)
+                images.append({
+                    "name": final_name,
+                    "small": small or placeholder_thumb,
+                    "large": large or small or placeholder_thumb,
+                    "alt": (final_name or "Commander"),
+                })
 
-        if pr:
-            small, large = _img_from_print(pr)
-            deck_cmdr[fid] = {
-                "name": final_name,
-                "small": small or placeholder_thumb,
-                "large": large or small or placeholder_thumb,
-                "alt": (final_name or "Commander"),
-            }
-        else:
+        # Add additional commander faces from oracle list (partners, backgrounds)
+        if f:
+            try:
+                oracle_ids = [
+                    (oid or "").strip().lower()
+                    for oid in split_commander_oracle_ids(f.commander_oracle_id) if (oid or "").strip()
+                ]
+            except Exception:
+                oracle_ids = []
+            for oid in oracle_ids:
+                if cmd_card and cmd_card.oracle_id and cmd_card.oracle_id.lower() == oid:
+                    continue
+                try:
+                    prints = prints_for_oracle(oid) or []
+                except Exception:
+                    prints = []
+                if not prints:
+                    continue
+                small, large = _img_from_print(prints[0])
+                images.append({
+                    "name": final_name or prints[0].get("name"),
+                    "small": small or placeholder_thumb,
+                    "large": large or small or placeholder_thumb,
+                    "alt": (final_name or prints[0].get("name") or "Commander"),
+                })
+
+        if not images:
             target_oid = primary_commander_oracle_id(cmd_oid) if cmd_oid else None
             if not target_oid and f:
                 target_oid = primary_commander_oracle_id(f.commander_oracle_id)
@@ -2695,12 +2722,18 @@ def decks_overview():
                 thumbnail_epoch,
             )
             final_name = thumb_payload.get("name") or cmd_name
-            deck_cmdr[fid] = {
+            images.append({
                 "name": final_name,
                 "small": thumb_payload.get("small") or placeholder_thumb,
                 "large": thumb_payload.get("large") or placeholder_thumb,
                 "alt": thumb_payload.get("alt") or (final_name or "Commander"),
-            }
+            })
+
+        primary = images[0] if images else None
+        if primary:
+            payload = dict(primary)
+            payload["images"] = images
+            deck_cmdr[fid] = payload
 
     # ---- optional sorting ----
     if sort in {"name", "ci", "pips", "qty", "bracket", "owner"}:

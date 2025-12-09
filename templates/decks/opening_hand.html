@@ -693,7 +693,7 @@
   const placeholderImage = "{{ url_for('static', filename='img/card-placeholder.svg') }}";
   const deckCardLookup = {{ deck_card_lookup | tojson | safe }} || {};
   const deckTokenLookup = {{ deck_token_lookup | tojson | safe }} || {};
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),

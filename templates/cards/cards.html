@@ -1102,8 +1102,8 @@
     }
   }
 
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-  const csrfHeader = csrfToken ? {'X-CSRFToken': csrfToken} : {};
+  const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const csrfHeader = window.csrfHeader || (csrfToken ? {'X-CSRFToken': csrfToken} : {});
 
   const actionBar = document.getElementById('cardActionBar');
   if (actionBar) {

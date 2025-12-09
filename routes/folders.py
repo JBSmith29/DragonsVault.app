@@ -726,22 +726,26 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     print_map = _bulk_print_lookup(deck_cards, cache_key=cache_key, epoch=cache_epoch())
 
     commander_media: Optional[Dict[str, Any]] = None
+    commander_media_list: List[Dict[str, Any]] = []
 
     def _assign_commander_media(print_obj: Optional[Dict[str, Any]], name_hint: Optional[str] = None):
         nonlocal commander_media
-        if commander_media or not print_obj:
+        if not print_obj:
             return
         art_uris = sc.image_for_print(print_obj) or {}
         image_src = art_uris.get("normal") or art_uris.get("small") or art_uris.get("large")
         hover_src = art_uris.get("large") or art_uris.get("normal") or art_uris.get("small")
         if not image_src and not hover_src:
             return
-        commander_media = {
+        media = {
             "name": name_hint or print_obj.get("name") or folder.commander_name,
             "image": image_src or hover_src,
             "hover": hover_src or image_src,
             "label": art_uris.get("label") or name_hint or folder.commander_name,
         }
+        commander_media_list.append(media)
+        if commander_media is None:
+            commander_media = media
 
     commander_oracle_set = {oid.strip().lower() for oid in split_commander_oracle_ids(folder.commander_oracle_id)}
 
@@ -827,12 +831,15 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             image_src = snapshot.get("thumb") or snapshot.get("hover")
             hover_src = snapshot.get("hover") or snapshot.get("thumb")
             if image_src or hover_src:
-                commander_media = {
+                media = {
                     "name": snapshot.get("name") or folder.commander_name,
                     "image": image_src or hover_src,
                     "hover": hover_src or image_src,
                     "label": snapshot.get("set_name") or snapshot.get("set"),
                 }
+                commander_media_list.append(media)
+                if commander_media is None:
+                    commander_media = media
 
     bracket_card_links: Dict[str, int] = {}
     if commander_ctx:
@@ -928,6 +935,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         include_proxies="1" if folder.is_proxy_deck else None,
     )
     folder_tag_category = TAG_CATEGORY_MAP.get(folder.deck_tag)
+    is_deck_folder = bool(folder and not folder.is_collection)
 
     synergy_summary = None
     synergy_error = None
@@ -975,6 +983,8 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             Folder.owner_user_id == folder.owner_user_id,
             Folder.id != folder.id
         ).order_by(Folder.name).all() if folder.owner_user_id else [],
+        is_deck_folder=is_deck_folder,
+        commander_media_list=commander_media_list,
     )
 
 

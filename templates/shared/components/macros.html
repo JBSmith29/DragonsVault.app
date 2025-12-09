@@ -21,17 +21,33 @@
 
 {% macro commander_chip(card, size=40) -%}
   {% if card %}
-    {# Accept Card rows (image_small/scryfall_small) and presenters (small/large/name/alt) #}
-    {% set src = (card.small if card.small is defined and card.small
-                  else card.image_small if card.image_small is defined and card.image_small
-                  else card.scryfall_small if card.scryfall_small is defined and card.scryfall_small
-                  else url_for('static', filename='img/card-back-small.jpg')) %}
-    {% set altcore = (card.alt if card.alt is defined and card.alt else (card.name|default('Commander'))) %}
-    <img
-      src="{{ src }}"
-      alt="{{ altcore }} (Commander)"
-      class="cmdr-thumb"
-      style="width: {{ size }}px; height:auto; border-radius:.5rem;"
-      loading="lazy" referrerpolicy="no-referrer">
+    {% set imgs = (card.images if card.images is defined and card.images else []) %}
+    {% if imgs|length > 1 %}
+      <div class="d-flex align-items-center" style="gap:{{ size * 0.08 }}px;">
+        {% for img in imgs %}
+          {% set src = img.small or img.normal or img.large or card.small or card.image_small or card.scryfall_small or url_for('static', filename='img/card-back-small.jpg') %}
+          {% set altcore = img.alt or card.alt or card.name or 'Commander' %}
+          <img
+            src="{{ src }}"
+            alt="{{ altcore }} (Commander)"
+            class="cmdr-thumb"
+            style="width: {{ size * 0.9 }}px; height:auto; border-radius:.5rem; box-shadow:0 0.25rem 0.75rem rgba(0,0,0,.35);"
+            loading="lazy" referrerpolicy="no-referrer">
+        {% endfor %}
+      </div>
+    {% else %}
+      {# Accept Card rows (image_small/scryfall_small) and presenters (small/large/name/alt) #}
+      {% set src = (card.small if card.small is defined and card.small
+                    else card.image_small if card.image_small is defined and card.image_small
+                    else card.scryfall_small if card.scryfall_small is defined and card.scryfall_small
+                    else url_for('static', filename='img/card-back-small.jpg')) %}
+      {% set altcore = (card.alt if card.alt is defined and card.alt else (card.name|default('Commander'))) %}
+      <img
+        src="{{ src }}"
+        alt="{{ altcore }} (Commander)"
+        class="cmdr-thumb"
+        style="width: {{ size }}px; height:auto; border-radius:.5rem;"
+        loading="lazy" referrerpolicy="no-referrer">
+    {% endif %}
   {% endif %}
 {%- endmacro %}
