@@ -242,42 +242,53 @@
   });
 
   // Hover preview only on commander chip or deck name
-  const preview = document.createElement('div');
-  preview.id = 'deckHoverPreview';
-  preview.style.position = 'fixed';
-  preview.style.pointerEvents = 'none';
-  preview.style.zIndex = '1080';
-  preview.style.display = 'none';
-  preview.innerHTML = '<img alt="Commander art" style="max-width:260px; max-height:360px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); background:#111;">';
-  document.body.appendChild(preview);
+  // Reuse global hover preview if available to avoid double overlays
+  const globalHover = window.dvHoverPreview;
+  if (globalHover && typeof globalHover.show === 'function' && typeof globalHover.hide === 'function') {
+    document.querySelectorAll('.deck-hover-target[data-hover-src]').forEach(el => {
+      const src = el.getAttribute('data-hover-src');
+      el.addEventListener('mouseenter', (e) => globalHover.show(el, src, e));
+      el.addEventListener('mousemove', (e) => globalHover.show(el, src, e));
+      el.addEventListener('mouseleave', (e) => globalHover.hide());
+    });
+  } else {
+    const preview = document.createElement('div');
+    preview.id = 'deckHoverPreview';
+    preview.style.position = 'fixed';
+    preview.style.pointerEvents = 'none';
+    preview.style.zIndex = '1080';
+    preview.style.display = 'none';
+    preview.innerHTML = '<img alt="Commander art" style="max-width:260px; max-height:360px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); background:#111;">';
+    document.body.appendChild(preview);
 
-  const imgEl = preview.querySelector('img');
-  function hidePreview() { preview.style.display = 'none'; imgEl.src = ''; }
-  function showPreview(src, evt) {
-    if (!src) return;
-    imgEl.src = src;
-    preview.style.display = 'block';
-    positionPreview(evt);
-  }
-  function positionPreview(evt) {
-    const pad = 16;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const rect = preview.getBoundingClientRect();
-    let x = evt.clientX + pad;
-    let y = evt.clientY + pad;
-    if (x + rect.width + pad > vw) x = evt.clientX - rect.width - pad;
-    if (y + rect.height + pad > vh) y = vh - rect.height - pad;
-    preview.style.left = `${x}px`;
-    preview.style.top = `${y}px`;
-  }
+    const imgEl = preview.querySelector('img');
+    function hidePreview() { preview.style.display = 'none'; imgEl.src = ''; }
+    function showPreview(src, evt) {
+      if (!src) return;
+      imgEl.src = src;
+      preview.style.display = 'block';
+      positionPreview(evt);
+    }
+    function positionPreview(evt) {
+      const pad = 16;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const rect = preview.getBoundingClientRect();
+      let x = evt.clientX + pad;
+      let y = evt.clientY + pad;
+      if (x + rect.width + pad > vw) x = evt.clientX - rect.width - pad;
+      if (y + rect.height + pad > vh) y = vh - rect.height - pad;
+      preview.style.left = `${x}px`;
+      preview.style.top = `${y}px`;
+    }
 
-  document.querySelectorAll('.deck-hover-target[data-hover-src]').forEach(el => {
-    const src = el.getAttribute('data-hover-src');
-    el.addEventListener('mouseenter', (e) => showPreview(src, e));
-    el.addEventListener('mousemove', positionPreview);
-    el.addEventListener('mouseleave', hidePreview);
-  });
+    document.querySelectorAll('.deck-hover-target[data-hover-src]').forEach(el => {
+      const src = el.getAttribute('data-hover-src');
+      el.addEventListener('mouseenter', (e) => showPreview(src, e));
+      el.addEventListener('mousemove', positionPreview);
+      el.addEventListener('mouseleave', hidePreview);
+    });
+  }
 })();
 </script>
 {% endblock %}

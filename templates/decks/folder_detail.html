@@ -470,6 +470,68 @@
     color:var(--bs-secondary-color);
     font-size:.85rem;
   }
+  .printing-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+    gap:.65rem;
+  }
+  .printing-grid-container{
+    max-height:45vh;
+    overflow-y:auto;
+    padding-right:.25rem;
+  }
+  /* Raise the modal top and leave some margin above the bulk bar */
+  #editPrintingModal .modal-dialog {
+    margin-top: max(0px, calc(var(--bs-modal-margin, 1.75rem) - 100px));
+    margin-bottom: 160px;
+  }
+  #editPrintingModal .modal-content {
+    max-height: calc(100vh - 20px);
+    display: flex;
+    flex-direction: column;
+  }
+  #editPrintingModal .modal-body {
+    overflow-y: auto;
+  }
+  .printing-option-tile{
+    width:100%;
+    border:1px solid var(--bs-border-color);
+    border-radius:.65rem;
+    padding:.4rem;
+    background:var(--bs-body-bg);
+    cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .printing-option-tile.active{
+    border-color: rgba(var(--bs-primary-rgb), .5);
+    box-shadow:0 0 0 3px rgba(var(--bs-primary-rgb), .2);
+  }
+  .printing-option-tile:hover{
+    transform:translateY(-2px);
+    box-shadow:0 .6rem 1.4rem rgba(0,0,0,.18);
+  }
+  .printing-thumb-wrap{
+    position:relative;
+    width:100%;
+    padding-top:130%;
+    overflow:hidden;
+    border-radius:.45rem;
+    background:var(--bs-tertiary-bg);
+  }
+  .printing-thumb{
+    position:absolute;
+    top:0; left:0; width:100%; height:100%;
+    object-fit:cover;
+    border-radius:.45rem;
+    box-shadow:0 .35rem .85rem rgba(0,0,0,.16);
+  }
+  .printing-thumb.placeholder{
+    background: var(--bs-secondary-bg);
+    border: 1px dashed var(--bs-border-color);
+  }
+  .printing-meta{
+    margin-top:.5rem;
+  }
   .role-section{
     background: var(--bs-tertiary-bg);
     border: 1px solid var(--bs-border-color);
@@ -1718,15 +1780,6 @@
 
                     <div class="flex-fill min-w-0">
                       <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-outline-secondary btn-sm px-2 py-1 tap-toggle"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#{{ collapse_id }}"
-                                aria-expanded="false"
-                                aria-controls="{{ collapse_id }}"
-                                title="Show token details">
-                          <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
-                        </button>
                         <div class="fw-semibold text-truncate">
                           <a class="token-name-link text-decoration-none"
                              href="{{ tok_href }}"
@@ -1739,20 +1792,56 @@
                         <span class="badge text-bg-secondary ms-auto">&times;{{ nsrc }}</span>
                       </div>
                       <div class="small text-muted text-truncate">{{ t.type_line or '' }}</div>
+                      {% if srcs %}
+                        {% set creator_collapse_id = 'tokcreator-' ~ loop.index0 %}
+                        <div class="d-flex align-items-center gap-2 mt-2">
+                          <button class="btn btn-outline-secondary btn-sm px-2 py-1 tap-toggle"
+                                  type="button"
+                                  data-bs-toggle="collapse"
+                                  data-bs-target="#{{ creator_collapse_id }}"
+                                  aria-expanded="true"
+                                  aria-controls="{{ creator_collapse_id }}"
+                                  title="Show token creators">
+                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
+                          </button>
+                          <span class="small text-muted fw-semibold">Token Creator</span>
+                        </div>
+                        <div class="collapse show mt-1" id="{{ creator_collapse_id }}">
+                          <div class="token-source-list">
+                            {% for s in srcs %}
+                              {% set src_small = s.img or '' %}
+                              {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
+                              {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
+                              <a class="token-source text-decoration-none d-flex align-items-center gap-2"
+                                 href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
+                                 {% if src_large or src_normal or src_small %}
+                                   data-hover-src="{{ src_large or src_normal or src_small }}"
+                                 {% endif %}>
+                                <span>{{ s.name }}</span>
+                              </a>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endif %}
 
                       <div class="collapse mt-2" id="{{ collapse_id }}">
-                        <div class="small mb-1 text-muted">Card(s) Generating Token</div>
+                        <div class="small mb-1 text-muted d-flex align-items-center gap-2">
+                          <span class="badge bg-light text-dark border">
+                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
+                          </span>
+                          <span>Token Creator</span>
+                        </div>
                         <div class="token-source-list">
                           {% for s in srcs %}
                             {% set src_small = s.img or '' %}
                             {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
                             {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
-                            <a class="token-source text-decoration-none"
+                            <a class="token-source text-decoration-none d-flex align-items-center gap-2"
                                href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
                                {% if src_large or src_normal or src_small %}
                                  data-hover-src="{{ src_large or src_normal or src_small }}"
                                {% endif %}>
-                              {{ s.name }}
+                              <span>{{ s.name }}</span>
                             </a>
                           {% endfor %}
                           {% if not srcs %}
@@ -1966,11 +2055,11 @@
 <div class="card-action-bar d-none" id="folderActionBar">
   <div class="bar-surface">
     <div class="row align-items-center bar-grid">
-      <div class="col-12 col-md-4 d-flex flex-column">
+      <div class="col-12 col-lg-3 d-flex flex-column">
         <div class="bar-title">Bulk actions</div>
         <div class="small muted" id="folderActionSummary">Select cards to enable actions</div>
       </div>
-      <div class="col-12 col-md-5">
+      <div class="col-12 col-lg-4">
         <label class="form-label mb-1" for="folderActionMove">Move to</label>
         <div class="dropdown dv-select w-100" data-dv-select="folder-move" data-allow-reselect="true">
           <input type="hidden" id="folderActionMove" data-dv-select-input value="">
@@ -1990,7 +2079,8 @@
           </ul>
         </div>
       </div>
-      <div class="col-12 col-md-3 d-flex gap-2 justify-content-end flex-wrap mt-2 mt-md-0">
+      <div class="col-12 col-lg-5 d-flex gap-2 justify-content-end flex-wrap mt-2 mt-lg-0">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="folderActionEditBtn" disabled>Edit printing</button>
         <button type="button" class="btn btn-outline-danger btn-sm" id="folderActionDelete" disabled>Delete selected</button>
         <button type="button" class="btn btn-primary btn-sm" id="folderActionMoveBtn" disabled>Move selected</button>
       </div>
@@ -2282,6 +2372,7 @@
   const bulkMoveSelect = document.getElementById('folderActionMove');
   const bulkMoveBtn = document.getElementById('folderActionMoveBtn');
   const bulkDeleteBtn = document.getElementById('folderActionDelete');
+  const bulkEditBtn = document.getElementById('folderActionEditBtn');
   const selectAllToggle = document.getElementById('folderSelectAll');
   const statUniqueEl = document.querySelector('[data-stat-unique]');
 const statTotalEl = document.querySelector('[data-stat-total]');
@@ -2329,6 +2420,7 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
     const targetSet = (bulkMoveSelect?.value || '').trim();
     if (bulkMoveBtn) bulkMoveBtn.disabled = !count || !targetSet;
     if (bulkDeleteBtn) bulkDeleteBtn.disabled = !count;
+    if (bulkEditBtn) bulkEditBtn.disabled = count !== 1;
     if (selectAllToggle) {
       const allBoxes = Array.from(rowCheckboxes);
       selectAllToggle.checked = count && count === allBoxes.length;
@@ -2343,6 +2435,8 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
         const checked = selectedCheckboxes();
         if (checked.length === 1 && chk.checked) {
           const row = chk.closest('tr.deck-row');
+          // Keep the bulk bar visible and launch edit printing for single selection
+          bulkBar.classList.remove('d-none');
           openEditModalForRow(row);
         }
       });
@@ -2416,6 +2510,13 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
         console.error("Bulk move failed", err);
         bulkMoveBtn.disabled = false;
       }
+    });
+
+    bulkEditBtn?.addEventListener('click', () => {
+      const checked = selectedCheckboxes();
+      if (checked.length !== 1) return;
+      const row = checked[0].closest('tr.deck-row');
+      openEditModalForRow(row);
     });
 
     // Initialize state after paint
@@ -2621,23 +2722,38 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
     printingEmpty?.classList.toggle('d-none', !!(options && options.length));
     const fragment = document.createDocumentFragment();
     (options || []).forEach(opt => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn-outline-secondary btn-sm printing-option';
-      btn.dataset.value = opt.value;
-      btn.dataset.finishes = (opt.finishes || []).join(',');
-      btn.innerHTML = `
-        <div class="fw-semibold">${opt.set} · ${opt.collector_number}</div>
-        <div class="small text-muted">${opt.set_name || ''} · ${opt.lang || ''}</div>
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'printing-option-tile text-start';
+      tile.dataset.value = opt.value;
+      tile.dataset.finishes = (opt.finishes || []).join(',');
+      const imgSrc = opt.image_small
+        || opt.image_normal
+        || opt.hover_image
+        || opt.image
+        || opt.image_uri
+        || opt.img
+        || opt.normal
+        || opt.small
+        || '';
+      tile.innerHTML = `
+        <div class="printing-thumb-wrap">
+          ${imgSrc ? `<img src="${imgSrc}" alt="${opt.set || ''}" class="printing-thumb" data-hover-src="${imgSrc}">`
+                   : `<div class="printing-thumb placeholder"></div>`}
+        </div>
+        <div class="printing-meta">
+          <div class="fw-semibold">${opt.set || ''} · ${opt.collector_number || ''}</div>
+          <div class="small text-muted">${opt.set_name || ''}</div>
+        </div>
       `;
-      if (current && current === opt.value) btn.classList.add('active');
-      btn.addEventListener('click', () => {
-        printingGrid.querySelectorAll('.printing-option').forEach(el => el.classList.remove('active'));
-        btn.classList.add('active');
+      if (current && current === opt.value) tile.classList.add('active');
+      tile.addEventListener('click', () => {
+        printingGrid.querySelectorAll('.printing-option-tile').forEach(el => el.classList.remove('active'));
+        tile.classList.add('active');
         printingInput.value = opt.value;
         setFoilingOptions(opt.finishes || []);
       });
-      fragment.appendChild(btn);
+      fragment.appendChild(tile);
     });
     printingGrid.appendChild(fragment);
     if (current) {
@@ -2737,8 +2853,26 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
         document.getElementById('editPrintingSubmit').disabled = false;
       }
     });
+    editPrintingModal.addEventListener('hidden.bs.modal', () => {
+      clearAllSelections();
+      if (bulkBar) updateBulkBar();
+    });
   }
 
+  function hideBulkBar() {
+    rowCheckboxes.forEach(cb => { cb.checked = false; });
+    updateBulkBar();
+    if (bulkBar) bulkBar.classList.add('d-none');
+  }
+
+  // Hide bulk bar when navigating away
+  window.addEventListener('beforeunload', hideBulkBar);
+  document.addEventListener('click', (evt) => {
+    const link = evt.target.closest && evt.target.closest('a[href]');
+    if (link && link.getAttribute('href') && !link.getAttribute('href').startsWith('#')) {
+      hideBulkBar();
+    }
+  });
 
   const proxyButtons = Array.from(document.querySelectorAll('.card-proxy-toggle'));
   const applyProxyState = (btn, isProxy) => {
@@ -2974,26 +3108,28 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
       <form id="editPrintingForm">
         <div class="modal-body">
           <div id="editPrintingAlert" class="alert alert-warning d-none mb-3"></div>
-          <div class="border rounded-3 p-3 bg-body-tertiary mb-3">
-            <div class="d-flex align-items-center gap-3 flex-wrap">
-              <div>
-                <div class="small text-muted">Card</div>
-                <div class="fw-semibold" id="editPrintingCardName">Loading…</div>
-              </div>
-              <div class="vr d-none d-md-block"></div>
-              <div>
-                <div class="small text-muted">Owned quantity</div>
-                <div class="fw-semibold" id="editPrintingOwnedQty">—</div>
+            <div class="border rounded-3 p-3 bg-body-tertiary mb-3">
+              <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div>
+                  <div class="small text-muted">Card</div>
+                  <div class="fw-semibold" id="editPrintingCardName">Loading…</div>
+                </div>
+                <div class="vr d-none d-md-block"></div>
+                <div>
+                  <div class="small text-muted">Owned quantity</div>
+                  <div class="fw-semibold" id="editPrintingOwnedQty">—</div>
+                </div>
               </div>
             </div>
-          </div>
-          <input type="hidden" id="editPrintingCardId" name="card_id" value="">
-          <div class="mb-3">
-            <label class="form-label">Printing</label>
-            <input type="hidden" id="printingSelectInput" value="">
-            <div id="printingGridEmpty" class="text-muted small d-none">No printings found for this card.</div>
-            <div class="printing-grid" id="printingOptionsGrid"></div>
-            <div class="form-text">Pick the exact set, collector number, language, and variant.</div>
+            <input type="hidden" id="editPrintingCardId" name="card_id" value="">
+            <div class="mb-3">
+              <label class="form-label">Printing</label>
+              <input type="hidden" id="printingSelectInput" value="">
+              <div id="printingGridEmpty" class="text-muted small d-none">No printings found for this card.</div>
+              <div class="printing-grid-container">
+                <div class="printing-grid" id="printingOptionsGrid"></div>
+              </div>
+            <div class="form-text">Pick the exact set, collector number, language, and variant. Scroll the grid below to see more printings.</div>
           </div>
           <div class="mb-3">
             <label for="foilingSelectToggle" class="form-label">Foiling</label>
@@ -3088,3 +3224,9 @@ const csrfHeader = csrfToken ? {"X-CSRFToken": csrfToken} : {};
 </script>
 </div>
 {% endblock %}
+    bulkEditBtn?.addEventListener('click', () => {
+      const checked = selectedCheckboxes();
+      if (checked.length !== 1) return;
+      const row = checked[0].closest('tr.deck-row');
+      openEditModalForRow(row);
+    });
