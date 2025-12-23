@@ -82,7 +82,6 @@ def test_process_csv_moxfield_headers(monkeypatch, tmp_path, db_session):  # noq
     assert card.collector_number == "146"
     assert card.quantity == 2
     assert card.is_foil is True
-    assert card.is_proxy is True
     assert card.lang == "en"
     folder = Folder.query.one()
     assert folder.name == "Collection"

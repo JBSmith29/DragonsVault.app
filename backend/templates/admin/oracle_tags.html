@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Draconic Attunement{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+      <h1 class="mb-0">Draconic Attunement</h1>
+      <div class="text-muted small">Deck tags and evergreen keywords derived from the Scryfall cache.</div>
+    </div>
+    <form method="post" class="d-flex gap-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary" type="submit">Refresh Draconic Attunement</button>
+    </form>
+  </div>
+
+  <form class="mb-3" method="get">
+    <div class="input-group">
+      <input type="search" class="form-control" name="q" placeholder="Search by card name, oracle id, tag, or keyword" value="{{ q or '' }}">
+      <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+    <div class="form-text">Showing up to 500 results per section. Total rows: {{ deck_total }} deck tags, {{ evergreen_total }} evergreen keywords.</div>
+  </form>
+
+  <div class="row g-3">
+    <div class="col-12 col-xl-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h5 class="card-title mb-0">Deck Tags</h5>
+            <span class="badge text-bg-secondary">{{ deck_rows|length }} rows</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="text-muted small">
+                <tr>
+                  <th>Oracle ID</th>
+                  <th>Name</th>
+                  <th>Tag</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in deck_rows %}
+                  <tr>
+                    <td class="text-muted small">{{ row.oracle_id }}</td>
+                    <td class="fw-semibold">{{ name_map.get(row.oracle_id) or '—' }}</td>
+                    <td><span class="badge text-bg-info">{{ row.tag }}</span></td>
+                    <td class="text-muted small">{{ row.category or '—' }}</td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="4" class="text-center text-muted py-4">No deck tags found.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h5 class="card-title mb-0">Evergreen Keywords</h5>
+            <span class="badge text-bg-secondary">{{ evergreen_rows|length }} rows</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="text-muted small">
+                <tr>
+                  <th>Oracle ID</th>
+                  <th>Name</th>
+                  <th>Keyword</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in evergreen_rows %}
+                  <tr>
+                    <td class="text-muted small">{{ row.oracle_id }}</td>
+                    <td class="fw-semibold">{{ name_map.get(row.oracle_id) or '—' }}</td>
+                    <td><span class="badge text-bg-success">{{ row.keyword }}</span></td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="3" class="text-center text-muted py-4">No evergreen keywords found.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -15,8 +15,151 @@ services:
         "--maxmemory-policy", "allkeys-lru"
       ]
 
+  ui:
+    build:
+      context: ./frontend
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: /api
+    volumes:
+      - ./frontend:/app
+      - ui-node-modules:/app/node_modules
+    depends_on:
+      - user-manager
+      - card-data
+      - folder-service
+
+  user-manager:
+    build:
+      context: .
+      dockerfile: backend/microservices/user-manager/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${USER_MANAGER_CONCURRENCY:-2}
+      --threads ${USER_MANAGER_THREADS:-2}
+      --worker-class gthread
+      --timeout ${USER_MANAGER_TIMEOUT:-90}
+      "app:create_app()"
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      SERVICE_NAME: user-manager
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      DATABASE_SCHEMA: user_manager
+    depends_on:
+      - postgres
+      - pgbouncer
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  card-data:
+    build:
+      context: .
+      dockerfile: backend/microservices/card-data/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${CARD_DATA_CONCURRENCY:-2}
+      --threads ${CARD_DATA_THREADS:-2}
+      --worker-class gthread
+      --timeout ${CARD_DATA_TIMEOUT:-90}
+      "app:create_app()"
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      SERVICE_NAME: card-data
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      DATABASE_SCHEMA: card_data
+      SCRYFALL_DATA_DIR: /tmp/scryfall
+      SCRYFALL_UA: "DragonsVault/6 (+https://dragonsvault.app)"
+      SCRYFALL_TIMEOUT: "180"
+      SCRYFALL_KEEP_DOWNLOADS: "0"
+    depends_on:
+      - postgres
+      - pgbouncer
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  folder-service:
+    build:
+      context: .
+      dockerfile: backend/microservices/folder-service/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${FOLDER_SERVICE_CONCURRENCY:-2}
+      --threads ${FOLDER_SERVICE_THREADS:-2}
+      --worker-class gthread
+      --timeout ${FOLDER_SERVICE_TIMEOUT:-90}
+      "app:create_app()"
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      SERVICE_NAME: folder-service
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      DATABASE_SCHEMA: folder_service
+    depends_on:
+      - postgres
+      - pgbouncer
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  price-service:
+    build:
+      context: .
+      dockerfile: backend/microservices/price-service/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${PRICE_SERVICE_CONCURRENCY:-2}
+      --threads ${PRICE_SERVICE_THREADS:-2}
+      --worker-class gthread
+      --timeout ${PRICE_SERVICE_TIMEOUT:-90}
+      "app:create_app()"
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      SERVICE_NAME: price-service
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      DATABASE_SCHEMA: price_service
+      MTGJSON_GRAPHQL_URL: ${MTGJSON_GRAPHQL_URL:-https://graphql.mtgjson.com/}
+      MTGJSON_API_TOKEN: ${MTGJSON_API_TOKEN:-}
+      PRICE_CACHE_TTL: ${PRICE_CACHE_TTL:-43200}
+      PRICE_REQUEST_TIMEOUT: ${PRICE_REQUEST_TIMEOUT:-20}
+      PRICE_PROVIDER_PREFERENCE: ${PRICE_PROVIDER_PREFERENCE:-tcgplayer,cardmarket,cardkingdom,mtgstocks}
+      PRICE_LISTTYPE_PREFERENCE: ${PRICE_LISTTYPE_PREFERENCE:-retail,market}
+    depends_on:
+      - postgres
+      - pgbouncer
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
     command: >-
       gunicorn
       --bind 0.0.0.0:5000
@@ -33,6 +176,7 @@ services:
       - "127.0.0.1:5000:5000"
     restart: unless-stopped
     environment:
+      PYTHONPATH: /app/backend
       FLASK_ENV: production
       FLASK_DEBUG: "0"
       INSTANCE_DIR: /app/instance
@@ -41,6 +185,9 @@ services:
       CACHE_REDIS_URL: redis://redis:6379/2
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      PRICE_SERVICE_URL: http://price-service:5000
+      PRICE_SERVICE_HTTP_TIMEOUT: ${PRICE_SERVICE_HTTP_TIMEOUT:-3}
+      PRICE_SERVICE_CACHE_TTL: ${PRICE_SERVICE_CACHE_TTL:-300}
       WEB_CONCURRENCY: "12"
       WEB_THREADS: "3"
       WEB_TIMEOUT: "180"
@@ -61,6 +208,7 @@ services:
       - redis
       - postgres
       - pgbouncer
+      - price-service
     init: true
     mem_limit: 32g
     healthcheck:
@@ -70,23 +218,67 @@ services:
       retries: 5
       start_period: 30s
 
+  django-api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${DJANGO_API_CONCURRENCY:-2}
+      --threads ${DJANGO_API_THREADS:-2}
+      --worker-class gthread
+      --timeout ${DJANGO_API_TIMEOUT:-90}
+      "dvapi.wsgi:application"
+    restart: unless-stopped
+    environment:
+      PYTHONPATH: /app/backend/django_api
+      DJANGO_SETTINGS_MODULE: dvapi.settings
+      DJANGO_DEBUG: "0"
+      INSTANCE_DIR: /app/instance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
+    volumes:
+      - .:/app
+    secrets:
+      - flask_secret_key
+    depends_on:
+      - postgres
+      - pgbouncer
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   nginx:
     image: nginx:1.26-alpine
     depends_on:
+      - ui
+      - user-manager
+      - card-data
+      - folder-service
+      - price-service
       - web
+      - django-api
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./static:/app/static:ro
+      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend/static:/app/backend/static:ro
     restart: unless-stopped
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
     command: rq worker default
     restart: unless-stopped
     environment:
       PYTHONWARNINGS: "ignore::UserWarning:click.core"
+      PYTHONPATH: /app/backend
       FLASK_ENV: production
       FLASK_DEBUG: "0"
       INSTANCE_DIR: /app/instance
@@ -100,6 +292,9 @@ services:
       CACHE_REDIS_URL: redis://redis:6379/2
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      PRICE_SERVICE_URL: http://price-service:5000
+      PRICE_SERVICE_HTTP_TIMEOUT: ${PRICE_SERVICE_HTTP_TIMEOUT:-3}
+      PRICE_SERVICE_CACHE_TTL: ${PRICE_SERVICE_CACHE_TTL:-300}
       WEB_CONCURRENCY: "12"
       WEB_THREADS: "3"
       WEB_TIMEOUT: "180"
@@ -129,7 +324,7 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./infra/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dvapp -d dragonsvault"]
@@ -158,32 +353,6 @@ services:
       - "127.0.0.1:6432:6432"
     restart: unless-stopped
 
-  pgbackup:
-    image: postgres:16-alpine
-    depends_on:
-      - postgres
-    environment:
-      PGHOST: postgres
-      PGUSER: dvapp
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
-      PGDATABASE: dragonsvault
-      BACKUP_INTERVAL: 86400
-      RETENTION_DAYS: 30
-    volumes:
-      - pgbackups:/backups
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        mkdir -p /backups && chmod 700 /backups && chown postgres:postgres /backups
-        while true; do
-          ts=$(date +%F)
-          su postgres -c "pg_dump --format=plain --no-owner --no-privileges > /backups/dragonsvault-$${ts}.sql" && \
-          find /backups -type f -name 'dragonsvault-*.sql' -mtime +$${RETENTION_DAYS:-30} -delete
-          sleep $${BACKUP_INTERVAL:-86400}
-        done
-    restart: unless-stopped
-    user: "999:999"
-
   pgmaintenance:
     image: postgres:16-alpine
     depends_on:
@@ -211,5 +380,5 @@ secrets:
 
 volumes:
   redis-data:
+  ui-node-modules:
   pgdata:
-  pgbackups:

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Frontend (API){% endblock %}
+{% block content %}
+<div class="container py-4" id="dvApiFrontend" data-default-limit="200">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Frontend via API</h1>
+      <p class="text-muted mb-0">Data below is loaded from the new <code>/api</code> endpoints.</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <span class="text-muted small" id="dvUserBadge">Loading user…</span>
+      <button class="btn btn-outline-secondary btn-sm" id="dvRefreshBtn" type="button">Refresh</button>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header fw-semibold">Folders</div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">Select a folder to load its cards.</p>
+          <ul class="list-group" id="dvFolderList"></ul>
+          <div class="text-muted small pt-2" id="dvFolderEmpty" hidden>No folders available.</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>
+            <div class="fw-semibold" id="dvFolderTitle">Select a folder</div>
+            <div class="text-muted small" id="dvFolderMeta">Waiting for selection.</div>
+          </div>
+          <span class="badge text-bg-light" id="dvFolderCount"></span>
+        </div>
+        <div class="card-body">
+          <div id="dvStatus" class="text-muted small">Use the list on the left to load data.</div>
+          <div id="dvCardsTable" class="table-responsive mt-3" hidden>
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Set</th>
+                  <th scope="col" class="text-center">#</th>
+                  <th scope="col" class="text-center">Foil</th>
+                </tr>
+              </thead>
+              <tbody id="dvCardsTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/frontend_app.js') }}" defer></script>
+{% endblock %}

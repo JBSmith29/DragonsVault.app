@@ -49,10 +49,10 @@ docker info
 
 ```bash
 # prepare env (edit POSTGRES_PASSWORD if you like)
-cp env.postgres.example .env
+cp infra/env.postgres.example .env
 
 # start infra with env file
-docker compose --env-file .env up -d postgres pgbouncer pgbackup pgmaintenance
+docker compose --env-file .env up -d postgres pgbouncer pgmaintenance
 
 # initialize schema
 docker compose --env-file .env run --rm web flask db upgrade
@@ -74,7 +74,7 @@ Within a web browser, navigate to [http://localhost](http://localhost) (or your 
 
 ### 6. Configure your DragonsVault Instance 
 
-> **Database**: The default stack now uses Postgres (via PgBouncer). Daily plain-text dumps are written to the `pgbackups` volume with 30-day retention. Set a strong `POSTGRES_PASSWORD` in `.env` before starting.
+> **Database**: The default stack uses Postgres (via PgBouncer). Set a strong `POSTGRES_PASSWORD` in `.env` before starting.
 
 ### 6.1 Download the Scryfall Bulk Data Collection
 
@@ -149,7 +149,7 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 - **Create users**  run `docker compose exec web flask users create USERNAME EMAIL --admin` (or use the Admin ? Create User form). Usernames must be unique and logins accept either email or username; passwords are prompted interactively.
 - **Sign in**  visit `/login` to access Import/Admin links plus the account menu.
 - **Generate tokens**  use the `/account/api-token` page or `docker compose exec web flask users token you@example.com` to print a new Bearer token (shown once).
-- **Use tokens**  add `Authorization: Bearer <token>` when calling protected endpoints from scripts/CI pipelines (query params are rejected).
+- **Use tokens**  add `Authorization: Bearer <token>` when calling protected endpoints from backend/scripts or CI pipelines (query params are rejected).
 - **Audit trail**  logins, admin actions, imports, and token rotations are stored in `audit_logs` for traceability.
 
 ## ?? Command Reference
@@ -206,6 +206,15 @@ Key environment variables (defaults in parentheses):
 | `CACHE_DIR` | `instance/cache` | Filesystem cache directory (used when `CACHE_TYPE=FileSystemCache`). |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection used for rate limiting and background jobs. |
 | `COMMANDER_SPELLBOOK_TIMEOUT` | `120` | Seconds to wait before spellbook downloads time out (adjust if the API is slow). |
+| `PRICE_SERVICE_URL` | `""` | Internal URL for the price microservice (e.g., `http://price-service:5000`). |
+| `PRICE_SERVICE_HTTP_TIMEOUT` | `3` | Seconds to wait for the price microservice. |
+| `PRICE_SERVICE_CACHE_TTL` | `300` | Seconds to cache price service responses in the web/worker processes. |
+| `MTGJSON_GRAPHQL_URL` | `https://graphql.mtgjson.com/` | MTGJSON GraphQL endpoint for price-service. |
+| `MTGJSON_API_TOKEN` | `""` | MTGJSON API token (required for price-service data access). |
+| `PRICE_CACHE_TTL` | `43200` | Seconds to cache MTGJSON prices inside price-service. |
+| `PRICE_REQUEST_TIMEOUT` | `20` | Seconds to wait on MTGJSON GraphQL requests. |
+| `PRICE_PROVIDER_PREFERENCE` | `tcgplayer,cardmarket,cardkingdom,mtgstocks` | Provider priority for normalized prices. |
+| `PRICE_LISTTYPE_PREFERENCE` | `retail,market` | Price list priority for normalized prices. |
 
 `.env` files are loaded automatically by `python-dotenv`.
 
@@ -213,20 +222,31 @@ Key environment variables (defaults in parentheses):
 
 ```bash
 DragonsVault/
-+-- app.py                # Flask application factory + CLI commands
-+-- config.py             # Config classes & defaults
-+-- extensions.py         # Shared extension instances
-+-- models/               # SQLAlchemy models
-+-- routes/               # Blueprint routes & helpers
-+-- services/             # CSV importer, Scryfall cache, stats helpers
-+-- templates/            # Jinja templates
-+-- static/               # CSS, JS, mana symbol assets
++-- backend/              # Flask app + workers + microservices
+|   +-- app.py            # Flask application factory + CLI commands
+|   +-- config.py         # Config classes & defaults
+|   +-- extensions.py     # Shared extension instances
+|   +-- models/           # SQLAlchemy models
+|   +-- routes/           # Blueprint routes & helpers
+|   +-- services/         # CSV importer, Scryfall cache, stats helpers
+|   +-- templates/        # Jinja templates
+|   +-- static/           # CSS, JS, mana symbol assets
+|   +-- scripts/          # Operational scripts + helpers
+|   +-- migrations/       # Alembic migration scripts
+|   +-- microservices/    # user-manager, card-data, folder-service, price-service
+|   +-- requirements.txt  # Python dependency lock
+|   +-- django_api/       # Django + DRF API (migration work)
++-- frontend/             # SPA front end (Vite + React)
++-- infra/                # Docker, nginx, postgres configs
 +-- instance/             # SQLite database, downloads, Jinja cache (gitignored)
-+-- migrations/           # Alembic migration scripts
 +-- tests/                # Pytest suite
-+-- requirements.txt      # Python dependency lock
++-- docker-compose.yml    # Local stack definition
 +-- README.md             # Project documentation
 ```
+
+## ?? Experimental Django API
+
+The Django + DRF service runs alongside Flask at `/api-next`. It currently requires an API token (`Authorization: Bearer <token>`). Use it for migration testing while the legacy `/api` routes remain on Flask.
 
 ## ??? Troubleshooting
 
@@ -235,8 +255,8 @@ DragonsVault/
 | OperationalError: no such column: folder.category | Run `flask db upgrade`. If upgrading from a very old DB, stamp to the latest seen revision before running upgrade. |
 | Scryfall-owned counts show zero | Ensure collection folders are marked as `collection` in Admin ? Folder Categories. |
 | Mana symbols missing from card text | Run `flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` or use the Admin button to re-fetch symbology. |
-| Migration history references missing revisions | The repo is rebased to a single `0001_initial` migration. Delete your local DB (`instance/*.db`) and rerun `docker compose run --rm web ./scripts/bootstrap.sh` (or `flask db upgrade`). |
-| Gunicorn worker timeout on startup | Pre-warm inside a container: `docker compose run --rm web ./scripts/bootstrap.sh`. If still slow, raise `WEB_TIMEOUT` (default 300) before `docker compose up`. |
+| Migration history references missing revisions | The repo is rebased to a single `0001_initial` migration. Delete your local DB (`instance/*.db`) and rerun `docker compose run --rm web ./backend/scripts/bootstrap.sh` (or `flask db upgrade`). |
+| Gunicorn worker timeout on startup | Pre-warm inside a container: `docker compose run --rm web ./backend/scripts/bootstrap.sh`. If still slow, raise `WEB_TIMEOUT` (default 300) before `docker compose up`. |
 | CSV import fails with Unsupported file type | Confirm the file is `.csv`, `.xlsx`, or `.xlsm`. The importer checks extensions. |
 | FTS search returns stale results | Run `flask fts-reindex`. |
 | SQLite locks / slow queries | Limit concurrent writers, run `flask analyze`/`flask vacuum`, and consider migrating to PostgreSQL if concurrency needs grow. |

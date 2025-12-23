@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Data Operations</h1>
+      <div class="text-muted small">Dataset refreshes and cache inspections.</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
+      <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline-flex">
+        <input type="hidden" name="action" value="refresh_all">
+        <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+        <button class="btn btn-outline-primary btn-sm" type="submit">Refresh All Data</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-body">
+          {% set prints_stats = stats.prints or {} %}
+          {% set status_badge = 'success' if prints.exists else 'danger' %}
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <h5 class="card-title mb-0">Scryfall Default Cards</h5>
+              <span class="badge text-bg-{{ status_badge }}">{{ 'Loaded' if prints.exists else 'Missing' }}</span>
+              {% if prints.exists %}
+                <span class="badge text-bg-{{ 'warning' if prints.stale else 'secondary' }}">{{ 'Stale' if prints.stale else 'Fresh' }}</span>
+              {% endif %}
+            </div>
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#defaultCardsDetails"
+              aria-expanded="false"
+              aria-controls="defaultCardsDetails"
+            >
+              Details
+            </button>
+          </div>
+          <div class="small text-muted mb-3">Bulk dataset powering art thumbnails, print lookups, and commander heuristics.</div>
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <form method="post" action="{{ url_for('views.admin_console') }}">
+              <input type="hidden" name="action" value="refresh_default_cards">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-primary btn-sm" type="submit">Download Latest Bulk File</button>
+            </form>
+            <form method="post" action="{{ url_for('views.admin_console') }}">
+              <input type="hidden" name="action" value="reload_default_cache">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-outline-primary btn-sm" type="submit">Reload In-Memory Cache</button>
+            </form>
+            <form method="post" action="{{ url_for('views.admin_console') }}">
+              <input type="hidden" name="action" value="clear_cache">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-outline-danger btn-sm" type="submit">Clear Cache Files</button>
+            </form>
+          </div>
+          <div class="collapse mt-3" id="defaultCardsDetails">
+            <div class="row g-3 small mb-3">
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 bg-body-secondary-subtle h-100">
+                  <div class="fw-semibold text-uppercase text-muted mb-2">File</div>
+                  <div>Path: <code>{{ prints.path }}</code></div>
+                  <div>Size: {{ '{:,}'.format(prints.size or 0) }} bytes</div>
+                  <div>Updated: {{ prints.mtime or 'N/A' }}</div>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="border rounded-3 p-3 bg-body-secondary-subtle h-100">
+                  <div class="fw-semibold text-uppercase text-muted mb-2">In-memory cache</div>
+                  <div>Records: {{ '{:,}'.format(prints_stats.records or 0) }}</div>
+                  <div>Unique oracles: {{ '{:,}'.format(prints_stats.unique_oracles or 0) }}</div>
+                  <div>Tracked sets: {{ '{:,}'.format(prints_stats.unique_sets or 0) }}</div>
+                </div>
+              </div>
+            </div>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
+                 data-job-monitor
+                 data-job-scope="scryfall"
+                 data-job-dataset="default_cards"
+                 data-job-label="Default cards">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    Queue a refresh to see live status updates as workers download the dataset.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <h5 class="card-title mb-0">Scryfall Rulings</h5>
+              <span class="badge text-bg-{{ 'success' if rulings.exists else 'danger' }}">{{ 'Present' if rulings.exists else 'Missing' }}</span>
+            </div>
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#rulingsDetails"
+              aria-expanded="false"
+              aria-controls="rulingsDetails"
+            >
+              Details
+            </button>
+          </div>
+          <div class="small text-muted mb-3">Bulk rulings by oracle ID.</div>
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline">
+              <input type="hidden" name="action" value="refresh_rulings">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-primary btn-sm" type="submit">Refresh Rulings</button>
+            </form>
+          </div>
+          <div class="collapse mt-3" id="rulingsDetails">
+            <ul class="list-unstyled small mb-3">
+              <li>Status: {{ 'Present' if rulings.exists else 'Missing' }}</li>
+              <li>Path: <code>{{ rulings.path }}</code></li>
+              <li>Size: {{ rulings.size }} bytes</li>
+              <li>Updated: {{ rulings.mtime or 'N/A' }}</li>
+            </ul>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
+                 data-job-monitor
+                 data-job-scope="scryfall"
+                 data-job-dataset="rulings"
+                 data-job-label="Rulings">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    When a rulings refresh runs the latest status appears here automatically.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <h5 class="card-title mb-0">Commander Spellbook Combos</h5>
+              <span class="badge text-bg-{{ 'success' if spellbook.exists else 'danger' }}">{{ 'Present' if spellbook.exists else 'Missing' }}</span>
+            </div>
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#spellbookDetails"
+              aria-expanded="false"
+              aria-controls="spellbookDetails"
+            >
+              Details
+            </button>
+          </div>
+          <div class="small text-muted mb-3">
+            Two-card lines pulled from Commander Spellbook (early <= {{ spellbook.early_threshold }}, late >= {{ spellbook.late_threshold }} total mana).
+          </div>
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline">
+              <input type="hidden" name="action" value="refresh_spellbook_combos">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-primary btn-sm" type="submit">Refresh Spellbook Combos</button>
+            </form>
+          </div>
+          <div class="collapse mt-3" id="spellbookDetails">
+            <ul class="list-unstyled small mb-3">
+              <li>Status: {{ 'Present' if spellbook.exists else 'Missing' }}</li>
+              <li>Path: <code>{{ spellbook.path }}</code></li>
+              <li>Size: {{ spellbook.size }} bytes</li>
+              <li>Updated: {{ spellbook.mtime or 'N/A' }}</li>
+              <li>Combos: {{ spellbook.counts.total }} total ({{ spellbook.counts.early }} early, {{ spellbook.counts.late }} late)</li>
+              {% if spellbook.categories %}
+                <li>Tracked categories:
+                  <ul class="mb-0">
+                    {% for label, value in spellbook.categories.items() %}
+                      <li>{{ label.replace('_', ' ') }}: {{ value }}</li>
+                    {% endfor %}
+                  </ul>
+                </li>
+              {% endif %}
+            </ul>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
+                 data-job-monitor
+                 data-job-scope="spellbook"
+                 data-job-dataset="spellbook"
+                 data-job-label="Commander Spellbook">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail">
+                    When a spellbook refresh runs the latest status appears here automatically.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <h5 class="card-title mb-0">Scryfall Symbols</h5>
+              {% if symbols_enabled %}
+                <span class="badge text-bg-{{ 'success' if symbols.exists else 'danger' }}">{{ 'Present' if symbols.exists else 'Missing' }}</span>
+              {% else %}
+                <span class="badge text-bg-warning-subtle text-warning">Unavailable</span>
+              {% endif %}
+            </div>
+            {% if symbols_enabled %}
+              <button
+                class="btn btn-outline-secondary btn-sm"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#symbolsDetails"
+                aria-expanded="false"
+                aria-controls="symbolsDetails"
+              >
+                Details
+              </button>
+            {% endif %}
+          </div>
+          <div class="small text-muted mb-3">Mana symbols cache (JSON + SVGs in <code>/static/symbols</code>).</div>
+          {% if symbols_enabled %}
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline">
+                <input type="hidden" name="action" value="refresh_symbols">
+                <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+                <button class="btn btn-primary btn-sm" type="submit">Refresh Symbols</button>
+              </form>
+            </div>
+            <div class="collapse mt-3" id="symbolsDetails">
+              <ul class="list-unstyled small mb-3">
+                <li>Status: {{ 'Present' if symbols.exists else 'Missing' }}</li>
+                <li>Path: <code>{{ symbols.path }}</code></li>
+                <li>Size: {{ symbols.size }} bytes</li>
+                <li>Updated: {{ symbols.mtime or 'N/A' }}</li>
+                <li>Entries: {{ symbols.entries }}</li>
+                <li>SVG cache: {{ symbols.svg_count }} icons ({{ 'Present' if symbols.svg_exists else 'Missing' }})<br>
+                  <span class="text-muted">Directory: <code>{{ symbols.svg_dir }}</code></span></li>
+              </ul>
+              <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
+                   data-job-monitor
+                   data-job-scope="symbols"
+                   data-job-dataset="symbology"
+                   data-job-label="Scryfall Symbols">
+                <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                  <div>
+                    <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                    <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                      When a symbols refresh runs the latest status appears here automatically.
+                    </p>
+                  </div>
+                  <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+                </div>
+                <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+              </div>
+            </div>
+          {% else %}
+            <div class="alert alert-warning small mb-0">
+              Symbols module not available. Make sure <code>services/symbols_cache.py</code> exists and is importable.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/job-monitor.js') }}" defer></script>
+{% endblock %}

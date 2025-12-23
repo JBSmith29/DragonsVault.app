@@ -1,0 +1,1786 @@
+{% extends "base.html" %}
+{% block title %}Decks - DragonsVault{% endblock %}
+{% block content %}
+
+{# Table-specific tweaks for the decks overview page #}
+<style>
+  .col-ci-pips { width:170px; min-width:170px; white-space:nowrap; }
+
+  .deck-bracket { display:inline-flex; align-items:center; gap:.2rem; white-space:nowrap; }
+
+  /* Commander thumbnail */
+  .cmdr-thumb-wrap {
+    width:48px;
+    height:64px;
+    border-radius:.65rem;
+    overflow:hidden;
+    position:relative;
+    flex:0 0 auto;
+  }
+  .cmdr-thumb {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    border-radius:.65rem;
+    display:block;
+  }
+  .cmdr-thumb-placeholder {
+    width:100%;
+    height:100%;
+    border-radius:.65rem;
+    background:rgba(148,163,184,.35);
+    border:1px dashed rgba(148,163,184,.9);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-transform:uppercase;
+    font-size:.62rem;
+    letter-spacing:.08em;
+    color:rgba(15,23,42,.85);
+    padding:.35rem;
+    text-align:center;
+  }
+  .commander-set-link {
+    background:none;
+    border:0;
+    padding:0;
+    color:var(--bs-primary);
+    font-size:.85rem;
+    text-decoration:underline;
+    cursor:pointer;
+  }
+  .commander-set-link:hover {
+    color:var(--bs-primary-hover, var(--bs-primary));
+  }
+  .commander-set-link:focus-visible {
+    outline:2px solid var(--bs-primary);
+    outline-offset:2px;
+  }
+  .deck-name-cell .meta { line-height: 1.1; }
+  .cards-table tbody tr.deck-row { cursor: pointer; }
+
+  .deck-drawer-section { margin-bottom: 1.5rem; }
+  .deck-drawer-pill {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .35rem .65rem; border-radius: .55rem;
+    background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08);
+    font-weight:600; justify-content:space-between; min-width:150px;
+  }
+  .deck-drawer-grid { display:grid; gap:.5rem; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); }
+  .deck-drawer-list { margin:0; padding-left:1.1rem; }
+  .deck-drawer-list li { margin-bottom:.25rem; }
+  .deck-drawer-combo-wrapper{
+    display:flex;
+    flex-direction:column;
+    gap:.35rem;
+  }
+  .deck-drawer-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.3rem;
+  }
+  .deck-drawer-tag{
+    display:inline-flex;
+    align-items:center;
+    gap:.2rem;
+    padding:.2rem .5rem;
+    border-radius:.45rem;
+    background:rgba(255,255,255,.08);
+    font-size:.75rem;
+    font-weight:600;
+  }
+  .deck-drawer-combo {
+    display:flex; align-items:center; gap:.3rem;
+    padding:.35rem .6rem; border-radius:.5rem;
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    white-space:nowrap; overflow-x:auto; scrollbar-width:thin;
+  }
+  .deck-drawer-combo::-webkit-scrollbar { height:6px; }
+  .deck-drawer-combo::-webkit-scrollbar-thumb { background:rgba(255,255,255,.25); border-radius:999px; }
+  .deck-drawer-combo span { flex:0 0 auto; }
+  .deck-curve-grid { display:flex; gap:.6rem; justify-content:center; flex-wrap:wrap; }
+  .deck-curve-col { width:48px; text-align:center; }
+
+  .deck-owner-pill {
+    display:flex;
+    flex-direction:column;
+    gap:.15rem;
+    padding:.45rem .75rem;
+    appearance:none;
+    border:1px solid rgba(255,255,255,.08);
+    background:rgba(255,255,255,.04);
+    border-radius:.65rem;
+    min-width:160px;
+    font:inherit;
+    color:inherit;
+    cursor:pointer;
+    text-align:left;
+    transition:border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .deck-owner-pill:hover { transform: translateY(-1px); }
+  .deck-owner-pill.active {
+    border-color: rgba(var(--bs-primary-rgb), .8);
+    background: rgba(13,110,253,.18);
+  }
+  .deck-owner-pill:focus-visible {
+    outline:2px solid var(--bs-primary);
+    outline-offset:2px;
+  }
+  .deck-owner-pill .name {
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:.35rem;
+  }
+  .deck-owner-pill .counts {
+    font-size:.8rem;
+    color:var(--bs-secondary-color);
+    display:flex;
+    gap:.75rem;
+    flex-wrap:wrap;
+  }
+  .proxy-badge {
+    display:inline-flex;
+    align-items:center;
+    gap:.25rem;
+    padding:.15rem .45rem;
+    border-radius:.5rem;
+    font-size:.7rem;
+    font-weight:600;
+    background:rgba(13, 110, 253, .15);
+    color:var(--bs-primary);
+  }
+  .modal.tag-picker-modal .modal-content {
+    border-radius: 1rem;
+    background: rgba(17, 24, 39, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      0 20px 60px rgba(0,0,0,0.45);
+    backdrop-filter: blur(12px);
+  }
+  .modal.tag-picker-modal .modal-header,
+  .modal.tag-picker-modal .modal-footer {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .modal.tag-picker-modal .tag-option.active {
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.35);
+  }
+  .type-pill {
+    cursor: pointer;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    color: inherit;
+    border-radius: .5rem;
+    padding: .35rem .75rem;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    font: inherit;
+  }
+  .type-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .45rem 1.2rem rgba(0,0,0,.25);
+    border-color: rgba(255,255,255,.25);
+  }
+  .type-pill.active {
+    background: var(--bs-primary);
+    color: #fff;
+    border-color: rgba(255,255,255,.35);
+  }
+  .owner-cell {
+    min-width:160px;
+  }
+
+  .owner-cell .owner-box {
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    padding:.35rem .6rem;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:.75rem;
+    background:rgba(255,255,255,.04);
+    position:relative;
+  }
+  .owner-cell .owner-label {
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:rgba(255,255,255,.65);
+  }
+  .owner-cell .owner-value {
+    font-weight:600;
+  }
+
+  .legend-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap:1rem;
+  }
+  .legend-card {
+    display:flex;
+    gap:.75rem;
+    padding:.75rem;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:1rem;
+    background:rgba(15,23,42,.6);
+    align-items:flex-start;
+    min-height:110px;
+  }
+  .legend-thumb-wrap {
+    width:64px;
+    height:90px;
+    border-radius:.85rem;
+    overflow:hidden;
+    background:rgba(255,255,255,.08);
+    flex:0 0 auto;
+  }
+  .legend-thumb {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .legend-body {
+    flex:1 1 auto;
+    min-width:0;
+  }
+  .legend-title {
+    font-weight:600;
+    margin-bottom:.15rem;
+  }
+  .legend-sub {
+    font-size:.8rem;
+    color:var(--bs-secondary-color);
+  }
+  .legend-card .btn {
+    margin-top:.5rem;
+  }
+
+  @media (min-width: 768px) {
+    #deckDrawer.offcanvas { width: 540px; }
+  }
+
+  .deck-curve-col { width:48px; text-align:center; }
+  .deck-curve-bar { position:relative; height:140px; border:1px solid var(--bs-border-color); border-radius:.65rem; background:rgba(255,255,255,.05); display:flex; align-items:flex-end; justify-content:center; overflow:hidden; }
+  .deck-curve-fill { width:100%; background:var(--bs-primary); opacity:.3; border-radius:.65rem .65rem 0 0; transition:height .15s ease; }
+  .deck-curve-count { position:absolute; top:.35rem; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.6); color:#fff; font-weight:700; padding:.1rem .45rem; border-radius:.35rem; font-size:.75rem; }
+  .deck-curve-label { margin-top:.35rem; font-size:.8rem; color:var(--bs-secondary-color); font-weight:600; }
+
+</style>
+
+{% include "decks/deck_tag_modal.html" %}
+
+<div class="page-section">
+  {% set total_decks = decks|length if decks is defined else 0 %}
+  {% set proxy_total = proxy_count or 0 %}
+  {% set owned_total = total_decks - proxy_total %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Decks</h1>
+      <div class="text-muted small d-flex flex-wrap align-items-center gap-3">
+        <span>Total: <strong>{{ '{:,}'.format(total_decks) }}</strong></span>
+        <span>Owned: <strong>{{ '{:,}'.format(owned_total) }}</strong></span>
+        <span>Proxy: <strong>{{ '{:,}'.format(proxy_total) }}</strong></span>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <a class="btn btn-outline-light btn-sm" href="{{ url_for('views.deck_tokens_overview') }}">
+        All Deck Tokens
+      </a>
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.deck_from_collection') }}">
+        Create Deck from Collection
+      </a>
+      <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#proxyDeckModal">
+        Import Proxy Deck
+      </button>
+      <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#bulkProxyModal">
+        Bulk Import (MTGGoldfish)
+      </button>
+    </div>
+  </div>
+
+  {% if owner_summary and owner_summary|length %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="text-uppercase text-muted small fw-semibold">Deck Owners</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="ownerFilterResetBtn">Show All</button>
+          </div>
+          {% if proxy_total %}
+            <span class="text-muted small">Proxy decks: {{ '{:,}'.format(proxy_total) }}</span>
+          {% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          {% for owner in owner_summary %}
+            <button type="button" class="deck-owner-pill" data-owner="{{ owner.label|e }}" data-owner-key="{{ (owner.owner or '')|lower }}" aria-pressed="false">
+              <div class="name">
+                {{ owner.label }}
+                {% if owner.proxy_count %}
+                  <span class="proxy-badge">
+                    {{ '{:,}'.format(owner.proxy_count) }} proxy deck{% if owner.proxy_count != 1 %}s{% endif %}
+                  </span>
+                {% endif %}
+              </div>
+              <div class="counts">
+                <span>{{ '{:,}'.format(owner.deck_count) }} deck{% if owner.deck_count != 1 %}s{% endif %}</span>
+                <span>{{ '{:,}'.format(owner.card_total) }} cards</span>
+              </div>
+            </button>
+            {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# Helpers to translate color identity abbreviations into friendly text #}
+  {% set WUBRG = ['W','U','B','R','G'] %}
+  {% set ci_names = {
+    '': 'Colorless',
+    'W':'White','U':'Blue','B':'Black','R':'Red','G':'Green',
+    'WU':'Azorius','UB':'Dimir','UR':'Izzet','BR':'Rakdos','BG':'Golgari',
+    'WB':'Orzhov','RG':'Gruul','RW':'Boros','GW':'Selesnya','GU':'Simic',
+    'WUG':'Bant','WUB':'Esper','UBR':'Grixis','BRG':'Jund','WRG':'Naya',
+    'WBG':'Abzan','WUR':'Jeskai','WBR':'Mardu','UBG':'Sultai','URG':'Temur',
+    'WUBR':'Yore','UBRG':'Glint','BRGW':'Dune','RGWU':'Ink','GWUB':'Witch',
+    'WUBRG':'5c'
+  } %}
+
+  {% if decks and decks|length %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle cards-table">
+        {# Determine the next direction for each sortable column link #}
+        {% set sort = (request.args.get('sort') or '') %}
+        {% set direction = (request.args.get('dir') or 'desc') %}
+        {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
+        {% set owner_dir = 'asc' if sort!='owner' or direction=='desc' else 'desc' %}
+        {% set ci_dir   = 'asc' if sort!='ci'   or direction=='desc' else 'desc' %}
+        {% set pips_dir = 'asc' if sort!='pips' or direction=='desc' else 'desc' %}
+        {% set qty_dir  = 'asc' if sort!='qty'  or direction=='desc' else 'desc' %}
+        {% set bracket_dir = 'asc' if sort!='bracket' or direction=='desc' else 'desc' %}
+        <thead>
+          <tr>
+           <th><a href="{{ url_for('views.decks_overview', sort='name', dir=name_dir) }}">Deck</a></th>
+           <th>Deck Tag</th>
+           <th class="owner-cell"><a href="{{ url_for('views.decks_overview', sort='owner', dir=owner_dir) }}">Owner</a></th>
+            <th><a href="{{ url_for('views.decks_overview', sort='ci', dir=ci_dir) }}">Color Identity</a></th>
+            <th class="col-ci-pips"><a href="{{ url_for('views.decks_overview', sort='pips', dir=pips_dir) }}">Pips</a></th>
+            <th class="text-start"><a href="{{ url_for('views.decks_overview', sort='bracket', dir=bracket_dir) }}">Bracket</a></th>
+            <th class="text-end"><a href="{{ url_for('views.decks_overview', sort='qty', dir=qty_dir) }}">Qty</a></th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in decks %}
+            {# Derive the color identity label for this deck #}
+            {% set helper_letters = deck_ci_letters.get(d.id) %}
+            {% set helper_name    = deck_ci_name.get(d.id) %}
+            {% set CI             = helper_letters|string|upper if helper_letters else '' %}
+            {% set CI_NAME        = helper_name or ci_names.get(CI, CI if CI else 'Colorless') %}
+
+            {# Commander preview information (thumbnail + hover image) #}
+            {% set cmd = deck_cmdr.get(d.id) %}
+            {% set cmd_small = cmd.small if cmd else None %}
+            {% set cmd_large = cmd.large if cmd else None %}
+            {% set cmd_name  = cmd.name  if cmd else None %}
+            {% set cmd_alt   = cmd.alt   if cmd else (cmd_name or 'Commander') %}
+            {% set set_url = url_for('views.set_commander', folder_id=d.id) %}
+            {% set clear_url = url_for('views.clear_commander', folder_id=d.id) %}
+            {% set candidate_url = url_for('views.api_folder_commander_candidates', folder_id=d.id) %}
+
+            <tr class="deck-row"
+                data-deck-id="{{ d.id }}"
+                data-owner="{{ (d.owner or '')|e }}"
+                data-owner-key="{{ (d.owner or '')|lower }}"
+                tabindex="0">
+              <!-- Deck cell with commander thumb (owned print) + deck/commander names -->
+              <td class="deck-name-cell">
+                <div class="d-flex align-items-center gap-2">
+                  <button
+                    type="button"
+                    class="cmdr-thumb-wrap btn p-0 border-0 bg-transparent"
+                    data-commander-trigger="true"
+                    data-folder-id="{{ d.id }}"
+                    data-deck-name="{{ d.name }}"
+                    data-set-url="{{ set_url }}"
+                    data-clear-url="{{ clear_url }}"
+                    data-candidate-url="{{ candidate_url }}"
+                    {% if cmd_name %}data-commander-name="{{ cmd_name }}"{% endif %}
+                    {% if cmd_large %}data-hover-src="{{ cmd_large }}"{% endif %}>
+                    {% if cmd_small %}
+                      <img class="cmdr-thumb" src="{{ cmd_small }}" alt="{{ cmd_alt }}">
+                    {% else %}
+                      <div class="cmdr-thumb-placeholder">
+                        <span>Set Commander</span>
+                      </div>
+                    {% endif %}
+                  </button>
+                  <div class="meta min-w-0">
+                    <div class="fw-semibold text-truncate d-flex align-items-center gap-2">
+                      <a href="{{ url_for('views.folder_detail', folder_id=d.id) }}">{{ d.name }}</a>
+                      {% if d.is_proxy %}
+                        <span class="proxy-badge">Proxy</span>
+                      {% endif %}
+                    </div>
+                    <div class="small text-muted text-truncate d-flex align-items-center gap-3 flex-wrap">
+                      <button type="button"
+                              class="commander-set-link"
+                              data-commander-trigger="true"
+                              data-folder-id="{{ d.id }}"
+                              data-deck-name="{{ d.name }}"
+                              data-commander-name="{{ cmd_name or '' }}"
+                              data-set-url="{{ set_url }}"
+                              data-clear-url="{{ clear_url }}"
+                              data-candidate-url="{{ candidate_url }}">
+                        {% if cmd_name %}
+                          Commander: {{ cmd_name }}
+                        {% else %}
+                          Click here to set commander
+                        {% endif %}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <td class="text-truncate">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary btn-sm deck-tag-trigger"
+                    data-folder-id="{{ d.id }}"
+                    data-deck-name="{{ d.name }}"
+                    data-current-tag="{{ d.tag or '' }}"
+                    data-current-label="{{ d.tag_label or d.tag or '' }}"
+                  >
+                    {{ d.tag_label or 'Set tag' }}
+                  </button>
+                </div>
+              </td>
+
+              <td class="owner-cell text-truncate">
+                {% if d.owner %}
+                  {{ d.owner }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+
+              <!-- Color Identity (friendly name) -->
+              <td class="text-nowrap">{{ CI_NAME }}</td>
+
+              <!-- Color identity pips -->
+              <td class="col-ci-pips">
+                {% if deck_ci_html.get(d.id) %}
+                  <span class="pip-row">{{ deck_ci_html.get(d.id) | safe }}</span>
+                {% else %}
+                  <span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>
+                {% endif %}
+              </td>
+
+              {# Wizards bracket classification pulled from commander_brackets.py #}
+              {% set br = d.bracket or {} %}
+              {% set level = br.level %}
+              {% set label = br.label %}
+              <td class="text-start">
+                {% if level %}
+                  <div class="deck-bracket">
+                    <span class="badge text-bg-primary">{{ level }}</span>
+                    {% if label %}<span class="label text-muted">{{ label }}</span>{% endif %}
+                  </div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              <!-- Total quantity in deck -->
+              <td class="text-end">{{ '{:,}'.format(d.qty or 0) }}</td>
+
+              <!-- Action -->
+              <td class="text-end">
+                <div class="d-flex flex-column align-items-end gap-1">
+                  <a class="btn btn-sm btn-primary"
+                     href="{{ url_for('views.list_cards', folder=d.id) }}">
+                    Show Cards
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    <div class="offcanvas offcanvas-end w-500" tabindex="-1" id="deckDrawer" aria-labelledby="deckDrawerLabel">
+      <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="deckDrawerLabel">Deck Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body" id="deckDrawerBody">
+        <div class="text-center small text-muted">Select a deck row to preview details.</div>
+      </div>
+    </div>
+
+    </div>
+  {% else %}
+    {# Empty state when no decks exist #}
+    <div class="alert alert-secondary">
+      No decks to show yet.
+    </div>
+{% endif %}
+</div>
+
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade" id="commanderQuickModal" tabindex="-1" aria-labelledby="commanderQuickModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="commanderQuickModalLabel">Set Commander</h5>
+          <div class="small text-muted" id="commanderQuickDeckName">Select a deck below</div>
+        </div>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close mobile-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+          <div>
+            <div class="text-uppercase text-muted small fw-semibold">Current Commander</div>
+            <div class="fw-semibold" id="commanderQuickCurrent">—</div>
+          </div>
+          <button type="button" class="btn btn-outline-danger btn-sm ms-auto d-none" id="commanderQuickClearBtn">
+            Clear Commander
+          </button>
+        </div>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="search"
+                 class="form-control"
+                 id="commanderQuickFilter"
+                 placeholder="Filter by name...">
+        </div>
+        <div class="text-muted small mt-2">You can assign up to two commanders per deck. Use Add Partner to append.</div>
+        <div id="commanderQuickAlert" class="alert alert-info small d-none mt-3" role="status"></div>
+        <div id="commanderQuickList" class="legend-grid mt-3">
+          <div class="text-muted text-center py-4 w-100">Select a deck to load commander options.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
+<div class="modal fade" id="bulkProxyModal" tabindex="-1" aria-labelledby="bulkProxyModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('views.create_proxy_deck_bulk') }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="bulkProxyModalLabel">Bulk Import Proxy Decks</h5>
+          {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="bulkProxyUrls" class="form-label">MTGGoldfish Deck URLs</label>
+            <textarea class="form-control" id="bulkProxyUrls" name="deck_urls" rows="8" placeholder="https://www.mtggoldfish.com/deck/#####&#10;https://www.mtggoldfish.com/deck/#####"></textarea>
+            <div class="form-text">One URL per line. Each deck will be imported as its own proxy deck using the MTGGoldfish name, owner, commander, and decklist.</div>
+          </div>
+          <div class="alert alert-info small">
+            Existing deck names are kept when available. If a name already exists, a numeric suffix is appended automatically.
+          </div>
+          <div class="mt-3 d-none" id="bulkProxyAlert"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import Decks</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
+<div class="modal fade" id="proxyDeckModal" tabindex="-1" aria-labelledby="proxyDeckModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="proxyDeckForm" method="post" action="{{ url_for('views.create_proxy_deck') }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="proxyDeckModalLabel">Import Proxy Deck</h5>
+          {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="proxyDeckName" class="form-label">Deck Name</label>
+            <input type="text" class="form-control" id="proxyDeckName" name="deck_name" placeholder="Auto-filled from URL">
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="proxyDeckOwner" class="form-label">Owner <span class="text-muted small">(optional)</span></label>
+              <input type="text" class="form-control" id="proxyDeckOwner" name="deck_owner" list="deckOwnerOptions" placeholder="e.g. Jamie">
+              {% if owner_names and owner_names|length %}
+                <datalist id="deckOwnerOptions">
+                  {% for owner_name in owner_names %}
+                    <option value="{{ owner_name }}">
+                  {% endfor %}
+                </datalist>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="proxyDeckCommander" class="form-label">Commander <span class="text-muted small">(optional)</span></label>
+              <input type="text" class="form-control" id="proxyDeckCommander" name="deck_commander" placeholder="e.g. Atraxa, Praetors' Voice">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label for="proxyDeckUrl" class="form-label">MTGGoldfish Deck URL <span class="text-muted small">(optional)</span></label>
+            <div class="input-group">
+              <input type="url" class="form-control" id="proxyDeckUrl" name="deck_url" placeholder="https://www.mtggoldfish.com/deck/123456">
+              <button class="btn btn-outline-primary" type="button" id="proxyDeckFetchBtn">Fetch</button>
+            </div>
+            <div class="form-text">Paste the deck URL, then click Fetch to auto-fill name, owner, commander, and decklist.</div>
+          </div>
+          <div class="mt-3">
+            <label for="proxyDeckList" class="form-label">Decklist</label>
+            <textarea class="form-control" id="proxyDeckList" name="decklist" rows="10" placeholder="1 Sol Ring&#10;1 Command Tower&#10;4 Arcane Signet"></textarea>
+            <div class="form-text">One card per line. Prefix quantities with a number (&ldquo;3 Sol Ring&rdquo; or &ldquo;3x Sol Ring&rdquo; both work).</div>
+          </div>
+          <div class="mt-3 d-none" id="proxyDeckFetchAlert"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Deck</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+<script>
+(function(){
+  const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const drawerEl = document.getElementById('deckDrawer');
+  const bodyEl = document.getElementById('deckDrawerBody');
+  if (!drawerEl || !bodyEl) return;
+  const resetDrawerScroll = () => {
+    window.scrollTo(0, 0);
+    drawerEl.scrollTop = 0;
+    bodyEl.scrollTop = 0;
+  };
+  drawerEl.addEventListener('show.bs.offcanvas', resetDrawerScroll);
+  drawerEl.addEventListener('shown.bs.offcanvas', resetDrawerScroll);
+  let offcanvasInstance = null;
+
+  function getOffcanvas(){
+    if (!offcanvasInstance && typeof bootstrap !== 'undefined') {
+      offcanvasInstance = new bootstrap.Offcanvas(drawerEl);
+    }
+    return offcanvasInstance;
+  }
+
+  function buildPill(label, count, icon){
+    const span = document.createElement('span');
+    span.className = 'deck-drawer-pill';
+    if (icon) {
+      const img = document.createElement('img');
+      img.src = icon;
+      img.alt = label;
+      img.style.height = '1.1em';
+      span.appendChild(img);
+    } else {
+      const textNode = document.createElement('span');
+      textNode.textContent = label;
+      span.appendChild(textNode);
+    }
+    const value = document.createElement('span');
+    value.textContent = count;
+    span.appendChild(value);
+    return span;
+  }
+
+  function appendBadges(section, title, pills){
+    if (!pills || !pills.length) return;
+    const heading = document.createElement('h6');
+    heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+    heading.textContent = title;
+    section.appendChild(heading);
+    const grid = document.createElement('div');
+    grid.className = 'deck-drawer-grid';
+    pills.forEach(p => grid.appendChild(p));
+    section.appendChild(grid);
+  }
+
+  function appendList(section, title, items){
+    if (!items || !items.length) return;
+    const heading = document.createElement('h6');
+    heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+    heading.textContent = title;
+    section.appendChild(heading);
+    const list = document.createElement('ul');
+    list.className = 'deck-drawer-list';
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.innerHTML = item;
+      list.appendChild(li);
+    });
+    section.appendChild(list);
+  }
+
+  function renderSummary(data){
+    bodyEl.innerHTML = '';
+    const deck = data.deck || {};
+    const commander = data.commander || {};
+    const bracket = data.bracket || {};
+
+    const topSection = document.createElement('div');
+    topSection.className = 'deck-drawer-section';
+    const headerRow = document.createElement('div');
+    headerRow.className = 'd-flex align-items-center gap-3';
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'rounded overflow-hidden';
+    if (commander.image || commander.hover) {
+      const img = document.createElement('img');
+      img.src = commander.image || commander.hover;
+      img.alt = commander.name || 'Commander';
+      img.style.width = '72px';
+      img.style.height = 'auto';
+      img.className = 'rounded';
+      imgWrap.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'bg-secondary-subtle rounded';
+      placeholder.style.width = '72px';
+      placeholder.style.height = '96px';
+      placeholder.style.opacity = '.25';
+      imgWrap.appendChild(placeholder);
+    }
+    headerRow.appendChild(imgWrap);
+
+    const meta = document.createElement('div');
+    meta.className = 'min-w-0';
+    const title = document.createElement('div');
+    title.className = 'h5 mb-1 text-truncate';
+    title.textContent = deck.name || 'Deck';
+    meta.appendChild(title);
+    if (deck.tag_label) {
+      const tagLine = document.createElement('div');
+      tagLine.className = 'small text-muted text-truncate';
+      tagLine.textContent = deck.tag_label;
+      meta.appendChild(tagLine);
+    }
+    if (commander.name) {
+      const cmdLine = document.createElement('div');
+      cmdLine.className = 'small text-muted text-truncate';
+      cmdLine.textContent = 'Commander: ' + commander.name;
+      meta.appendChild(cmdLine);
+    }
+    if (data.total_cards) {
+      const totalLine = document.createElement('div');
+      totalLine.className = 'small text-muted';
+      totalLine.textContent = data.total_cards + ' total cards';
+      meta.appendChild(totalLine);
+    }
+    headerRow.appendChild(meta);
+    topSection.appendChild(headerRow);
+    bodyEl.appendChild(topSection);
+
+    if (bracket.level) {
+      const bracketSection = document.createElement('div');
+      bracketSection.className = 'deck-drawer-section';
+      const badgeRow = document.createElement('div');
+      badgeRow.className = 'd-flex align-items-center gap-2 mb-2';
+      const badge = document.createElement('span');
+      badge.className = 'badge text-bg-primary';
+      badge.textContent = bracket.level;
+      badgeRow.appendChild(badge);
+      if (bracket.label) {
+        const label = document.createElement('span');
+        label.className = 'fw-semibold';
+        label.textContent = bracket.label;
+        badgeRow.appendChild(label);
+      }
+      if (typeof bracket.score === 'number') {
+        const score = document.createElement('span');
+        score.className = 'text-muted small';
+        score.textContent = 'Score ' + bracket.score;
+        badgeRow.appendChild(score);
+      }
+      bracketSection.appendChild(badgeRow);
+      const points = bracket.summary_points || [];
+      if (points.length) {
+        const list = document.createElement('ul');
+        list.className = 'deck-drawer-list';
+        points.forEach(point => {
+          const li = document.createElement('li');
+          li.textContent = point;
+          list.appendChild(li);
+        });
+        bracketSection.appendChild(list);
+      } else {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted small';
+        empty.textContent = 'No summary available.';
+        bracketSection.appendChild(empty);
+      }
+      bodyEl.appendChild(bracketSection);
+    }
+
+    const typePills = (data.type_breakdown || []).map(item => buildPill(item[0] + ":", item[1], null));
+    const typeSection = document.createElement('div');
+    typeSection.className = 'deck-drawer-section';
+    appendBadges(typeSection, 'Types', typePills);
+    if (typeSection.children.length > 0) bodyEl.appendChild(typeSection);
+
+    const manaCostPills = (data.mana_pip_dist || []).map(item => buildPill(item.color, item.count, item.icon));
+    const costSection = document.createElement('div');
+    costSection.className = 'deck-drawer-section';
+    appendBadges(costSection, 'Color Distribution', manaCostPills);
+    if (costSection.children.length > 0) bodyEl.appendChild(costSection);
+
+    const deckColors = new Set((data.deck_colors || []).map(color => String(color || '').toUpperCase()));
+    const manaSourcePills = (data.land_mana_sources || [])
+      .filter(item => {
+        const code = String(item.color || item.code || '').toUpperCase();
+        if (!code) return false;
+        return deckColors.has(code) || code === 'C';
+      })
+      .map(item => {
+        let label = item.label || item.color || "C";
+        let icon = item.icon;
+        if ((label === "C" || label.toUpperCase() === "COLORLESS") && !icon) {
+          icon = "/static/symbols/C.svg";
+          label = "C";
+        }
+        return buildPill(label + ":", item.count, icon);
+      });
+    if (manaSourcePills.length) {
+      const sourceSection = document.createElement('div');
+      sourceSection.className = 'deck-drawer-section';
+      appendBadges(sourceSection, 'Mana Sources', manaSourcePills);
+      bodyEl.appendChild(sourceSection);
+    }
+
+    const curveRows = data.curve_rows || [];
+    if (curveRows.length) {
+      const section = document.createElement('div');
+      section.className = 'deck-drawer-section';
+      const heading = document.createElement('h6');
+      heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+      heading.textContent = 'Mana Curve';
+      section.appendChild(heading);
+      const grid = document.createElement('div');
+      grid.className = 'deck-curve-grid';
+      const maxPct = Math.max(...curveRows.map(row => row.pct || 0));
+      curveRows.forEach(row => {
+        const col = document.createElement('div');
+        col.className = 'deck-curve-col';
+        const bar = document.createElement('div');
+        bar.className = 'deck-curve-bar';
+        const fill = document.createElement('div');
+        fill.className = 'deck-curve-fill';
+        const pct = row.pct || 0;
+        const height = maxPct ? Math.max(12, (pct / maxPct) * 100) : 0;
+        fill.style.height = height + '%';
+        bar.appendChild(fill);
+        const count = document.createElement('div');
+        count.className = 'deck-curve-count';
+        count.textContent = row.count;
+        bar.appendChild(count);
+        col.appendChild(bar);
+        const label = document.createElement('div');
+        label.className = 'deck-curve-label';
+        label.textContent = row.label;
+        col.appendChild(label);
+        grid.appendChild(col);
+      });
+      section.appendChild(grid);
+      bodyEl.appendChild(section);
+    }
+
+    const combos = (bracket.spellbook_combos || []);
+    if (combos.length) {
+      const comboSection = document.createElement('div');
+      comboSection.className = 'deck-drawer-section';
+      const heading = document.createElement('h6');
+      heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+      heading.textContent = 'Commander Spellbook Combos';
+      comboSection.appendChild(heading);
+      const list = document.createElement('div');
+      list.className = 'd-flex flex-column gap-2';
+      combos.forEach(combo => {
+        const wrapper = document.createElement(combo.url ? 'a' : 'div');
+        wrapper.classList.add('deck-drawer-combo-wrapper');
+        if (combo.url) {
+          wrapper.href = combo.url;
+          wrapper.target = '_blank';
+          wrapper.rel = 'noopener';
+          wrapper.classList.add('text-decoration-none', 'text-reset');
+        }
+        const tags = Array.isArray(combo.tags) ? combo.tags : [];
+        if (tags.length) {
+          const tagGroup = document.createElement('div');
+          tagGroup.className = 'deck-drawer-tags';
+          tags.forEach(label => {
+            const tagEl = document.createElement('span');
+            tagEl.className = 'deck-drawer-tag';
+            tagEl.textContent = label;
+            tagGroup.appendChild(tagEl);
+          });
+          wrapper.appendChild(tagGroup);
+        }
+        const pill = document.createElement('div');
+        pill.className = 'deck-drawer-combo';
+        const cards = combo.cards || [];
+        cards.forEach((card, index) => {
+          const span = document.createElement('span');
+          span.textContent = card.name;
+          if (card.hover) {
+            span.setAttribute('data-hover-src', card.hover);
+          }
+          pill.appendChild(span);
+          if (index < cards.length - 1) {
+            const plus = document.createElement('span');
+            plus.textContent = '+';
+            pill.appendChild(plus);
+          }
+        });
+        wrapper.appendChild(pill);
+        list.appendChild(wrapper);
+      });
+      comboSection.appendChild(list);
+      bodyEl.appendChild(comboSection);
+    }
+  }
+
+  async function openDrawer(deckId){
+    const instance = getOffcanvas();
+    if (!instance) return;
+    bodyEl.innerHTML = '<div class="text-center py-5 text-muted">Loading deck insight...</div>';
+    bodyEl.scrollTop = 0;
+    drawerEl.scrollTop = 0;
+    instance.show();
+    try {
+      const resp = await fetch('/api/decks/' + deckId + '/insight');
+      if (!resp.ok) throw new Error('Failed to load deck insight');
+      const payload = await resp.json();
+      renderSummary(payload);
+      bodyEl.scrollTop = 0;
+      drawerEl.scrollTop = 0;
+    } catch (err) {
+      const message = err && err.message ? err.message : 'Unable to load deck details.';
+      bodyEl.innerHTML = '<div class="text-center text-danger py-5">' + message + '</div>';
+      bodyEl.scrollTop = 0;
+      drawerEl.scrollTop = 0;
+    }
+  }
+
+  document.querySelectorAll('.cards-table .deck-row').forEach(row => {
+    row.addEventListener('click', (event) => {
+      if (event.target.closest('a, button')) return;
+      const deckId = row.dataset.deckId;
+      if (deckId) openDrawer(deckId);
+    });
+    row.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.target.closest('a, button')) return;
+      event.preventDefault();
+      const deckId = row.dataset.deckId;
+      if (deckId) openDrawer(deckId);
+    });
+  });
+
+})();
+
+// Deck tag modal
+(function(){
+  const modalEl = document.getElementById('deckTagModal');
+  if (!modalEl) return;
+  const filterInput = modalEl.querySelector('#deckTagFilter');
+  const currentEl = modalEl.querySelector('#deckTagCurrent');
+  const statusEl = modalEl.querySelector('#deckTagStatus');
+  const nameEl = modalEl.querySelector('#deckTagModalName');
+  const emptyEl = modalEl.querySelector('#deckTagEmpty');
+  const clearBtn = modalEl.querySelector('#deckTagClearBtn');
+  const tagButtons = Array.from(modalEl.querySelectorAll('.tag-option'));
+  const categorySections = Array.from(modalEl.querySelectorAll('.tag-category'));
+  const triggerButtons = Array.from(document.querySelectorAll('.deck-tag-trigger'));
+  let activeFolderId = null;
+  let activeBadge = null;
+  let activeButton = null;
+
+  function setStatus(msg, level) {
+    if (!statusEl) return;
+    statusEl.textContent = msg || '';
+    statusEl.className = 'text-muted small';
+    if (level === 'error') statusEl.classList.add('text-danger');
+    if (level === 'success') statusEl.classList.add('text-success');
+  }
+
+  function setCurrentLabel(tag) {
+    if (!currentEl) return;
+    const text = (tag || '').trim();
+    if (text) {
+      currentEl.innerHTML = 'Current tag: <strong>' + text + '</strong>';
+      currentEl.classList.remove('d-none');
+    } else {
+      currentEl.classList.add('d-none');
+      currentEl.textContent = '';
+    }
+  }
+
+  function setActiveTag(tag) {
+    const normalized = (tag || '').toLowerCase().trim();
+    tagButtons.forEach(btn => {
+      const match = (btn.dataset.tag || '').toLowerCase() === normalized;
+      btn.classList.toggle('active', match);
+      btn.setAttribute('aria-pressed', match ? 'true' : 'false');
+    });
+  }
+
+  function applyFilter() {
+    const q = (filterInput && filterInput.value || '').toLowerCase().trim();
+    let visible = 0;
+    tagButtons.forEach(btn => {
+      const label = (btn.dataset.label || '').toLowerCase();
+      const cat = (btn.dataset.category || '').toLowerCase();
+      const match = !q || label.includes(q) || cat.includes(q);
+      btn.classList.toggle('d-none', !match);
+      if (match) visible++;
+    });
+    categorySections.forEach(section => {
+      const hasVisible = !!section.querySelector('.tag-option:not(.d-none)');
+      section.classList.toggle('d-none', !hasVisible);
+    });
+    if (emptyEl) emptyEl.classList.toggle('d-none', visible > 0);
+  }
+
+  async function submitTag(tag) {
+    if (!activeFolderId || !tag) return;
+    setStatus('Saving tag...');
+    try {
+      const resp = await fetch('/folders/' + activeFolderId + '/tag/set', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
+        body: JSON.stringify({ tag })
+      });
+      const data = await resp.json();
+      if (data && data.ok) {
+        setStatus('Tag saved.', 'success');
+        if (activeButton) {
+          activeButton.dataset.currentTag = tag;
+          activeButton.dataset.currentLabel = tag;
+          activeButton.textContent = tag;
+        }
+        setCurrentLabel(activeButton?.dataset.currentLabel || tag);
+        setActiveTag(tag);
+        if (clearBtn) clearBtn.classList.remove('d-none');
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        setTimeout(() => bsModal.hide(), 300);
+      } else {
+        setStatus((data && data.error) || 'Unable to save tag.', 'error');
+      }
+    } catch (err) {
+      setStatus('Unable to save tag.', 'error');
+    }
+  }
+
+  tagButtons.forEach(btn => {
+    btn.addEventListener('click', () => submitTag(btn.dataset.tag));
+  });
+
+  ['input','keyup','change'].forEach(evt => {
+    if (filterInput) filterInput.addEventListener(evt, applyFilter);
+  });
+
+  triggerButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeFolderId = btn.dataset.folderId || null;
+      activeButton = btn;
+      const deckName = btn.dataset.deckName || 'this deck';
+      const currentTag = (btn.dataset.currentTag || '').trim();
+      const currentLabel = (btn.dataset.currentLabel || currentTag).trim();
+      if (nameEl) nameEl.textContent = deckName;
+      setCurrentLabel(currentLabel);
+      setActiveTag(currentTag);
+      if (clearBtn) {
+        clearBtn.classList.toggle('d-none', !currentTag);
+      }
+      if (filterInput) {
+        filterInput.value = '';
+        applyFilter();
+      }
+      setStatus('');
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+      if (filterInput) {
+        requestAnimationFrame(() => {
+          filterInput.focus();
+          filterInput.select();
+        });
+      }
+    });
+  });
+
+  modalEl.addEventListener('shown.bs.modal', () => {
+    if (filterInput) {
+      filterInput.focus();
+      filterInput.select();
+    }
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async () => {
+      if (!activeFolderId) return;
+      setStatus('Clearing tag...');
+      try {
+        const resp = await fetch('/folders/' + activeFolderId + '/tag/clear', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+          },
+          body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data && data.ok) {
+          setStatus('Tag cleared.', 'success');
+          if (activeButton) {
+            activeButton.dataset.currentTag = '';
+            activeButton.textContent = 'Set deck tag';
+          }
+          setCurrentLabel('');
+          setActiveTag('');
+          clearBtn.classList.add('d-none');
+          const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+          setTimeout(() => bsModal.hide(), 250);
+        } else {
+          setStatus((data && data.error) || 'Unable to clear tag.', 'error');
+        }
+      } catch (err) {
+        setStatus('Unable to clear tag.', 'error');
+      }
+    });
+  }
+})();
+</script>
+
+<script>
+(function(){
+  const form = document.getElementById('proxyDeckForm');
+  if (!form) return;
+  const fetchBtn = document.getElementById('proxyDeckFetchBtn');
+  const urlInput = document.getElementById('proxyDeckUrl');
+  const nameInput = document.getElementById('proxyDeckName');
+  const ownerInput = document.getElementById('proxyDeckOwner');
+  const commanderInput = document.getElementById('proxyDeckCommander');
+  const listInput = document.getElementById('proxyDeckList');
+  const alertBox = document.getElementById('proxyDeckFetchAlert');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  function showAlert(message, variant){
+    if (!alertBox) return;
+    alertBox.className = `mt-3 alert alert-${variant}`;
+    alertBox.textContent = message;
+  }
+
+  function resetAlert(){
+    if (!alertBox) return;
+    alertBox.className = 'mt-3 d-none';
+    alertBox.textContent = '';
+  }
+
+  async function handleFetch(){
+    if (!fetchBtn || !urlInput) return;
+    const deckUrl = (urlInput.value || '').trim();
+    if (!deckUrl){
+      showAlert('Please paste an MTGGoldfish deck URL first.', 'warning');
+      return;
+    }
+
+    resetAlert();
+    const originalLabel = fetchBtn.textContent;
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = 'Fetching…';
+
+    try {
+      const response = await fetch('/api/decks/proxy/fetch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
+        body: JSON.stringify({deck_url: deckUrl}),
+      });
+      const data = await response.json();
+
+      if (!response.ok || data.ok === false){
+        const msg = (data && (data.error || (data.warnings && data.warnings[0]))) || 'Unable to fetch deck data.';
+        showAlert(msg, 'danger');
+        return;
+      }
+
+      if (data.deck_name && nameInput){
+        nameInput.value = data.deck_name;
+      }
+      if (ownerInput){
+        ownerInput.value = data.owner || '';
+      }
+      if (commanderInput){
+        commanderInput.value = data.commander || '';
+      }
+      if (listInput && typeof data.decklist === 'string'){
+        listInput.value = data.decklist.trim();
+      }
+
+      if (Array.isArray(data.warnings) && data.warnings.length){
+        showAlert(data.warnings.join(' '), 'warning');
+      } else {
+        showAlert('Deck details fetched successfully. Review the fields before saving.', 'success');
+      }
+    } catch (error){
+      const msg = (error && error.message) ? error.message : 'Unexpected error occurred while fetching deck data.';
+      showAlert(msg, 'danger');
+    } finally {
+      fetchBtn.disabled = false;
+      fetchBtn.textContent = originalLabel;
+    }
+  }
+
+  if (fetchBtn){
+    fetchBtn.addEventListener('click', handleFetch);
+  }
+
+  async function handleSubmit(event) {
+    if (!window.fetch || !window.FormData) {
+      return;
+    }
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    if (form.dataset.submitting === '1') {
+      return;
+    }
+
+    resetAlert();
+    form.dataset.submitting = '1';
+
+    const originalLabel = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Creating deck...';
+    }
+
+    try {
+      const formData = new FormData(form);
+      const response = await fetch(form.action, {
+        method: form.method || 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
+      });
+
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const data = isJson ? await response.json().catch(() => null) : null;
+
+      if (response.ok && data && data.ok) {
+        if (Array.isArray(data.info) && data.info.length) {
+          showAlert(data.info.join(' '), 'info');
+        } else if (Array.isArray(data.warnings) && data.warnings.length) {
+          showAlert(data.warnings.join(' '), 'warning');
+        } else {
+          showAlert('Proxy deck created successfully.', 'success');
+        }
+        if (data.redirect) {
+          window.location.assign(data.redirect);
+        }
+        return;
+      }
+
+      if (data && data.error) {
+        if (Array.isArray(data.warnings) && data.warnings.length) {
+          showAlert(data.warnings.join(' '), 'warning');
+        }
+        throw new Error(data.error);
+      }
+
+      throw new Error('Unable to create proxy deck. Please review the decklist and try again.');
+    } catch (error) {
+      const message = (error && error.message) ? error.message : 'Unable to create proxy deck. Please refresh and try again.';
+      showAlert(message, 'danger');
+    } finally {
+      form.dataset.submitting = '';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalLabel;
+      }
+    }
+  }
+
+  if (window.fetch && window.FormData) {
+    form.addEventListener('submit', handleSubmit);
+  }
+})();
+</script>
+
+<script>
+(function(){
+  const modal = document.getElementById('bulkProxyModal');
+  if (!modal || !window.fetch || !window.FormData) return;
+  const form = modal.querySelector('form');
+  if (!form) return;
+
+  const alertBox = document.getElementById('bulkProxyAlert');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  function showAlert(message, variant) {
+    if (!alertBox) return;
+    alertBox.className = `mt-3 alert alert-${variant}`;
+    alertBox.textContent = message;
+  }
+
+  function resetAlert() {
+    if (!alertBox) return;
+    alertBox.className = 'mt-3 d-none';
+    alertBox.textContent = '';
+  }
+
+  form.addEventListener('submit', async (event) => {
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    if (form.dataset.submitting === '1') return;
+
+    resetAlert();
+    form.dataset.submitting = '1';
+
+    const originalLabel = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Importing decks...';
+    }
+
+    try {
+      const response = await fetch(form.action, {
+        method: form.method || 'POST',
+        body: new FormData(form),
+        credentials: 'same-origin',
+        headers: {
+          ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+        },
+      });
+
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return;
+      }
+
+      throw new Error('Unable to import proxy decks. Please check the URLs and try again.');
+    } catch (error) {
+      const message = (error && error.message) ? error.message : 'Unable to import proxy decks. Please refresh and try again.';
+      showAlert(message, 'danger');
+    } finally {
+      form.dataset.submitting = '';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalLabel;
+      }
+    }
+  });
+})();
+</script>
+
+<script>
+(function(){
+  const modalEl = document.getElementById('commanderQuickModal');
+  const triggerSelector = '[data-commander-trigger="true"]';
+  if (!modalEl || !window.fetch) {
+    return;
+  }
+
+  let modal;
+
+  function init() {
+    if (!window.bootstrap || !window.bootstrap.Modal) {
+      return;
+    }
+
+    modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+  const deckNameEl = document.getElementById('commanderQuickDeckName');
+  const currentEl = document.getElementById('commanderQuickCurrent');
+  const listEl = document.getElementById('commanderQuickList');
+  const alertEl = document.getElementById('commanderQuickAlert');
+  const filterInput = document.getElementById('commanderQuickFilter');
+  const clearBtn = document.getElementById('commanderQuickClearBtn');
+
+  let activeDeck = null;
+  let candidates = [];
+  let pendingController = null;
+  const MAX_COMMANDERS = 2;
+
+  function commanderCount(text) {
+    if (!text) return 0;
+    return text.split("//").map(part => part.trim()).filter(Boolean).length;
+  }
+
+  function canAppendPartner() {
+    if (!activeDeck) return true;
+    return commanderCount(activeDeck.commander) < MAX_COMMANDERS;
+  }
+
+  function setStatus(message, variant = 'info') {
+    if (!alertEl) return;
+    if (!message) {
+      alertEl.className = 'alert alert-info small d-none mt-3';
+      alertEl.textContent = '';
+      return;
+    }
+    alertEl.className = `alert alert-${variant} small mt-3`;
+    alertEl.textContent = message;
+  }
+
+  function setListMessage(text) {
+    if (!listEl) return;
+    listEl.innerHTML = `<div class="text-muted text-center py-4 w-100">${text}</div>`;
+  }
+
+  function buildCard(candidate) {
+    const card = document.createElement('div');
+    card.className = 'legend-card commander-picker-card';
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'legend-thumb-wrap';
+    if (candidate.image) {
+      const img = document.createElement('img');
+      img.className = 'legend-thumb';
+      img.loading = 'lazy';
+      img.alt = candidate.name || 'Commander candidate';
+      img.src = candidate.image;
+      thumbWrap.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'bg-secondary-subtle rounded w-100 h-100';
+      placeholder.style.opacity = '.35';
+      thumbWrap.appendChild(placeholder);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'legend-body';
+    const title = document.createElement('div');
+    title.className = 'legend-title text-truncate';
+    title.textContent = candidate.name || 'Unknown';
+    const meta = document.createElement('div');
+    meta.className = 'legend-sub text-truncate';
+    const parts = [];
+    if (candidate.set_code) parts.push((candidate.set_code || '').toUpperCase());
+    if (candidate.collector_number) parts.push(`#${candidate.collector_number}`);
+    if (candidate.is_foil) parts.push('Foil');
+    meta.textContent = parts.join(' ') || 'Legendary permanent';
+
+    const actions = document.createElement('div');
+    actions.className = 'd-flex flex-wrap gap-2 mt-2';
+
+    const setBtn = document.createElement('button');
+    setBtn.type = 'button';
+    setBtn.className = 'btn btn-sm btn-outline-primary';
+    setBtn.textContent = 'Set Commander';
+    setBtn.addEventListener('click', () => handleSave(candidate, 'replace'));
+
+    const partnerBtn = document.createElement('button');
+    partnerBtn.type = 'button';
+    partnerBtn.className = 'btn btn-sm btn-outline-secondary';
+    partnerBtn.textContent = 'Add Partner';
+    partnerBtn.disabled = !canAppendPartner();
+    if (partnerBtn.disabled) {
+      partnerBtn.title = `Already at the ${MAX_COMMANDERS} commander limit.`;
+    }
+    partnerBtn.addEventListener('click', () => handleSave(candidate, 'append'));
+
+    actions.append(setBtn, partnerBtn);
+
+    body.append(title, meta, actions);
+    card.append(thumbWrap, body);
+    return card;
+  }
+
+  function renderCandidates() {
+    if (!listEl) return;
+    const query = (filterInput.value || '').trim().toLowerCase();
+    listEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    let visible = 0;
+    candidates.forEach(candidate => {
+      const name = (candidate.name || '').toLowerCase();
+      if (query && !name.includes(query)) {
+        return;
+      }
+      visible += 1;
+      frag.appendChild(buildCard(candidate));
+    });
+    if (!visible) {
+      setListMessage(query ? 'No commanders match your search yet.' : 'No commander candidates found in this deck.');
+      return;
+    }
+    listEl.appendChild(frag);
+  }
+
+  async function fetchCandidates(deck) {
+    if (!deck || !deck.candidateUrl) return;
+    if (pendingController) {
+      pendingController.abort();
+    }
+    pendingController = new AbortController();
+    candidates = [];
+    filterInput.value = '';
+    setStatus('');
+    setListMessage('Loading commander options…');
+
+    try {
+      const response = await fetch(deck.candidateUrl, {
+        headers: {'Accept': 'application/json'},
+        signal: pendingController.signal,
+        credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) {
+        throw new Error((data && data.error) || 'Unable to load commander options.');
+      }
+      candidates = Array.isArray(data.candidates) ? data.candidates : [];
+      if (!candidates.length) {
+        setListMessage('No obvious legendary permanents in this deck yet.');
+        return;
+      }
+      renderCandidates();
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      setStatus(error.message || 'Unable to load commander options.', 'danger');
+      setListMessage('Unable to load commander options right now.');
+    }
+  }
+
+  async function postJson(url, payload) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) {
+      const message = (data && (data.error || data.message)) || 'Unable to complete request.';
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  async function handleSave(candidate, mode = 'replace') {
+    if (!activeDeck || !activeDeck.setUrl) return;
+    const actionLabel = mode === 'append' ? 'Adding partner…' : 'Saving commander…';
+    setStatus(actionLabel, 'info');
+    try {
+      await postJson(activeDeck.setUrl, {
+        oracle_id: candidate.oracle_id,
+        name: candidate.name,
+        mode,
+      });
+      if (window.DV && window.DV.scroll && typeof window.DV.scroll.reload === 'function') {
+        window.DV.scroll.reload();
+      } else {
+        window.location.reload();
+      }
+    } catch (error) {
+      setStatus(error.message || 'Unable to update commander right now.', 'danger');
+    }
+  }
+
+  async function handleClear() {
+    if (!activeDeck || !activeDeck.clearUrl) return;
+    setStatus('Clearing commander…', 'info');
+    clearBtn.disabled = true;
+    try {
+      await postJson(activeDeck.clearUrl, {});
+      if (window.DV && window.DV.scroll && typeof window.DV.scroll.reload === 'function') {
+        window.DV.scroll.reload();
+      } else {
+        window.location.reload();
+      }
+    } catch (error) {
+      clearBtn.disabled = false;
+      setStatus(error.message || 'Unable to clear commander right now.', 'danger');
+    }
+  }
+
+  function openModalFor(button) {
+    const deckId = parseInt(button.dataset.folderId, 10);
+    if (!deckId) return;
+    activeDeck = {
+      id: deckId,
+      name: button.dataset.deckName || 'Deck',
+      commander: button.dataset.commanderName || '',
+      setUrl: button.dataset.setUrl,
+      clearUrl: button.dataset.clearUrl,
+      candidateUrl: button.dataset.candidateUrl,
+    };
+    deckNameEl.textContent = activeDeck.name;
+    const currentCount = commanderCount(activeDeck.commander);
+    const commanderLabel = activeDeck.commander ? activeDeck.commander : 'Not set';
+    currentEl.textContent = `${commanderLabel} (${currentCount}/${MAX_COMMANDERS})`;
+    if (clearBtn) {
+      clearBtn.classList.toggle('d-none', !activeDeck.commander);
+      clearBtn.disabled = false;
+    }
+    filterInput.value = '';
+    setStatus('');
+    setListMessage('Loading commander options…');
+    modal.show();
+    fetchCandidates(activeDeck);
+  }
+
+    document.addEventListener('click', (event) => {
+      const trigger = event.target.closest(triggerSelector);
+      if (!trigger) return;
+      event.preventDefault();
+      openModalFor(trigger);
+    });
+
+    if (filterInput) {
+      filterInput.addEventListener('input', () => renderCandidates());
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', handleClear);
+    }
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      if (pendingController) {
+        pendingController.abort();
+        pendingController = null;
+      }
+      activeDeck = null;
+      candidates = [];
+      filterInput.value = '';
+      setStatus('');
+      setListMessage('Select a deck to load commander options.');
+    });
+  }
+
+  if (window.bootstrap && window.bootstrap.Modal) {
+    init();
+  } else {
+    window.addEventListener('load', init);
+  }
+})();
+</script>
+
+<script>
+(function(){
+  const ownerButtons = Array.from(document.querySelectorAll('.deck-owner-pill[data-owner]'));
+  if (!ownerButtons.length) return;
+  const resetBtn = document.getElementById('ownerFilterResetBtn');
+  const tableBody = document.querySelector('.cards-table tbody');
+  if (!tableBody) return;
+  const tableRows = Array.from(tableBody.querySelectorAll('tr.deck-row'));
+  const columnCount = document.querySelectorAll('.cards-table thead th').length || 6;
+
+  let emptyRow = document.getElementById('ownerFilterEmptyRow');
+  if (!emptyRow) {
+    emptyRow = document.createElement('tr');
+    emptyRow.id = 'ownerFilterEmptyRow';
+    emptyRow.className = 'd-none';
+    const td = document.createElement('td');
+    td.colSpan = columnCount;
+    td.className = 'text-center text-muted py-4';
+    td.textContent = 'No decks for this owner.';
+    emptyRow.appendChild(td);
+    tableBody.appendChild(emptyRow);
+  }
+
+  function normalize(value) {
+    return (value || '').trim().toLowerCase();
+  }
+
+  const EMPTY_KEY = "__none__";
+  function ownerKeyFrom(value) {
+    const norm = normalize(value);
+    return norm.length ? norm : EMPTY_KEY;
+  }
+
+  ownerButtons.forEach(btn => {
+    const key = ownerKeyFrom(btn.dataset.ownerKey || btn.dataset.owner || '');
+    btn.dataset.ownerKey = key;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => {
+      setFilter(activeOwner === key ? null : key);
+    });
+    btn.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        btn.click();
+      }
+    });
+  });
+
+  tableRows.forEach(row => {
+    row.dataset.ownerKey = ownerKeyFrom(row.dataset.ownerKey || row.dataset.owner || '');
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => setFilter(null));
+  }
+
+  let activeOwner = null;
+
+  function setFilter(ownerKey) {
+    activeOwner = ownerKey === null ? null : ownerKey;
+    updateUI();
+  }
+
+  function updateUI() {
+    ownerButtons.forEach(btn => {
+      const match = !!activeOwner && (btn.dataset.ownerKey || EMPTY_KEY) === activeOwner;
+      btn.classList.toggle('active', match);
+      btn.setAttribute('aria-pressed', match ? 'true' : 'false');
+    });
+
+    if (resetBtn) {
+      resetBtn.classList.toggle('d-none', !activeOwner);
+    }
+
+    let anyVisible = false;
+    tableRows.forEach(row => {
+      const rowKey = row.dataset.ownerKey || ownerKeyFrom(row.dataset.owner || '');
+      const match = !activeOwner || rowKey === activeOwner;
+      row.classList.toggle('d-none', !match);
+      if (match) anyVisible = true;
+    });
+
+    if (emptyRow) {
+      const cell = emptyRow.firstElementChild;
+      if (cell) cell.colSpan = columnCount;
+      emptyRow.classList.toggle('d-none', anyVisible);
+    }
+  }
+
+  updateUI();
+})();
+</script>
+
+{% endblock %}

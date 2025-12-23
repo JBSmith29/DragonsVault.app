@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Create Deck from Collection{% endblock %}
+{% block content %}
+<div class="page-section">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Create Deck from Collection</h1>
+      <p class="text-muted mb-0">Move cards out of your collection folders into a new deck using set+collector number. We only move what you own; any shortfalls or conflicts are listed below.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.decks_overview') }}">Back to Decks</a>
+  </div>
+
+  {% if errors %}
+    <div class="alert alert-danger" role="alert">
+      <ul class="mb-0">
+        {% for err in errors %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+  {% if warnings %}
+    <div class="alert alert-warning" role="alert">
+      <ul class="mb-0">
+        {% for warn in warnings %}
+          <li>{{ warn }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+  {% if infos %}
+    <div class="alert alert-info" role="alert">
+      <ul class="mb-0">
+        {% for msg in infos %}
+          <li>{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="deckName">Deck Name</label>
+        <input type="text" class="form-control" id="deckName" name="deck_name" value="{{ form.deck_name or '' }}" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="deckCommander">Commander (optional)</label>
+        <input type="text" class="form-control" id="deckCommander" name="commander" value="{{ form.commander or '' }}" placeholder="Exact name for best match">
+        <div class="form-text">Exact name uses commander picker logic.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="deckTag">Deck Tag (optional)</label>
+        <div class="dropdown w-100" data-dv-select="deck-tag">
+          <input type="hidden" id="deckTag" name="deck_tag" value="{{ form.deck_tag or '' }}" data-dv-select-input>
+          <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center" type="button" id="deckTagToggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-dv-select-label>{{ form.deck_tag or '(no tag)' }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100 shadow" aria-labelledby="deckTagToggle">
+            <li class="px-2 pt-2">
+              <input type="text" class="form-control form-control-sm" id="deckTagSearch" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+            </li>
+            <li>
+              <button class="dropdown-item {% if not form.deck_tag %}active{% endif %}" type="button" data-dv-select-option data-value="" data-label="(no tag)">(no tag)</button>
+            </li>
+            {% for category, tags in deck_tag_groups.items() %}
+              <li><h6 class="dropdown-header mt-2">{{ category }}</h6></li>
+              {% for tag in tags %}
+                <li>
+                  <button class="dropdown-item {% if form.deck_tag == tag %}active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">
+                    {{ tag }}
+                  </button>
+                </li>
+              {% endfor %}
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="deckLines">Cards (one per line)</label>
+      <textarea class="form-control" id="deckLines" name="deck_lines" rows="10" placeholder="1 Annie Joins Up (OTJ) 191&#10;2 Sol Ring" required>{{ form.deck_lines or '' }}</textarea>
+      <div class="form-text">Format: <code>&lt;qty&gt; &lt;name&gt; [(set code) collector number]</code>. Set/code are optional; if omitted, we’ll prompt you to pick the printing from your collection. We only move from collection folders. If you own fewer copies, we move what’s available and warn you.</div>
+    </div>
+
+    {% if conflicts %}
+      <div class="card border-warning mb-3">
+        <div class="card-header bg-warning-subtle text-warning-emphasis fw-semibold">Resolve printing conflicts</div>
+        <div class="card-body">
+          <p class="small text-muted mb-3">Set/collector was omitted or multiple printings were found. Pick which one to move.</p>
+          {% for conflict in conflicts %}
+            <div class="mb-3">
+              <div class="fw-semibold mb-1">{{ conflict.display }}</div>
+              <div class="d-flex flex-column gap-2">
+                {% for option in conflict.options %}
+                  <label class="form-check">
+                    <input class="form-check-input" type="radio" name="resolve_{{ conflict.index }}" value="{{ option.id }}" {% if option.id|string == conflict.selected %}checked{% endif %}>
+                    <span class="form-check-label">
+                      {{ option.name }} [{{ option.set_code|upper }} {{ option.collector_number }}] &mdash;
+                      Qty: {{ option.quantity }}; Lang: {{ option.lang|upper }}; Foil: {{ 'Yes' if option.is_foil else 'No' }}
+                      {% if option.folder %} ({{ option.folder }}){% endif %}
+                    </span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if summary %}
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Preview</div>
+        <div class="card-body">
+          <ul class="mb-0">
+            <li>Requested lines: {{ summary.requested }}</li>
+            <li>Resolved lines: {{ summary.resolved }}</li>
+            <li>Total cards to move: {{ summary.total_move }}</li>
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+
+    <input type="hidden" name="stage" value="{{ stage }}">
+    <button type="submit" class="btn btn-primary">Create Deck</button>
+  </form>
+</div>
+
+<script>
+(function(){
+  const tagSearch = document.getElementById('deckTagSearch');
+  const toggle = document.getElementById('deckTagToggle');
+  const menu = toggle ? toggle.nextElementSibling : null;
+  if (tagSearch && toggle && menu) {
+    toggle.addEventListener('click', () => {
+      setTimeout(() => tagSearch.focus(), 50);
+    });
+    tagSearch.addEventListener('input', () => {
+      const q = tagSearch.value.toLowerCase().trim();
+      menu.querySelectorAll('[data-dv-select-option]').forEach(btn => {
+        const label = (btn.getAttribute('data-label') || btn.textContent || '').toLowerCase();
+        btn.style.display = (!q || label.includes(q)) ? '' : 'none';
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -12,6 +12,10 @@ venv/
 ENV/
 env/
 
+# Node / UI
+node_modules/
+frontend/dist/
+
 # OS junk
 .DS_Store
 Thumbs.db
@@ -21,6 +25,7 @@ Thumbs.db
 .idea/
 
 # Flask / project-local data (your app uses instance/ for DB, uploads, jinja cache)
+backend/instance/
 instance/
 *.db
 *.sqlite

@@ -26,16 +26,16 @@ def test_import_confirm_runs_inline(client, create_user, app):
         follow_redirects=True,
     )
     csv_bytes = io.BytesIO(b"Card Name,Set,Collector Number,Quantity\nSol Ring,2XM,1,1")
-        response = client.post(
-            "/import",
-            data={
-                "action": "confirm",
-                "quantity_mode": "new_only",
-                "file": (csv_bytes, "inline.csv"),
-            },
-            content_type="multipart/form-data",
-            follow_redirects=True,
-        )
+    response = client.post(
+        "/import",
+        data={
+            "action": "confirm",
+            "quantity_mode": "new_only",
+            "file": (csv_bytes, "inline.csv"),
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
     assert response.status_code == 200
     assert b"Import applied immediately" in response.data
     with app.app_context():

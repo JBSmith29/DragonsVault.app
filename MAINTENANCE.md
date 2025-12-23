@@ -9,7 +9,6 @@ Use these commands from the project root (where `docker-compose.yml` lives).
   - `docker inspect dragonsvaultapp-web-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
   - `docker inspect dragonsvaultapp-worker-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
   - `docker inspect dragonsvaultapp-nginx-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - `docker inspect dragonsvaultapp-pgbackup-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
   - `docker inspect dragonsvaultapp-pgmaintenance-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
   - `docker inspect dragonsvaultapp-pgbouncer-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
   - `docker inspect dragonsvaultapp-redis-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`
@@ -20,9 +19,18 @@ Use these commands from the project root (where `docker-compose.yml` lives).
 - `docker compose exec worker python - <<'PY'`  
   `import redis; print(redis.Redis.from_url('redis://redis:6379/0').ping())`  
   `PY` — confirm Redis connectivity from the worker.
+- Microservice pings (through nginx):  
+  - `curl http://localhost/api/user/v1/ping`  
+  - `curl http://localhost/api/cards/v1/ping`  
+  - `curl http://localhost/api/folders/v1/ping`
+  - `curl http://localhost/api/prices/v1/ping`
 
 ## Logs (recent)
 - `docker compose logs web --tail=200`
+- `docker compose logs user-manager --tail=200`
+- `docker compose logs card-data --tail=200`
+- `docker compose logs folder-service --tail=200`
+- `docker compose logs price-service --tail=200`
 - `docker compose logs worker --tail=200`
 - `docker compose logs pgbouncer --tail=200`
 - `docker compose logs nginx --tail=200`
@@ -40,6 +48,8 @@ Run inside the web container:
 - `docker compose exec web flask fetch-scryfall-bulk --progress` — download Scryfall bulk.
 - `docker compose exec web flask refresh-scryfall` — load bulk into cache/index.
 - `docker compose exec web flask sync-spellbook-combos` — download Commander Spellbook combos (use `--progress/--no-progress`; bump `--concurrency` to speed up; optionally `--skip-existing` to avoid reprocessing already written combos).
+- `docker compose exec web flask refresh-oracle-tags` — recompute oracle deck tags and evergreen keywords from the Scryfall cache.
+- `docker compose exec web flask refresh-oracle-tags-full` — recompute oracle roles, keywords, typal tags, deck tags, and evergreen keywords.
 - `docker compose exec web flask fts-ensure` — ensure FTS table and triggers exist.
 - `docker compose exec web flask fts-reindex` — rebuild FTS index.
 - `docker compose exec web flask analyze` — run `ANALYZE` on the DB.
@@ -58,6 +68,11 @@ Inline helpers (copy/paste as shown):
   `exit()`  
   `PY`
 
+Card Data service (oracle-level DB):
+- Trigger sync: `curl -X POST http://localhost/api/cards/v1/scryfall/sync`
+- Force re-sync: `curl -X POST http://localhost/api/cards/v1/scryfall/sync?force=1`
+- Status: `curl http://localhost/api/cards/v1/scryfall/status`
+
 ## Job Queue / Background Tasks
 - `docker compose exec worker rq info` — inspect RQ queues.
 - `docker compose logs worker --tail=200` — check for job failures.
@@ -66,9 +81,8 @@ Inline helpers (copy/paste as shown):
 ## Database / PgBouncer
 - `docker compose exec postgres pg_isready -U dvapp -d dragonsvault` — database readiness.
 - `docker compose exec postgres psql -U dvapp -d dragonsvault -c "select now();"` — quick query check.
+- Create service schemas (once): `docker compose exec -T postgres psql -U dvapp -d dragonsvault < backend/scripts/init_service_schemas.sql`
 - `docker compose logs pgbouncer --tail=200` — connection pool issues.
-- `docker compose exec pgbackup ls -l /backups` — confirm backup files exist.
-- Restore a plain dump (example): `docker compose exec -T postgres psql -U dvapp -d dragonsvault < /backups/dragonsvault-YYYY-MM-DD.sql`
 
 ## Nginx / Networking
 - `docker compose logs nginx --tail=200` — TLS/redirect/gzip/static issues.

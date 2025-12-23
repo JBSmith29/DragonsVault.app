@@ -6,17 +6,21 @@ from models import Card, Folder, db
 @pytest.fixture
 def _clean_db(app):
     with app.app_context():
+        db.session.remove()
         db.session.query(Card).delete()
         db.session.query(Folder).delete()
         db.session.commit()
+        db.session.remove()
     yield
     with app.app_context():
+        db.session.remove()
         db.session.query(Card).delete()
         db.session.query(Folder).delete()
         db.session.commit()
+        db.session.remove()
 
 
-def test_deck_list_uses_commander_placeholder(client, app, monkeypatch, _clean_db):
+def test_deck_list_uses_commander_placeholder(client, app, monkeypatch, _clean_db, create_user):
     from routes import cards as cards_route
 
     placeholder_path = "/static/img/card-placeholder.svg"
@@ -39,11 +43,18 @@ def test_deck_list_uses_commander_placeholder(client, app, monkeypatch, _clean_d
             collector_number="278",
             folder_id=folder.id,
             quantity=1,
-            is_proxy=True,
             lang="en",
         )
         db.session.add(card)
         db.session.commit()
+        db.session.remove()
+
+    user, password = create_user(email="decks@example.com")
+    client.post(
+        "/login",
+        data={"identifier": user.email, "password": password},
+        follow_redirects=True,
+    )
 
     monkeypatch.setattr(cards_route, "evaluate_commander_bracket", lambda *args, **kwargs: {})
     monkeypatch.setattr(cards_route, "prints_for_oracle", lambda *args, **kwargs: ())
@@ -55,7 +66,7 @@ def test_deck_list_uses_commander_placeholder(client, app, monkeypatch, _clean_d
     assert placeholder_path in body
 
 
-def test_cards_type_filter_uses_cache_fallback(app, monkeypatch):
+def test_cards_type_filter_uses_cache_fallback(app, monkeypatch, db_session):
     from routes import cards as cards_route
 
     with app.app_context():

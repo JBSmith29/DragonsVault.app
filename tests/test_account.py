@@ -1,3 +1,4 @@
+from extensions import db
 from models import User
 
 
@@ -113,7 +114,7 @@ def test_user_can_update_display_name(client, create_user):
     assert b"Display name updated." in resp.data
 
     with client.application.app_context():
-        refreshed = User.query.get(user.id)
+        refreshed = db.session.get(User, user.id)
         assert refreshed.display_name == "Commander Guru"
 
 
@@ -134,5 +135,5 @@ def test_display_name_rejects_overly_long_value(client, create_user):
     assert b"Display name must be" in resp.data
 
     with client.application.app_context():
-        refreshed = User.query.get(user.id)
+        refreshed = db.session.get(User, user.id)
         assert refreshed.display_name is None
