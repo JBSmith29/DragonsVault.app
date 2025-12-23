@@ -162,36 +162,104 @@ def _get_or_create_subrole(parent: Role, sub_key: str, cache: Dict[Tuple[int, st
     return subrole
 
 
-def recompute_all_roles() -> None:
+def recompute_all_roles(*, merge_existing: bool = True) -> None:
     """
     Rebuild role and subrole links for every card using the role engine.
+    If merge_existing is True, union derived roles with existing ones.
     """
     role_cache: Dict[str, Role] = {}
     subrole_cache: Dict[Tuple[int, str], SubRole] = {}
+    cache_ready = sc.ensure_cache_loaded()
 
     cards: Iterable[Card] = Card.query.all()
     for card in cards:
-        roles = get_roles_for_card(card)
-        subroles = get_subroles_for_card(card)
-        primary = get_primary_role(roles)
+        print_data = None
+        if cache_ready:
+            try:
+                if card.oracle_id:
+                    prints = sc.prints_for_oracle(card.oracle_id) or []
+                    print_data = _select_best_print(prints) or (prints[0] if prints else None)
+                if not print_data:
+                    print_data = sc.find_by_set_cn(card.set_code, card.collector_number, card.name)
+            except Exception:
+                print_data = None
+
+        if print_data:
+            mock = {
+                "name": print_data.get("name") or card.name,
+                "oracle_text": _oracle_text_from_print(print_data),
+                "type_line": _type_line_from_print(print_data) or (card.type_line or ""),
+                "card_faces": print_data.get("card_faces") or [],
+                "layout": print_data.get("layout") or "",
+                "produced_mana": print_data.get("produced_mana") or [],
+            }
+        else:
+            mock = {
+                "name": card.name,
+                "oracle_text": "",
+                "type_line": card.type_line or "",
+                "card_faces": [],
+                "layout": "",
+                "produced_mana": [],
+            }
+
+        derived_roles_list = get_roles_for_card(mock)
+        derived_subroles_list = get_subroles_for_card(mock)
+        derived_roles = set(derived_roles_list)
+        derived_subroles = set(derived_subroles_list)
+        derived_primary = get_primary_role(derived_roles_list)
+
+        existing_roles: set[str] = set()
+        existing_primary = None
+        existing_subroles: set[str] = set()
+        if merge_existing:
+            existing_role_rows = (
+                db.session.query(Role.key, CardRole.primary)
+                .join(CardRole, CardRole.role_id == Role.id)
+                .filter(CardRole.card_id == card.id)
+                .all()
+            )
+            for role_key, is_primary in existing_role_rows:
+                if role_key:
+                    existing_roles.add(role_key)
+                    if is_primary and not existing_primary:
+                        existing_primary = role_key
+
+            existing_subrole_rows = (
+                db.session.query(Role.key, SubRole.key)
+                .join(SubRole, SubRole.role_id == Role.id)
+                .join(CardSubRole, CardSubRole.subrole_id == SubRole.id)
+                .filter(CardSubRole.card_id == card.id)
+                .all()
+            )
+            for parent_key, sub_key in existing_subrole_rows:
+                if parent_key and sub_key:
+                    existing_subroles.add(f"{parent_key}:{sub_key}".lower())
+
+        roles = set(existing_roles) | derived_roles
+        subroles = set(existing_subroles) | derived_subroles
+        primary = existing_primary or derived_primary
+        if primary:
+            roles.add(primary)
 
         CardRole.query.filter_by(card_id=card.id).delete(synchronize_session=False)
         CardSubRole.query.filter_by(card_id=card.id).delete(synchronize_session=False)
 
         for role_key in roles:
+            if not role_key:
+                continue
             role = _get_or_create_role(role_key, role_cache)
-            db.session.add(CardRole(card_id=card.id, role_id=role.id))
+            db.session.add(
+                CardRole(card_id=card.id, role_id=role.id, primary=bool(primary and role_key == primary))
+            )
 
         for subrole_key in subroles:
+            if not subrole_key:
+                continue
             parent_key, _, child_key = subrole_key.partition(":")
             parent = _get_or_create_role(parent_key or "utility", role_cache)
             subrole = _get_or_create_subrole(parent, child_key or subrole_key, subrole_cache)
             db.session.add(CardSubRole(card_id=card.id, subrole_id=subrole.id))
-
-        if primary:
-            # Ensure primary role exists in the set (helpful for downstream consumers)
-            primary_role = _get_or_create_role(primary, role_cache)
-            db.session.add(CardRole(card_id=card.id, role_id=primary_role.id))
 
     db.session.commit()
 

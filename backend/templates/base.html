@@ -500,31 +500,46 @@
       }
 
       @media (max-width: 991.98px) {
+        :root {
+          --sidebar-w: 88px;
+        }
         .layout-shell {
-          grid-template-columns: 1fr;
+          grid-template-columns: var(--sidebar-w) 1fr;
         }
         #sidebar {
-          position: fixed;
-          inset: var(--app-header-h, 96px) auto 0 0;
+          position: sticky;
           height: calc(100vh - var(--app-header-h, 96px));
           min-height: calc(100vh - var(--app-header-h, 96px));
-          width: min(85vw, 320px);
-          max-width: 320px;
-          transform: translateX(-110%);
-          transition: transform .24s var(--dv-ease-soft), box-shadow .24s var(--dv-ease-soft);
+          width: var(--sidebar-w);
+          max-width: none;
+          transform: none;
         }
-        body.sidebar-open {
-          overflow: hidden;
+        .sidebar-header {
+          justify-content: center;
         }
-        body.sidebar-open #sidebar {
-          transform: translateX(0);
+        .sidebar-title,
+        #sidebar .sidebar-label {
+          display: none;
+        }
+        #sidebar .nav-link {
+          justify-content: center;
+          gap: 0;
+          padding: .6rem .4rem;
+        }
+        #sidebar .nav-link:hover,
+        #sidebar .nav-link:focus-visible {
+          transform: none;
+        }
+        .sidebar-collapse-btn.d-lg-none {
+          display: none;
         }
         #content {
           padding-left: 1rem;
           padding-right: 1rem;
         }
-        .content-toolbar {
-          display: flex;
+        .content-toolbar,
+        .sidebar-backdrop {
+          display: none;
         }
       }
 
@@ -1131,23 +1146,6 @@
       {% endif %}
 
       <div id="content" class="flex-grow-1 position-relative{% if not sidebar_active %} w-100{% else %} has-mobile-toolbar{% endif %}">
-        {% if sidebar_active and not is_mobile %}
-        <header class="content-toolbar d-lg-none">
-          <button
-            id="sidebarMobileToggle"
-            class="sidebar-collapse-btn"
-            type="button"
-            aria-controls="sidebar"
-            aria-expanded="false"
-            aria-label="Open waypoints">
-            <i class="bi bi-list" aria-hidden="true"></i>
-          </button>
-          <a class="brand-link small text-uppercase fw-semibold text-decoration-none text-reset"
-             href="{{ url_for('views.dashboard') }}">
-            DragonsVault
-          </a>
-        </header>
-        {% endif %}
         <!-- Explicit ID + hx-history-elt for better back/forward snapshots -->
         <main
           id="main"
@@ -1175,14 +1173,14 @@
         </main>
         <footer class="app-footer py-3 border-top mt-auto{% if not legal_links_visible %} d-none{% endif %}">
           <div class="container-fluid text-center small d-flex flex-wrap justify-content-center gap-3">
-            <a class="text-decoration-none" href="{{ url_for('views.terms_of_service') }}">Terms of Service</a>
-            <a class="text-decoration-none" href="{{ url_for('views.terms_of_use') }}">Terms of Use</a>
-            <a class="text-decoration-none" href="{{ url_for('views.privacy_policy') }}">Privacy Policy</a>
-            <a class="text-decoration-none" href="{{ url_for('views.accessibility_statement') }}">Accessibility</a>
-            <a class="text-decoration-none" href="{{ url_for('views.legal_disclaimer') }}">Disclaimer</a>
-            <a class="text-decoration-none" href="{{ url_for('views.coppa_notice') }}">COPPA Notice</a>
-            <a class="text-decoration-none" href="{{ url_for('views.about_page') }}">About</a>
-            <a class="text-decoration-none" href="{{ url_for('views.contact_page') }}">Contact</a>
+            <a class="text-decoration-none" href="{{ url_for('views.terms_of_service') }}" data-hx-boost="false">Terms of Service</a>
+            <a class="text-decoration-none" href="{{ url_for('views.terms_of_use') }}" data-hx-boost="false">Terms of Use</a>
+            <a class="text-decoration-none" href="{{ url_for('views.privacy_policy') }}" data-hx-boost="false">Privacy Policy</a>
+            <a class="text-decoration-none" href="{{ url_for('views.accessibility_statement') }}" data-hx-boost="false">Accessibility</a>
+            <a class="text-decoration-none" href="{{ url_for('views.legal_disclaimer') }}" data-hx-boost="false">Disclaimer</a>
+            <a class="text-decoration-none" href="{{ url_for('views.coppa_notice') }}" data-hx-boost="false">COPPA Notice</a>
+            <a class="text-decoration-none" href="{{ url_for('views.about_page') }}" data-hx-boost="false">About</a>
+            <a class="text-decoration-none" href="{{ url_for('views.contact_page') }}" data-hx-boost="false">Contact</a>
           </div>
         </footer>
       </div>

@@ -6,7 +6,8 @@
 
   <!-- ---------- Styles (scoped) ---------- -->
   <style>
-    .artwork-wrap { max-width: 420px; margin: 0 auto 1rem; position: relative; }
+    .artwork-wrap { max-width: 520px; margin: 0 auto 1rem; position: relative; }
+    @media (min-width: 992px) { .artwork-wrap { margin-left: 0; } }
     @media (max-width: 576px) { .artwork-wrap { max-width: 100%; } }
 
     #artworkCarousel .carousel-item img {
@@ -78,81 +79,82 @@
 
   {% set initial_tcg_url = info.tcgplayer_url %}
 
-<!-- ---------- Artwork / Carousel ---------- -->
-  {# Primary image carousel seeded with the owned print, with JS fetching alternates. #}
-  {% set first_img = (images[0] if images and images|length else None) %}
-  {% set first_src = (first_img.large or first_img.normal or first_img.small) if first_img else None %}
-  {% set primary_src = (main_img_url or first_src) %}
-  <div class="artwork-wrap">
-    <!-- overlay flip button (shown only when a back face exists) -->
-    <button id="flipOverlayBtn" type="button" class="flip-overlay" aria-pressed="false" title="Flip (⇆)">⇆</button>
-
-    <div id="artworkCarousel"
-         class="carousel slide mb-2"
-         data-bs-ride="false"
-         data-prints-uri="{{ info.prints_search_uri or '' }}"
-         data-oracle-id="{{ oracle_id or '' }}"
-         data-initial-sid="{{ scryfall_id or '' }}"
-         data-initial-src="{{ primary_src or '' }}">
-      <div class="carousel-inner">
-        {% if primary_src %}
-          <div class="carousel-item active"
-               data-sid="{{ scryfall_id or '' }}"
-               data-set="{{ (info.set or '')|upper }}"
-               data-set-name="{{ info.set_name or '' }}"
-               data-cn="{{ info.collector_number or '' }}"
-               data-lang="{{ (info.lang or '')|upper }}"
-               data-rarity="{{ info.rarity or '' }}"
-               data-prices='{{ (info.prices or {})|tojson }}'
-               data-name="{{ info.name or (card.name if card else name) }}"
-               data-scry-uri="{{ info.scryfall_uri or '' }}"
-               data-tcg-uri="{{ initial_tcg_url or '' }}">
-            <img src="{{ primary_src }}" alt="{{ info.name or (card.name if card else name) }}">
-          </div>
-        {% else %}
-          <div class="carousel-item active">
-            <div class="bg-secondary-subtle rounded" style="width:100%;height:420px;opacity:.25;"></div>
-          </div>
-        {% endif %}
-      </div>
-      <button class="carousel-control-prev" type="button" data-bs-target="#artworkCarousel" data-bs-slide="prev">
-        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-        <span class="visually-hidden">Previous</span>
-      </button>
-      <button class="carousel-control-next" type="button" data-bs-target="#artworkCarousel" data-bs-slide="next">
-        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-        <span class="visually-hidden">Next</span>
-      </button>
-    </div>
-
-    <!-- Buttons under image: Show Alt Artworks + Flip -->
-    <div class="d-flex flex-wrap gap-2 mb-2">
-      <!-- Hidden by default; shown by JS only if 2+ alternates exist -->
-      <button id="altArtToggle"
-              class="btn btn-sm btn-outline-primary d-none"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#altArtCollapse"
-              aria-expanded="false" aria-controls="altArtCollapse">
-        Show Alternative Artworks (<span id="altArtCount">0</span>)
-      </button>
-
-      <!-- Hidden until a back face exists -->
-      <button id="flipFaceBtn" class="btn btn-sm btn-primary d-none" type="button" disabled>
-        ⇆ Flip
-      </button>
-    </div>
-
-    <div class="collapse" id="altArtCollapse">
-      {# Populated client-side with additional arts fetched from Scryfall. #}
-      <div class="thumbs d-flex gap-2 flex-wrap" id="altArtThumbs"></div>
-    </div>
-  </div>
-
-  <!-- ---------- Details / Rulings / Side info ---------- -->
-  <div class="row g-3">
-    {# Left column: oracle text, tokens, and external resource links. #}
+  <!-- ---------- Artwork / Details / Side info ---------- -->
+  <div class="row g-3 align-items-start">
     <div class="col-lg-7">
+      <!-- ---------- Artwork / Carousel ---------- -->
+      {# Primary image carousel seeded with the owned print, with JS fetching alternates. #}
+      {% set first_img = (images[0] if images and images|length else None) %}
+      {% set first_src = (first_img.large or first_img.normal or first_img.small) if first_img else None %}
+      {% set primary_src = (main_img_url or first_src) %}
+      <div class="artwork-wrap">
+        <!-- overlay flip button (shown only when a back face exists) -->
+        <button id="flipOverlayBtn" type="button" class="flip-overlay" aria-pressed="false" title="Flip (⇆)">⇆</button>
+
+        <div id="artworkCarousel"
+             class="carousel slide mb-2"
+             data-bs-ride="false"
+             data-prints-uri="{{ info.prints_search_uri or '' }}"
+             data-oracle-id="{{ oracle_id or '' }}"
+             data-initial-sid="{{ scryfall_id or '' }}"
+             data-initial-src="{{ primary_src or '' }}">
+          <div class="carousel-inner">
+            {% if primary_src %}
+              <div class="carousel-item active"
+                   data-sid="{{ scryfall_id or '' }}"
+                   data-set="{{ (info.set or '')|upper }}"
+                   data-set-name="{{ info.set_name or '' }}"
+                   data-cn="{{ info.collector_number or '' }}"
+                   data-lang="{{ (info.lang or '')|upper }}"
+                   data-rarity="{{ info.rarity or '' }}"
+                   data-prices='{{ (info.prices or {})|tojson }}'
+                   data-name="{{ info.name or (card.name if card else name) }}"
+                   data-scry-uri="{{ info.scryfall_uri or '' }}"
+                   data-tcg-uri="{{ initial_tcg_url or '' }}">
+                <img src="{{ primary_src }}" alt="{{ info.name or (card.name if card else name) }}">
+              </div>
+            {% else %}
+              <div class="carousel-item active">
+                <div class="bg-secondary-subtle rounded" style="width:100%;height:420px;opacity:.25;"></div>
+              </div>
+            {% endif %}
+          </div>
+          <button class="carousel-control-prev" type="button" data-bs-target="#artworkCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Previous</span>
+          </button>
+          <button class="carousel-control-next" type="button" data-bs-target="#artworkCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Next</span>
+          </button>
+        </div>
+
+        <!-- Buttons under image: Show Alt Artworks + Flip -->
+        <div class="d-flex flex-wrap gap-2 mb-2 justify-content-center">
+          <!-- Hidden by default; shown by JS only if 2+ alternates exist -->
+          <button id="altArtToggle"
+                  class="btn btn-sm btn-outline-primary d-none"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#altArtCollapse"
+                  aria-expanded="false" aria-controls="altArtCollapse">
+            Show Alternative Artworks (<span id="altArtCount">0</span>)
+          </button>
+
+          <!-- Hidden until a back face exists -->
+          <button id="flipFaceBtn" class="btn btn-sm btn-primary d-none" type="button" disabled>
+            ⇆ Flip
+          </button>
+        </div>
+
+        <div class="collapse" id="altArtCollapse">
+          {# Populated client-side with additional arts fetched from Scryfall. #}
+          <div class="thumbs d-flex gap-2 flex-wrap" id="altArtThumbs"></div>
+        </div>
+      </div>
+
+      <!-- ---------- Details / Rulings ---------- -->
+      {# Left column: oracle text, tokens, and external resource links. #}
       {% if info.oracle_text_html and info.oracle_text_html != '—' %}
         <div class="mb-3">
           <div class="fw-semibold">Card Text</div>
@@ -188,41 +190,6 @@
           </div>
         </div>
       {% endif %}
-
-      <div class="mb-3">
-        <div class="fw-semibold">Roles</div>
-        <div class="mt-2">
-          <div class="small text-muted">Core Roles</div>
-          {% if primary_role_label or role_labels %}
-            {% if primary_role_label %}
-              {% set primary_role_slug = primary_role_label|lower|replace(' ', '-')|replace('/', '-') %}
-              <span class="badge role-{{ primary_role_slug }}">
-                <img src="{{ url_for('static', filename='img/roles/' ~ primary_role_slug ~ '.svg') }}" class="icon me-1" alt="">
-                Primary: {{ primary_role_label }}
-              </span>
-            {% endif %}
-            {% for role in role_labels %}
-              {% set role_slug = role|lower|replace(' ', '-')|replace('/', '-') %}
-              <span class="badge role-{{ role_slug }}">
-                <img src="{{ url_for('static', filename='img/roles/' ~ role_slug ~ '.svg') }}" class="icon me-1" alt="">
-                {{ role }}
-              </span>
-            {% endfor %}
-          {% else %}
-            <span class="text-muted small">None</span>
-          {% endif %}
-        </div>
-        <div class="mt-2">
-          <div class="small text-muted">Sub-Roles</div>
-          {% if subrole_labels %}
-            {% for sub in subrole_labels %}
-              <span class="badge bg-secondary">{{ sub }}</span>
-            {% endfor %}
-          {% else %}
-            <span class="text-muted small">None</span>
-          {% endif %}
-        </div>
-      </div>
 
       <div class="mb-3">
         <div class="d-flex flex-wrap gap-2">
@@ -266,27 +233,31 @@
           <span class="fw-semibold text-muted">Type</span>
           <span>{{ info.type_line or '—' }}</span>
         </div>
-        <div class="list-group-item d-flex justify-content-between">
-          <span class="fw-semibold text-muted">Core Role</span>
-          <span class="text-end">
+        <div class="list-group-item d-flex justify-content-between align-items-start">
+          <span class="fw-semibold text-muted">Core Tags</span>
+          <span class="d-flex flex-wrap gap-1 justify-content-end text-end">
             {% if primary_role_label %}
               {% set primary_role_slug = primary_role_label|lower|replace(' ', '-')|replace('/', '-') %}
-              <span class="badge role-{{ primary_role_slug }}">{{ primary_role_label }}</span>
-            {% else %}
+              <span class="badge role-{{ primary_role_slug }}">Primary: {{ primary_role_label }}</span>
+            {% endif %}
+            {% for role in role_labels %}
+              {% if role != primary_role_label %}
+                {% set role_slug = role|lower|replace(' ', '-')|replace('/', '-') %}
+                <span class="badge role-{{ role_slug }}">{{ role }}</span>
+              {% endif %}
+            {% endfor %}
+            {% if not primary_role_label and not role_labels %}
               <span class="text-muted">—</span>
             {% endif %}
           </span>
         </div>
-        <div class="list-group-item d-flex justify-content-between">
+        <div class="list-group-item d-flex justify-content-between align-items-start">
           <span class="fw-semibold text-muted">Evergreen Tags</span>
-          <span class="text-end">
+          <span class="d-flex flex-wrap gap-1 justify-content-end text-end">
             {% if evergreen_labels %}
-              {% for tag in evergreen_labels[:4] %}
+              {% for tag in evergreen_labels %}
                 <span class="badge text-bg-secondary">{{ tag|replace('_', ' ')|replace('-', ' ')|title }}</span>
               {% endfor %}
-              {% if evergreen_labels|length > 4 %}
-                <span class="text-muted small">+{{ evergreen_labels|length - 4 }}</span>
-              {% endif %}
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}

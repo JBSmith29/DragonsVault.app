@@ -17,6 +17,7 @@ from extensions import db, limiter
 from models import Card, Folder
 from services.csv_importer import preview_csv, HeaderValidationError
 from services.jobs import enqueue_csv_import
+from services.live_updates import latest_job_events
 from services.audit import record_audit_event
 from services.scryfall_cache import (
     ensure_cache_loaded,
@@ -250,10 +251,11 @@ def import_csv():
             deck_category=Folder.CATEGORY_DECK,
             collection_category=Folder.CATEGORY_COLLECTION,
             build_category=Folder.CATEGORY_BUILD,
+            disable_hx=True,
             **_export_context(),
         )
 
-    action = (request.form.get("action") or "").strip().lower()
+    action = (request.form.get("import_action") or request.form.get("action") or "").strip().lower()
 
     # PREVIEW
     if action == "preview":
@@ -273,6 +275,7 @@ def import_csv():
                 preview=pv,
                 filepath=saved,
                 quantity_mode=quantity_mode,
+                disable_hx=True,
                 **_export_context(),
             )
 
@@ -310,6 +313,11 @@ def import_csv():
         quantity_mode = _normalize_quantity_mode(request.form.get("quantity_mode"))
         overwrite = (action == "overwrite") or (quantity_mode == "purge")
         filename = os.path.basename(filepath)
+        wants_json = (
+            request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
+        )
+        run_async = wants_json or (request.form.get("import_async") == "1")
 
         try:
             owner_name_preferred = None
@@ -326,18 +334,49 @@ def import_csv():
                 overwrite=overwrite,
                 owner_user_id=current_user.id if current_user.is_authenticated else None,
                 owner_username=owner_name_preferred,
+                run_async=run_async,
             )
         except HeaderValidationError as err:
             current_app.logger.warning("Import aborted due to header validation: %s", err)
+            if wants_json:
+                return jsonify({"ok": False, "error": str(err)}), 400
             flash(str(err), "warning")
             return redirect(url_for("views.import_csv"))
         except Exception as exc:
             current_app.logger.exception("Failed to queue import job")
+            if wants_json:
+                return jsonify({"ok": False, "error": f"Unable to queue import: {exc}"}), 500
             flash(f"Unable to queue import: {exc}", "danger")
             return redirect(url_for("views.import_csv"))
 
         mode_note = "overwrite" if overwrite else quantity_mode
         job_id = result["job_id"]
+        if wants_json:
+            record_audit_event(
+                "import_queued",
+                {
+                    "job_id": job_id,
+                    "mode": mode_note,
+                    "filename": filename,
+                },
+            )
+            payload = {
+                "ok": True,
+                "job_id": job_id,
+                "mode": mode_note,
+                "status_url": url_for("views.import_status", job_id=job_id),
+                "complete_url": url_for("views.import_csv", import_success=1),
+            }
+            if result.get("ran_inline") and result.get("stats"):
+                stats = result.get("stats")
+                payload["stats"] = {
+                    "added": stats.added,
+                    "updated": stats.updated,
+                    "skipped": stats.skipped,
+                    "errors": stats.errors,
+                }
+            status = 200 if result.get("ran_inline") else 202
+            return jsonify(payload), status
         if result.get("ran_inline"):
             stats = result.get("stats")
             if stats:
@@ -414,6 +453,25 @@ def import_csv():
     else:
         flash("Unsupported action.", "warning")
         return redirect(url_for("views.import_csv"))
+
+
+@views.route("/import/status", methods=["GET"])
+@login_required
+def import_status():
+    job_id = (request.args.get("job_id") or "").strip()
+    if not job_id:
+        return jsonify({"ok": False, "error": "job_id is required"}), 400
+    events = latest_job_events("import")
+    user_id = current_user.id if current_user.is_authenticated else None
+    filtered = []
+    for event in events:
+        if event.get("job_id") != job_id:
+            continue
+        event_user_id = event.get("user_id")
+        if user_id is not None and event_user_id not in (None, user_id):
+            continue
+        filtered.append(event)
+    return jsonify({"ok": True, "job_id": job_id, "events": filtered})
 
 
 @views.route("/import/template.csv", methods=["GET"])
@@ -823,4 +881,10 @@ def api_update_folder_categories():
     return jsonify({"ok": True, "updated": updated})
 
 
-__all__ = ["export_cards", "import_csv", "import_template_csv", "api_update_folder_categories"]
+__all__ = [
+    "export_cards",
+    "import_csv",
+    "import_status",
+    "import_template_csv",
+    "api_update_folder_categories",
+]

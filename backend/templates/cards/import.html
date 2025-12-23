@@ -34,6 +34,11 @@
       <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
   {% endif %}
+  <div class="alert alert-success alert-dismissible fade show d-none" role="alert" id="importSummaryAlert">
+    <div class="fw-semibold" id="importSummaryTitle">Import completed</div>
+    <div class="small text-muted" id="importSummaryDetails"></div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
 
   <style>
     .folder-export-grid {
@@ -112,8 +117,9 @@
   <div class="row g-4">
     <div class="col-12 col-lg-7">
       <!-- Upload & Import -->
-      <form id="import-form" class="card border-0 shadow-sm h-100" method="post" enctype="multipart/form-data" action="{{ url_for('views.import_csv') }}">
-        <input type="hidden" name="action" value="confirm">
+      <form id="import-form" class="card border-0 shadow-sm h-100" method="post" enctype="multipart/form-data" action="{{ url_for('views.import_csv') }}" data-hx-boost="false">
+        <input type="hidden" name="import_action" value="confirm">
+        <input type="hidden" name="import_async" value="1">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div>
             <div class="fw-semibold">Import cards from a file</div>
@@ -177,20 +183,21 @@
           <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
             <button type="submit" class="btn btn-primary btn-progress" id="btn-import">
               <span class="btn-progress__icon" aria-hidden="true">
+                <i class="bi bi-upload btn-progress__idle"></i>
                 <span class="spinner-border spinner-border-sm btn-progress__spinner" role="status"></span>
                 <i class="bi bi-check2 btn-progress__check"></i>
               </span>
               <span class="btn-progress__label">Import</span>
             </button>
-            <span class="text-muted small">We’ll show progress below once the upload starts.</span>
+            <span class="text-muted small">Review Progress Below.</span>
           </div>
           <div class="mt-3 d-none" id="importProgress">
             <div class="d-flex align-items-center justify-content-between mb-1">
               <span class="small text-muted">Uploading &amp; processing your file...</span>
               <span class="small fw-semibold" id="importProgressLabel">Working</span>
             </div>
-            <div class="progress progress-striped" role="progressbar" aria-label="Import progress">
-              <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 35%;"></div>
+            <div class="progress progress-striped" role="progressbar" aria-label="Import progress" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" id="importProgressBar" style="width: 0%;" aria-valuenow="0"></div>
             </div>
             <div class="small text-muted mt-1">This may take a minute for larger binders. Please keep this tab open.</div>
           </div>
@@ -477,9 +484,64 @@
   (function () {
     const form = document.getElementById("import-form");
     const btn = document.getElementById("btn-import");
-    const STORAGE_KEY = "dv-import-progress";
+    const STORAGE_KEY = "dv-import-job";
+    const COMPLETE_KEY = "dv-import-complete-url";
     const progressWrap = document.getElementById("importProgress");
     const progressLabel = document.getElementById("importProgressLabel");
+    const progressBar = document.getElementById("importProgressBar");
+    const summaryAlert = document.getElementById("importSummaryAlert");
+    const summaryTitle = document.getElementById("importSummaryTitle");
+    const summaryDetails = document.getElementById("importSummaryDetails");
+    const statusEndpoint = "{{ url_for('views.import_status') }}";
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    const STATS_KEY = "dv-import-stats";
+    let pollTimer = null;
+    let activeJobId = null;
+    let submitLocked = false;
+    let completeUrl = "";
+    let redirectPending = false;
+
+    function updateProgress(value) {
+      if (!progressBar) return;
+      const clamped = Math.max(0, Math.min(100, value));
+      progressBar.style.width = `${clamped}%`;
+      progressBar.setAttribute("aria-valuenow", String(Math.round(clamped)));
+    }
+
+    function setBarAnimated(animated) {
+      if (!progressBar) return;
+      progressBar.classList.toggle("progress-bar-animated", animated);
+      progressBar.classList.toggle("progress-bar-striped", animated);
+    }
+
+    function setProgressText(text) {
+      if (progressLabel) progressLabel.textContent = text || "";
+    }
+
+    function renderCompletionSummary(summary) {
+      if (!summaryAlert || !summaryDetails) return;
+      const added = Number(summary.added || 0);
+      const updated = Number(summary.updated || 0);
+      const skipped = Number(summary.skipped || 0);
+      const errors = Number(summary.errors || 0);
+      const file = String(summary.file || "").trim();
+      const processed = Number(summary.processed || 0);
+      const total = Number(summary.total_rows || summary.total || 0);
+      const parts = [`${added} added`, `${updated} updated`, `${skipped} skipped`];
+      if (errors) {
+        parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
+      }
+      if (processed && total) {
+        parts.push(`${processed} / ${total} rows`);
+      }
+      const prefix = file ? `File: ${file}. ` : "";
+      summaryDetails.textContent = `${prefix}${parts.join(", ")}.`;
+      if (summaryTitle) {
+        summaryTitle.textContent = errors ? "Import completed with errors" : "Import completed";
+      }
+      summaryAlert.classList.remove("d-none", "alert-success", "alert-warning");
+      summaryAlert.classList.add(errors ? "alert-warning" : "alert-success");
+    }
 
     function setBtnState(state) {
       if (!btn) return;
@@ -494,40 +556,222 @@
       if (progressWrap) {
         if (state === "loading") {
           progressWrap.classList.remove("d-none");
-          if (progressLabel) progressLabel.textContent = "Working";
+          setProgressText("Uploading");
+          setBarAnimated(true);
         } else if (state === "complete") {
           progressWrap.classList.remove("d-none");
-          if (progressLabel) progressLabel.textContent = "Done";
+          setBarAnimated(false);
         } else {
           progressWrap.classList.add("d-none");
+          setBarAnimated(false);
+          updateProgress(0);
         }
       }
     }
 
-    if (btn) {
-      const flag = sessionStorage.getItem(STORAGE_KEY);
-      if (flag === "pending") {
-        setBtnState("complete");
-        sessionStorage.removeItem(STORAGE_KEY);
-        window.setTimeout(() => setBtnState("idle"), 1600);
-      } else {
-        setBtnState("idle");
+    function applyEvent(event) {
+      if (!event) return false;
+      const type = event.type || "";
+      if (type === "queued") {
+        setBtnState("loading");
+        setProgressText("Queued");
+        updateProgress(0);
+        return false;
       }
+      if (type === "started") {
+        setBtnState("loading");
+        setProgressText("Starting import");
+        updateProgress(0);
+        return false;
+      }
+      if (type === "progress") {
+        const processed = Number(event.processed || 0);
+        const total = Number(event.total_rows || event.total || event.stats?.total_rows || 0);
+        const pct = total > 0 ? Math.min(Math.round((processed / total) * 100), 99) : 0;
+        updateProgress(pct);
+        setProgressText(total > 0 ? `${pct}% · ${processed} / ${total}` : `${processed} rows`);
+        return false;
+      }
+      if (type === "completed") {
+        updateProgress(100);
+        setBtnState("complete");
+        const stats = event.stats || {};
+        const detail = `Done · ${stats.added || 0} added, ${stats.updated || 0} updated, ${stats.skipped || 0} skipped`;
+        setProgressText(detail);
+        const summaryPayload = {
+          added: stats.added || 0,
+          updated: stats.updated || 0,
+          skipped: stats.skipped || 0,
+          errors: stats.errors || 0,
+          processed: event.processed || stats.processed || 0,
+          total_rows: event.total_rows || event.total || stats.total_rows || 0,
+          file: event.file || "",
+        };
+        try {
+          sessionStorage.setItem(STATS_KEY, JSON.stringify(summaryPayload));
+        } catch (e) {}
+        renderCompletionSummary(summaryPayload);
+        if (completeUrl && !redirectPending) {
+          redirectPending = true;
+          setProgressText("Finalizing...");
+          window.setTimeout(() => {
+            window.location.assign(completeUrl);
+          }, 600);
+        }
+        return true;
+      }
+      if (type === "failed") {
+        setBtnState("idle");
+        if (progressWrap) {
+          progressWrap.classList.remove("d-none");
+        }
+        setBarAnimated(false);
+        updateProgress(0);
+        setProgressText(event.error || "Import failed");
+        return true;
+      }
+      return false;
+    }
+
+    function stopPolling({ clearStorage } = { clearStorage: true }) {
+      if (pollTimer) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      if (clearStorage) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(COMPLETE_KEY);
+        activeJobId = null;
+      }
+    }
+
+    function pollStatus() {
+      if (!activeJobId) return;
+      const url = `${statusEndpoint}?job_id=${encodeURIComponent(activeJobId)}`;
+      fetch(url, { headers: { Accept: "application/json" } })
+        .then((resp) => {
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          return resp.json();
+        })
+        .then((data) => {
+          const events = Array.isArray(data.events) ? data.events : [];
+          if (!events.length) {
+            pollTimer = window.setTimeout(pollStatus, 1500);
+            return;
+          }
+          const latest = events[events.length - 1];
+          const done = applyEvent(latest);
+          if (done) {
+            stopPolling();
+            submitLocked = false;
+            return;
+          }
+          pollTimer = window.setTimeout(pollStatus, 1500);
+        })
+        .catch(() => {
+          pollTimer = window.setTimeout(pollStatus, 2500);
+        });
+    }
+
+    function startPolling(jobId) {
+      if (!jobId) return;
+      activeJobId = jobId;
+      sessionStorage.setItem(STORAGE_KEY, jobId);
+      if (!completeUrl) {
+        completeUrl = sessionStorage.getItem(COMPLETE_KEY) || "";
+      }
+      setBtnState("loading");
+      setProgressText("Queued");
+      updateProgress(0);
+      pollStatus();
+    }
+
+    function handleAsyncSubmit(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (!form || !btn) return;
+      if (!window.fetch || !window.FormData) {
+        setBtnState("idle");
+        if (progressWrap) {
+          progressWrap.classList.remove("d-none");
+        }
+        setBarAnimated(false);
+        updateProgress(0);
+        setProgressText("Browser upload support missing.");
+        return;
+      }
+      if (submitLocked) {
+        setProgressText("Import already running...");
+        return;
+      }
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      submitLocked = true;
+      setBtnState("loading");
+      setProgressText("Uploading");
+      updateProgress(0);
+
+      const formData = new FormData(form);
+      const actionUrl = form.getAttribute("action") || (typeof form.action === "string" ? form.action : "");
+      fetch(actionUrl || window.location.href, {
+        method: "POST",
+        body: formData,
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+        },
+      })
+        .then((resp) =>
+          resp
+            .json()
+            .then((data) => ({ ok: resp.ok, status: resp.status, data }))
+            .catch(() => ({ ok: false, status: resp.status, data: {} }))
+        )
+        .then(({ ok, data }) => {
+          if (!ok || !data || data.ok === false) {
+            throw new Error(data?.error || "Import failed to start.");
+          }
+          completeUrl = data.complete_url || "";
+          if (completeUrl) {
+            sessionStorage.setItem(COMPLETE_KEY, completeUrl);
+          } else {
+            sessionStorage.removeItem(COMPLETE_KEY);
+          }
+          startPolling(data.job_id);
+        })
+        .catch((err) => {
+          setBtnState("idle");
+          if (progressWrap) {
+            progressWrap.classList.remove("d-none");
+          }
+          setBarAnimated(false);
+          updateProgress(0);
+          setProgressText(err.message || "Import failed to start.");
+          submitLocked = false;
+        });
     }
 
     if (form && btn) {
-      form.addEventListener("submit", function () {
-        setBtnState("loading");
-        sessionStorage.setItem(STORAGE_KEY, "pending");
-      });
-      window.addEventListener("pageshow", function () {
-        if (!btn) return;
-        if (sessionStorage.getItem(STORAGE_KEY) === "pending" && !btn.classList.contains("is-complete")) {
-          setBtnState("complete");
-          sessionStorage.removeItem(STORAGE_KEY);
-          window.setTimeout(() => setBtnState("idle"), 1600);
-        }
-      });
+      form.addEventListener("submit", handleAsyncSubmit, true);
+    }
+
+    const storedSummary = sessionStorage.getItem(STATS_KEY);
+    if (storedSummary) {
+      sessionStorage.removeItem(STATS_KEY);
+      try {
+        renderCompletionSummary(JSON.parse(storedSummary));
+      } catch (e) {}
+    }
+
+    const existingJob = sessionStorage.getItem(STORAGE_KEY);
+    if (existingJob) {
+      completeUrl = sessionStorage.getItem(COMPLETE_KEY) || "";
+      startPolling(existingJob);
     }
 
     // Escapes a CSV field per RFC 4180

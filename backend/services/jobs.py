@@ -8,6 +8,7 @@ import shutil
 import uuid
 from contextlib import nullcontext
 import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -65,6 +66,7 @@ def enqueue_csv_import(
     *,
     owner_user_id: Optional[int] = None,
     owner_username: Optional[str] = None,
+    run_async: bool = False,
 ) -> dict:
     # Force inline imports so users aren't blocked by a missing/idle queue.
     inline_pref = bool(current_app.config.get("IMPORT_RUN_INLINE", True))
@@ -81,8 +83,36 @@ def enqueue_csv_import(
             "quantity_mode": quantity_mode,
             "overwrite": overwrite,
             "filepath": filepath,
+            "run_async": run_async,
         },
     )
+
+    if run_async:
+        def _runner():
+            try:
+                run_csv_import_inline(
+                    filepath=filepath,
+                    quantity_mode=quantity_mode,
+                    overwrite=overwrite,
+                    owner_user_id=owner_user_id,
+                    owner_username=owner_username,
+                    job_id=job_id,
+                )
+            except Exception:
+                _get_logger().exception("Async import failed", extra={"job_id": job_id})
+
+        thread = threading.Thread(
+            target=_runner,
+            name=f"import-{job_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+        return {
+            "job_id": job_id,
+            "ran_inline": False,
+            "stats": None,
+            "per_folder": None,
+        }
 
     if inline_mode:
         stats, per_folder = run_csv_import_inline(
@@ -253,6 +283,7 @@ def _process_csv_import(
         rq_id=getattr(job_ref, "id", None),
         file=os.path.basename(filepath),
         overwrite=overwrite,
+        user_id=owner_user_id,
     )
     preserved: Optional[dict] = None
     removed = 0
@@ -280,6 +311,7 @@ def _process_csv_import(
             skipped=stats.skipped,
             errors=stats.errors,
             removed_folders=removed,
+            user_id=owner_user_id,
         )
         return stats, per_folder
     except HeaderValidationError as exc:
@@ -288,6 +320,7 @@ def _process_csv_import(
             "failed",
             job_id=import_job_id,
             error=str(exc),
+            user_id=owner_user_id,
         )
         raise
     except Exception as exc:
@@ -296,6 +329,7 @@ def _process_csv_import(
             "failed",
             job_id=import_job_id,
             error=str(exc),
+            user_id=owner_user_id,
         )
         raise
 

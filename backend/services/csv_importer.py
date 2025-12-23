@@ -407,10 +407,47 @@ class ImportStats:
     skipped: int = 0
     errors: int = 0
     job_id: Optional[str] = None
+    total_rows: Optional[int] = None
     skipped_details: list = field(default_factory=list)
 
 
 SKIP_DETAIL_LIMIT = 50
+
+def _count_rows(filepath: str) -> Optional[int]:
+    try:
+        if _is_excel(filepath):
+            from openpyxl import load_workbook
+
+            wb = load_workbook(filepath, read_only=True, data_only=True)
+            try:
+                ws = wb.worksheets[0]
+                rows = ws.iter_rows(values_only=True)
+                header_found = False
+                count = 0
+                for row in rows:
+                    vals = ["" if v is None else str(v).strip() for v in row]
+                    if not header_found:
+                        if any(vals):
+                            header_found = True
+                        continue
+                    if not any(vals):
+                        continue
+                    count += 1
+                return count
+            finally:
+                try:
+                    wb.close()
+                except Exception:
+                    pass
+        reader, _delimiter = _make_reader(filepath)
+        count = 0
+        for row in reader:
+            if not any((str(v or "").strip() for v in row.values())):
+                continue
+            count += 1
+        return count
+    except Exception:
+        return None
 
 def process_csv(
     filepath: str,
@@ -432,6 +469,8 @@ def process_csv(
     stats = ImportStats()
     stats.job_id = job_id or uuid.uuid4().hex
     job_id = stats.job_id
+    total_rows = _count_rows(filepath)
+    stats.total_rows = total_rows
     source_name = Path(filepath).name
     emit_import_event(
         "started",
@@ -440,6 +479,8 @@ def process_csv(
         dry_run=dry_run,
         default_folder=default_folder,
         quantity_mode=quantity_mode,
+        total_rows=total_rows,
+        user_id=owner_user_id,
     )
     per_folder: Dict[str, int] = {}
 
@@ -568,6 +609,8 @@ def process_csv(
                         job_id=job_id,
                         file=source_name,
                         processed=processed,
+                        total_rows=total_rows,
+                        user_id=owner_user_id,
                         stats=asdict(stats),
                     )
                 continue
@@ -669,9 +712,11 @@ def process_csv(
                     "progress",
                     job_id=job_id,
                     file=source_name,
-                        processed=processed,
-                        stats=asdict(stats),
-                    )
+                    processed=processed,
+                    total_rows=total_rows,
+                    user_id=owner_user_id,
+                    stats=asdict(stats),
+                )
         except Exception:
             stats.errors += 1
             current_app.logger.exception("Error processing row", exc_info=True)
@@ -685,6 +730,8 @@ def process_csv(
             job_id=job_id,
             file=source_name,
             processed=processed,
+            total_rows=total_rows,
+            user_id=owner_user_id,
             stats=asdict(stats),
         )
 
@@ -700,6 +747,8 @@ def process_csv(
         file=source_name,
         processed=processed,
         dry_run=dry_run,
+        total_rows=total_rows,
+        user_id=owner_user_id,
         stats=asdict(stats),
         per_folder=per_folder,
     )

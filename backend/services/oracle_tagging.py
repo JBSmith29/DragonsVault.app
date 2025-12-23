@@ -37,6 +37,33 @@ _EVERGREEN_TEXT_HINTS = {
     "goad": ("goad",),
 }
 
+_EVERGREEN_TEXT_PATTERNS = {
+    "deathtouch": (r"\bdeathtouch\b",),
+    "defender": (r"\bdefender\b",),
+    "double strike": (r"\bdouble strike\b",),
+    "enchant": (r"\benchant\b",),
+    "equip": (r"\bequip\b",),
+    "first strike": (r"\bfirst strike\b",),
+    "flash": (r"\bflash\b",),
+    "flying": (r"\bflying\b",),
+    "goad": (r"\bgoad\b", r"\bgoaded\b"),
+    "haste": (r"\bhaste\b",),
+    "hexproof": (r"\bhexproof\b",),
+    "indestructible": (r"\bindestructible\b",),
+    "lifelink": (r"\blifelink\b",),
+    "menace": (r"\bmenace\b",),
+    "protection": (r"\bprotection from\b",),
+    "reach": (r"\breach\b",),
+    "trample": (r"\btrample\b",),
+    "vigilance": (r"\bvigilance\b",),
+    "ward": (r"\bward\b",),
+}
+
+_EVERGREEN_TEXT_REGEX = {
+    keyword: tuple(re.compile(pattern) for pattern in patterns)
+    for keyword, patterns in _EVERGREEN_TEXT_PATTERNS.items()
+}
+
 
 _IRREGULAR_PLURALS = {
     "elves": "elf",
@@ -158,6 +185,13 @@ def derive_evergreen_keywords(*, oracle_text: str | None, keywords: Iterable[str
     for keyword, hints in _EVERGREEN_TEXT_HINTS.items():
         if any(hint in text for hint in hints):
             evergreen.add(keyword)
+    for keyword, regexes in _EVERGREEN_TEXT_REGEX.items():
+        if keyword in evergreen:
+            continue
+        for rx in regexes:
+            if rx.search(text):
+                evergreen.add(keyword)
+                break
     return evergreen
 
 

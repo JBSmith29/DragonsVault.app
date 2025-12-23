@@ -170,6 +170,12 @@ td, th {
   opacity: 0;
   transition: opacity 160ms var(--dv-ease-soft);
 }
+.btn-progress .btn-progress__idle {
+  font-size: 1.05rem;
+  line-height: 1;
+  opacity: 1;
+  transition: opacity 160ms var(--dv-ease-soft);
+}
 .btn-progress .btn-progress__check {
   position: absolute;
   font-size: 1.15rem;
@@ -182,6 +188,10 @@ td, th {
 }
 .btn-progress.is-loading {
   pointer-events: none;
+}
+.btn-progress.is-loading .btn-progress__idle,
+.btn-progress.is-complete .btn-progress__idle {
+  opacity: 0;
 }
 .btn-progress.is-loading .btn-progress__spinner {
   opacity: 1;

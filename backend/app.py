@@ -1101,6 +1101,17 @@ def create_app():
         recompute_oracle_enrichment()
         click.echo("Full oracle enrichment refreshed from Scryfall cache.")
 
+    @app.cli.command("refresh-card-roles")
+    @click.option("--replace", is_flag=True, help="Replace existing roles instead of merging.")
+    def refresh_card_roles_cmd(replace):
+        """Update card roles from Scryfall oracle text (merges by default)."""
+        if not (cache_exists() and load_cache()):
+            click.echo("No local Scryfall cache found. Roles will be derived from card rows only.")
+        from worker.tasks import recompute_all_roles
+
+        recompute_all_roles(merge_existing=not replace)
+        click.echo("Card roles refreshed from oracle text.")
+
     @app.cli.command("cache-stats")
     @click.option("--json", "as_json", is_flag=True, help="Output raw JSON.")
     def cache_stats_cmd(as_json):
