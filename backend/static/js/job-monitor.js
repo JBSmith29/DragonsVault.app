@@ -1,6 +1,8 @@
 (function () {
   const MAX_LOG_ENTRIES = 5;
   const POLL_INTERVAL_MS = 4000;
+  const TRIGGER_STORAGE_KEY = "dv-admin-job-trigger";
+  const TRIGGER_TTL_MS = 10 * 60 * 1000;
 
   function formatBytes(value) {
     const bytes = Number(value);
@@ -119,6 +121,48 @@
     if (logEl) logEl.innerHTML = "";
   }
 
+  function storeTrigger(scope, dataset) {
+    if (!scope) return;
+    const payload = {
+      scope,
+      dataset: dataset || null,
+      at: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(TRIGGER_STORAGE_KEY, JSON.stringify(payload));
+    } catch (err) {
+      console.warn("Unable to store job trigger", err);
+    }
+  }
+
+  function loadTrigger() {
+    try {
+      const raw = sessionStorage.getItem(TRIGGER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.scope || !parsed.at) return null;
+      if (Date.now() - parsed.at > TRIGGER_TTL_MS) {
+        sessionStorage.removeItem(TRIGGER_STORAGE_KEY);
+        return null;
+      }
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearTrigger(scope, dataset) {
+    try {
+      const current = loadTrigger();
+      if (!current) return;
+      if (current.scope === scope && (current.dataset || null) === (dataset || null)) {
+        sessionStorage.removeItem(TRIGGER_STORAGE_KEY);
+      }
+    } catch (err) {
+      // no-op
+    }
+  }
+
   function renderLog(node, events) {
     const logEl = node.querySelector("[data-job-log]");
     if (!logEl) return;
@@ -214,11 +258,29 @@
 
   function renderEvents(node, events) {
     if (!events.length) {
+      const trigger = loadTrigger();
+      if (trigger) {
+        const scope = node.dataset.jobScope || "";
+        const dataset = node.dataset.jobDataset || null;
+        if (trigger.scope === scope && (trigger.dataset || null) === (dataset || null)) {
+          applyLatestEvent(node, {
+            scope,
+            dataset,
+            type: "queued",
+            job_id: trigger.jobId || "pending",
+          });
+          return;
+        }
+      }
       setIdleState(node);
       return;
     }
     applyLatestEvent(node, events[events.length - 1]);
     renderLog(node, events);
+    const last = events[events.length - 1];
+    if (last && (last.type === "completed" || last.type === "failed")) {
+      clearTrigger(node.dataset.jobScope || "", node.dataset.jobDataset || null);
+    }
   }
 
   function startPolling(node) {
@@ -250,7 +312,19 @@
     poll();
   }
 
+  function initJobTriggers() {
+    const forms = Array.from(document.querySelectorAll("[data-job-trigger]"));
+    forms.forEach((form) => {
+      form.addEventListener("submit", () => {
+        const scope = form.dataset.jobScope || "";
+        const dataset = form.dataset.jobDataset || "";
+        storeTrigger(scope, dataset);
+      });
+    });
+  }
+
   function initJobMonitor() {
+    initJobTriggers();
     const nodes = Array.from(document.querySelectorAll("[data-job-monitor]"));
     if (!nodes.length) return;
     nodes.forEach((node) => {

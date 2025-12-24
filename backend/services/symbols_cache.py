@@ -8,17 +8,12 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import requests
-from flask import current_app, has_app_context
 
-# Where we store JSON + SVGs
-DATA_DIR = Path(os.getenv("SCRYFALL_DATA_DIR", "data"))
-SYMBOLS_JSON = DATA_DIR / "scryfall_symbols.json"
-STATIC_DIR = (
-    Path(current_app.static_folder)
-    if has_app_context()
-    else Path(__file__).resolve().parents[1] / "static"
-)
+# Where we store JSON + SVGs (always under backend/static/symbols)
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 SYMBOLS_DIR = STATIC_DIR / "symbols"
+SYMBOLS_JSON = SYMBOLS_DIR / "scryfall_symbols.json"
+_LEGACY_SYMBOLS_JSON = Path(os.getenv("SCRYFALL_DATA_DIR", "data")) / "scryfall_symbols.json"
 _SYMBOL_REFRESH_BACKOFF_MINUTES = int(os.getenv("SCRYFALL_SYMBOL_BACKOFF_MINUTES", "15"))
 _LOG = logging.getLogger(__name__)
 
@@ -79,7 +74,14 @@ def ensure_symbols_cache(
     """
     global _SYMBOL_MAP, _SRC_MAP_LOCAL, _SRC_MAP_REMOTE
 
-    # Load JSON if present
+    # Load JSON if present (migrate legacy location if needed).
+    if not force and not SYMBOLS_JSON.exists() and _LEGACY_SYMBOLS_JSON.exists():
+        try:
+            SYMBOLS_DIR.mkdir(parents=True, exist_ok=True)
+            SYMBOLS_JSON.write_text(_LEGACY_SYMBOLS_JSON.read_text(encoding="utf-8"), encoding="utf-8")
+        except Exception:
+            pass
+
     if not force and SYMBOLS_JSON.exists():
         try:
             data = json.loads(SYMBOLS_JSON.read_text(encoding="utf-8"))
@@ -100,7 +102,7 @@ def ensure_symbols_cache(
                 resp.raise_for_status()
                 payload = resp.json()
                 items = payload.get("data") or []
-                DATA_DIR.mkdir(parents=True, exist_ok=True)
+                SYMBOLS_DIR.mkdir(parents=True, exist_ok=True)
                 SYMBOLS_JSON.write_text(json.dumps(payload, indent=2), encoding="utf-8")
                 fetched_remote = True
                 _clear_failure()

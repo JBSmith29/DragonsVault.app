@@ -43,7 +43,7 @@
           </div>
           <div class="small text-muted mb-3">Bulk dataset powering art thumbnails, print lookups, and commander heuristics.</div>
           <div class="d-flex flex-wrap gap-2 mb-2">
-            <form method="post" action="{{ url_for('views.admin_console') }}">
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-job-trigger data-job-scope="scryfall" data-job-dataset="default_cards">
               <input type="hidden" name="action" value="refresh_default_cards">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
               <button class="btn btn-primary btn-sm" type="submit">Download Latest Bulk File</button>
@@ -129,7 +129,7 @@
           </div>
           <div class="small text-muted mb-3">Bulk rulings by oracle ID.</div>
           <div class="d-flex flex-wrap gap-2 mb-2">
-            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline">
+            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="scryfall" data-job-dataset="rulings">
               <input type="hidden" name="action" value="refresh_rulings">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
               <button class="btn btn-primary btn-sm" type="submit">Refresh Rulings</button>
@@ -195,7 +195,7 @@
             Two-card lines pulled from Commander Spellbook (early <= {{ spellbook.early_threshold }}, late >= {{ spellbook.late_threshold }} total mana).
           </div>
           <div class="d-flex flex-wrap gap-2 mb-2">
-            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline">
+            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="spellbook" data-job-dataset="spellbook">
               <input type="hidden" name="action" value="refresh_spellbook_combos">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
               <button class="btn btn-primary btn-sm" type="submit">Refresh Spellbook Combos</button>
@@ -276,7 +276,7 @@
           <div class="small text-muted mb-3">Mana symbols cache (JSON + SVGs in <code>/static/symbols</code>).</div>
           {% if symbols_enabled %}
             <div class="d-flex flex-wrap gap-2 mb-2">
-              <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline">
+              <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="symbols" data-job-dataset="symbology">
                 <input type="hidden" name="action" value="refresh_symbols">
                 <input type="hidden" name="redirect_to" value="views.admin_data_operations">
                 <button class="btn btn-primary btn-sm" type="submit">Refresh Symbols</button>
@@ -328,5 +328,5 @@
     </div>
   </div>
 </div>
-<script src="{{ url_for('static', filename='js/job-monitor.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/job-monitor.js', v='2') }}" defer></script>
 {% endblock %}
