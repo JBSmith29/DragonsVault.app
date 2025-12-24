@@ -70,6 +70,7 @@ from routes.base import (
     _move_folder_choices,
     _lookup_print_data,
     _prices_for_print,
+    _prices_for_print_exact,
     _safe_commit,
     _unique_art_variants,
     color_identity_name,
@@ -2222,6 +2223,38 @@ def list_cards():
             return None
         return num if num > 0 else None
 
+    def _format_exact_price(prices: dict | None, is_foil: bool) -> str | None:
+        if not prices:
+            return None
+
+        def _fmt(value, prefix):
+            if value in (None, "", 0, "0", "0.0", "0.00"):
+                return None
+            try:
+                num = float(value)
+            except (TypeError, ValueError):
+                return None
+            if num <= 0:
+                return None
+            return f"{prefix}{num:,.2f}".replace(",", "")
+
+        if is_foil:
+            value = _fmt(prices.get("usd_foil"), "$") or _fmt(prices.get("usd"), "$") or _fmt(prices.get("usd_etched"), "$")
+            if value:
+                return value
+            value = _fmt(prices.get("eur_foil"), "EUR ") or _fmt(prices.get("eur"), "EUR ")
+            if value:
+                return value
+        else:
+            value = _fmt(prices.get("usd"), "$") or _fmt(prices.get("usd_foil"), "$") or _fmt(prices.get("usd_etched"), "$")
+            if value:
+                return value
+            value = _fmt(prices.get("eur"), "EUR ") or _fmt(prices.get("eur_foil"), "EUR ")
+            if value:
+                return value
+
+        return _fmt(prices.get("tix"), "TIX ")
+
     def _price_value_from_prices(prices: dict | None, is_foil: bool) -> float | None:
         if not prices:
             return None
@@ -2251,8 +2284,8 @@ def list_cards():
             for t in ["Artifact", "Battle", "Creature", "Enchantment", "Instant", "Land", "Planeswalker", "Sorcery"]
             if t.lower() in (type_line or "").lower()
         ]
-        prices = _prices_for_print(pr) if pr else {}
-        price_text_map[c.id] = _format_price_text(prices)
+        prices = _prices_for_print_exact(pr) if pr else {}
+        price_text_map[c.id] = _format_exact_price(prices, bool(c.is_foil))
         price_value_map[c.id] = _price_value_from_prices(prices, bool(c.is_foil))
 
     def _rarity_badge_class(label: str | None) -> str | None:

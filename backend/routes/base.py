@@ -23,6 +23,7 @@ from services import scryfall_cache as sc
 from services.pricing import (
     format_price_text as _format_price_text,
     prices_for_print as _prices_for_print,
+    prices_for_print_exact as _prices_for_print_exact,
 )
 from services.scryfall_cache import cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
 
@@ -617,6 +618,7 @@ __all__ = [
     "_name_sort_expr",
     "_normalize_name",
     "_prices_for_print",
+    "_prices_for_print_exact",
     "_safe_commit",
     "_small_thumb_for_print",
     "_unique_art_variants",

@@ -21,6 +21,7 @@ __all__ = [
     "price_has_value",
     "oracle_price_lookup",
     "prices_for_print",
+    "prices_for_print_exact",
     "format_price_text",
 ]
 
@@ -151,6 +152,19 @@ def prices_for_print(pr: Dict[str, Any] | None) -> Dict[str, Any]:
     if price_has_value(prices):
         return prices
     return oracle_price_lookup(pr.get("oracle_id"))
+
+
+def prices_for_print_exact(pr: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Return price service data for a print, falling back to Scryfall print prices only."""
+    if not pr:
+        return {}
+    service_prices = _price_service_prices_for_print(pr)
+    if price_has_value(service_prices):
+        return service_prices
+    prices = pr.get("prices") or {}
+    if price_has_value(prices):
+        return prices
+    return {}
 
 
 def format_price_text(prices: Dict[str, Any] | None) -> str | None:
