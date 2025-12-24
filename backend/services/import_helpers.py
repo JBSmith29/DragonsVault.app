@@ -11,7 +11,7 @@ from extensions import db
 from models import Card, Folder
 
 
-def purge_cards_preserve_commanders() -> Dict[str, Dict[str, str | None]]:
+def purge_cards_preserve_commanders(*, commit: bool = True) -> Dict[str, Dict[str, str | None]]:
     preserved = {
         (f.name or "").lower(): {
             "commander_oracle_id": f.commander_oracle_id,
@@ -20,12 +20,13 @@ def purge_cards_preserve_commanders() -> Dict[str, Dict[str, str | None]]:
         for f in Folder.query.all()
     }
     db.session.query(Card).delete(synchronize_session=False)
-    db.session.commit()
+    if commit:
+        db.session.commit()
     current_app.logger.info("Purged all cards prior to import.")
     return preserved
 
 
-def restore_commander_metadata(preserved: Dict[str, Dict[str, str | None]]) -> None:
+def restore_commander_metadata(preserved: Dict[str, Dict[str, str | None]], *, commit: bool = True) -> None:
     if not preserved:
         return
     changed = False
@@ -37,12 +38,12 @@ def restore_commander_metadata(preserved: Dict[str, Dict[str, str | None]]) -> N
             f.commander_oracle_id = meta["commander_oracle_id"]
             f.commander_name = meta["commander_name"]
             changed = True
-    if changed:
+    if changed and commit:
         db.session.commit()
         current_app.logger.info("Commander metadata restored for %s folders.", len(preserved))
 
 
-def delete_empty_folders() -> int:
+def delete_empty_folders(*, commit: bool = True) -> int:
     empties = (
         db.session.query(Folder)
         .outerjoin(Card)
@@ -54,7 +55,7 @@ def delete_empty_folders() -> int:
     for folder in empties:
         db.session.delete(folder)
         removed += 1
-    if removed:
+    if removed and commit:
         db.session.commit()
         current_app.logger.info("Removed %s empty folders.", removed)
     return removed

@@ -1,11 +1,12 @@
 # services/stats.py
 import json
 from sqlalchemy import func
-from extensions import db, cache
+from extensions import db
 
 # Import your models. If Folder isn't re-exported at models/__init__.py,
 # change these to: from models.card import Card; from models.folder import Folder
 from models import Card, Folder
+from services.request_cache import request_cached
 
 
 def _filters_to_key(filters: dict | None) -> str:
@@ -18,8 +19,7 @@ def _filters_to_key(filters: dict | None) -> str:
     return json.dumps(f, sort_keys=True, separators=(",", ":"))
 
 
-@cache.memoize(timeout=300)
-def folder_stats_cached(filters_key: str):
+def _folder_stats_compute(filters_key: str):
     """
     Return per-folder counts and quantities, grouped by folder_id.
     Output shape: [{"folder_id": int, "folder": "Name", "rows": int, "qty": int}, ...]
@@ -56,6 +56,11 @@ def folder_stats_cached(filters_key: str):
         }
         for (folder_id, rows_count, qty_sum, folder_name) in rows
     ]
+
+
+def folder_stats_cached(filters_key: str):
+    cache_key = ("folder_summary", filters_key)
+    return request_cached(cache_key, lambda: _folder_stats_compute(filters_key))
 
 
 def get_folder_stats(filters: dict | None = None):

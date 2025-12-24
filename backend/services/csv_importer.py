@@ -37,8 +37,19 @@ def _ensure_cache_loaded() -> bool:
     return bool(_CACHE_READY)
 # ----------------------------------------------------
 
-_METADATA_FIELDS = ("type_line", "rarity", "color_identity_mask")
+_METADATA_FIELDS = (
+    "type_line",
+    "rarity",
+    "oracle_text",
+    "mana_value",
+    "colors",
+    "color_identity",
+    "color_identity_mask",
+    "layout",
+    "faces_json",
+)
 IMPORT_CHUNK_SIZE = int(os.getenv("IMPORT_BATCH_SIZE", 500))
+IMPORT_MAX_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +62,10 @@ class HeaderValidationError(ValueError):
         self.details = details
 
 
+class FileValidationError(ValueError):
+    """Raised when the import file fails size or encoding checks."""
+
+
 def _apply_card_metadata(card: Card, metadata: Dict[str, Any], *, only_if_empty: bool = False) -> bool:
     """Apply derived metadata to a Card, returning True if any field changed."""
     changed = False
@@ -59,7 +74,7 @@ def _apply_card_metadata(card: Card, metadata: Dict[str, Any], *, only_if_empty:
         if value is None:
             continue
         current = getattr(card, field, None)
-        if only_if_empty and current not in (None, "", 0):
+        if only_if_empty and current not in (None, "", 0, [], {}):
             continue
         if current != value:
             setattr(card, field, value)
@@ -286,6 +301,7 @@ def _ensure_folder_for_owner(
     if folder:
         if folder_category and folder.category != folder_category:
             folder.category = folder_category
+            folder.set_primary_role(folder_category)
         if owner_user_id and not folder.owner_user_id:
             folder.owner_user_id = owner_user_id
         if owner_name and (not folder.owner or folder.owner_user_id == owner_user_id):
@@ -295,6 +311,9 @@ def _ensure_folder_for_owner(
     folder = Folder(name=folder_name)
     if folder_category:
         folder.category = folder_category
+    if not folder.category:
+        folder.category = Folder.CATEGORY_DECK
+    folder.set_primary_role(folder.category)
     if owner_user_id:
         folder.owner_user_id = owner_user_id
     if owner_name:
@@ -317,6 +336,9 @@ def _ensure_folder_for_owner(
                 alt = Folder(name=candidate)
                 if folder_category:
                     alt.category = folder_category
+                if not alt.category:
+                    alt.category = Folder.CATEGORY_DECK
+                alt.set_primary_role(alt.category)
                 if owner_user_id:
                     alt.owner_user_id = owner_user_id
                 if owner_name:
@@ -329,9 +351,30 @@ def _ensure_folder_for_owner(
         db.session.rollback()
         raise
 
+def _validate_file_size(filepath: str) -> None:
+    try:
+        size = Path(filepath).stat().st_size
+    except Exception as exc:
+        log = current_app.logger if current_app else logger
+        log.warning("Unable to read import file size for %s: %s", filepath, exc)
+        raise FileValidationError("Unable to read import file size.") from exc
+    if size > IMPORT_MAX_BYTES:
+        log = current_app.logger if current_app else logger
+        log.warning("Import file too large: %s (%s bytes)", filepath, size)
+        raise FileValidationError(
+            f"File is too large. Limit: {IMPORT_MAX_BYTES // (1024 * 1024)} MB."
+        )
+
+
 def _read_text(filepath: str) -> str:
-    with open(filepath, "r", encoding="utf-8-sig", errors="replace") as f:
-        return f.read()
+    _validate_file_size(filepath)
+    data = Path(filepath).read_bytes()
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        log = current_app.logger if current_app else logger
+        log.warning("CSV encoding error for %s: %s", filepath, exc)
+        raise FileValidationError("CSV must be UTF-8 encoded.") from exc
 
 def _strip_sep_preamble(text: str) -> Tuple[str, Optional[str]]:
     """
@@ -458,6 +501,7 @@ def process_csv(
     job_id: Optional[str] = None,
     owner_user_id: Optional[int] = None,
     owner_username: Optional[str] = None,
+    commit: bool = True,
 ) -> Tuple[ImportStats, Dict[str, int]]:
     """
     Reads a CSV or Excel file and upserts Cards. Returns (stats, by_folder_counts).
@@ -492,9 +536,16 @@ def process_csv(
 
     owner_name = (owner_username or "").strip() or None
 
-    def _commit_batch():
+    pending_new: dict[tuple, Card] = {}
+    pending_new_list: list[Card] = []
+
+    def _flush_batch():
         try:
-            db.session.commit()
+            if pending_new_list:
+                db.session.add_all(pending_new_list)
+                pending_new_list.clear()
+                pending_new.clear()
+            db.session.flush()
             if not has_request_context():
                 # Releasing the identity map keeps worker memory flat without detaching web request users.
                 db.session.expunge_all()
@@ -615,6 +666,48 @@ def process_csv(
                     )
                 continue
 
+            pending_key = (
+                key.get("name"),
+                key.get("folder_id"),
+                key.get("set_code"),
+                key.get("collector_number"),
+                key.get("lang"),
+                key.get("is_foil"),
+            )
+            pending_card = pending_new.get(pending_key)
+            if pending_card:
+                if quantity_mode == "new_only":
+                    stats.skipped += 1
+                    if len(stats.skipped_details) < SKIP_DETAIL_LIMIT:
+                        stats.skipped_details.append(
+                            {
+                                "reason": "Existing card (new only mode)",
+                                "name": name,
+                                "set_code": set_code,
+                                "collector_number": collector_number,
+                                "folder": folder_name,
+                            }
+                        )
+                elif quantity_mode == "absolute":
+                    pending_card.quantity = qty
+                    stats.updated += 1
+                else:
+                    pending_card.quantity = (pending_card.quantity or 0) + qty
+                    stats.updated += 1
+                per_folder[folder_name] = per_folder.get(folder_name, 0) + qty
+                processed += 1
+                if processed % 25 == 0:
+                    emit_import_event(
+                        "progress",
+                        job_id=job_id,
+                        file=source_name,
+                        processed=processed,
+                        total_rows=total_rows,
+                        user_id=owner_user_id,
+                        stats=asdict(stats),
+                    )
+                continue
+
             # Upsert (with row-level minimality)
             existing = Card.query.filter_by(**key).with_for_update(of=Card).first()
             if existing:
@@ -674,36 +767,18 @@ def process_csv(
                     "quantity": initial_qty,
                     "type_line": metadata.get("type_line"),
                     "rarity": metadata.get("rarity"),
+                    "oracle_text": metadata.get("oracle_text"),
+                    "mana_value": metadata.get("mana_value"),
+                    "colors": metadata.get("colors"),
+                    "color_identity": metadata.get("color_identity"),
                     "color_identity_mask": metadata.get("color_identity_mask"),
+                    "layout": metadata.get("layout"),
+                    "faces_json": metadata.get("faces_json"),
                 }
                 card = Card(**card_kwargs)
-                db.session.add(card)
-                try:
-                    db.session.flush()
-                    stats.added += 1
-                except IntegrityError:
-                    # Rare race—retry as update
-                    db.session.rollback()
-                    existing = Card.query.filter_by(**key).first()
-                    if existing:
-                        if (existing.oracle_id in (None, "")) and _ensure_cache_loaded():
-                            found = find_by_set_cn(set_code, collector_number, name)
-                            if found:
-                                existing.oracle_id = found.get("oracle_id")
-                                metadata = metadata_from_print(found)
-                                _apply_card_metadata(existing, metadata)
-                        if quantity_mode == "absolute":
-                            if (existing.quantity or 0) != qty:
-                                existing.quantity = qty
-                                stats.updated += 1
-                            else:
-                                stats.skipped += 1
-                        else:
-                            existing.quantity = (existing.quantity or 0) + qty
-                            stats.updated += 1
-                    else:
-                        stats.errors += 1
-                        current_app.logger.exception("IntegrityError without recover", exc_info=True)
+                pending_new[pending_key] = card
+                pending_new_list.append(card)
+                stats.added += 1
 
             per_folder[folder_name] = per_folder.get(folder_name, 0) + qty
             processed += 1
@@ -720,9 +795,9 @@ def process_csv(
         except Exception:
             stats.errors += 1
             current_app.logger.exception("Error processing row", exc_info=True)
-        # Commit in batches to reduce memory usage on large imports
+        # Flush in batches to reduce memory usage on large imports
         if not dry_run and IMPORT_CHUNK_SIZE > 0 and processed and processed % IMPORT_CHUNK_SIZE == 0:
-            _commit_batch()
+            _flush_batch()
 
     if processed and processed % 25:
         emit_import_event(
@@ -736,7 +811,9 @@ def process_csv(
         )
 
     if not dry_run:
-        _commit_batch()
+        _flush_batch()
+        if commit:
+            db.session.commit()
         try:
             cache.clear()
         except Exception:
@@ -806,6 +883,7 @@ def _open_table(filepath: str) -> tuple[Iterable[Dict[str, Any]], list[str], Opt
     Unified row source for CSV or Excel.
     Returns (row_iter, headers, delimiter_if_csv_else_None).
     """
+    _validate_file_size(filepath)
     if _is_excel(filepath):
         rows, headers = _iter_excel_rows(filepath)
         return rows, headers, None

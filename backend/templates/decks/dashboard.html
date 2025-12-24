@@ -173,7 +173,7 @@
   {% if decks and decks|length %}
     <div class="row g-3 mb-4" id="deckGrid">
       {% for d in decks %}
-        {% set cmd = dashboard_cmdr.get(d.id) %}
+        {% set cmd = d.commander %}
         <div class="col-12 col-sm-12 col-md-6 col-lg-6" data-deck-name="{{ (d.name or '')|lower }}">
           <a class="tile d-block h-100 deck-tile hover-lift card-hover-shadow"
              href="{{ url_for('views.folder_detail', folder_id=d.id) }}">
@@ -189,9 +189,9 @@
                     {{ d.name }}
                   </div>
                   <div class="small text-muted">
-                    {% if deck_ci_html is defined and deck_ci_html.get(d.id) %}
-                      <span class="pip-row">{{ deck_ci_html.get(d.id) | safe }}</span>
-                      <span class="ms-1">{{ deck_ci_name.get(d.id) }}</span>
+                    {% if d.ci_html %}
+                      <span class="pip-row">{{ d.ci_html | safe }}</span>
+                      <span class="ms-1">{{ d.ci_name }}</span>
                     {% else %}
                       <span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>
                       <span class="ms-1">Colorless</span>

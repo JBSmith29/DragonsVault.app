@@ -1178,9 +1178,6 @@
     copy.name = copy.name || card.name || 'Card';
 
     if (!copy.image) {
-      if (card.image_uris) {
-        copy.image = card.image_uris.normal || card.image_uris.large || card.image_uris.small || card.image_uris.png;
-      }
       copy.image = copy.image || card.image || card.normal || card.small || card.large || placeholderImage;
     }
 

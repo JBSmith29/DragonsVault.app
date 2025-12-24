@@ -40,7 +40,13 @@ class Card(db.Model):
     # Derived metadata hydrated during sync jobs / migrations
     type_line = db.Column(db.Text, nullable=True)
     rarity = db.Column(db.String(16), nullable=True)
+    oracle_text = db.Column(db.Text, nullable=True)
+    mana_value = db.Column(db.Float, nullable=True)
+    colors = db.Column(db.String(8), nullable=True)
+    color_identity = db.Column(db.String(8), nullable=True)
     color_identity_mask = db.Column(db.Integer, nullable=True)
+    layout = db.Column(db.String(32), nullable=True)
+    faces_json = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow, index=True)
     archived_at = db.Column(db.DateTime, nullable=True, index=True)

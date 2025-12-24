@@ -333,19 +333,6 @@
     </div>
   {% endif %}
 
-  {# Helpers to translate color identity abbreviations into friendly text #}
-  {% set WUBRG = ['W','U','B','R','G'] %}
-  {% set ci_names = {
-    '': 'Colorless',
-    'W':'White','U':'Blue','B':'Black','R':'Red','G':'Green',
-    'WU':'Azorius','UB':'Dimir','UR':'Izzet','BR':'Rakdos','BG':'Golgari',
-    'WB':'Orzhov','RG':'Gruul','RW':'Boros','GW':'Selesnya','GU':'Simic',
-    'WUG':'Bant','WUB':'Esper','UBR':'Grixis','BRG':'Jund','WRG':'Naya',
-    'WBG':'Abzan','WUR':'Jeskai','WBR':'Mardu','UBG':'Sultai','URG':'Temur',
-    'WUBR':'Yore','UBRG':'Glint','BRGW':'Dune','RGWU':'Ink','GWUB':'Witch',
-    'WUBRG':'5c'
-  } %}
-
   {% if decks and decks|length %}
     <div class="table-responsive">
       <table class="table table-sm align-middle cards-table">
@@ -372,14 +359,8 @@
         </thead>
         <tbody>
           {% for d in decks %}
-            {# Derive the color identity label for this deck #}
-            {% set helper_letters = deck_ci_letters.get(d.id) %}
-            {% set helper_name    = deck_ci_name.get(d.id) %}
-            {% set CI             = helper_letters|string|upper if helper_letters else '' %}
-            {% set CI_NAME        = helper_name or ci_names.get(CI, CI if CI else 'Colorless') %}
-
             {# Commander preview information (thumbnail + hover image) #}
-            {% set cmd = deck_cmdr.get(d.id) %}
+            {% set cmd = d.commander %}
             {% set cmd_small = cmd.small if cmd else None %}
             {% set cmd_large = cmd.large if cmd else None %}
             {% set cmd_name  = cmd.name  if cmd else None %}
@@ -391,7 +372,7 @@
             <tr class="deck-row"
                 data-deck-id="{{ d.id }}"
                 data-owner="{{ (d.owner or '')|e }}"
-                data-owner-key="{{ (d.owner or '')|lower }}"
+                data-owner-key="{{ d.owner_key }}"
                 tabindex="0">
               <!-- Deck cell with commander thumb (owned print) + deck/commander names -->
               <td class="deck-name-cell">
@@ -467,21 +448,20 @@
               </td>
 
               <!-- Color Identity (friendly name) -->
-              <td class="text-nowrap">{{ CI_NAME }}</td>
+              <td class="text-nowrap">{{ d.ci_name }}</td>
 
               <!-- Color identity pips -->
               <td class="col-ci-pips">
-                {% if deck_ci_html.get(d.id) %}
-                  <span class="pip-row">{{ deck_ci_html.get(d.id) | safe }}</span>
+                {% if d.ci_html %}
+                  <span class="pip-row">{{ d.ci_html | safe }}</span>
                 {% else %}
                   <span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>
                 {% endif %}
               </td>
 
               {# Wizards bracket classification pulled from commander_brackets.py #}
-              {% set br = d.bracket or {} %}
-              {% set level = br.level %}
-              {% set label = br.label %}
+              {% set level = d.bracket_level %}
+              {% set label = d.bracket_label %}
               <td class="text-start">
                 {% if level %}
                   <div class="deck-bracket">

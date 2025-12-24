@@ -120,20 +120,18 @@
       {% for card in cards %}
         <div class="col">
           <div class="gallery-card shadow-sm">
-            {% set img_src = card.normal or card.thumb %}
-            {% set detail_href = card.card_id and url_for('views.card_detail', card_id=card.card_id) or url_for('views.scryfall_print_detail', sid=card.id) %}
-            {% if img_src %}
-              <a href="{{ detail_href }}">
-                <img src="{{ img_src }}" alt="{{ card.name }} ({{ card.collector_number or '—' }})">
+            {% if card.image_src %}
+              <a href="{{ card.detail_href }}">
+                <img src="{{ card.image_src }}" alt="{{ card.title }}">
               </a>
             {% else %}
               <div class="ratio ratio-3x4 bg-secondary-subtle"></div>
             {% endif %}
             <div class="card-body">
-              <div class="fw-semibold text-truncate" title="{{ card.name }} (#{{ card.collector_number }})">
-                {{ card.collector_number or '—' }} · {{ card.name }}
+              <div class="fw-semibold text-truncate" title="{{ card.title }}">
+                {{ card.collector_number_display }} · {{ card.name }}
               </div>
-              <div class="rarity">{{ card.rarity.replace('_', ' ')|title }}</div>
+              <div class="rarity">{{ card.rarity_label }}</div>
               {% if card.owned_qty %}
                 <div class="mt-2">
                   <span class="badge bg-success">Owned ×{{ card.owned_qty }}</span>

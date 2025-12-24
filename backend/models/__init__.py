@@ -13,6 +13,8 @@ from extensions import db  # shared SQLAlchemy() instance
 from .card import Card  # type: ignore F401
 from .commander_cache import CommanderBracketCache  # type: ignore F401
 from .folder import Folder, FolderShare  # type: ignore F401
+from .folder_role import FolderRole  # type: ignore F401
+from .deck_stats import DeckStats  # type: ignore F401
 from .wishlist import WishlistItem  # type: ignore F401
 from .user import User, AuditLog  # type: ignore F401
 from .site_request import SiteRequest  # type: ignore F401
@@ -39,6 +41,8 @@ __all__ = [
     "CommanderBracketCache",
     "Folder",
     "FolderShare",
+    "FolderRole",
+    "DeckStats",
     "WishlistItem",
     "User",
     "AuditLog",

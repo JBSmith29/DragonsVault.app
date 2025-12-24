@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import load_only
 
 from extensions import cache, db
-from models import Card, Folder, SiteRequest
+from models import Card, Folder, FolderRole, SiteRequest
 from services import scryfall_cache as sc
 from services.pricing import (
     format_price_text as _format_price_text,
@@ -64,28 +64,14 @@ def _collection_rows_with_fallback() -> list[tuple[int | None, str | None]]:
     try:
         rows = (
             db.session.query(Folder.id, Folder.name)
-            .filter(func.coalesce(Folder.category, Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION)
+            .join(FolderRole, FolderRole.folder_id == Folder.id)
+            .filter(FolderRole.role == FolderRole.ROLE_COLLECTION)
             .order_by(func.lower(Folder.name))
             .all()
         )
     except SQLAlchemyError:
         current_app.logger.exception("Failed to load collection folders (primary query)")
         db.session.rollback()
-    if rows:
-        return rows
-
-    try:
-        rows = (
-            db.session.query(Folder.id, Folder.name)
-            .filter(func.lower(Folder.name).in_(DEFAULT_COLLECTION_FOLDERS))
-            .order_by(func.lower(Folder.name))
-            .all()
-        )
-    except SQLAlchemyError:
-        current_app.logger.exception("Failed to load collection folders (fallback query)")
-        db.session.rollback()
-        rows = []
-
     if rows:
         return rows
 
@@ -104,12 +90,10 @@ def _collection_folder_names() -> list[str]:
 
 
 def _collection_folder_lower_names() -> set[str]:
-    """Return normalised folder names so downstream comparisons can be case-insensitive."""
-    names = _collection_folder_names()
-    lowered = {(name or "").strip().lower() for name in names}
-    if lowered:
-        return lowered
-    return set(DEFAULT_COLLECTION_FOLDERS)
+    """Return normalized names for folders explicitly tagged as collection buckets."""
+    rows = _collection_rows_with_fallback()
+    lowered = {(name or "").strip().lower() for fid, name in rows if fid is not None and name}
+    return lowered
 
 
 def _collection_metadata() -> tuple[list[int], list[str], set[str]]:
@@ -117,9 +101,7 @@ def _collection_metadata() -> tuple[list[int], list[str], set[str]]:
     rows = _collection_rows_with_fallback()
     ids = [fid for fid, _ in rows if fid is not None]
     names = [name for _, name in rows if name]
-    lowered = {(name or "").strip().lower() for name in names}
-    if not lowered:
-        lowered = set(DEFAULT_COLLECTION_FOLDERS)
+    lowered = {(name or "").strip().lower() for fid, name in rows if fid is not None and name}
     return ids, names, lowered
 
 
@@ -428,6 +410,7 @@ def _commander_candidates_for_folder(folder_id: int, limit: int = 60):
                 Card.lang,
                 Card.is_foil,
                 Card.oracle_id,
+                Card.type_line,
             )
         )
         .all()
@@ -448,14 +431,14 @@ def _commander_candidates_for_folder(folder_id: int, limit: int = 60):
     out = []
     for c in qs:
         pr = _lookup_print_data(c.set_code, c.collector_number, c.name, c.oracle_id)
-        tline = (sc.type_label_for_print(pr) if pr else None) or getattr(c, "type_line", "") or ""
+        tline = getattr(c, "type_line", "") or ""
         tl = tline.lower()
         if ("legendary" in tl) and ("creature" in tl or "artifact" in tl):
             out.append(
                 {
                     "card_id": c.id,
-                    "name": pr.get("name") or c.name,
-                    "oracle_id": pr.get("oracle_id") or c.oracle_id,
+                    "name": c.name,
+                    "oracle_id": c.oracle_id,
                     "set_code": c.set_code,
                     "collector_number": c.collector_number,
                     "lang": c.lang,
@@ -585,34 +568,28 @@ def compute_folder_color_identity(folder_id: int):
     Return (letters, label) for the folder's color identity using Scryfall cache.
     letters: e.g., "WUG" or "" (colorless). label: friendly name.
     """
-    have_cache = cache_ready() or ensure_cache_loaded()
+    seen = set()
     rows = (
-        db.session.query(Card.set_code, Card.collector_number, Card.name, Card.oracle_id)
+        db.session.query(Card.color_identity, Card.colors)
         .filter(Card.folder_id == folder_id)
         .all()
     )
-    seen = set()
     if not rows:
         return "", color_identity_name([])
 
-    for scode, cn, name, oid in rows:
-        ci = []
-        if have_cache:
-            pr = None
-            try:
-                if oid:
-                    prs = prints_for_oracle(oid) or []
-                    pr = prs[0] if prs else None
-                if not pr:
-                    pr = find_by_set_cn(scode, cn, name)
-            except Exception:
-                pr = None
-            if pr:
-                ci = (pr.get("color_identity") or pr.get("colors") or []) or []
-        for ch in ci:
-            u = str(ch).upper()
-            if u in {"W", "U", "B", "R", "G"}:
-                seen.add(u)
+    def _letters_from_value(value):
+        if not value:
+            return []
+        if isinstance(value, (list, tuple, set)):
+            raw = [str(v).upper() for v in value]
+        else:
+            raw = [ch for ch in str(value).upper()]
+        return [ch for ch in raw if ch in WUBRG_ORDER]
+
+    for ci_val, colors_val in rows:
+        letters = _letters_from_value(ci_val) or _letters_from_value(colors_val)
+        for ch in letters:
+            seen.add(ch)
 
     letters = "".join([c for c in WUBRG_ORDER if c in seen])
     label = color_identity_name(letters)

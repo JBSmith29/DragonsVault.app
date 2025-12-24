@@ -2,6 +2,7 @@ import hashlib
 import secrets
 
 from extensions import db
+from .folder_role import FolderRole
 from utils.time import utcnow
 
 class Folder(db.Model):
@@ -75,18 +76,55 @@ class Folder(db.Model):
         passive_deletes=True,
         uselist=False,
     )
+    role_entries = db.relationship(
+        "FolderRole",
+        back_populates="folder",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    deck_stats = db.relationship(
+        "DeckStats",
+        back_populates="folder",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
+    @property
+    def role_names(self) -> set[str]:
+        return {entry.role for entry in (self.role_entries or []) if entry.role}
+
+    def has_role(self, role: str | None) -> bool:
+        normalized = FolderRole.normalize(role)
+        if not normalized:
+            return False
+        return normalized in self.role_names
+
+    def has_any_role(self, roles) -> bool:
+        role_set = {FolderRole.normalize(r) for r in (roles or []) if FolderRole.normalize(r)}
+        if not role_set:
+            return False
+        return bool(self.role_names & role_set)
+
+    def set_primary_role(self, role: str | None) -> None:
+        normalized = FolderRole.normalize(role)
+        if not normalized:
+            return
+        keep = {r for r in self.role_names if r not in FolderRole.PRIMARY_ROLES}
+        keep.add(normalized)
+        self.role_entries = [FolderRole(role=r) for r in sorted(keep)]
 
     @property
     def is_collection(self) -> bool:
-        return (self.category or self.CATEGORY_DECK) == self.CATEGORY_COLLECTION
+        return self.has_role(FolderRole.ROLE_COLLECTION)
 
     @property
     def is_deck(self) -> bool:
-        return not self.is_collection
+        return self.has_any_role({FolderRole.ROLE_DECK, FolderRole.ROLE_BUILD})
 
     @property
     def is_build(self) -> bool:
-        return (self.category or self.CATEGORY_DECK) == self.CATEGORY_BUILD
+        return self.has_role(FolderRole.ROLE_BUILD)
 
     @property
     def is_proxy_deck(self) -> bool:

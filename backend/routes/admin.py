@@ -29,9 +29,11 @@ from services.live_updates import emit_job_event, latest_job_events
 from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from services.authz import require_admin
 from services.audit import record_audit_event
+from services.request_cache import request_cached
 from .base import limiter_key_user_or_ip
 from .auth import MIN_PASSWORD_LENGTH
 from .base import DEFAULT_COLLECTION_FOLDERS, _safe_commit, views
+from utils.validation import ValidationError, log_validation_error, parse_positive_int, parse_positive_int_list
 from models.card import Card
 from models.role import (
     Role,
@@ -72,13 +74,13 @@ def _folder_categories_page(admin_mode: bool):
         if bulk_action not in {"bulk_edit", "bulk_share"}:
             if single_delete_id:
                 delete_ids_raw.append(single_delete_id)
-            delete_ids: set[int] = set()
-            for raw_id in delete_ids_raw:
-                try:
-                    delete_ids.add(int(raw_id))
-                except (TypeError, ValueError):
-                    flash("Invalid folder id.", "danger")
-                    return redirect(url_for(target_endpoint))
+            try:
+                delete_ids_list = parse_positive_int_list(delete_ids_raw, field="folder id(s)")
+            except ValidationError as exc:
+                log_validation_error(exc, context="admin_folder_delete")
+                flash("Invalid folder id.", "danger")
+                return redirect(url_for(target_endpoint))
+            delete_ids = set(delete_ids_list)
 
             if delete_ids:
                 to_delete = [f for f in folders if f.id in delete_ids]
@@ -104,15 +106,13 @@ def _folder_categories_page(admin_mode: bool):
 
         if bulk_action == "bulk_edit":
             raw_selected = request.form.get("bulk_folder_ids") or ""
-            selected_ids: set[int] = set()
-            for part in raw_selected.split(","):
-                part = part.strip()
-                if not part:
-                    continue
-                try:
-                    selected_ids.add(int(part))
-                except (TypeError, ValueError):
-                    continue
+            try:
+                selected_ids_list = parse_positive_int_list(raw_selected.split(","), field="folder id(s)")
+            except ValidationError as exc:
+                log_validation_error(exc, context="admin_folder_bulk_edit")
+                flash("Invalid folder selection.", "warning")
+                return redirect(url_for(target_endpoint))
+            selected_ids: set[int] = set(selected_ids_list)
 
             if not selected_ids:
                 flash("Select at least one folder to bulk edit.", "warning")
@@ -138,6 +138,7 @@ def _folder_categories_page(admin_mode: bool):
                     continue
                 if category_input in allowed_categories and folder.category != category_input:
                     folder.category = category_input
+                    folder.set_primary_role(category_input)
                     updated["category"] += 1
                 if owner_apply:
                     new_owner = owner_value or None
@@ -174,15 +175,13 @@ def _folder_categories_page(admin_mode: bool):
                 return redirect(url_for(target_endpoint))
 
             raw_selected = request.form.get("bulk_folder_ids") or ""
-            selected_ids: set[int] = set()
-            for part in raw_selected.split(","):
-                part = part.strip()
-                if not part:
-                    continue
-                try:
-                    selected_ids.add(int(part))
-                except (TypeError, ValueError):
-                    continue
+            try:
+                selected_ids_list = parse_positive_int_list(raw_selected.split(","), field="folder id(s)")
+            except ValidationError as exc:
+                log_validation_error(exc, context="admin_folder_bulk_share")
+                flash("Invalid folder selection.", "warning")
+                return redirect(url_for(target_endpoint))
+            selected_ids: set[int] = set(selected_ids_list)
 
             if not selected_ids:
                 flash("Select at least one folder to share.", "warning")
@@ -263,6 +262,7 @@ def _folder_categories_page(admin_mode: bool):
                 submitted = Folder.CATEGORY_DECK
             if folder.category != submitted:
                 folder.category = submitted
+                folder.set_primary_role(submitted)
                 updated_categories += 1
 
             owner_value = (request.form.get(f"owner-{folder.id}") or "").strip() or None
@@ -553,8 +553,9 @@ def _handle_reset_user_password(target_endpoint: str):
         flash("Select a user to reset.", "warning")
         return redirect(redirect_target)
     try:
-        target_user_id = int(target_user_raw)
-    except (TypeError, ValueError):
+        target_user_id = parse_positive_int(target_user_raw, field="user id")
+    except ValidationError as exc:
+        log_validation_error(exc, context="admin_reset_password")
         flash("Invalid user id.", "danger")
         return redirect(redirect_target)
     if len(new_password) < MIN_PASSWORD_LENGTH:
@@ -582,8 +583,9 @@ def _handle_delete_user(target_endpoint: str):
         flash("Select a user to delete.", "warning")
         return redirect(redirect_target)
     try:
-        target_user_id = int(target_user_raw)
-    except (TypeError, ValueError):
+        target_user_id = parse_positive_int(target_user_raw, field="user id")
+    except ValidationError as exc:
+        log_validation_error(exc, context="admin_delete_user")
         flash("Invalid user id.", "danger")
         return redirect(redirect_target)
     if current_user.is_authenticated and target_user_id == current_user.id:
@@ -1092,6 +1094,21 @@ def _oracle_name_map(oracle_ids: Set[str]) -> dict[str, str]:
             .all()
         )
         name_map.update({oid: name for oid, name in fallback if name})
+    missing = [oid for oid in oracle_ids if oid not in name_map]
+    if missing:
+        try:
+            if ensure_cache_loaded():
+                for oid in missing:
+                    try:
+                        prints = sc.prints_for_oracle(oid) or []
+                    except Exception:
+                        prints = []
+                    if prints:
+                        name = prints[0].get("name")
+                        if name:
+                            name_map[oid] = name
+        except Exception:
+            pass
     return name_map
 
 
@@ -1101,6 +1118,17 @@ def _paginate_query(query, page: int, per_page: int):
     page = max(1, min(page, pages))
     rows = query.limit(per_page).offset((page - 1) * per_page).all()
     return rows, total, page, pages
+
+
+def _deck_synergy_counts() -> dict[str, int]:
+    return request_cached(
+        ("deck_synergy", "counts"),
+        lambda: {
+            "core": DeckTagCoreRoleSynergy.query.count(),
+            "evergreen": DeckTagEvergreenSynergy.query.count(),
+            "card": DeckTagCardSynergy.query.count(),
+        },
+    )
 
 
 @views.route("/admin/oracle-tags", methods=["GET", "POST"])
@@ -1145,6 +1173,7 @@ def admin_oracle_tags():
 
     oracle_ids = {row.oracle_id for row in core_rows} | {row.oracle_id for row in evergreen_rows}
     name_map = _oracle_name_map(oracle_ids)
+    synergy_counts = _deck_synergy_counts()
 
     return render_template(
         "admin/oracle_tags.html",
@@ -1153,9 +1182,9 @@ def admin_oracle_tags():
         core_total=OracleCoreRoleTag.query.count(),
         deck_total=OracleDeckTag.query.count(),
         evergreen_total=OracleEvergreenTag.query.count(),
-        synergy_core_total=DeckTagCoreRoleSynergy.query.count(),
-        synergy_evergreen_total=DeckTagEvergreenSynergy.query.count(),
-        synergy_card_total=DeckTagCardSynergy.query.count(),
+        synergy_core_total=synergy_counts["core"],
+        synergy_evergreen_total=synergy_counts["evergreen"],
+        synergy_card_total=synergy_counts["card"],
         name_map=name_map,
         q=q,
     )
@@ -1182,7 +1211,11 @@ def admin_oracle_core_roles():
             )
         )
     query = query.order_by(OracleCoreRoleTag.role, OracleCoreRoleTag.oracle_id)
-    rows, total, page, pages = _paginate_query(query, page, _ADMIN_TABLE_PAGE_SIZE)
+    cache_key = ("deck_synergy", "core", q, page, _ADMIN_TABLE_PAGE_SIZE)
+    rows, total, page, pages = request_cached(
+        cache_key,
+        lambda: _paginate_query(query, page, _ADMIN_TABLE_PAGE_SIZE),
+    )
     name_map = _oracle_name_map({row.oracle_id for row in rows})
     return render_template(
         "admin/oracle_core_roles.html",
@@ -1216,7 +1249,11 @@ def admin_oracle_evergreen_tags():
             )
         )
     query = query.order_by(OracleEvergreenTag.keyword, OracleEvergreenTag.oracle_id)
-    rows, total, page, pages = _paginate_query(query, page, _ADMIN_TABLE_PAGE_SIZE)
+    cache_key = ("deck_synergy", "evergreen", q, page, _ADMIN_TABLE_PAGE_SIZE)
+    rows, total, page, pages = request_cached(
+        cache_key,
+        lambda: _paginate_query(query, page, _ADMIN_TABLE_PAGE_SIZE),
+    )
     name_map = _oracle_name_map({row.oracle_id for row in rows})
     return render_template(
         "admin/oracle_evergreen_tags.html",
@@ -1251,7 +1288,11 @@ def admin_oracle_deck_tags():
             )
         )
     query = query.order_by(OracleDeckTag.tag, OracleDeckTag.category, OracleDeckTag.oracle_id)
-    rows, total, page, pages = _paginate_query(query, page, _ADMIN_TABLE_PAGE_SIZE)
+    cache_key = ("deck_synergy", "card", q, page, _ADMIN_TABLE_PAGE_SIZE)
+    rows, total, page, pages = request_cached(
+        cache_key,
+        lambda: _paginate_query(query, page, _ADMIN_TABLE_PAGE_SIZE),
+    )
     name_map = _oracle_name_map({row.oracle_id for row in rows})
     return render_template(
         "admin/oracle_deck_tags.html",
@@ -1402,8 +1443,9 @@ def admin_requests():
             raw_id = request.form.get("request_id")
             raw_status = (request.form.get("status") or "").strip().lower()
             try:
-                target_id = int(raw_id)
-            except (TypeError, ValueError):
+                target_id = parse_positive_int(raw_id, field="request id")
+            except ValidationError as exc:
+                log_validation_error(exc, context="admin_requests")
                 flash("Invalid request id.", "warning")
                 return redirect(url_for("views.admin_requests"))
             target = db.session.get(SiteRequest, target_id)

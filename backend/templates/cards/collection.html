@@ -107,39 +107,28 @@
   {# Quick links into the main card list filtered by each bucket type. #}
   {% if type_breakdown and type_breakdown|length %}
     <h2 class="h6 text-uppercase text-muted mb-2">Type breakdown</h2>
-    {% set type_icon_classes = {
-      'Artifact': 'bi-cpu',
-      'Battle': 'bi-shield-check',
-      'Creature': 'bi-people',
-      'Enchantment': 'bi-stars',
-      'Instant': 'bi-lightning',
-      'Land': 'bi-geo-alt',
-      'Planeswalker': 'bi-compass',
-      'Sorcery': 'bi-fire'
-    } %}
     <div class="row g-3 mb-4">
-      {% for t, n in type_breakdown %}
+      {% for item in type_breakdown %}
       <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
         <a class="tile type-tile d-block"
-           href="{{ url_for('views.list_cards', type=t.lower(), collection=1) }}">
+           href="{{ item.url }}">
           <div class="type-left">
             <div class="type-icon-group">
-              {% set icon_class = type_icon_classes.get(t) %}
               <div class="type-icon">
-                {% if icon_class %}
-                  <i class="bi {{ icon_class }}" aria-hidden="true"></i>
-                {% elif t %}
-                  <span aria-hidden="true">{{ t[0] }}</span>
+                {% if item.icon_class %}
+                  <i class="bi {{ item.icon_class }}" aria-hidden="true"></i>
+                {% elif item.icon_letter %}
+                  <span aria-hidden="true">{{ item.icon_letter }}</span>
                 {% else %}
                   <span aria-hidden="true">?</span>
                 {% endif %}
-                <span class="visually-hidden">{{ t or 'Unknown card type' }}</span>
+                <span class="visually-hidden">{{ item.label or 'Unknown card type' }}</span>
               </div>
-              <span class="badge text-bg-secondary type-count">&times;{{ '{:,}'.format(n) }}</span>
+              <span class="badge text-bg-secondary type-count">&times;{{ '{:,}'.format(item.count) }}</span>
             </div>
             <div class="text-truncate">
-              <div class="type-name text-truncate">{{ t }}</div>
-              <div class="text-muted small text-truncate">Show {{ t }} cards in collection</div>
+              <div class="type-name text-truncate">{{ item.label }}</div>
+              <div class="text-muted small text-truncate">Show {{ item.label }} cards in collection</div>
             </div>
           </div>
         </a>

@@ -8,7 +8,6 @@
   {% set back_to = back_to[:-1] %}
 {% endif %}
 
-{% set hover_map = hover_map|default({}, true) %}
 {% set per_value = per or 25 %}
 
 {# ---------- local state helpers ---------- #}
@@ -27,8 +26,6 @@
     {%- set tl = (t or '')|lower -%}
     <span class="badge badge-type badge-type-{{ tl }}">{{ t }}</span>
   {%- endmacro %}
-
-  {% set COLLECTION_FOLDERS = collection_folders|default([], true) %}
 
   {# Local styling keeps the listing layout self-contained. #}
   <style>
@@ -378,6 +375,79 @@
       {% if q or role_query_text or folder_id or set_code or foil_only or (ui_selected_types and ui_selected_types|length) or (selected_colors and selected_colors|length) or collection_flag %}
         <a class="small" href="{{ reset_url }}">Reset</a>
       {% endif %}
+      <div class="dropdown">
+        <button
+          class="btn btn-sm btn-outline-secondary dropdown-toggle"
+          type="button"
+          data-bs-toggle="dropdown"
+          data-bs-auto-close="outside"
+          aria-expanded="false"
+        >
+          Columns
+        </button>
+        <div class="dropdown-menu dropdown-menu-end p-3" style="min-width:220px;">
+          <div class="small text-muted mb-2">Show columns</div>
+          {% if move_folder_options %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="cardsColSelect" data-columns-toggle="cards" data-col="select" checked>
+              <label class="form-check-label" for="cardsColSelect">Select</label>
+            </div>
+          {% endif %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColArt" data-columns-toggle="cards" data-col="art" checked>
+            <label class="form-check-label" for="cardsColArt">Art</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColName" data-columns-toggle="cards" data-col="name" checked>
+            <label class="form-check-label" for="cardsColName">Name</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColType" data-columns-toggle="cards" data-col="type" checked>
+            <label class="form-check-label" for="cardsColType">Type</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColCore" data-columns-toggle="cards" data-col="core_role" checked>
+            <label class="form-check-label" for="cardsColCore">Core Role</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColEvergreen" data-columns-toggle="cards" data-col="evergreen" checked>
+            <label class="form-check-label" for="cardsColEvergreen">Evergreen</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColFolder" data-columns-toggle="cards" data-col="folder" checked>
+            <label class="form-check-label" for="cardsColFolder">Folder</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColSet" data-columns-toggle="cards" data-col="set" checked>
+            <label class="form-check-label" for="cardsColSet">Set</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColQty" data-columns-toggle="cards" data-col="qty" checked>
+            <label class="form-check-label" for="cardsColQty">Qty</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColPrice" data-columns-toggle="cards" data-col="price" checked>
+            <label class="form-check-label" for="cardsColPrice">Price</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColColors" data-columns-toggle="cards" data-col="colors" checked>
+            <label class="form-check-label" for="cardsColColors">Colors</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColRarity" data-columns-toggle="cards" data-col="rarity" checked>
+            <label class="form-check-label" for="cardsColRarity">Rarity</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColCollector" data-columns-toggle="cards" data-col="collector" checked>
+            <label class="form-check-label" for="cardsColCollector">Collector #</label>
+          </div>
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-columns-reset="cards">
+              Reset columns
+            </button>
+          </div>
+        </div>
+      </div>
       {# Export preserves the correct param flavor for types #}
       {% if type_mode_local == 'exact' %}
         {% set export_url = url_for('views.export_cards',
@@ -422,7 +492,7 @@
     </div>
   {% else %}
     <div class="table-responsive">
-      <table class="table table-sm align-middle cards-table">
+      <table class="table table-sm align-middle cards-table" data-columns-table="cards">
         <thead>
           {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
           {% set ctyp_dir = 'asc' if sort!='ctype' or direction=='desc' else 'desc' %}
@@ -432,6 +502,10 @@
           {% set set_dir  = 'asc' if sort!='set'  or direction=='desc' else 'desc' %}
           {% set cn_dir   = 'asc' if sort!='cn'   or direction=='desc' else 'desc' %}
           {% set qty_dir  = 'asc' if sort!='qty'  or direction=='desc' else 'desc' %}
+          {% set art_dir  = 'asc' if sort!='art'  or direction=='desc' else 'desc' %}
+          {% set core_dir = 'asc' if sort!='core_role' or direction=='desc' else 'desc' %}
+          {% set evergreen_dir = 'asc' if sort!='evergreen' or direction=='desc' else 'desc' %}
+          {% set price_dir = 'asc' if sort!='price' or direction=='desc' else 'desc' %}
           {% macro keep_params(sort_field, dir_value) -%}
             {%- if type_mode_local == 'exact' -%}
               {{ url_for('views.list_cards',
@@ -451,173 +525,127 @@
           {%- endmacro %}
           <tr>
             {% if move_folder_options %}
-              <th class="col-select">
+              <th class="col-select" data-col="select">
                 <div class="form-check mb-0">
                   <input class="form-check-input" type="checkbox" id="cardSelectAll" aria-label="Select all cards on this page">
                 </div>
               </th>
             {% endif %}
-            <th>Art</th>
-            <th><a href="{{ keep_params('name', name_dir) }}">Name</a></th>
-            <th><a href="{{ keep_params('ctype', ctyp_dir) }}">Type</a></th>
-            <th class="col-tags">Core Role</th>
-            <th class="col-tags">Evergreen</th>
-            <th><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
-            <th>Set</th>
-            <th class="text-end"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
-            <th class="col-colors"><a href="{{ keep_params('colors', col_dir) }}">Colors</a></th>
-            <th><a href="{{ keep_params('rar', rar_dir) }}">Rarity</a></th>
-            <th><a href="{{ keep_params('cn', cn_dir) }}">#</a></th>
+            <th data-col="art"><a href="{{ keep_params('art', art_dir) }}">Art</a></th>
+            <th data-col="name"><a href="{{ keep_params('name', name_dir) }}">Name</a></th>
+            <th data-col="type"><a href="{{ keep_params('ctype', ctyp_dir) }}">Type</a></th>
+            <th class="col-tags" data-col="core_role"><a href="{{ keep_params('core_role', core_dir) }}">Core Role</a></th>
+            <th class="col-tags" data-col="evergreen"><a href="{{ keep_params('evergreen', evergreen_dir) }}">Evergreen</a></th>
+            <th data-col="folder"><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
+            <th data-col="set"><a href="{{ keep_params('set', set_dir) }}">Set</a></th>
+            <th class="text-end" data-col="qty"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
+            <th class="text-end" data-col="price"><a href="{{ keep_params('price', price_dir) }}">Price</a></th>
+            <th class="col-colors" data-col="colors"><a href="{{ keep_params('colors', col_dir) }}">Colors</a></th>
+            <th data-col="rarity"><a href="{{ keep_params('rar', rar_dir) }}">Rarity</a></th>
+            <th data-col="collector"><a href="{{ keep_params('cn', cn_dir) }}">#</a></th>
           </tr>
         </thead>
         <tbody>
           {% for card in cards %}
-            {% set fname = card.folder.name if (card.folder and card.folder.name) else None %}
-
-            {# ---- TYPES FILTER (tokenize; OR for contains, AND for exact) ---- #}
-            {% set raw_types = type_map.get(card.id) if type_map else [] %}
-            {% if raw_types is string %}
-              {% set tokens = raw_types
-                               | replace('—',' ')
-                               | replace('-',' ')
-                               | replace(',',' ')
-                               | lower
-                               | split() %}
-            {% else %}
-              {% set tokens = (raw_types or []) | map('lower') | list %}
-            {% endif %}
-
-            {% set type_ok = True %}
-            {% if ui_selected_types and ui_selected_types|length %}
-              {% set sel = ui_selected_types | map('lower') | list %}
-              {% if type_mode_local == 'exact' %}
-                {% set ns = namespace(ok=true) %}
-                {% for t in sel %}
-                  {% if t not in tokens %}{% set ns.ok = false %}{% endif %}
-                {% endfor %}
-                {% set type_ok = ns.ok %}
-              {% else %}
-                {% set ns = namespace(hit=false) %}
-                {% for t in sel %}
-                  {% if t in tokens %}{% set ns.hit = true %}{% endif %}
-                {% endfor %}
-                {% set type_ok = ns.hit %}
-              {% endif %}
-            {% endif %}
-
-            {% if (not collection_flag or (fname in COLLECTION_FOLDERS)) and type_ok %}
-            {% set hover_src = hover_map.get(card.id) if hover_map else None %}
-            {% set display_name = display_name_map.get(card.id) or card.name %}
+            {% set fname = card.folder_name %}
+            {% set hover_src = card.image_large %}
             <tr class="card-row"
                 data-card-id="{{ card.id }}"
                 data-folder="{{ (fname or '')|lower }}"
                 data-folder-id="{{ card.folder_id }}"
                 data-quantity="{{ card.quantity }}"
-                data-set="{{ card.set_code }}"
-                data-cn="{{ card.collector_number }}"
-                data-lang="{{ card.lang }}"
+                data-set="{{ card.set_code or '' }}"
+                data-cn="{{ card.collector_number or '' }}"
+                data-lang="{{ card.lang or '' }}"
                 data-foil="{{ 1 if card.is_foil else 0 }}"
-                data-rarity="{{ (rarity_map.get(card.id) or '') }}"
-                data-type="{{ (raw_types if raw_types is string else (raw_types|join(' '))) if raw_types else '' }}"
-                data-img-small="{{ (image_map.get(card.id) or '') }}"
+                data-rarity="{{ card.rarity_label or '' }}"
+                data-type="{{ card.type_tokens_str or '' }}"
+                data-img-small="{{ card.image_small or '' }}"
                 data-img-large="{{ (hover_src or '') }}"
-                data-name="{{ display_name }}"
+                data-name="{{ card.display_name }}"
                 data-ignore-hover="true">
               {% if move_folder_options %}
-                <td class="col-select">
+                <td class="col-select" data-col="select">
                   <div class="form-check mb-0">
                     <input class="form-check-input card-select"
                            type="checkbox"
                            value="{{ card.id }}"
-                           aria-label="Select {{ display_name }}"
-                           data-card-name="{{ display_name }}">
+                           aria-label="Select {{ card.display_name }}"
+                           data-card-name="{{ card.display_name }}">
                   </div>
                 </td>
               {% endif %}
-              <td style="width:52px;">
-                {% if image_map and image_map.get(card.id) %}
-                  <img decoding="async" src="{{ image_map.get(card.id) }}" alt="" width="48" height="auto" loading="lazy" class="rounded card-thumb" {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
+              <td style="width:52px;" data-col="art">
+                {% if card.image_small %}
+                  <img decoding="async" src="{{ card.image_small }}" alt="" width="48" height="auto" loading="lazy" class="rounded card-thumb" {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td><a class="card-link" href="{{ url_for('views.card_detail', card_id=card.id) }}" {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>{{ display_name_map.get(card.id) or card.name }}</a></td>
-              <td class="align-middle">
-                {% if raw_types %}
-                  {% if raw_types is string %}
-                    {% for tkn in tokens %}
-                      {% if tkn in ['artifact','battle','creature','enchantment','instant','land','planeswalker','sorcery'] %}
-                        {{ type_badge(tkn|capitalize) }}
-                      {% endif %}
-                    {% endfor %}
-                  {% else %}
-                    {% for t in raw_types %}{{ type_badge(t) }}{% endfor %}
-                  {% endif %}
+              <td data-col="name"><a class="card-link" href="{{ url_for('views.card_detail', card_id=card.id) }}" {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>{{ card.display_name }}</a></td>
+              <td class="align-middle" data-col="type">
+                {% if card.type_badges %}
+                  {% for t in card.type_badges %}{{ type_badge(t) }}{% endfor %}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="col-tags">
-                {% set core_roles = core_role_map.get(card.oracle_id) if core_role_map else [] %}
-                {% if core_roles and core_roles|length %}
-                  {% for role in core_roles[:2] %}
-                    <span class="badge text-bg-secondary">{{ role|replace('_', ' ')|replace('-', ' ')|title }}</span>
+              <td class="col-tags" data-col="core_role">
+                {% if card.core_roles_display %}
+                  {% for role in card.core_roles_display %}
+                    <span class="badge text-bg-secondary">{{ role }}</span>
                   {% endfor %}
-                  {% if core_roles|length > 2 %}
-                    <span class="text-muted small">+{{ core_roles|length - 2 }}</span>
+                  {% if card.core_roles_overflow %}
+                    <span class="text-muted small">+{{ card.core_roles_overflow }}</span>
                   {% endif %}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="col-tags">
-                {% set evergreen = evergreen_map.get(card.oracle_id) if evergreen_map else [] %}
-                {% if evergreen and evergreen|length %}
-                  {% for tag in evergreen[:2] %}
-                    <span class="badge text-bg-secondary">{{ tag|replace('_', ' ')|replace('-', ' ')|title }}</span>
+              <td class="col-tags" data-col="evergreen">
+                {% if card.evergreen_display %}
+                  {% for tag in card.evergreen_display %}
+                    <span class="badge text-bg-secondary">{{ tag }}</span>
                   {% endfor %}
-                  {% if evergreen|length > 2 %}
-                    <span class="text-muted small">+{{ evergreen|length - 2 }}</span>
+                  {% if card.evergreen_overflow %}
+                    <span class="text-muted small">+{{ card.evergreen_overflow }}</span>
                   {% endif %}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td>
-                {% if card.folder and card.folder.name %}
-                  {{ folder_badge(card.folder.name) }}
+              <td data-col="folder">
+                {% if card.folder_name %}
+                  {{ folder_badge(card.folder_name) }}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="text-uppercase">{{ card.set_code }}</td>
-              <td class="text-end">{{ card.quantity }}</td>
-              <td class="col-colors">
-                {% set cols = (color_map.get(card.id) if color_map else []) %}
-                {% if not cols or not cols|length %}{% set cols = ['C'] %}{% endif %}
+              <td class="text-uppercase" data-col="set">{{ card.set_code or '' }}</td>
+              <td class="text-end" data-col="qty">{{ card.quantity }}</td>
+              <td class="text-end text-nowrap" data-col="price">
+                {% if card.price_text %}
+                  {{ card.price_text }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="col-colors" data-col="colors">
                 <span class="pip-row">
-                  {% for C in cols %}
+                  {% for C in card.color_letters %}
                     <img class="mana mana-sm" src="/static/symbols/{{ C }}.svg" alt="{{ C }}" onerror="this.outerHTML='{{ C }}'">
                   {% endfor %}
                 </span>
               </td>
-              <td>
-                {% set r = (rarity_map.get(card.id) if rarity_map else None) %}
-                {% if r %}
-                  {% set rl = r|lower %}
-                  {% set cls = 'secondary' %}
-                  {% if rl == 'common' %}{% set cls = 'secondary' %}
-                  {% elif rl == 'uncommon' %}{% set cls = 'success' %}
-                  {% elif rl == 'rare' %}{% set cls = 'warning' %}
-                  {% elif rl in ['mythic','mythic rare'] %}{% set cls = 'danger' %}{% endif %}
-                  <span class="badge text-bg-{{ cls }}">{{ r|capitalize }}</span>
+              <td data-col="rarity">
+                {% if card.rarity_label %}
+                  <span class="badge text-bg-{{ card.rarity_badge_class or 'secondary' }}">{{ card.rarity_label }}</span>
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td>{{ card.collector_number }}</td>
+              <td data-col="collector">{{ card.collector_number or '' }}</td>
             </tr>
-            {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -851,6 +879,94 @@
     });
   }
 
+  // Column visibility toggles for the cards table.
+  const columnTable = document.querySelector('[data-columns-table="cards"]');
+  const columnToggles = Array.from(document.querySelectorAll('[data-columns-toggle="cards"]'));
+  const columnReset = document.querySelector('[data-columns-reset="cards"]');
+  if (columnTable && columnToggles.length) {
+    const storageKey = 'dv:columns:cards';
+    const availableCols = new Set(
+      columnToggles.map((toggle) => toggle.getAttribute('data-col')).filter(Boolean)
+    );
+
+    const readHidden = () => {
+      try {
+        const raw = window.localStorage?.getItem(storageKey);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((col) => availableCols.has(col)) : [];
+      } catch (_err) {
+        return [];
+      }
+    };
+
+    const writeHidden = (hidden) => {
+      try {
+        window.localStorage?.setItem(storageKey, JSON.stringify(hidden));
+      } catch (_err) {
+        /* ignore storage failures */
+      }
+    };
+
+    const setColumnVisible = (col, visible) => {
+      columnTable.querySelectorAll(`[data-col="${col}"]`).forEach((cell) => {
+        cell.classList.toggle('d-none', !visible);
+      });
+    };
+
+    const applyHidden = (hidden) => {
+      const hiddenSet = new Set(hidden);
+      columnToggles.forEach((toggle) => {
+        const col = toggle.getAttribute('data-col');
+        if (!col) return;
+        const visible = !hiddenSet.has(col);
+        toggle.checked = visible;
+        setColumnVisible(col, visible);
+      });
+    };
+
+    const storedHidden = readHidden();
+    if (storedHidden.length === availableCols.size) {
+      writeHidden([]);
+      applyHidden([]);
+    } else {
+      applyHidden(storedHidden);
+    }
+
+    const syncFromUI = () => {
+      const hidden = columnToggles
+        .filter((toggle) => !toggle.checked)
+        .map((toggle) => toggle.getAttribute('data-col'))
+        .filter(Boolean);
+
+      if (hidden.length === columnToggles.length) {
+        columnToggles.forEach((toggle) => {
+          toggle.checked = true;
+        });
+        writeHidden([]);
+        applyHidden([]);
+        return;
+      }
+
+      writeHidden(hidden);
+      applyHidden(hidden);
+    };
+
+    columnToggles.forEach((toggle) => {
+      toggle.addEventListener('change', syncFromUI);
+    });
+
+    if (columnReset) {
+      columnReset.addEventListener('click', () => {
+        columnToggles.forEach((toggle) => {
+          toggle.checked = true;
+        });
+        writeHidden([]);
+        applyHidden([]);
+      });
+    }
+  }
+
   // --- Drawer (unchanged) ---
   const drawerEl  = document.getElementById('cardDrawer');
   const contentEl = document.getElementById('drawerContent');
@@ -877,9 +993,8 @@
     const out = [];
     if (Array.isArray(payload?.images)) out.push(...payload.images);
     const info = payload?.info || {};
-    if (info?.image_uris) out.push(info.image_uris);
-    if (Array.isArray(info?.card_faces)) {
-      info.card_faces.forEach(face => { if (face?.image_uris) out.push(face.image_uris); });
+    if (Array.isArray(info?.faces)) {
+      info.faces.forEach(face => { if (face) out.push(face); });
     }
     return out.map(i => ({
       small:  i?.small  || i?.normal || i?.large || i?.url || i?.uri || null,

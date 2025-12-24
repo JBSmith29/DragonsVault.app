@@ -248,21 +248,16 @@
     {% else %}
       <div class="deck-token-grid" id="deckTokenGrid">
         {% for token in tokens %}
-          {% set deck_ids = token.decks | map(attribute='deck_id') | list %}
-          {% set deck_names = token.decks | map(attribute='deck_name') | reject('equalto', None) | list %}
-          {% set search_key = (token.name ~ ' ' ~ token.type_line ~ ' ' ~ (deck_names | join(' ')))|lower %}
           <article class="deck-token-card"
-                   data-search="{{ search_key }}"
-                   data-decks="{{ deck_ids | join(',') }}">
+                   data-search="{{ token.search_key }}"
+                   data-decks="{{ token.deck_ids_csv }}">
             <div class="deck-token-card-header">
               <div class="deck-token-thumb">
                 {% if token.image %}
                   <img src="{{ token.image }}"
                        alt="{{ token.name }}"
-                       {% if token.normal %}
-                         data-hover-src="{{ token.normal }}"
-                       {% elif token.image %}
-                         data-hover-src="{{ token.image }}"
+                       {% if token.hover_image %}
+                         data-hover-src="{{ token.hover_image }}"
                        {% endif %}>
                 {% else %}
                   <div class="w-100 h-100 bg-secondary-subtle opacity-50"></div>
@@ -270,7 +265,7 @@
               </div>
               <div class="deck-token-meta flex-grow-1">
                 <div class="token-name">{{ token.name }}</div>
-                <div class="token-type">{{ token.type_line or 'Token' }}</div>
+                <div class="token-type">{{ token.type_line }}</div>
                 <div class="token-pill-row">
                   <span class="badge text-bg-primary">Decks: {{ token.deck_count }}</span>
                   <span class="badge text-bg-secondary">Cards: {{ token.total_sources }}</span>

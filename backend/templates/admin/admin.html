@@ -7,18 +7,33 @@
       <div class="text-muted small">Operate users, data pipelines, and cache health from one place.</div>
     </div>
     <div class="d-flex flex-wrap align-items-center gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.manage_api_token') }}">
-        Account &amp; API Token
-      </a>
       <form method="post" class="d-inline-flex">
         <input type="hidden" name="action" value="refresh_all">
         <button class="btn btn-outline-primary btn-sm" type="submit">
           Refresh All Data
         </button>
       </form>
-      <a class="btn btn-outline-danger btn-sm" href="{{ url_for('views.logout') }}" data-hx-boost="false">
-        Sign out
-      </a>
+      <div class="dropdown">
+        <button
+          class="btn btn-outline-secondary btn-sm dropdown-toggle"
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          Users
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="{{ url_for('views.manage_api_token') }}">User Settings</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('views.admin_manage_users') }}">User Manager</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('views.admin_data_operations') }}">Data Operations</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item text-danger" href="{{ url_for('views.logout') }}" data-hx-boost="false">
+              Sign out
+            </a>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 
@@ -122,11 +137,11 @@
               <input type="hidden" name="action" value="refresh_oracle_tags">
               <button class="btn btn-primary btn-sm" type="submit">Refresh Draconic Attunement</button>
             </form>
-            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_oracle_tags') }}">View Draconic Attunement</a>
             <form method="post" class="d-inline">
               <input type="hidden" name="action" value="refresh_oracle_enrichment_full">
               <button class="btn btn-outline-secondary btn-sm" type="submit">Full Oracle Rebuild</button>
             </form>
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.admin_oracle_tags') }}">View Draconic Attunement</a>
           </div>
           <div class="text-muted small mt-2">Requires the Scryfall default cards cache.</div>
         </div>

@@ -142,7 +142,6 @@ def _compute_list_checker(pasted: str):
             Card,
             Folder.id.label("folder_id"),
             Folder.name.label("folder_name"),
-            Folder.category.label("folder_category"),
         )
         .join(Folder, Folder.id == Card.folder_id, isouter=True)
         .filter(func.lower(Card.name).in_(keys))
@@ -153,42 +152,43 @@ def _compute_list_checker(pasted: str):
     collection_counts = defaultdict(lambda: defaultdict(int))
     deck_counts = defaultdict(lambda: defaultdict(int))
     available_per_folder_counts = defaultdict(lambda: defaultdict(int))
-    _, _, collection_lower = _collection_metadata()
+    collection_ids, _, _ = _collection_metadata()
+    collection_id_set = set(collection_ids)
 
-    def _rank_folder(fname):
+    def _rank_folder(fid, fname):
         lower = (fname or "").strip().lower()
         return (
-            0 if (lower in collection_lower or "collection" in lower) else 1,
+            0 if (fid in collection_id_set) else 1,
             lower,
         )
 
     avail_ids = _accessible_folder_ids()
 
     best_card_for_name = {}
-    for card, folder_id, folder_name, folder_category in rows:
+    for card, folder_id, folder_name in rows:
         if folder_name:
             nkey = _normalize_name(card.name)
             per_folder_counts[nkey][folder_name] += 1
-            is_collection_folder = (folder_category or Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION
+            is_collection_folder = bool(folder_id and folder_id in collection_id_set)
             if is_collection_folder:
                 collection_counts[nkey][folder_name] += 1
                 if folder_id:
                     available_per_folder_counts[nkey][folder_name] += 1
             else:
                 deck_counts[nkey][folder_name] += 1
-            cand = (_rank_folder(folder_name), card)
+            cand = (_rank_folder(folder_id, folder_name), card)
             prev = best_card_for_name.get(nkey)
             if prev is None or cand[0] < prev[0]:
                 best_card_for_name[nkey] = cand
     rows2 = (
-        db.session.query(Card.name, Card.folder_id, Folder.category)
+        db.session.query(Card.name, Card.folder_id)
         .join(Folder, Folder.id == Card.folder_id, isouter=True)
         .filter(func.lower(Card.name).in_(keys))
         .all()
     )
     available_count = defaultdict(int)
-    for name, fid, folder_category in rows2:
-        is_collection_folder = (folder_category or Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION
+    for name, fid in rows2:
+        is_collection_folder = bool(fid and fid in collection_id_set)
         if fid and is_collection_folder:
             available_count[_normalize_name(name)] += 1
 
@@ -219,16 +219,15 @@ def _compute_list_checker(pasted: str):
                     Card,
                     Folder.id.label("folder_id"),
                     Folder.name.label("folder_name"),
-                    Folder.category.label("folder_category"),
                 )
                 .join(Folder, Folder.id == Card.folder_id, isouter=True)
                 .filter(func.lower(Card.name) == canonical_lower)
                 .all()
             )
-            for card, folder_id, folder_name, folder_category in add_rows:
+            for card, folder_id, folder_name in add_rows:
                 if folder_name:
                     per_folder_counts[nkey][folder_name] += 1
-                    is_collection_folder = (folder_category or Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION
+                    is_collection_folder = bool(folder_id and folder_id in collection_id_set)
                     if is_collection_folder:
                         collection_counts[nkey][folder_name] += 1
                         if folder_id:
@@ -236,13 +235,13 @@ def _compute_list_checker(pasted: str):
                     else:
                         deck_counts[nkey][folder_name] += 1
             add_rows2 = (
-                db.session.query(Card.folder_id, Folder.category)
+                db.session.query(Card.folder_id)
                 .join(Folder, Folder.id == Card.folder_id, isouter=True)
                 .filter(func.lower(Card.name) == canonical_lower)
                 .all()
             )
-            for fid, folder_category in add_rows2:
-                is_collection_folder = (folder_category or Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION
+            for (fid,) in add_rows2:
+                is_collection_folder = bool(fid and fid in collection_id_set)
                 if fid and is_collection_folder:
                     available_count[nkey] += 1
             rep_card_map[nkey] = face_card
@@ -257,16 +256,15 @@ def _compute_list_checker(pasted: str):
                 Card,
                 Folder.id.label("folder_id"),
                 Folder.name.label("folder_name"),
-                Folder.category.label("folder_category"),
             )
             .join(Folder, Folder.id == Card.folder_id, isouter=True)
             .filter(or_(*[Card.name.ilike(p) for p in patterns]))
             .all()
         )
-        for card, folder_id, folder_name, folder_category in add_rows:
+        for card, folder_id, folder_name in add_rows:
             if folder_name:
                 per_folder_counts[nkey][folder_name] += 1
-                is_collection_folder = (folder_category or Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION
+                is_collection_folder = bool(folder_id and folder_id in collection_id_set)
                 if is_collection_folder:
                     collection_counts[nkey][folder_name] += 1
                     if folder_id:
@@ -275,13 +273,13 @@ def _compute_list_checker(pasted: str):
                     deck_counts[nkey][folder_name] += 1
 
         add_rows2 = (
-            db.session.query(Card.folder_id, Folder.category)
+            db.session.query(Card.folder_id)
             .join(Folder, Folder.id == Card.folder_id, isouter=True)
             .filter(or_(*[Card.name.ilike(p) for p in patterns]))
             .all()
         )
-        for fid, folder_category in add_rows2:
-            is_collection_folder = (folder_category or Folder.CATEGORY_DECK) == Folder.CATEGORY_COLLECTION
+        for (fid,) in add_rows2:
+            is_collection_folder = bool(fid and fid in collection_id_set)
             if fid and is_collection_folder:
                 available_count[nkey] += 1
 

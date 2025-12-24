@@ -15,6 +15,7 @@ from typing import Optional
 
 from flask import current_app, has_app_context
 
+from extensions import db
 _jobs_disabled = os.getenv("DISABLE_BACKGROUND_JOBS", "0").lower() in {"1", "true", "yes", "on"}
 if _jobs_disabled:
     get_current_job = None  # type: ignore
@@ -35,7 +36,7 @@ from services.import_helpers import (
     restore_commander_metadata,
     delete_empty_folders,
 )
-from services.csv_importer import process_csv, HeaderValidationError, validate_import_file
+from services.csv_importer import FileValidationError, process_csv, HeaderValidationError, validate_import_file
 from services.scryfall_cache import ensure_cache_loaded
 from services import scryfall_cache as sc
 from services.spellbook_sync import (
@@ -289,20 +290,22 @@ def _process_csv_import(
     preserved: Optional[dict] = None
     removed = 0
     try:
-        if overwrite or quantity_mode in {"absolute", "purge"}:
-            preserved = purge_cards_preserve_commanders()
-        stats, per_folder = process_csv(
-            filepath,
-            default_folder="Unsorted",
-            dry_run=False,
-            quantity_mode=quantity_mode,
-            job_id=import_job_id,
-            owner_user_id=owner_user_id,
-            owner_username=owner_username,
-        )
-        if preserved:
-            restore_commander_metadata(preserved)
-            removed = delete_empty_folders()
+        with db.session.begin():
+            if overwrite or quantity_mode in {"absolute", "purge"}:
+                preserved = purge_cards_preserve_commanders(commit=False)
+            stats, per_folder = process_csv(
+                filepath,
+                default_folder="Unsorted",
+                dry_run=False,
+                quantity_mode=quantity_mode,
+                job_id=import_job_id,
+                owner_user_id=owner_user_id,
+                owner_username=owner_username,
+                commit=False,
+            )
+            if preserved:
+                restore_commander_metadata(preserved, commit=False)
+                removed = delete_empty_folders(commit=False)
         emit_job_event(
             "import",
             "completed",
@@ -315,7 +318,7 @@ def _process_csv_import(
             user_id=owner_user_id,
         )
         return stats, per_folder
-    except HeaderValidationError as exc:
+    except (HeaderValidationError, FileValidationError) as exc:
         emit_job_event(
             "import",
             "failed",

@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 from collections import defaultdict, deque
+from pathlib import Path
 from typing import Callable, Tuple
 
 from flask import current_app, has_app_context
@@ -24,6 +26,59 @@ except ImportError:  # pragma: no cover
     _redis_available = False
 
 _redis_client = None
+
+
+def _event_file_dir() -> Path:
+    if has_app_context():
+        return Path(current_app.instance_path) / "data" / "job_events"
+    instance_env = os.getenv("INSTANCE_DIR")
+    if instance_env:
+        return Path(instance_env) / "data" / "job_events"
+    return Path(__file__).resolve().parents[2] / "instance" / "data" / "job_events"
+
+
+def _event_file_path(scope: str, dataset: str | None) -> Path:
+    safe_scope = re.sub(r"[^A-Za-z0-9_.-]+", "_", scope or "scope")
+    safe_dataset = re.sub(r"[^A-Za-z0-9_.-]+", "_", dataset or "none")
+    return _event_file_dir() / f"{safe_scope}__{safe_dataset}.json"
+
+
+def _store_event_file(event: dict) -> None:
+    scope = event.get("scope") or ""
+    dataset = event.get("dataset")
+    if not scope:
+        return
+    path = _event_file_path(scope, dataset)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            raw = path.read_text(encoding="utf-8")
+            events = json.loads(raw) if raw else []
+        else:
+            events = []
+        if not isinstance(events, list):
+            events = []
+        events.append(event)
+        events = events[-_RECENT_EVENT_LIMIT:]
+        path.write_text(json.dumps(events, ensure_ascii=True), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _load_event_file(scope: str, dataset: str | None) -> list[dict]:
+    if not scope:
+        return []
+    path = _event_file_path(scope, dataset)
+    try:
+        if not path.exists():
+            return []
+        raw = path.read_text(encoding="utf-8")
+        events = json.loads(raw) if raw else []
+        if isinstance(events, list):
+            return events
+    except Exception:
+        return []
+    return []
 
 
 def _redis_url() -> str:
@@ -71,6 +126,7 @@ def _store_recent_event(event: dict) -> None:
 
     conn = _redis_connection()
     if conn is None:
+        _store_event_file(event)
         return
     try:
         payload = json.dumps(event, ensure_ascii=True)
@@ -82,8 +138,7 @@ def _store_recent_event(event: dict) -> None:
             pipe.expire(redis_key, _REDIS_EVENT_TTL_SECONDS)
         pipe.execute()
     except Exception:
-        # Redis is optional; fall back to in-memory only.
-        pass
+        _store_event_file(event)
 
 
 def emit_job_event(scope: str, event_type: str, **payload) -> None:
@@ -118,6 +173,9 @@ def latest_job_events(scope: str, dataset: str | None = None) -> list[dict]:
                 return events
         except Exception:
             pass
+    file_events = _load_event_file(scope, dataset)
+    if file_events:
+        return file_events
     key = (scope, dataset)
     events = _recent_events.get(key)
     if not events:

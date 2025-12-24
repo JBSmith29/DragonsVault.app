@@ -221,15 +221,51 @@ def _cn_num(cn: str) -> Optional[int]:
 
 
 _COLOR_BIT_MAP = {"W": 1, "U": 2, "B": 4, "R": 8, "G": 16}
+_WUBRG_ORDER = ("W", "U", "B", "R", "G")
 
 
 def normalize_color_identity(colors: Optional[Iterable[str]]) -> Tuple[str, int]:
-    """Return (sorted letters string, bitmask) from an iterable of color letters."""
-    letters = sorted({str(c or "").strip().upper() for c in (colors or []) if c})
+    """Return (WUBRG-ordered letters string, bitmask) from an iterable of color letters."""
+    raw = {str(c or "").strip().upper() for c in (colors or []) if c}
+    letters = [c for c in _WUBRG_ORDER if c in raw]
     mask = 0
     for letter in letters:
         mask |= _COLOR_BIT_MAP.get(letter, 0)
     return "".join(letters), mask
+
+
+def _joined_oracle_text(print_data: Dict[str, Any]) -> str:
+    parts = []
+    text = print_data.get("oracle_text")
+    if text:
+        parts.append(text)
+    for face in print_data.get("card_faces") or []:
+        face_text = (face or {}).get("oracle_text")
+        if face_text:
+            parts.append(face_text)
+    return " // ".join(part for part in parts if part)
+
+
+def _face_payload(face_data: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    fallback = fallback or {}
+    colors_raw = face_data.get("colors") or []
+    identity_raw = face_data.get("color_identity") or []
+    colors_letters, _ = normalize_color_identity(colors_raw)
+    identity_letters, _ = normalize_color_identity(identity_raw)
+    image_uris = (face_data.get("image_uris") or {}) if isinstance(face_data, dict) else {}
+    return {
+        "name": face_data.get("name") or fallback.get("name"),
+        "oracle_text": face_data.get("oracle_text"),
+        "mana_cost": face_data.get("mana_cost"),
+        "type_line": face_data.get("type_line"),
+        "colors": colors_letters or None,
+        "color_identity": identity_letters or None,
+        "image_uris": {
+            "small": image_uris.get("small"),
+            "normal": image_uris.get("normal"),
+            "large": image_uris.get("large"),
+        },
+    }
 
 
 def metadata_from_print(print_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -238,8 +274,13 @@ def metadata_from_print(print_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "type_line": None,
             "rarity": None,
+            "oracle_text": None,
+            "mana_value": None,
+            "colors": None,
             "color_identity": None,
             "color_identity_mask": None,
+            "layout": None,
+            "faces_json": None,
         }
 
     type_line_raw = (print_data.get("type_line") or "").strip()
@@ -248,16 +289,47 @@ def metadata_from_print(print_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     rarity_raw = (print_data.get("rarity") or "").strip().lower()
     rarity = rarity_raw or None
 
-    colors = print_data.get("color_identity")
-    if not colors:
-        colors = print_data.get("colors")
-    identity_letters, mask = normalize_color_identity(colors or [])
+    layout_raw = (print_data.get("layout") or "").strip().lower()
+    layout = layout_raw or None
+
+    oracle_text = _joined_oracle_text(print_data) or None
+
+    mana_value = print_data.get("cmc")
+    if mana_value is None:
+        mana_value = print_data.get("mana_value")
+    try:
+        mana_value = float(mana_value) if mana_value is not None else None
+    except (TypeError, ValueError):
+        mana_value = None
+
+    colors_raw = print_data.get("colors")
+    if not colors_raw:
+        colors_raw = []
+        for face in print_data.get("card_faces") or []:
+            colors_raw.extend(face.get("colors") or [])
+    colors_letters, _ = normalize_color_identity(colors_raw or [])
+
+    identity_raw = print_data.get("color_identity")
+    if not identity_raw:
+        identity_raw = colors_raw or []
+    identity_letters, mask = normalize_color_identity(identity_raw or [])
+
+    faces = print_data.get("card_faces") or []
+    if faces:
+        faces_json = [_face_payload(face, fallback=print_data) for face in faces if isinstance(face, dict)]
+    else:
+        faces_json = [_face_payload(print_data, fallback=print_data)]
 
     return {
         "type_line": type_line,
         "rarity": rarity,
+        "oracle_text": oracle_text,
+        "mana_value": mana_value,
+        "colors": colors_letters or None,
         "color_identity": identity_letters or None,
         "color_identity_mask": mask or None,
+        "layout": layout,
+        "faces_json": faces_json or None,
     }
 
 

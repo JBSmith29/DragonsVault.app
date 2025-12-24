@@ -724,7 +724,11 @@ def create_app():
 
         # Import models after db is bound
         from models import Card, Folder, WishlistItem  # noqa: F401
+        from services.deck_service import register_deck_stats_listeners
+        from services.request_cache import register_request_cache_listeners
         _register_visibility_filters(Card, Folder)
+        register_deck_stats_listeners()
+        register_request_cache_listeners()
 
         if fallback and (app.debug or app.config.get("ALLOW_RUNTIME_INDEX_BOOTSTRAP")):
             # Create DB objects if missing (safe even with Alembic)
@@ -803,24 +807,29 @@ def create_app():
             raise click.ClickException(f"File not found: {p}")
 
         preserved = None
+        removed = 0
         should_reset = not dry_run and (overwrite or quantity_mode == "absolute")
-        if should_reset:
-            click.echo("Clearing existing cards before import...")
-            preserved = purge_cards_preserve_commanders()
-
         try:
-            stats, per_folder = process_csv(
-                str(p),
-                default_folder=default_folder,
-                dry_run=dry_run,
-                quantity_mode=quantity_mode,
-            )
+            with db.session.begin():
+                if should_reset:
+                    click.echo("Clearing existing cards before import...")
+                    preserved = purge_cards_preserve_commanders(commit=False)
+
+                stats, per_folder = process_csv(
+                    str(p),
+                    default_folder=default_folder,
+                    dry_run=dry_run,
+                    quantity_mode=quantity_mode,
+                    commit=False,
+                )
+
+                if preserved:
+                    restore_commander_metadata(preserved, commit=False)
+                    removed = delete_empty_folders(commit=False)
         except HeaderValidationError as exc:
             raise click.ClickException(str(exc)) from exc
 
         if preserved:
-            restore_commander_metadata(preserved)
-            removed = delete_empty_folders()
             click.echo(f"Restored commander metadata; removed {removed} empty folder(s).")
 
         click.echo(

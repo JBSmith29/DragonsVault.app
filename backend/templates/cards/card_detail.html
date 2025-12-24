@@ -56,10 +56,10 @@
     <span>{{ info.name or card.name }}</span>
   </h2>
   <div class="text-muted mb-2">
-    {{ (info.set or card.set_code or "")|upper }} #{{ info.collector_number or card.collector_number }}
+    {{ (info.set_code or card.set_code or "")|upper }} #{{ info.collector_number or card.collector_number }}
     {% if card is defined and card is not none %}
       • {{ "Foil" if card.is_foil else "Nonfoil" }}
-      {% if card.folder %} • in <strong>{{ card.folder.name }}</strong>{% endif %}
+      {% if card.folder_name %} • in <strong>{{ card.folder_name }}</strong>{% endif %}
       • Qty: <strong>{{ card.quantity or 1 }}</strong>
     {% endif %}
   </div>
@@ -94,15 +94,13 @@
         <div id="artworkCarousel"
              class="carousel slide mb-2"
              data-bs-ride="false"
-             data-prints-uri="{{ info.prints_search_uri or '' }}"
-             data-oracle-id="{{ oracle_id or '' }}"
              data-initial-sid="{{ scryfall_id or '' }}"
              data-initial-src="{{ primary_src or '' }}">
           <div class="carousel-inner">
             {% if primary_src %}
               <div class="carousel-item active"
                    data-sid="{{ scryfall_id or '' }}"
-                   data-set="{{ (info.set or '')|upper }}"
+                   data-set="{{ (info.set_code or '')|upper }}"
                    data-set-name="{{ info.set_name or '' }}"
                    data-cn="{{ info.collector_number or '' }}"
                    data-lang="{{ (info.lang or '')|upper }}"
@@ -287,7 +285,7 @@
         </div>
         <div class="list-group-item d-flex justify-content-between">
           <span class="fw-semibold text-muted">Set</span>
-          <span>{{ info.set_name or '-' }} <span class="text-muted">[{{ (info.set or '')|upper }}]</span></span>
+          <span>{{ info.set_name or '-' }} <span class="text-muted">[{{ (info.set_code or '')|upper }}]</span></span>
         </div>
         <div class="list-group-item d-flex justify-content-between">
           <span class="fw-semibold text-muted">Price</span>
@@ -301,7 +299,7 @@
         </div>
         <div class="list-group-item d-flex justify-content-between">
           <span class="fw-semibold text-muted">Folder</span>
-          <span>{{ card.folder.name if (card and card.folder) else '—' }}</span>
+          <span>{{ card.folder_name if card and card.folder_name else '—' }}</span>
         </div>
 
         {% set COLLECTION_FOLDERS = collection_folders|default([], true) %}
@@ -363,6 +361,7 @@
   const tcgLinkBtn = document.getElementById('detail-tcg-link');
   const tcgDefaultHref = tcgLinkBtn ? (tcgLinkBtn.getAttribute('data-default-href') || '#') : '#';
   let printsMeta = [];
+  const preloadedPrints = {{ print_images_json | safe }};
 
   let carousel = null;
   if (typeof bootstrap !== 'undefined' && carouselEl) {
@@ -498,112 +497,7 @@
     updateAltBtnLabel(collapseEl.classList.contains('show'));
   }
 
-  // -------- Load all prints (unique artworks) from Scryfall --------
-  const printsUri   = carouselEl?.getAttribute('data-prints-uri') || '';
-  const oracleId    = carouselEl?.getAttribute('data-oracle-id') || '';
-  const initialSid  = carouselEl?.getAttribute('data-initial-sid') || '';
-  const firstServer = carouselEl?.getAttribute('data-initial-src') || '';
-
-  function buildFallbackUri(oracleId) {
-    if (!oracleId) return null;
-    const q = encodeURIComponent(`oracleid:${oracleId}`);
-    return `https://api.scryfall.com/cards/search?q=${q}&unique=prints&order=released`;
-  }
-
-  function extractImagesFromCard(c) {
-    const out = [];
-    const setCode = String(c.set || "").toUpperCase();
-    const labelParts = [];
-    if (setCode) labelParts.push(setCode);
-    if (c.collector_number) labelParts.push(String(c.collector_number));
-    if (c.lang) labelParts.push(String(c.lang).toUpperCase());
-    const label = labelParts.join(" · " );
-    const purchase = c.purchase_uris || {};
-    const related = c.related_uris || {};
-    const base = {
-      id: c.id || "",
-      set: setCode,
-      setName: c.set_name || "",
-      collectorNumber: String(c.collector_number || ""),
-      lang: String(c.lang || "").toUpperCase(),
-      rarity: c.rarity || "",
-      prices: c.prices || {},
-      name: c.name || "",
-      scryUri: c.scryfall_uri || "",
-      tcgUri: purchase.tcgplayer || related.tcgplayer || "",
-      releasedAt: c.released_at || ""
-    };
-    const push = (sm, nm) => {
-      if (!sm && !nm) return;
-      out.push({
-        ...base,
-        small: sm || nm,
-        normal: nm || sm,
-        label
-      });
-    };
-    const iu = c.image_uris || null;
-    const faces = Array.isArray(c.card_faces) ? c.card_faces : [];
-    if (iu) {
-      push(iu.small || iu.normal || iu.large, iu.normal || iu.large || iu.small);
-    } else if (faces.length) {
-      const fiu = (faces[0] || {}).image_uris || {};
-      push(fiu.small || fiu.normal || fiu.large, fiu.normal || fiu.large || fiu.small);
-    }
-    return out;
-  }
-
-  async function fetchAllPrintImages(uri, oracleId) {
-    let url = uri || buildFallbackUri(oracleId);
-    if (!url) return [];
-    try {
-      const u = new URL(url);
-      if (!u.searchParams.get('unique')) u.searchParams.set('unique', 'prints');
-      if (!u.searchParams.get('order'))  u.searchParams.set('order', 'released');
-      url = u.toString();
-    } catch {}
-
-    const out = [];
-    let next = url, pages = 0;
-    while (next && pages < 12) {
-      pages++;
-      const res = await fetch(next, { credentials: 'omit' });
-      if (!res.ok) break;
-      const payload = await res.json();
-      const data = Array.isArray(payload.data) ? payload.data : [];
-      for (const c of data) extractImagesFromCard(c).forEach(x => out.push(x));
-      next = payload.has_more ? payload.next_page : null;
-    }
-    // dedupe by print id (or by URL)
-    const seen = new Set(), imgs = [];
-    for (const x of out) {
-      const key = x.id || x.normal || x.small;
-      if (seen.has(key)) continue;
-      seen.add(key); imgs.push(x);
-    }
-    // ensure the first image from server is at index 0
-    if (firstServer && !imgs.some(x => x.small === firstServer || x.normal === firstServer)) {
-      const active = carouselEl ? carouselEl.querySelector('.carousel-item.active') : null;
-      const ds = active ? (active.dataset || {}) : {};
-      imgs.unshift({
-        id: (ds.sid || initialSid || ""),
-        set: ds.set || "",
-        setName: ds.setName || "",
-        collectorNumber: ds.cn || "",
-        lang: ds.lang || "",
-        rarity: ds.rarity || "",
-        prices: parseJSONSafe(ds.prices, {}),
-        name: ds.name || "",
-        scryUri: ds.scryUri || "",
-        tcgUri: ds.tcgUri || "",
-        releasedAt: ds.releasedAt || "",
-        small: firstServer,
-        normal: firstServer,
-        label: ds.label || ""
-      });
-    }
-    return imgs;
-  }
+  // -------- Use preloaded prints (server sanitized) --------
 
   function rebuildCarousel(imgs) {
     printsMeta = imgs.map(im => ({ ...im }));
@@ -666,7 +560,7 @@
   (async function run() {
     if (!carouselEl) return;
     try {
-      const imgs = await fetchAllPrintImages(printsUri, oracleId);
+      const imgs = Array.isArray(preloadedPrints) ? preloadedPrints : [];
       if (imgs && imgs.length) {
         rebuildCarousel(imgs);
         rebuildThumbs(imgs);
@@ -682,7 +576,7 @@
     }
   })();
 
-  // -------- Flip logic using Scryfall card faces --------
+  // -------- Flip logic using sanitized face images --------
   const facesCache = new Map(); // sid -> {front:string|null, back:string|null}
   let flipState = 'front';      // 'front' | 'back'
 
@@ -690,17 +584,17 @@
     if (!sid) return { front: null, back: null };
     if (facesCache.has(sid)) return facesCache.get(sid);
     try {
-      const res = await fetch(`https://api.scryfall.com/cards/${sid}`);
+      const res = await fetch(`/api/print/${encodeURIComponent(sid)}/faces`);
       if (!res.ok) throw new Error('faces fetch failed');
       const c = await res.json();
-      const faces = Array.isArray(c.card_faces) ? c.card_faces : [];
+      const faces = Array.isArray(c.faces) ? c.faces : [];
       let front = null, back = null;
       if (faces.length >= 1) {
-        const f0 = faces[0]?.image_uris || {};
+        const f0 = faces[0] || {};
         front = f0.large || f0.normal || f0.small || null;
       }
       if (faces.length >= 2) {
-        const f1 = faces[1]?.image_uris || {};
+        const f1 = faces[1] || {};
         back = f1.large || f1.normal || f1.small || null;
       }
       const rec = { front, back };

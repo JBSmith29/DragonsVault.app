@@ -43,66 +43,6 @@
     </a>
   {%- endmacro %}
 
-  {% macro rarity_badge(value, label) -%}
-    {% if value %}
-      {% set cls = 'secondary' %}
-      {% set lv = value.lower() %}
-      {% if lv == 'uncommon' %}
-        {% set cls = 'success' %}
-      {% elif lv == 'rare' %}
-        {% set cls = 'warning' %}
-      {% elif lv in ['mythic', 'mythic rare'] %}
-        {% set cls = 'danger' %}
-      {% endif %}
-      <span class="badge text-bg-{{ cls }}">{{ label }}</span>
-    {% else %}
-      <span class="text-muted">-</span>
-    {% endif %}
-  {%- endmacro %}
-
-  {% macro type_badges(type_line) -%}
-    {% if not type_line %}
-      <span class="text-muted">-</span>
-    {% else %}
-      {% set base_types = ["Artifact","Battle","Creature","Enchantment","Instant","Land","Planeswalker","Sorcery"] %}
-      {% set shown = namespace(count=0) %}
-      <div class="d-inline-flex flex-wrap gap-1">
-        {% for t in base_types %}
-          {% if t in type_line %}
-            {% set shown.count = shown.count + 1 %}
-            <span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>
-          {% endif %}
-        {% endfor %}
-      </div>
-      {% if shown.count == 0 %}
-        <span class="text-muted">-</span>
-      {% endif %}
-    {% endif %}
-  {%- endmacro %}
-
-  {% macro price_block(prices) -%}
-    {% set ns = namespace(found=false) %}
-    <div class="d-flex flex-column gap-1 small">
-      {% if prices %}
-        {% if prices.usd %}
-          {% set ns.found = true %}
-          <span>USD {{ prices.usd }}</span>
-        {% endif %}
-        {% if prices.usd_foil %}
-          {% set ns.found = true %}
-          <span>USD Foil {{ prices.usd_foil }}</span>
-        {% endif %}
-        {% if prices.usd_etched %}
-          {% set ns.found = true %}
-          <span>USD Etched {{ prices.usd_etched }}</span>
-        {% endif %}
-      {% endif %}
-      {% if not ns.found %}
-        <span class="text-muted">-</span>
-      {% endif %}
-    </div>
-  {%- endmacro %}
-
   {% set _unique = request.args.get('unique') %}
   {% set _commander = request.args.get('commander') %}
   {% set unique_checked = (_unique != '0') %}
@@ -314,34 +254,89 @@
     {% if not args.get('commander') %}{% set _ = args.update({'commander':'legal'}) %}{% endif %}
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
       <div class="small text-muted">Showing {{ results|length }} of {{ '{:,}'.format(total or 0) }} cards</div>
+      <div class="dropdown">
+        <button
+          class="btn btn-sm btn-outline-secondary dropdown-toggle"
+          type="button"
+          data-bs-toggle="dropdown"
+          data-bs-auto-close="outside"
+          aria-expanded="false"
+        >
+          Columns
+        </button>
+        <div class="dropdown-menu dropdown-menu-end p-3" style="min-width:220px;">
+          <div class="small text-muted mb-2">Show columns</div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColArt" data-columns-toggle="scryfall" data-col="art" checked>
+            <label class="form-check-label" for="sfbColArt">Art</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColName" data-columns-toggle="scryfall" data-col="name" checked>
+            <label class="form-check-label" for="sfbColName">Name</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColMana" data-columns-toggle="scryfall" data-col="mana" checked>
+            <label class="form-check-label" for="sfbColMana">Mana Cost</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColCmc" data-columns-toggle="scryfall" data-col="cmc" checked>
+            <label class="form-check-label" for="sfbColCmc">CMC</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColType" data-columns-toggle="scryfall" data-col="type" checked>
+            <label class="form-check-label" for="sfbColType">Type</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColRarity" data-columns-toggle="scryfall" data-col="rarity" checked>
+            <label class="form-check-label" for="sfbColRarity">Rarity</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColPrices" data-columns-toggle="scryfall" data-col="prices" checked>
+            <label class="form-check-label" for="sfbColPrices">Prices</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColCollector" data-columns-toggle="scryfall" data-col="collector" checked>
+            <label class="form-check-label" for="sfbColCollector">Card #</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sfbColSet" data-columns-toggle="scryfall" data-col="set" checked>
+            <label class="form-check-label" for="sfbColSet">Set</label>
+          </div>
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-columns-reset="scryfall">
+              Reset columns
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="table-responsive mb-3">
-      <table class="table table-sm align-middle cards-table sfb-table">
+      <table class="table table-sm align-middle cards-table sfb-table" data-columns-table="scryfall">
         <thead>
           <tr>
-            <th class="col-art">Art</th>
-            <th>{{ sort_header('Name', 'name') }}</th>
-            <th>Mana Cost</th>
-            <th class="text-center">{{ sort_header('CMC', 'cmc') }}</th>
-            <th>Type</th>
-            <th>{{ sort_header('Rarity', 'rarity') }}</th>
-            <th class="price-cell">Prices</th>
-            <th>{{ sort_header('Card #', 'collector') }}</th>
-            <th>{{ sort_header('Set', 'set') }}</th>
+            <th class="col-art" data-col="art">{{ sort_header('Art', 'art') }}</th>
+            <th data-col="name">{{ sort_header('Name', 'name') }}</th>
+            <th data-col="mana">{{ sort_header('Mana Cost', 'mana') }}</th>
+            <th class="text-center" data-col="cmc">{{ sort_header('CMC', 'cmc') }}</th>
+            <th data-col="type">{{ sort_header('Type', 'type') }}</th>
+            <th data-col="rarity">{{ sort_header('Rarity', 'rarity') }}</th>
+            <th class="price-cell" data-col="prices">{{ sort_header('Prices', 'price') }}</th>
+            <th data-col="collector">{{ sort_header('Card #', 'collector') }}</th>
+            <th data-col="set">{{ sort_header('Set', 'set') }}</th>
           </tr>
         </thead>
         <tbody>
           {% for it in results %}
             <tr class="card-row sfb-row" data-scryfall-id="{{ it.id }}" data-prints-uri="{{ it.prints_uri or '' }}" data-ignore-hover="true">
-              <td class="col-art">
+              <td class="col-art" data-col="art">
                 {% if it.thumb %}
                   <img class="sfb-art-thumb" src="{{ it.thumb }}" alt="{{ it.name }}" loading="lazy" data-hover-src="{{ it.image_large or it.thumb }}">
                 {% else %}
                   <span class="text-muted">-</span>
                 {% endif %}
               </td>
-              <td>
+              <td data-col="name">
                 <a class="card-link fw-semibold" data-row-link href="{{ url_for('views.scryfall_print_detail', sid=it.id, return_to=request.full_path) }}">{{ it.name }}</a>
                 <div class="small text-muted">
                   {% if it.set_name %}{{ it.set_name }}{% endif %}
@@ -349,19 +344,45 @@
                   {% if it.owned_total %} &middot; Owned {{ it.owned_total }}{% endif %}
                 </div>
               </td>
-              <td class="text-nowrap">
+              <td class="text-nowrap" data-col="mana">
                 {% if it.mana_cost_html and it.mana_cost_html != '-' %}
                   <span class="mana-cost">{{ it.mana_cost_html | safe }}</span>
                 {% else %}
                   <span class="text-muted">-</span>
                 {% endif %}
               </td>
-              <td class="text-center">{{ it.cmc_display }}</td>
-              <td>{{ type_badges(it.type_line) }}</td>
-              <td>{{ rarity_badge(it.rarity_value, it.rarity_label or '-') }}</td>
-              <td class="price-cell">{{ price_block(it.prices) }}</td>
-              <td>{{ it.collector_number or '-' }}</td>
-              <td>{{ it.set }}</td>
+              <td class="text-center" data-col="cmc">{{ it.cmc_display }}</td>
+              <td data-col="type">
+                {% if it.type_badges %}
+                  <div class="d-inline-flex flex-wrap gap-1">
+                    {% for t in it.type_badges %}
+                      <span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td data-col="rarity">
+                {% if it.rarity_label %}
+                  <span class="badge text-bg-{{ it.rarity_badge_class or 'secondary' }}">{{ it.rarity_label }}</span>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td class="price-cell" data-col="prices">
+                {% if it.price_lines %}
+                  <div class="d-flex flex-column gap-1 small">
+                    {% for line in it.price_lines %}
+                      <span>{{ line }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td data-col="collector">{{ it.collector_number or '-' }}</td>
+              <td data-col="set">{{ it.set_code }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -409,6 +430,97 @@
     <div class="alert alert-secondary">No cards matched these filters. Try broadening your search.</div>
   {% endif %}
 </div>
+
+<script>
+(function(){
+  const columnTable = document.querySelector('[data-columns-table="scryfall"]');
+  const columnToggles = Array.from(document.querySelectorAll('[data-columns-toggle="scryfall"]'));
+  const columnReset = document.querySelector('[data-columns-reset="scryfall"]');
+  if (!columnTable || !columnToggles.length) return;
+
+  const storageKey = 'dv:columns:scryfall';
+  const availableCols = new Set(
+    columnToggles.map((toggle) => toggle.getAttribute('data-col')).filter(Boolean)
+  );
+
+  const readHidden = () => {
+    try {
+      const raw = window.localStorage?.getItem(storageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((col) => availableCols.has(col)) : [];
+    } catch (_err) {
+      return [];
+    }
+  };
+
+  const writeHidden = (hidden) => {
+    try {
+      window.localStorage?.setItem(storageKey, JSON.stringify(hidden));
+    } catch (_err) {
+      /* ignore storage failures */
+    }
+  };
+
+  const setColumnVisible = (col, visible) => {
+    columnTable.querySelectorAll(`[data-col="${col}"]`).forEach((cell) => {
+      cell.classList.toggle('d-none', !visible);
+    });
+  };
+
+  const applyHidden = (hidden) => {
+    const hiddenSet = new Set(hidden);
+    columnToggles.forEach((toggle) => {
+      const col = toggle.getAttribute('data-col');
+      if (!col) return;
+      const visible = !hiddenSet.has(col);
+      toggle.checked = visible;
+      setColumnVisible(col, visible);
+    });
+  };
+
+  const storedHidden = readHidden();
+  if (storedHidden.length === availableCols.size) {
+    writeHidden([]);
+    applyHidden([]);
+  } else {
+    applyHidden(storedHidden);
+  }
+
+  const syncFromUI = () => {
+    const hidden = columnToggles
+      .filter((toggle) => !toggle.checked)
+      .map((toggle) => toggle.getAttribute('data-col'))
+      .filter(Boolean);
+
+    if (hidden.length === columnToggles.length) {
+      columnToggles.forEach((toggle) => {
+        toggle.checked = true;
+      });
+      writeHidden([]);
+      applyHidden([]);
+      return;
+    }
+
+    writeHidden(hidden);
+    applyHidden(hidden);
+  };
+
+  columnToggles.forEach((toggle) => {
+    toggle.addEventListener('change', syncFromUI);
+  });
+
+  if (columnReset) {
+    columnReset.addEventListener('click', () => {
+      columnToggles.forEach((toggle) => {
+        toggle.checked = true;
+      });
+      writeHidden([]);
+      applyHidden([]);
+    });
+  }
+})();
+</script>
 
 <div class="offcanvas offcanvas-end w-500" tabindex="-1" id="sfbDrawer" aria-labelledby="sfbDrawerLabel">
   <div class="offcanvas-header">

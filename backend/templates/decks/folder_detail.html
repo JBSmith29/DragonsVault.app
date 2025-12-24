@@ -889,7 +889,7 @@
   </div>
   {% endcall %}
 
-  {% set commander_slot_count = folder.commander_name.split('//')|length if folder.commander_name else 0 %}
+{% set commander_slot_count = folder.commander_slot_count %}
   {% set commander_limit_reached = commander_slot_count >= 2 %}
   {% call wrap_modal() %}
   <div class="modal fade" id="commanderPickerModal" tabindex="-1" aria-labelledby="commanderPickerLabel" aria-hidden="true" role="dialog" aria-modal="true">
@@ -1118,7 +1118,7 @@
                                       {% set key_name = card_name|trim|lower %}
                                       {% set card_id = bracket_card_links.get(key_name) %}
                                       {% set card_href = card_id and url_for('views.card_detail', card_id=card_id) or url_for('views.scryfall_browser', q=card_name) %}
-                                      {% set card_img = card_id and image_map.get(card_id) %}
+                                      {% set card_img = card_id and card_image_lookup.get(card_id) %}
                                       {% set card_large = card_img and card_img|replace('/small/','/large/')|replace('/normal/','/large/') %}
                                       {% set hover_img = card_large or ('https://api.scryfall.com/cards/named?format=image&amp;version=large&amp;exact=' ~ encoded) %}
                                       <a href="{{ card_href }}"
@@ -1464,36 +1464,32 @@
       <tbody>
         {% if deck_cards and deck_cards|length %}
           {% for c in deck_cards %}
-            {% set tl  = (type_line_map.get(c.id) or c.type_line or '') %}
-            {% set rar = (rarity_map.get(c.id) or c.rarity or '') %}
-            {% set art = image_map.get(c.id) %}
-            {% set hover_art = (art or '')|replace('/small/','/large/') %}
-            {% set card_roles = [] %}
+            {% set hover_art = c.hover_image %}
             <tr class="deck-row"
                 data-card-id="{{ c.id }}"
-                data-name="{{ (display_name_map.get(c.id) or c.name) | e }}"
-                data-type="{{ tl | e }}"
-                data-tags="{{ (folder_tag_category or '') ~ ' ' ~ (folder.deck_tag or '') ~ ' ' ~ ((card_roles or []) | join(' ')) }}"
-                data-rarity="{{ (rar|capitalize) | e }}"
-                data-set="{{ (c.set_code or '')|upper }}"
+                data-name="{{ c.display_name | e }}"
+                data-type="{{ c.type_line | e }}"
+                data-tags="{{ c.data_tags }}"
+                data-rarity="{{ (c.rarity_label or '') | e }}"
+                data-set="{{ c.set_code_upper }}"
                 data-cn="{{ c.collector_number or '' }}"
                 data-foil="{{ '1' if c.is_foil else '0' }}"
                 data-qty="{{ c.quantity or 1 }}"
-                data-cmc-bucket="{{ cmc_bucket_map.get(c.id) or '' }}"
-                data-roles="{{ (card_roles or []) | join(' ') }}"
-                data-img-small="{{ art or '' }}"
-                data-img-normal="{{ (art or '')|replace('/small/','/normal/') }}"
-                data-img-large="{{ (art or '')|replace('/small/','/large/') }}"
+                data-cmc-bucket="{{ c.cmc_bucket }}"
+                data-roles="{{ c.data_roles }}"
+                data-img-small="{{ c.image_small or '' }}"
+                data-img-normal="{{ c.image_normal or '' }}"
+                data-img-large="{{ c.image_large or '' }}"
               data-ignore-hover="true"
               role="button"
-                aria-label="View {{ display_name_map.get(c.id) or c.name }} details"
+                aria-label="View {{ c.display_name }} details"
             >
               <td class="text-center">
                 <input class="form-check-input card-select" type="checkbox" value="{{ c.id }}">
               </td>
               <td class="col-art">
-                {% if art %}
-                  <img src="{{ art }}"
+                {% if c.image_small %}
+                  <img src="{{ c.image_small }}"
                        class="art-thumb"
                        alt="art"
                        data-hover-src="{{ hover_art }}">
@@ -1505,42 +1501,37 @@
                 <a href="{{ url_for('views.card_detail', card_id=c.id) }}"
                    class="deck-name-link"
                    data-hover-src="{{ hover_art }}">
-                  {{ display_name_map.get(c.id) or c.name }}
+                  {{ c.display_name }}
                 </a>
               </td>
               <td>
-                {% set base_types = ["Artifact","Battle","Creature","Enchantment","Instant","Land","Planeswalker","Sorcery"] %}
-                {% set ns = namespace(list=[]) %}
-                {% for bt in base_types %}{% if bt in tl %}{% set ns.list = ns.list + [bt] %}{% endif %}{% endfor %}
-                {% if ns.list and ns.list|length %}
-                  {% for t in ns.list %}<span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>{% endfor %}
+                {% if c.type_badges and c.type_badges|length %}
+                  {% for t in c.type_badges %}<span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>{% endfor %}
                 {% else %}<span class="text-muted">â€”</span>{% endif %}
               </td>
               <td class="col-colors">
-                {% set pips = color_icons_map.get(c.id) or [] %}
-                {% if pips|length %}
+                {% if c.color_icons and c.color_icons|length %}
                   <span class="pip-row">
-                    {% for src in pips %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
+                    {% for src in c.color_icons %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
                   </span>
                 {% else %}
                   <span class="pip-row"><img class="pip" src="/static/symbols/C.svg" alt="{C}"></span>
                 {% endif %}
               </td>
-              {% set cmc_value = cmc_map.get(c.id) %}
-              <td class="text-center nowrap col-cmc" data-cmc="{{ ('%.4f' % cmc_value) if cmc_value is not none else '' }}">
-                {% if cmc_value is not none %}
-                  <span class="cmc-chip">{{ ('%.2f' % cmc_value).rstrip('0').rstrip('.') }}</span>
+              <td class="text-center nowrap col-cmc" data-cmc="{{ ('%.4f' % c.cmc_value) if c.cmc_value is not none else '' }}">
+                {% if c.cmc_value is not none %}
+                  <span class="cmc-chip">{{ c.cmc_display }}</span>
                 {% else %}
                   <span class="cmc-chip text-muted">&mdash;</span>
                 {% endif %}
               </td>
               <td class="nowrap">
-                {% if rar %}
-                  <span class="badge badge-folder badge-folder-{{ rar|lower }}">{{ rar|capitalize }}</span>
+                {% if c.rarity_label %}
+                  <span class="badge badge-folder badge-folder-{{ c.rarity_badge_class or '' }}">{{ c.rarity_label }}</span>
                 {% else %}&mdash;{% endif %}
               </td>
-              <td class="nowrap">{{ (c.set_code or '')|upper }}</td>
-              <td class="nowrap">{{ c.collector_number }}</td>
+              <td class="nowrap">{{ c.set_code_upper }}</td>
+              <td class="nowrap">{{ c.collector_number or '' }}</td>
               <td class="nowrap">
                 {% if c.is_foil %}
                   <span class="text-success">&#10003;</span>
@@ -1659,11 +1650,10 @@
     const out = [];
     const info = payload?.info || {};
     // faces first so flip works predictably
-    const faces = Array.isArray(info?.card_faces) ? info.card_faces : [];
+    const faces = Array.isArray(info?.faces) ? info.faces : [];
     faces.forEach((f, i) => {
-      const iu = f?.image_uris || {};
-      const src = iu.large || iu.normal || iu.small || null;
-      if (src) out.push({ large: iu.large, normal: iu.normal, small: iu.small, label: f?.name || (i ? 'Back' : 'Front'), _isFace: true, _faceIndex: i });
+      const src = f?.large || f?.normal || f?.small || null;
+      if (src) out.push({ large: f.large, normal: f.normal, small: f.small, label: f.label || (i ? 'Back' : 'Front'), _isFace: true, _faceIndex: i });
     });
 
     // alternates from payload.images
@@ -1675,10 +1665,6 @@
     }
 
     // fallback single
-    if (!out.length && info?.image_uris) {
-      const iu = info.image_uris;
-      out.push({ large: iu.large || iu.normal || iu.small, normal: iu.normal, small: iu.small, label: '' });
-    }
     return out;
   }
 
