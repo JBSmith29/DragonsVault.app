@@ -18,7 +18,7 @@ from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db, limiter
 from models import Card, Folder, FolderShare, User
-from models.role import Role, SubRole, CardRole, OracleRole, OracleEvergreenTag
+from models.role import Role, SubRole, OracleCoreRoleTag, OracleEvergreenTag
 from services import scryfall_cache as sc
 from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
@@ -1416,25 +1416,20 @@ def list_cards():
     if subrole_list:
         query = query.join(Card.subroles).filter(SubRole.label.in_(subrole_list))
     if role_query_text:
-        role_query = f"%{role_query_text.lower()}%"
+        role_query_base = role_query_text.lower().strip()
+        role_query_alt = re.sub(r"[_-]+", " ", role_query_base).strip()
+        role_query_tokens = {role_query_base, role_query_alt}
+        role_query_patterns = [f"%{token}%" for token in role_query_tokens if token]
         role_match = (
-            db.session.query(OracleRole.oracle_id)
-            .filter(OracleRole.oracle_id == Card.oracle_id)
-            .filter(
-                func.lower(
-                    func.coalesce(OracleRole.primary_role, "")
-                    + " "
-                    + func.coalesce(func.cast(OracleRole.roles, db.Text), "")
-                    + " "
-                    + func.coalesce(func.cast(OracleRole.subroles, db.Text), "")
-                ).ilike(role_query)
-            )
+            db.session.query(OracleCoreRoleTag.id)
+            .filter(OracleCoreRoleTag.oracle_id == Card.oracle_id)
+            .filter(or_(*[func.lower(OracleCoreRoleTag.role).ilike(pattern) for pattern in role_query_patterns]))
             .exists()
         )
         evergreen_match = (
             db.session.query(OracleEvergreenTag.id)
             .filter(OracleEvergreenTag.oracle_id == Card.oracle_id)
-            .filter(func.lower(OracleEvergreenTag.keyword).ilike(role_query))
+            .filter(or_(*[func.lower(OracleEvergreenTag.keyword).ilike(pattern) for pattern in role_query_patterns]))
             .exists()
         )
         query = query.filter(or_(role_match, evergreen_match))
@@ -1629,29 +1624,22 @@ def list_cards():
         .all()
     )
 
-    card_ids = [c.id for c in cards]
-    role_map: dict[int, list[str]] = {}
-    primary_role_map: dict[int, str] = {}
-    if card_ids:
-        role_rows = (
-            db.session.query(CardRole.card_id, Role.label, CardRole.primary)
-            .join(Role, CardRole.role_id == Role.id)
-            .filter(CardRole.card_id.in_(card_ids))
-            .order_by(Role.label.asc())
+    oracle_ids = {c.oracle_id for c in cards if c.oracle_id}
+    core_role_map: dict[str, list[str]] = {}
+    evergreen_map: dict[str, list[str]] = {}
+    if oracle_ids:
+        core_rows = (
+            db.session.query(OracleCoreRoleTag.oracle_id, OracleCoreRoleTag.role)
+            .filter(OracleCoreRoleTag.oracle_id.in_(oracle_ids))
+            .order_by(OracleCoreRoleTag.role.asc())
             .all()
         )
-        for card_id, label, primary in role_rows:
-            if not label:
+        for oracle_id, role in core_rows:
+            if not role:
                 continue
-            bucket = role_map.setdefault(card_id, [])
-            if label not in bucket:
-                bucket.append(label)
-            if primary and card_id not in primary_role_map:
-                primary_role_map[card_id] = label
-
-    evergreen_map: dict[str, list[str]] = {}
-    oracle_ids = {c.oracle_id for c in cards if c.oracle_id}
-    if oracle_ids:
+            bucket = core_role_map.setdefault(oracle_id, [])
+            if role not in bucket:
+                bucket.append(role)
         evergreen_rows = (
             db.session.query(OracleEvergreenTag.oracle_id, OracleEvergreenTag.keyword)
             .filter(OracleEvergreenTag.oracle_id.in_(oracle_ids))
@@ -1763,8 +1751,7 @@ def list_cards():
         all_roles=all_roles,
         all_subroles=all_subroles,
         role_query_text=role_query_text,
-        role_map=role_map,
-        primary_role_map=primary_role_map,
+        core_role_map=core_role_map,
         evergreen_map=evergreen_map,
         image_map=image_map,
         type_line_map=type_line_map,

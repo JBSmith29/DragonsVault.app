@@ -6,12 +6,12 @@ def test_derive_evergreen_keywords_from_keywords():
     out = derive_evergreen_keywords(oracle_text="", keywords=keywords)
     assert "flying" in out
     assert "ward" in out
-    assert "kicker" not in out
+    assert "kicker" in out
 
 
 def test_derive_evergreen_keywords_from_text():
-    out = derive_evergreen_keywords(oracle_text="Protection from red", keywords=[])
-    assert "protection" in out
+    out = derive_evergreen_keywords(oracle_text="Creatures you control have double strike.", keywords=[])
+    assert "double strike" in out
 
 
 def test_derive_deck_tags_keyword_and_typal():

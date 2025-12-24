@@ -5,7 +5,7 @@
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     <div>
       <h1 class="mb-0">Draconic Attunement</h1>
-      <div class="text-muted small">Deck tags and evergreen keywords derived from the Scryfall cache.</div>
+      <div class="text-muted small">Core roles, evergreen tags, and deck-tag synergies derived from the Scryfall cache.</div>
     </div>
     <form method="post" class="d-flex gap-2">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -13,12 +13,69 @@
     </form>
   </div>
 
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-uppercase text-muted small mb-1">Core Roles</div>
+          <div class="fs-4 fw-semibold mb-3">{{ core_total }}</div>
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.admin_oracle_core_roles') }}">View Core Roles</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-uppercase text-muted small mb-1">Evergreen Tags</div>
+          <div class="fs-4 fw-semibold mb-3">{{ evergreen_total }}</div>
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.admin_oracle_evergreen_tags') }}">View Evergreen Tags</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-uppercase text-muted small mb-1">Deck Tags</div>
+          <div class="fs-4 fw-semibold mb-3">{{ deck_total }}</div>
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.admin_oracle_deck_tags') }}">View Deck Tags</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-uppercase text-muted small mb-1">Deck Tag to Core Roles</div>
+          <div class="fs-4 fw-semibold mb-3">{{ synergy_core_total }}</div>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_deck_tag_core_role_synergies') }}">View Core Role Synergies</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-uppercase text-muted small mb-1">Deck Tag to Evergreen</div>
+          <div class="fs-4 fw-semibold mb-3">{{ synergy_evergreen_total }}</div>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_deck_tag_evergreen_synergies') }}">View Evergreen Synergies</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-uppercase text-muted small mb-1">Deck Tag to Cards</div>
+          <div class="fs-4 fw-semibold mb-3">{{ synergy_card_total }}</div>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_deck_tag_card_synergies') }}">View Card Synergies</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <form class="mb-3" method="get">
     <div class="input-group">
-      <input type="search" class="form-control" name="q" placeholder="Search by card name, oracle id, tag, or keyword" value="{{ q or '' }}">
+      <input type="search" class="form-control" name="q" placeholder="Search by card name, oracle id, core role, or evergreen tag" value="{{ q or '' }}">
       <button class="btn btn-outline-secondary" type="submit">Search</button>
     </div>
-    <div class="form-text">Showing up to 500 results per section. Total rows: {{ deck_total }} deck tags, {{ evergreen_total }} evergreen keywords.</div>
+    <div class="form-text">Showing up to 500 results per section. Total rows: {{ core_total }} core roles, {{ evergreen_total }} evergreen tags.</div>
   </form>
 
   <div class="row g-3">
@@ -26,8 +83,8 @@
       <div class="card shadow-sm h-100">
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <h5 class="card-title mb-0">Deck Tags</h5>
-            <span class="badge text-bg-secondary">{{ deck_rows|length }} rows</span>
+            <h5 class="card-title mb-0">Core Roles</h5>
+            <span class="badge text-bg-secondary">{{ core_rows|length }} rows</span>
           </div>
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
@@ -35,21 +92,19 @@
                 <tr>
                   <th>Oracle ID</th>
                   <th>Name</th>
-                  <th>Tag</th>
-                  <th>Category</th>
+                  <th>Role</th>
                 </tr>
               </thead>
               <tbody>
-                {% for row in deck_rows %}
+                {% for row in core_rows %}
                   <tr>
                     <td class="text-muted small">{{ row.oracle_id }}</td>
                     <td class="fw-semibold">{{ name_map.get(row.oracle_id) or '—' }}</td>
-                    <td><span class="badge text-bg-info">{{ row.tag }}</span></td>
-                    <td class="text-muted small">{{ row.category or '—' }}</td>
+                    <td><span class="badge text-bg-info">{{ row.role|replace('_', ' ')|replace('-', ' ')|title }}</span></td>
                   </tr>
                 {% else %}
                   <tr>
-                    <td colspan="4" class="text-center text-muted py-4">No deck tags found.</td>
+                    <td colspan="3" class="text-center text-muted py-4">No core roles found.</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -63,7 +118,7 @@
       <div class="card shadow-sm h-100">
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <h5 class="card-title mb-0">Evergreen Keywords</h5>
+            <h5 class="card-title mb-0">Evergreen Tags</h5>
             <span class="badge text-bg-secondary">{{ evergreen_rows|length }} rows</span>
           </div>
           <div class="table-responsive">
@@ -80,11 +135,11 @@
                   <tr>
                     <td class="text-muted small">{{ row.oracle_id }}</td>
                     <td class="fw-semibold">{{ name_map.get(row.oracle_id) or '—' }}</td>
-                    <td><span class="badge text-bg-success">{{ row.keyword }}</span></td>
+                    <td><span class="badge text-bg-success">{{ row.keyword|replace('_', ' ')|replace('-', ' ')|title }}</span></td>
                   </tr>
                 {% else %}
                   <tr>
-                    <td colspan="3" class="text-center text-muted py-4">No evergreen keywords found.</td>
+                    <td colspan="3" class="text-center text-muted py-4">No evergreen tags found.</td>
                   </tr>
                 {% endfor %}
               </tbody>

@@ -25,6 +25,12 @@ from .role import (  # type: ignore F401
     OracleKeywordTag,
     OracleRoleTag,
     OracleTypalTag,
+    OracleDeckTag,
+    OracleEvergreenTag,
+    OracleCoreRoleTag,
+    DeckTagCoreRoleSynergy,
+    DeckTagEvergreenSynergy,
+    DeckTagCardSynergy,
 )
 
 __all__ = [
@@ -45,4 +51,10 @@ __all__ = [
     "OracleKeywordTag",
     "OracleRoleTag",
     "OracleTypalTag",
+    "OracleDeckTag",
+    "OracleEvergreenTag",
+    "OracleCoreRoleTag",
+    "DeckTagCoreRoleSynergy",
+    "DeckTagEvergreenSynergy",
+    "DeckTagCardSynergy",
 ]

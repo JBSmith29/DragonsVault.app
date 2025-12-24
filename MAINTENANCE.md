@@ -1,6 +1,7 @@
 # Maintenance & Troubleshooting
 
 Use these commands from the project root (where `docker-compose.yml` lives).
+Note: this compose stack is treated as dev/staging; production uses separate deployment config.
 
 ## Quick Health Checks
 - `docker ps` — verify containers are running.
@@ -22,8 +23,8 @@ Use these commands from the project root (where `docker-compose.yml` lives).
 - Microservice pings (through nginx):  
   - `curl http://localhost/api/user/v1/ping`  
   - `curl http://localhost/api/cards/v1/ping`  
-  - `curl http://localhost/api/folders/v1/ping`
   - `curl http://localhost/api/prices/v1/ping`
+- Folder APIs (`/api/folders/*`) are currently served by the monolith and require auth (no public ping).
 
 ## Logs (recent)
 - `docker compose logs web --tail=200`
@@ -48,8 +49,8 @@ Run inside the web container:
 - `docker compose exec web flask fetch-scryfall-bulk --progress` — download Scryfall bulk.
 - `docker compose exec web flask refresh-scryfall` — load bulk into cache/index.
 - `docker compose exec web flask sync-spellbook-combos` — download Commander Spellbook combos (use `--progress/--no-progress`; bump `--concurrency` to speed up; optionally `--skip-existing` to avoid reprocessing already written combos).
-- `docker compose exec web flask refresh-oracle-tags` — recompute oracle deck tags and evergreen keywords from the Scryfall cache.
-- `docker compose exec web flask refresh-oracle-tags-full` — recompute oracle roles, keywords, typal tags, deck tags, and evergreen keywords.
+- `docker compose exec web flask refresh-oracle-tags` — recompute oracle core roles and evergreen tags from the Scryfall cache.
+- `docker compose exec web flask refresh-oracle-tags-full` — recompute oracle roles, keywords, typal tags, core roles, deck tags, and evergreen tags.
 - `docker compose exec web flask fts-ensure` — ensure FTS table and triggers exist.
 - `docker compose exec web flask fts-reindex` — rebuild FTS index.
 - `docker compose exec web flask analyze` — run `ANALYZE` on the DB.

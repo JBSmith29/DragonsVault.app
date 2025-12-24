@@ -558,14 +558,13 @@
                 {% endif %}
               </td>
               <td class="col-tags">
-                {% set primary_role = primary_role_map.get(card.id) if primary_role_map else None %}
-                {% set roles = role_map.get(card.id) if role_map else [] %}
-                {% if primary_role %}
-                  <span class="badge text-bg-secondary">{{ primary_role }}</span>
-                {% elif roles and roles|length %}
-                  <span class="badge text-bg-secondary">{{ roles[0] }}</span>
-                  {% if roles|length > 1 %}
-                    <span class="text-muted small">+{{ roles|length - 1 }}</span>
+                {% set core_roles = core_role_map.get(card.oracle_id) if core_role_map else [] %}
+                {% if core_roles and core_roles|length %}
+                  {% for role in core_roles[:2] %}
+                    <span class="badge text-bg-secondary">{{ role|replace('_', ' ')|replace('-', ' ')|title }}</span>
+                  {% endfor %}
+                  {% if core_roles|length > 2 %}
+                    <span class="text-muted small">+{{ core_roles|length - 2 }}</span>
                   {% endif %}
                 {% else %}
                   <span class="text-muted">—</span>

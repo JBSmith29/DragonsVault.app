@@ -1,0 +1,36 @@
+{
+  "engine_version": "evergreen_detection_engine_v1.0",
+  "normalization": {
+    "strip_parentheses": true,
+    "symbol_map": {
+      "{t}": "tap",
+      "{q}": "untap",
+      "{x}": "x"
+    }
+  },
+  "detection_rules": {
+    "regex": {
+      "mode": "search",
+      "flags": ["IGNORECASE"]
+    },
+    "phrases": {
+      "match": "all"
+    },
+    "composite": {
+      "base_confidence": 0.6,
+      "optional_increment": 0.1,
+      "max_confidence": 0.9
+    }
+  },
+  "exclusions": [
+    {
+      "if_contains": ["opponent"],
+      "exclude_tags": ["firebending", "sacrifice"]
+    }
+  ],
+  "output": {
+    "store_confidence": true,
+    "store_source": "evergreen_v1",
+    "allow_duplicates": false
+  }
+}

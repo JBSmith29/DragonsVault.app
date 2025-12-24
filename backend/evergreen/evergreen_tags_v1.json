@@ -1,0 +1,181 @@
+{
+  "version": "evergreen_tags_v1.1",
+  "frozen": true,
+
+  "normalization": {
+    "lowercase": true,
+    "strip_reminder_text": true,
+    "strip_parentheses": true,
+    "symbol_map": {
+      "{t}": "tap",
+      "{q}": "untap",
+      "{x}": "x"
+    }
+  },
+
+  "engine": {
+    "regex": {
+      "mode": "search",
+      "flags": ["IGNORECASE"]
+    },
+    "phrases": {
+      "match": "all"
+    },
+    "composite": {
+      "base_confidence": 0.6,
+      "optional_increment": 0.1,
+      "max_confidence": 0.9
+    },
+    "output": {
+      "store_confidence": true,
+      "store_source": "evergreen_v1.1",
+      "allow_duplicates": false
+    }
+  },
+
+  "tags": [
+
+    /* =========================================================
+       KEYWORDS (STATIC ABILITIES)
+       ========================================================= */
+
+    { "tag": "flying", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bflying\\b" } },
+    { "tag": "trample", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\btrample\\b" } },
+    { "tag": "menace", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bmenace\\b" } },
+    { "tag": "haste", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bhaste\\b" } },
+    { "tag": "deathtouch", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bdeathtouch\\b" } },
+    { "tag": "lifelink", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\blifelink\\b" } },
+    { "tag": "hexproof", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bhexproof\\b" } },
+    { "tag": "indestructible", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bindestructible\\b" } },
+    { "tag": "first_strike", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bfirst strike\\b" } },
+    { "tag": "double_strike", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bdouble strike\\b" } },
+    { "tag": "reach", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\breach\\b" } },
+    { "tag": "vigilance", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bvigilance\\b" } },
+    { "tag": "defender", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bdefender\\b" } },
+    { "tag": "ward", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bward\\b" } },
+    { "tag": "prowess", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bprowess\\b" } },
+    { "tag": "flash", "category": "keyword", "confidence": 1.0, "detect": { "regex": "\\bflash\\b" } },
+
+    /* =========================================================
+       KEYWORD ACTIONS
+       ========================================================= */
+
+    { "tag": "scry", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bscry\\b" } },
+    { "tag": "surveil", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bsurveil\\b" } },
+    { "tag": "explore", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bexplore\\b" } },
+    { "tag": "connive", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bconnive\\b" } },
+    { "tag": "amass", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bamass\\b" } },
+    { "tag": "proliferate", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bproliferate\\b" } },
+    { "tag": "populate", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bpopulate\\b" } },
+    { "tag": "mill", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bmill\\b" } },
+    { "tag": "manifest", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\bmanifest\\b" } },
+    { "tag": "investigate", "category": "keyword_action", "confidence": 1.0, "detect": { "regex": "\\binvestigate\\b" } },
+
+    /* =========================================================
+       COST & ALTERNATIVE COST MECHANICS
+       ========================================================= */
+
+    { "tag": "cycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^cycling\\b" } },
+    { "tag": "plainscycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^plainscycling\\b" } },
+    { "tag": "islandcycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^islandcycling\\b" } },
+    { "tag": "swampcycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^swampcycling\\b" } },
+    { "tag": "mountaincycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^mountaincycling\\b" } },
+    { "tag": "forestcycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^forestcycling\\b" } },
+    { "tag": "landcycling", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "^landcycling\\b" } },
+
+    { "tag": "kicker", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "\\bkicker\\b" } },
+    { "tag": "flashback", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "\\bflashback\\b" } },
+    { "tag": "escape", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "\\bescape\\b" } },
+    { "tag": "foretell", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "\\bforetell\\b" } },
+    { "tag": "suspend", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "\\bsuspend\\b" } },
+    { "tag": "plot", "category": "cost_mechanic", "confidence": 1.0, "detect": { "regex": "\\bplot\\b" } },
+
+    /* =========================================================
+       CARD TYPE & FRAME MECHANICS
+       ========================================================= */
+
+    { "tag": "planeswalker_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "\\bplaneswalker\\b" } },
+    { "tag": "saga_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "enchantment — saga" } },
+    { "tag": "battle_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "\\bbattle —" } },
+    { "tag": "vehicle_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "artifact — vehicle" } },
+    { "tag": "equipment_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "artifact — equipment" } },
+    { "tag": "aura_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "enchantment — aura" } },
+    { "tag": "background_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "background$" } },
+    { "tag": "companion_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "\\bcompanion\\b" } },
+    { "tag": "adventure_card", "category": "card_type", "confidence": 1.0, "detect": { "regex": "\\badventure\\b" } },
+
+    /* =========================================================
+       MODAL / CHOICE / STACK
+       ========================================================= */
+
+    { "tag": "modal_spell", "category": "rules_hook", "confidence": 0.9, "detect": { "regex": "choose one —|choose two —|choose one or more —" } },
+    { "tag": "storm", "category": "stack_mechanic", "confidence": 1.0, "detect": { "regex": "\\bstorm\\b" } },
+    { "tag": "cascade", "category": "stack_mechanic", "confidence": 1.0, "detect": { "regex": "\\bcascade\\b" } },
+    { "tag": "discover", "category": "stack_mechanic", "confidence": 1.0, "detect": { "regex": "\\bdiscover\\b" } },
+
+    /* =========================================================
+       COMMANDER-SPECIFIC
+       ========================================================= */
+
+    { "tag": "partner", "category": "commander_rule", "confidence": 1.0, "detect": { "regex": "\\bpartner\\b" } },
+    { "tag": "partner_with", "category": "commander_rule", "confidence": 1.0, "detect": { "regex": "partner with" } },
+    { "tag": "friends_forever", "category": "commander_rule", "confidence": 1.0, "detect": { "regex": "friends forever" } },
+    { "tag": "eminence", "category": "commander_rule", "confidence": 1.0, "detect": { "regex": "\\beminence\\b" } },
+
+    /* =========================================================
+       ELEMENTAL / FLAVOR (CUSTOM)
+       ========================================================= */
+
+    {
+      "tag": "firebending",
+      "category": "elemental_flavor",
+      "confidence": 0.6,
+      "detect": {
+        "requires": ["damage"],
+        "optional": ["exile", "destroy", "sacrifice"],
+        "color_hint": ["R"]
+      }
+    },
+    {
+      "tag": "waterbending",
+      "category": "elemental_flavor",
+      "confidence": 0.6,
+      "detect": {
+        "requires": ["tap", "return"],
+        "optional": ["draw", "doesn't untap"],
+        "color_hint": ["U"]
+      }
+    },
+    {
+      "tag": "earthbending",
+      "category": "elemental_flavor",
+      "confidence": 0.6,
+      "detect": {
+        "requires": ["land"],
+        "optional": ["+1/+1", "reach", "defender"],
+        "color_hint": ["G"]
+      }
+    },
+    {
+      "tag": "airbending",
+      "category": "elemental_flavor",
+      "confidence": 0.6,
+      "detect": {
+        "requires": ["flying"],
+        "optional": ["bounce", "blink"],
+        "color_hint": ["W", "U"]
+      }
+    },
+    {
+      "tag": "voidbending",
+      "category": "elemental_flavor",
+      "confidence": 0.6,
+      "detect": {
+        "requires": ["exile"],
+        "optional": ["graveyard", "cast from exile"],
+        "color_hint": ["B", "C"]
+      }
+    }
+
+  ]
+}

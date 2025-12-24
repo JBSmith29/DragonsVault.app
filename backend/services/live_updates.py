@@ -1,16 +1,60 @@
-"""Lightweight event hub for streaming import progress over WebSocket."""
+"""Lightweight event hub for streaming import/job progress over HTTP polling."""
 from __future__ import annotations
 
+import json
+import os
 import queue
 from collections import defaultdict, deque
 from typing import Callable, Tuple
 
+from flask import current_app, has_app_context
 from blinker import Signal
 
 from utils.time import utcnow
 _import_signal = Signal("import-events")
 _RECENT_EVENT_LIMIT = 50
+_REDIS_EVENT_TTL_SECONDS = int(os.getenv("JOB_EVENT_TTL_SECONDS", "7200"))
 _recent_events: dict[tuple[str, str | None], deque] = defaultdict(lambda: deque(maxlen=_RECENT_EVENT_LIMIT))
+
+try:  # pragma: no cover - optional dependency
+    import redis
+    _redis_available = True
+except ImportError:  # pragma: no cover
+    redis = None  # type: ignore
+    _redis_available = False
+
+_redis_client = None
+
+
+def _redis_url() -> str:
+    if has_app_context():
+        return (
+            current_app.config.get("REDIS_URL")
+            or current_app.config.get("RATELIMIT_STORAGE_URI")
+            or "redis://localhost:6379/0"
+        )
+    return (
+        os.getenv("REDIS_URL")
+        or os.getenv("RATELIMIT_STORAGE_URI")
+        or "redis://localhost:6379/0"
+    )
+
+
+def _redis_connection():
+    global _redis_client
+    if not _redis_available:
+        return None
+    if _redis_client is None:
+        try:
+            _redis_client = redis.from_url(_redis_url())
+        except Exception:
+            return None
+    return _redis_client
+
+
+def _redis_key(scope: str, dataset: str | None) -> str:
+    suffix = dataset if dataset else "none"
+    return f"job-events:{scope}:{suffix}"
 
 
 def _store_recent_event(event: dict) -> None:
@@ -24,6 +68,22 @@ def _store_recent_event(event: dict) -> None:
         bucket = deque(maxlen=_RECENT_EVENT_LIMIT)
         _recent_events[key] = bucket
     bucket.append(event)
+
+    conn = _redis_connection()
+    if conn is None:
+        return
+    try:
+        payload = json.dumps(event, ensure_ascii=True)
+        redis_key = _redis_key(scope, dataset)
+        pipe = conn.pipeline()
+        pipe.lpush(redis_key, payload)
+        pipe.ltrim(redis_key, 0, _RECENT_EVENT_LIMIT - 1)
+        if _REDIS_EVENT_TTL_SECONDS > 0:
+            pipe.expire(redis_key, _REDIS_EVENT_TTL_SECONDS)
+        pipe.execute()
+    except Exception:
+        # Redis is optional; fall back to in-memory only.
+        pass
 
 
 def emit_job_event(scope: str, event_type: str, **payload) -> None:
@@ -43,6 +103,21 @@ def latest_job_events(scope: str, dataset: str | None = None) -> list[dict]:
     """Return the recorded events for a job scope/dataset combo (newest last)."""
     if not scope:
         return []
+    conn = _redis_connection()
+    if conn is not None:
+        try:
+            redis_key = _redis_key(scope, dataset)
+            raw = conn.lrange(redis_key, 0, _RECENT_EVENT_LIMIT - 1)
+            if raw:
+                events = []
+                for item in raw:
+                    if isinstance(item, bytes):
+                        item = item.decode("utf-8")
+                    events.append(json.loads(item))
+                events.reverse()
+                return events
+        except Exception:
+            pass
     key = (scope, dataset)
     events = _recent_events.get(key)
     if not events:

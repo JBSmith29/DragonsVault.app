@@ -100,6 +100,20 @@ class OracleRoleTag(db.Model):
     )
 
 
+class OracleCoreRoleTag(db.Model):
+    __tablename__ = "oracle_core_role_tags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    oracle_id = db.Column(db.String(64), nullable=False, index=True)
+    role = db.Column(db.String(128), nullable=False, index=True)
+    source = db.Column(db.String(64), nullable=False, default="core-role")
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+
+    __table_args__ = (
+        db.UniqueConstraint("oracle_id", "role", "source", name="uq_oracle_core_role_tag"),
+    )
+
+
 class OracleTypalTag(db.Model):
     __tablename__ = "oracle_typal_tags"
 
@@ -140,4 +154,49 @@ class OracleEvergreenTag(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("oracle_id", "keyword", "source", name="uq_oracle_evergreen_tag"),
+    )
+
+
+class DeckTagCoreRoleSynergy(db.Model):
+    __tablename__ = "deck_tag_core_role_synergies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    deck_tag = db.Column(db.String(128), nullable=False, index=True)
+    role = db.Column(db.String(128), nullable=False, index=True)
+    weight = db.Column(db.Float, nullable=True)
+    source = db.Column(db.String(64), nullable=False, default="derived")
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+
+    __table_args__ = (
+        db.UniqueConstraint("deck_tag", "role", "source", name="uq_deck_tag_core_role_synergy"),
+    )
+
+
+class DeckTagEvergreenSynergy(db.Model):
+    __tablename__ = "deck_tag_evergreen_synergies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    deck_tag = db.Column(db.String(128), nullable=False, index=True)
+    keyword = db.Column(db.String(128), nullable=False, index=True)
+    weight = db.Column(db.Float, nullable=True)
+    source = db.Column(db.String(64), nullable=False, default="derived")
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+
+    __table_args__ = (
+        db.UniqueConstraint("deck_tag", "keyword", "source", name="uq_deck_tag_evergreen_synergy"),
+    )
+
+
+class DeckTagCardSynergy(db.Model):
+    __tablename__ = "deck_tag_card_synergies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    deck_tag = db.Column(db.String(128), nullable=False, index=True)
+    oracle_id = db.Column(db.String(64), nullable=False, index=True)
+    weight = db.Column(db.Float, nullable=True)
+    source = db.Column(db.String(64), nullable=False, default="derived")
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+
+    __table_args__ = (
+        db.UniqueConstraint("deck_tag", "oracle_id", "source", name="uq_deck_tag_card_synergy"),
     )

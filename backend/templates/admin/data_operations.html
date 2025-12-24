@@ -59,6 +59,31 @@
               <button class="btn btn-outline-danger btn-sm" type="submit">Clear Cache Files</button>
             </form>
           </div>
+          <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+               data-job-monitor
+               data-job-scope="scryfall"
+               data-job-dataset="default_cards"
+               data-job-label="Default cards">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                  Queue a refresh to see live status updates as workers download the dataset.
+                </p>
+              </div>
+              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+            </div>
+            <div class="mt-3 d-none" data-job-progress>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="small text-muted" data-job-progress-text>Working</span>
+                <span class="small fw-semibold" data-job-progress-label>0%</span>
+              </div>
+              <div class="progress progress-striped" role="progressbar" aria-label="Default cards progress" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+              </div>
+            </div>
+            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+          </div>
           <div class="collapse mt-3" id="defaultCardsDetails">
             <div class="row g-3 small mb-3">
               <div class="col-12 col-md-6">
@@ -77,22 +102,6 @@
                   <div>Tracked sets: {{ '{:,}'.format(prints_stats.unique_sets or 0) }}</div>
                 </div>
               </div>
-            </div>
-            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
-                 data-job-monitor
-                 data-job-scope="scryfall"
-                 data-job-dataset="default_cards"
-                 data-job-label="Default cards">
-              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                    Queue a refresh to see live status updates as workers download the dataset.
-                  </p>
-                </div>
-                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-              </div>
-              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
             </div>
           </div>
         </div>
@@ -126,6 +135,31 @@
               <button class="btn btn-primary btn-sm" type="submit">Refresh Rulings</button>
             </form>
           </div>
+          <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+               data-job-monitor
+               data-job-scope="scryfall"
+               data-job-dataset="rulings"
+               data-job-label="Rulings">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                  When a rulings refresh runs the latest status appears here automatically.
+                </p>
+              </div>
+              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+            </div>
+            <div class="mt-3 d-none" data-job-progress>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="small text-muted" data-job-progress-text>Working</span>
+                <span class="small fw-semibold" data-job-progress-label>0%</span>
+              </div>
+              <div class="progress progress-striped" role="progressbar" aria-label="Rulings progress" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+              </div>
+            </div>
+            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+          </div>
           <div class="collapse mt-3" id="rulingsDetails">
             <ul class="list-unstyled small mb-3">
               <li>Status: {{ 'Present' if rulings.exists else 'Missing' }}</li>
@@ -133,22 +167,6 @@
               <li>Size: {{ rulings.size }} bytes</li>
               <li>Updated: {{ rulings.mtime or 'N/A' }}</li>
             </ul>
-            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
-                 data-job-monitor
-                 data-job-scope="scryfall"
-                 data-job-dataset="rulings"
-                 data-job-label="Rulings">
-              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                    When a rulings refresh runs the latest status appears here automatically.
-                  </p>
-                </div>
-                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-              </div>
-              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
-            </div>
           </div>
         </div>
       </div>
@@ -183,6 +201,31 @@
               <button class="btn btn-primary btn-sm" type="submit">Refresh Spellbook Combos</button>
             </form>
           </div>
+          <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+               data-job-monitor
+               data-job-scope="spellbook"
+               data-job-dataset="spellbook"
+               data-job-label="Commander Spellbook">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                <p class="text-muted small mb-0 job-monitor__detail">
+                  When a spellbook refresh runs the latest status appears here automatically.
+                </p>
+              </div>
+              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+            </div>
+            <div class="mt-3 d-none" data-job-progress>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="small text-muted" data-job-progress-text>Working</span>
+                <span class="small fw-semibold" data-job-progress-label>0%</span>
+              </div>
+              <div class="progress progress-striped" role="progressbar" aria-label="Spellbook progress" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+              </div>
+            </div>
+            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+          </div>
           <div class="collapse mt-3" id="spellbookDetails">
             <ul class="list-unstyled small mb-3">
               <li>Status: {{ 'Present' if spellbook.exists else 'Missing' }}</li>
@@ -200,22 +243,6 @@
                 </li>
               {% endif %}
             </ul>
-            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
-                 data-job-monitor
-                 data-job-scope="spellbook"
-                 data-job-dataset="spellbook"
-                 data-job-label="Commander Spellbook">
-              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                  <p class="text-muted small mb-0 job-monitor__detail">
-                    When a spellbook refresh runs the latest status appears here automatically.
-                  </p>
-                </div>
-                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-              </div>
-              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
-            </div>
           </div>
         </div>
       </div>
@@ -255,6 +282,31 @@
                 <button class="btn btn-primary btn-sm" type="submit">Refresh Symbols</button>
               </form>
             </div>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+                 data-job-monitor
+                 data-job-scope="symbols"
+                 data-job-dataset="symbology"
+                 data-job-label="Scryfall Symbols">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    When a symbols refresh runs the latest status appears here automatically.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <div class="mt-3 d-none" data-job-progress>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="small text-muted" data-job-progress-text>Working</span>
+                  <span class="small fw-semibold" data-job-progress-label>0%</span>
+                </div>
+                <div class="progress progress-striped" role="progressbar" aria-label="Symbols progress" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+                </div>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
             <div class="collapse mt-3" id="symbolsDetails">
               <ul class="list-unstyled small mb-3">
                 <li>Status: {{ 'Present' if symbols.exists else 'Missing' }}</li>
@@ -265,22 +317,6 @@
                 <li>SVG cache: {{ symbols.svg_count }} icons ({{ 'Present' if symbols.svg_exists else 'Missing' }})<br>
                   <span class="text-muted">Directory: <code>{{ symbols.svg_dir }}</code></span></li>
               </ul>
-              <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor"
-                   data-job-monitor
-                   data-job-scope="symbols"
-                   data-job-dataset="symbology"
-                   data-job-label="Scryfall Symbols">
-                <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                  <div>
-                    <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                    <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                      When a symbols refresh runs the latest status appears here automatically.
-                    </p>
-                  </div>
-                  <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-                </div>
-                <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
-              </div>
             </div>
           {% else %}
             <div class="alert alert-warning small mb-0">

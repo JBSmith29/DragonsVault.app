@@ -1,0 +1,442 @@
+{
+  "version": "core_roles_phrase_library_v1.0",
+  "normalization": {
+    "lowercase": true,
+    "strip_reminder_text": true,
+    "symbol_replacements": {
+      "{t}": "tap",
+      "{q}": "untap",
+      "{x}": "x",
+      "{w}": "white",
+      "{u}": "blue",
+      "{b}": "black",
+      "{r}": "red",
+      "{g}": "green"
+    }
+  },
+  "roles": [
+    {
+      "role": "ramp",
+      "base_confidence": 0.7,
+      "requires": ["add", "mana"],
+      "optional": [
+        "for each",
+        "equal to",
+        "land you control",
+        "basic land",
+        "any color"
+      ],
+      "excludes": ["opponent"]
+    },
+    {
+      "role": "fixing",
+      "base_confidence": 0.65,
+      "requires": ["any color"],
+      "optional": [
+        "mana of any",
+        "spend mana as though",
+        "add one mana of any"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "treasure",
+      "base_confidence": 0.8,
+      "requires": ["create", "treasure"],
+      "optional": [
+        "x treasure",
+        "for each",
+        "whenever"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "draw",
+      "base_confidence": 0.75,
+      "requires": ["draw", "card"],
+      "optional": [
+        "two",
+        "x",
+        "whenever",
+        "at the beginning"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "selection",
+      "base_confidence": 0.6,
+      "requires": ["look at", "top"],
+      "optional": [
+        "library",
+        "reveal",
+        "put into your hand",
+        "put on the bottom"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "advantage",
+      "base_confidence": 0.6,
+      "requires": ["exile", "you may play"],
+      "optional": [
+        "until end of turn",
+        "until your next turn"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "tutor",
+      "base_confidence": 0.85,
+      "requires": ["search your library"],
+      "optional": [
+        "reveal it",
+        "shuffle",
+        "put it into your hand",
+        "onto the battlefield"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "recursion",
+      "base_confidence": 0.75,
+      "requires": ["return", "graveyard"],
+      "optional": [
+        "to the battlefield",
+        "to your hand",
+        "target creature"
+      ],
+      "excludes": ["opponent"]
+    },
+    {
+      "role": "removal",
+      "base_confidence": 0.7,
+      "requires": ["destroy target"],
+      "optional": [
+        "exile target",
+        "deals damage",
+        "-x/-x"
+      ],
+      "excludes": ["all"]
+    },
+    {
+      "role": "wipe",
+      "base_confidence": 0.85,
+      "requires": ["destroy all"],
+      "optional": [
+        "each creature",
+        "each nonland permanent",
+        "exile all"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "counter",
+      "base_confidence": 0.9,
+      "requires": ["counter target spell"],
+      "optional": [
+        "unless its controller pays",
+        "that spell"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "protection",
+      "base_confidence": 0.7,
+      "requires": ["hexproof"],
+      "optional": [
+        "indestructible",
+        "protection from",
+        "cannot be the target"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "tax",
+      "base_confidence": 0.75,
+      "requires": ["costs", "more"],
+      "optional": [
+        "unless",
+        "for each",
+        "additional"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "stax",
+      "base_confidence": 0.8,
+      "requires": ["players can't"],
+      "optional": [
+        "more than one",
+        "each turn",
+        "during their"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "hate",
+      "base_confidence": 0.75,
+      "requires": ["can't be cast"],
+      "optional": [
+        "from graveyard",
+        "activated abilities can't",
+        "enters the battlefield tapped"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "fog",
+      "base_confidence": 0.85,
+      "requires": ["prevent", "combat damage"],
+      "optional": [
+        "this turn",
+        "that would be dealt"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "engine",
+      "base_confidence": 0.65,
+      "requires": ["whenever"],
+      "optional": [
+        "each time",
+        "at the beginning",
+        "you may"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "enabler",
+      "base_confidence": 0.6,
+      "requires": ["you may"],
+      "optional": [
+        "instead",
+        "as long as",
+        "whenever you"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "payoff",
+      "base_confidence": 0.7,
+      "requires": ["if you do"],
+      "optional": [
+        "whenever",
+        "for each",
+        "then"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "outlet",
+      "base_confidence": 0.65,
+      "requires": ["discard a card"],
+      "optional": [
+        "any number",
+        "as an additional cost"
+      ],
+      "excludes": ["opponent"]
+    },
+    {
+      "role": "sac_outlet",
+      "base_confidence": 0.8,
+      "requires": ["sacrifice"],
+      "optional": [
+        "another",
+        "any number",
+        "as an additional cost"
+      ],
+      "excludes": ["opponent"]
+    },
+    {
+      "role": "mana_sink",
+      "base_confidence": 0.7,
+      "requires": ["x"],
+      "optional": [
+        "where x is",
+        "pay x"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "copy",
+      "base_confidence": 0.85,
+      "requires": ["copy"],
+      "optional": [
+        "that spell",
+        "that ability",
+        "you may choose new targets"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "token",
+      "base_confidence": 0.8,
+      "requires": ["create", "token"],
+      "optional": [
+        "x",
+        "for each",
+        "tapped and attacking"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "anthem",
+      "base_confidence": 0.75,
+      "requires": ["creatures you control get"],
+      "optional": [
+        "+1/+1",
+        "until end of turn"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "evasion",
+      "base_confidence": 0.7,
+      "requires": ["flying"],
+      "optional": [
+        "menace",
+        "unblockable",
+        "can't be blocked"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "finisher",
+      "base_confidence": 0.75,
+      "requires": ["double strike"],
+      "optional": [
+        "trample",
+        "combat damage"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "go_wide",
+      "base_confidence": 0.7,
+      "requires": ["for each creature you control"],
+      "optional": [
+        "tokens you control"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "go_tall",
+      "base_confidence": 0.7,
+      "requires": ["gets +"],
+      "optional": [
+        "until end of turn",
+        "for each"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "voltron",
+      "base_confidence": 0.75,
+      "requires": ["equipped creature"],
+      "optional": [
+        "auras you control"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "tempo",
+      "base_confidence": 0.65,
+      "requires": ["return target"],
+      "optional": [
+        "to its owner's hand",
+        "tap target"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "bounce",
+      "base_confidence": 0.75,
+      "requires": ["return target"],
+      "optional": [
+        "nonland permanent",
+        "to its owner's hand"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "tap_down",
+      "base_confidence": 0.75,
+      "requires": ["tap target"],
+      "optional": [
+        "doesn't untap",
+        "during its controller's"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "theft",
+      "base_confidence": 0.8,
+      "requires": ["gain control"],
+      "optional": [
+        "of target",
+        "for as long as"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "blink",
+      "base_confidence": 0.75,
+      "requires": ["exile", "return"],
+      "optional": [
+        "immediately",
+        "at the beginning of the next end step"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "cheat",
+      "base_confidence": 0.85,
+      "requires": ["without paying", "mana cost"],
+      "optional": [
+        "put onto the battlefield"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "cast_from_zone",
+      "base_confidence": 0.8,
+      "requires": ["you may cast"],
+      "optional": [
+        "from your graveyard",
+        "from exile"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "replacement",
+      "base_confidence": 0.7,
+      "requires": ["instead"],
+      "optional": [
+        "would be",
+        "that event"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "static_lock",
+      "base_confidence": 0.8,
+      "requires": ["can't"],
+      "optional": [
+        "during",
+        "as long as"
+      ],
+      "excludes": []
+    },
+    {
+      "role": "transform",
+      "base_confidence": 0.9,
+      "requires": ["transform"],
+      "optional": [
+        "meld",
+        "daybound",
+        "nightbound"
+      ],
+      "excludes": []
+    }
+  ]
+}

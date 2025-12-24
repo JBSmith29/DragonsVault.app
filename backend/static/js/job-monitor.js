@@ -48,6 +48,22 @@
         detail: `Job ${jobId} is downloading the latest data from Scryfall.`,
       };
     }
+    if (type === "progress") {
+      const bytes = formatBytes(payload.bytes);
+      const total = formatBytes(payload.total);
+      const percent = Number.isFinite(payload.percent) ? `${payload.percent}%` : null;
+      const detail = percent && total
+        ? `Downloaded ${bytes || "some data"} of ${total} (${percent}).`
+        : bytes
+          ? `Downloaded ${bytes}.`
+          : "Download in progress.";
+      return {
+        badgeTone: "warning",
+        badgeLabel: "Running",
+        summary: `${label} refresh in progress`,
+        detail,
+      };
+    }
     if (type === "completed") {
       const size = formatBytes(payload.bytes || payload.bytes_downloaded);
       const status = payload.status || payload.download_status || "OK";
@@ -79,6 +95,10 @@
     const statusEl = node.querySelector("[data-job-status]");
     const detailEl = node.querySelector("[data-job-detail]");
     const badgeEl = node.querySelector("[data-job-badge]");
+    const progressWrap = node.querySelector("[data-job-progress]");
+    const progressBar = node.querySelector("[data-job-progress-bar]");
+    const progressLabel = node.querySelector("[data-job-progress-label]");
+    const progressText = node.querySelector("[data-job-progress-text]");
     if (statusEl) statusEl.textContent = "No refresh in progress.";
     if (detailEl) {
       detailEl.textContent = "Queue a refresh to see live status updates as jobs run.";
@@ -87,6 +107,14 @@
       badgeEl.textContent = "Idle";
       badgeEl.className = "badge text-bg-secondary job-monitor__badge";
     }
+    if (progressWrap) progressWrap.classList.add("d-none");
+    if (progressBar) {
+      progressBar.style.width = "0%";
+      progressBar.setAttribute("aria-valuenow", "0");
+      progressBar.classList.add("progress-bar-striped", "progress-bar-animated");
+    }
+    if (progressLabel) progressLabel.textContent = "0%";
+    if (progressText) progressText.textContent = "Working";
     const logEl = node.querySelector("[data-job-log]");
     if (logEl) logEl.innerHTML = "";
   }
@@ -95,7 +123,9 @@
     const logEl = node.querySelector("[data-job-log]");
     if (!logEl) return;
     logEl.innerHTML = "";
-    const recent = events.slice(-MAX_LOG_ENTRIES).reverse();
+    const visible = events.filter((event) => event.type !== "progress");
+    const source = visible.length ? visible : events;
+    const recent = source.slice(-MAX_LOG_ENTRIES).reverse();
     recent.forEach((event) => {
       const entry = document.createElement("li");
       const meta = describeEvent(node, event);
@@ -116,6 +146,69 @@
     if (badgeEl) {
       badgeEl.textContent = meta.badgeLabel;
       badgeEl.className = `badge text-bg-${meta.badgeTone} job-monitor__badge`;
+    }
+    updateProgress(node, event);
+  }
+
+  function updateProgress(node, event) {
+    const wrap = node.querySelector("[data-job-progress]");
+    const bar = node.querySelector("[data-job-progress-bar]");
+    const label = node.querySelector("[data-job-progress-label]");
+    const text = node.querySelector("[data-job-progress-text]");
+    if (!wrap || !bar) return;
+    if (!event || !event.type) {
+      wrap.classList.add("d-none");
+      return;
+    }
+
+    const type = event.type;
+    if (type === "failed") {
+      wrap.classList.add("d-none");
+      return;
+    }
+
+    wrap.classList.remove("d-none");
+    const total = Number(event.total || event.bytes_total || 0);
+    const bytes = Number(event.bytes || event.bytes_downloaded || 0);
+    let percent = Number.isFinite(event.percent) ? Number(event.percent) : null;
+    if (percent === null && total > 0) {
+      percent = Math.floor((bytes / total) * 100);
+    }
+
+    if (type === "completed") {
+      bar.style.width = "100%";
+      bar.setAttribute("aria-valuenow", "100");
+      bar.classList.remove("progress-bar-animated", "progress-bar-striped");
+      if (label) label.textContent = "100%";
+      if (text) text.textContent = "Completed";
+      return;
+    }
+
+    bar.classList.add("progress-bar-striped", "progress-bar-animated");
+    if (percent !== null && Number.isFinite(percent)) {
+      const clamped = Math.max(0, Math.min(100, percent));
+      bar.style.width = `${clamped}%`;
+      bar.setAttribute("aria-valuenow", String(clamped));
+      if (label) label.textContent = `${clamped}%`;
+      if (text) {
+        const totalLabel = formatBytes(total);
+        const bytesLabel = formatBytes(bytes);
+        text.textContent = totalLabel && bytesLabel
+          ? `Downloaded ${bytesLabel} of ${totalLabel}`
+          : "Downloading";
+      }
+    } else {
+      bar.style.width = type === "queued" ? "25%" : "100%";
+      bar.setAttribute("aria-valuenow", "0");
+      if (label) label.textContent = type === "queued" ? "Queued" : "Working";
+      if (text) {
+        const bytesLabel = formatBytes(bytes);
+        if (bytesLabel) {
+          text.textContent = `Downloaded ${bytesLabel}`;
+        } else {
+          text.textContent = type === "queued" ? "Waiting for worker" : "Working";
+        }
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from typing import Dict, Iterable, Tuple, Set
 
 from extensions import db
@@ -13,16 +14,58 @@ from models.role import (
     OracleKeywordTag,
     OracleRoleTag,
     OracleTypalTag,
+    OracleCoreRoleTag,
     OracleDeckTag,
     OracleEvergreenTag,
+    DeckTagCoreRoleSynergy,
+    DeckTagEvergreenSynergy,
+    DeckTagCardSynergy,
 )
 from roles.role_engine import get_primary_role, get_roles_for_card, get_subroles_for_card, get_land_tags_for_card
-from services.oracle_tagging import derive_deck_tags, derive_evergreen_keywords, deck_tag_category, ensure_fallback_tag
+from services.oracle_tagging import (
+    derive_deck_tags,
+    derive_evergreen_keywords,
+    deck_tag_category,
+    ensure_fallback_tag,
+    evergreen_source,
+)
+from services.core_role_logic import core_role_label, derive_core_roles
 from services import scryfall_cache as sc
 
 _DASH = "\u2014"
 _EXCLUDED_SET_TYPES = {"token", "memorabilia", "art_series"}
 _TYPAL_TRIGGER_TYPES = {"creature", "tribal", "kindred"}
+_TYPE_LINE_SKIP_TOKENS = {
+    "artifact",
+    "battle",
+    "basic",
+    "creature",
+    "enchantment",
+    "instant",
+    "kindred",
+    "land",
+    "legendary",
+    "ongoing",
+    "planeswalker",
+    "scheme",
+    "snow",
+    "sorcery",
+    "token",
+    "tribal",
+    "vanguard",
+    "world",
+}
+_DECK_TAG_SYNERGY_SOURCE = "derived_synergy_v1"
+_DECK_TAG_SYNERGY_MIN_COUNT = 3
+_DECK_TAG_SYNERGY_MIN_LIFT = 1.15
+_DECK_TAG_SYNERGY_MAX_ROLES = 12
+_DECK_TAG_SYNERGY_MAX_EVERGREEN = 20
+_DECK_TAG_SYNERGY_MAX_CARDS = 150
+_DECK_TAG_SYNERGY_ROLE_WEIGHT = 1.0
+_DECK_TAG_SYNERGY_EVERGREEN_WEIGHT = 0.7
+_DECK_TAG_SYNERGY_TAG_BONUS = 1.5
+_DECK_TAG_SYNERGY_MIN_CARD_SCORE = 2.0
+_DECK_TAG_SYNERGY_MIN_NON_TAG_MATCHES = 2
 
 
 def _score_print(print_data: dict) -> int:
@@ -107,8 +150,14 @@ def _typal_from_type_line(type_line: str) -> Set[str]:
     out: Set[str] = set()
     for token in right.split():
         token = token.strip()
-        if token:
-            out.add(token.lower())
+        if not token:
+            continue
+        if not any(char.isalpha() for char in token):
+            continue
+        token_norm = token.lower()
+        if token_norm in _TYPE_LINE_SKIP_TOKENS:
+            continue
+        out.add(token_norm)
     return out
 
 
@@ -285,18 +334,190 @@ def _ensure_oracle_cache() -> bool:
     return bool(getattr(sc, "_by_oracle", {}) or {})
 
 
+def _build_deck_tag_synergy_rows(
+    deck_tag_rows: Iterable[OracleDeckTag],
+    core_role_rows: Iterable[OracleCoreRoleTag],
+    evergreen_rows: Iterable[OracleEvergreenTag],
+) -> tuple[list[DeckTagCoreRoleSynergy], list[DeckTagEvergreenSynergy], list[DeckTagCardSynergy]]:
+    deck_to_oracles: dict[str, set[str]] = defaultdict(set)
+    for row in deck_tag_rows:
+        if row and row.tag and row.oracle_id:
+            deck_to_oracles[row.tag].add(row.oracle_id)
+
+    role_by_oracle: dict[str, set[str]] = defaultdict(set)
+    role_to_oracles: dict[str, set[str]] = defaultdict(set)
+    for row in core_role_rows:
+        if row and row.role and row.oracle_id:
+            role_by_oracle[row.oracle_id].add(row.role)
+            role_to_oracles[row.role].add(row.oracle_id)
+
+    evergreen_by_oracle: dict[str, set[str]] = defaultdict(set)
+    evergreen_to_oracles: dict[str, set[str]] = defaultdict(set)
+    for row in evergreen_rows:
+        if row and row.keyword and row.oracle_id:
+            evergreen_by_oracle[row.oracle_id].add(row.keyword)
+            evergreen_to_oracles[row.keyword].add(row.oracle_id)
+
+    all_oracles: set[str] = set()
+    for oids in deck_to_oracles.values():
+        all_oracles.update(oids)
+    all_oracles.update(role_by_oracle.keys())
+    all_oracles.update(evergreen_by_oracle.keys())
+    total_oracles = max(len(all_oracles), 1)
+
+    global_role_counts = {role: len(oids) for role, oids in role_to_oracles.items()}
+    global_evergreen_counts = {kw: len(oids) for kw, oids in evergreen_to_oracles.items()}
+
+    core_synergy_rows: list[DeckTagCoreRoleSynergy] = []
+    evergreen_synergy_rows: list[DeckTagEvergreenSynergy] = []
+    card_synergy_rows: list[DeckTagCardSynergy] = []
+
+    for deck_tag, base_oracles in deck_to_oracles.items():
+        total = len(base_oracles)
+        if total == 0:
+            continue
+
+        role_counts: Counter[str] = Counter()
+        for oid in base_oracles:
+            for role in role_by_oracle.get(oid, set()):
+                role_counts[role] += 1
+
+        role_scores: list[tuple[float, int, str]] = []
+        for role, count in role_counts.items():
+            if count < _DECK_TAG_SYNERGY_MIN_COUNT:
+                continue
+            global_count = global_role_counts.get(role, 0)
+            if not global_count:
+                continue
+            support = count / total
+            global_support = global_count / total_oracles
+            lift = support / global_support if global_support else 0.0
+            if lift < _DECK_TAG_SYNERGY_MIN_LIFT:
+                continue
+            role_scores.append((lift, count, role))
+        role_scores.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        role_scores = role_scores[:_DECK_TAG_SYNERGY_MAX_ROLES]
+
+        selected_roles = {role for _, _, role in role_scores}
+        for lift, _, role in role_scores:
+            core_synergy_rows.append(
+                DeckTagCoreRoleSynergy(
+                    deck_tag=deck_tag,
+                    role=role,
+                    weight=round(lift, 4),
+                    source=_DECK_TAG_SYNERGY_SOURCE,
+                )
+            )
+
+        evergreen_counts: Counter[str] = Counter()
+        for oid in base_oracles:
+            for keyword in evergreen_by_oracle.get(oid, set()):
+                evergreen_counts[keyword] += 1
+
+        evergreen_scores: list[tuple[float, int, str]] = []
+        for keyword, count in evergreen_counts.items():
+            if count < _DECK_TAG_SYNERGY_MIN_COUNT:
+                continue
+            global_count = global_evergreen_counts.get(keyword, 0)
+            if not global_count:
+                continue
+            support = count / total
+            global_support = global_count / total_oracles
+            lift = support / global_support if global_support else 0.0
+            if lift < _DECK_TAG_SYNERGY_MIN_LIFT:
+                continue
+            evergreen_scores.append((lift, count, keyword))
+        evergreen_scores.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        evergreen_scores = evergreen_scores[:_DECK_TAG_SYNERGY_MAX_EVERGREEN]
+
+        selected_evergreen = {keyword for _, _, keyword in evergreen_scores}
+        for lift, _, keyword in evergreen_scores:
+            evergreen_synergy_rows.append(
+                DeckTagEvergreenSynergy(
+                    deck_tag=deck_tag,
+                    keyword=keyword,
+                    weight=round(lift, 4),
+                    source=_DECK_TAG_SYNERGY_SOURCE,
+                )
+            )
+
+        candidate_oracles: set[str] = set(base_oracles)
+        for role in selected_roles:
+            candidate_oracles.update(role_to_oracles.get(role, set()))
+        for keyword in selected_evergreen:
+            candidate_oracles.update(evergreen_to_oracles.get(keyword, set()))
+
+        card_scores: list[tuple[float, int, int, str]] = []
+        for oid in candidate_oracles:
+            role_matches = len(role_by_oracle.get(oid, set()) & selected_roles)
+            evergreen_matches = len(evergreen_by_oracle.get(oid, set()) & selected_evergreen)
+            if oid not in base_oracles and (role_matches + evergreen_matches) < _DECK_TAG_SYNERGY_MIN_NON_TAG_MATCHES:
+                continue
+            score = 0.0
+            if oid in base_oracles:
+                score += _DECK_TAG_SYNERGY_TAG_BONUS
+            score += role_matches * _DECK_TAG_SYNERGY_ROLE_WEIGHT
+            score += evergreen_matches * _DECK_TAG_SYNERGY_EVERGREEN_WEIGHT
+            if score < _DECK_TAG_SYNERGY_MIN_CARD_SCORE:
+                continue
+            card_scores.append((score, role_matches, evergreen_matches, oid))
+
+        card_scores.sort(key=lambda item: (-item[0], -item[1], -item[2], item[3]))
+        for score, _, _, oid in card_scores[:_DECK_TAG_SYNERGY_MAX_CARDS]:
+            card_synergy_rows.append(
+                DeckTagCardSynergy(
+                    deck_tag=deck_tag,
+                    oracle_id=oid,
+                    weight=round(score, 4),
+                    source=_DECK_TAG_SYNERGY_SOURCE,
+                )
+            )
+
+    return core_synergy_rows, evergreen_synergy_rows, card_synergy_rows
+
+
+def recompute_deck_tag_synergies(
+    *,
+    deck_tag_rows: Iterable[OracleDeckTag] | None = None,
+    core_role_rows: Iterable[OracleCoreRoleTag] | None = None,
+    evergreen_rows: Iterable[OracleEvergreenTag] | None = None,
+) -> None:
+    DeckTagCoreRoleSynergy.query.delete(synchronize_session=False)
+    DeckTagEvergreenSynergy.query.delete(synchronize_session=False)
+    DeckTagCardSynergy.query.delete(synchronize_session=False)
+
+    deck_tag_rows = list(deck_tag_rows) if deck_tag_rows is not None else OracleDeckTag.query.all()
+    if not deck_tag_rows:
+        return
+    core_role_rows = list(core_role_rows) if core_role_rows is not None else OracleCoreRoleTag.query.all()
+    evergreen_rows = list(evergreen_rows) if evergreen_rows is not None else OracleEvergreenTag.query.all()
+
+    core_synergy_rows, evergreen_synergy_rows, card_synergy_rows = _build_deck_tag_synergy_rows(
+        deck_tag_rows,
+        core_role_rows,
+        evergreen_rows,
+    )
+    if core_synergy_rows:
+        db.session.bulk_save_objects(core_synergy_rows)
+    if evergreen_synergy_rows:
+        db.session.bulk_save_objects(evergreen_synergy_rows)
+    if card_synergy_rows:
+        db.session.bulk_save_objects(card_synergy_rows)
+
+
 def recompute_oracle_deck_tags() -> None:
     """
-    Rebuild oracle-level deck tags and evergreen keywords using the Scryfall cache.
+    Rebuild oracle-level core roles and evergreen tags using the Scryfall cache.
     """
     if not _ensure_oracle_cache():
         return
 
-    OracleDeckTag.query.delete(synchronize_session=False)
+    OracleCoreRoleTag.query.delete(synchronize_session=False)
     OracleEvergreenTag.query.delete(synchronize_session=False)
 
-    deck_tag_rows = []
+    core_role_rows = []
     evergreen_rows = []
+    evergreen_src = evergreen_source()
 
     for oid, prints in _iter_oracle_prints():
         best = _select_best_print(prints) or (prints[0] if prints else None)
@@ -312,27 +533,36 @@ def recompute_oracle_deck_tags() -> None:
             "layout": best.get("layout") or "",
             "produced_mana": best.get("produced_mana") or [],
         }
-        roles = get_roles_for_card(mock)
         keywords = _collect_keywords(prints)
         typals = _collect_typals(prints)
         land_tags = get_land_tags_for_card(mock)
-        evergreen = set(land_tags) if land_tags else derive_evergreen_keywords(oracle_text=oracle_text, keywords=keywords)
-        deck_tags = derive_deck_tags(
+        evergreen = derive_evergreen_keywords(
             oracle_text=oracle_text,
             type_line=type_line,
+            name=mock["name"],
             keywords=keywords,
             typals=typals,
-            roles=roles,
+            colors=best.get("color_identity") or best.get("colors"),
         )
-        deck_tags = ensure_fallback_tag(deck_tags, evergreen)
+        if land_tags:
+            evergreen |= set(land_tags)
+        core_roles = derive_core_roles(
+            oracle_text=oracle_text,
+            type_line=type_line,
+            name=mock["name"],
+        )
+        core_role_tags: Set[str] = set()
+        for role in core_roles:
+            label = core_role_label(role)
+            if label:
+                core_role_tags.add(label)
 
-        for tag in sorted(deck_tags):
-            deck_tag_rows.append(
-                OracleDeckTag(
+        for tag in sorted(core_role_tags):
+            core_role_rows.append(
+                OracleCoreRoleTag(
                     oracle_id=oid,
-                    tag=tag,
-                    category=deck_tag_category(tag),
-                    source="derived",
+                    role=tag,
+                    source="core-role",
                 )
             )
 
@@ -341,20 +571,27 @@ def recompute_oracle_deck_tags() -> None:
                 OracleEvergreenTag(
                     oracle_id=oid,
                     keyword=keyword,
-                    source="derived",
+                    source=evergreen_src,
                 )
             )
 
-    if deck_tag_rows:
-        db.session.bulk_save_objects(deck_tag_rows)
+    if core_role_rows:
+        db.session.bulk_save_objects(core_role_rows)
     if evergreen_rows:
         db.session.bulk_save_objects(evergreen_rows)
+    deck_tag_rows = OracleDeckTag.query.all()
+    if deck_tag_rows:
+        recompute_deck_tag_synergies(
+            deck_tag_rows=deck_tag_rows,
+            core_role_rows=core_role_rows,
+            evergreen_rows=evergreen_rows,
+        )
     db.session.commit()
 
 
 def recompute_oracle_enrichment() -> None:
     """
-    Rebuild oracle-level role, keyword, typal, deck, and evergreen tags using the cache.
+    Rebuild oracle-level role, keyword, typal, core role, deck, and evergreen tags using the cache.
     """
     if not _ensure_oracle_cache():
         return
@@ -362,6 +599,7 @@ def recompute_oracle_enrichment() -> None:
     OracleRoleTag.query.delete(synchronize_session=False)
     OracleKeywordTag.query.delete(synchronize_session=False)
     OracleTypalTag.query.delete(synchronize_session=False)
+    OracleCoreRoleTag.query.delete(synchronize_session=False)
     OracleDeckTag.query.delete(synchronize_session=False)
     OracleEvergreenTag.query.delete(synchronize_session=False)
     OracleRole.query.delete(synchronize_session=False)
@@ -370,8 +608,10 @@ def recompute_oracle_enrichment() -> None:
     role_tag_rows = []
     keyword_rows = []
     typal_rows = []
+    core_role_rows = []
     deck_tag_rows = []
     evergreen_rows = []
+    evergreen_src = evergreen_source()
 
     for oid, prints in _iter_oracle_prints():
         best = _select_best_print(prints) or (prints[0] if prints else None)
@@ -393,7 +633,16 @@ def recompute_oracle_enrichment() -> None:
         keywords = _collect_keywords(prints)
         typals = _collect_typals(prints)
         land_tags = get_land_tags_for_card(mock)
-        evergreen = set(land_tags) if land_tags else derive_evergreen_keywords(oracle_text=oracle_text, keywords=keywords)
+        evergreen = derive_evergreen_keywords(
+            oracle_text=oracle_text,
+            type_line=type_line,
+            name=mock["name"],
+            keywords=keywords,
+            typals=typals,
+            colors=best.get("color_identity") or best.get("colors"),
+        )
+        if land_tags:
+            evergreen |= set(land_tags)
         deck_tags = derive_deck_tags(
             oracle_text=oracle_text,
             type_line=type_line,
@@ -401,7 +650,18 @@ def recompute_oracle_enrichment() -> None:
             typals=typals,
             roles=roles,
         )
-        deck_tags = ensure_fallback_tag(deck_tags, evergreen)
+        core_roles = derive_core_roles(
+            oracle_text=oracle_text,
+            type_line=type_line,
+            name=mock["name"],
+        )
+        core_role_tags: Set[str] = set()
+        for role in core_roles:
+            label = core_role_label(role)
+            if label:
+                core_role_tags.add(label)
+        if not core_role_tags:
+            deck_tags = ensure_fallback_tag(deck_tags, evergreen)
 
         role_rows.append(
             OracleRole(
@@ -452,12 +712,21 @@ def recompute_oracle_enrichment() -> None:
                 )
             )
 
+        for tag in sorted(core_role_tags):
+            core_role_rows.append(
+                OracleCoreRoleTag(
+                    oracle_id=oid,
+                    role=tag,
+                    source="core-role",
+                )
+            )
+
         for keyword in sorted(evergreen):
             evergreen_rows.append(
                 OracleEvergreenTag(
                     oracle_id=oid,
                     keyword=keyword,
-                    source="derived",
+                    source=evergreen_src,
                 )
             )
 
@@ -469,8 +738,16 @@ def recompute_oracle_enrichment() -> None:
         db.session.bulk_save_objects(keyword_rows)
     if typal_rows:
         db.session.bulk_save_objects(typal_rows)
+    if core_role_rows:
+        db.session.bulk_save_objects(core_role_rows)
     if deck_tag_rows:
         db.session.bulk_save_objects(deck_tag_rows)
     if evergreen_rows:
         db.session.bulk_save_objects(evergreen_rows)
+    if deck_tag_rows and (core_role_rows or evergreen_rows):
+        recompute_deck_tag_synergies(
+            deck_tag_rows=deck_tag_rows,
+            core_role_rows=core_role_rows,
+            evergreen_rows=evergreen_rows,
+        )
     db.session.commit()

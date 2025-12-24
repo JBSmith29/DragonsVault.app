@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import json
+import re
 from math import ceil
 from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from extensions import db
 from models import Card, Folder
-from models.role import OracleRole, OracleEvergreenTag
+from models.role import OracleCoreRoleTag, OracleEvergreenTag
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded, rulings_for_oracle, set_name_for_code, all_set_codes
 from services.scryfall_search import build_query, search_cards
@@ -236,19 +237,14 @@ def scryfall_browser():
         )
 
     if role_query_text:
-        role_query = f"%{role_query_text.lower()}%"
+        role_query_base = role_query_text.lower().strip()
+        role_query_alt = re.sub(r"[_-]+", " ", role_query_base).strip()
+        role_query_tokens = {role_query_base, role_query_alt}
+        role_query_patterns = [f"%{token}%" for token in role_query_tokens if token]
         matching_roles = {
             oid
-            for (oid,) in db.session.query(OracleRole.oracle_id)
-            .filter(
-                func.lower(
-                    func.coalesce(OracleRole.primary_role, "")
-                    + " "
-                    + func.coalesce(func.cast(OracleRole.roles, db.Text), "")
-                    + " "
-                    + func.coalesce(func.cast(OracleRole.subroles, db.Text), "")
-                ).ilike(role_query)
-            )
+            for (oid,) in db.session.query(OracleCoreRoleTag.oracle_id)
+            .filter(or_(*[func.lower(OracleCoreRoleTag.role).ilike(pattern) for pattern in role_query_patterns]))
             .distinct()
             .all()
             if oid
@@ -256,7 +252,7 @@ def scryfall_browser():
         matching_evergreen = {
             oid
             for (oid,) in db.session.query(OracleEvergreenTag.oracle_id)
-            .filter(func.lower(OracleEvergreenTag.keyword).ilike(role_query))
+            .filter(or_(*[func.lower(OracleEvergreenTag.keyword).ilike(pattern) for pattern in role_query_patterns]))
             .distinct()
             .all()
             if oid

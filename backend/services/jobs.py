@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 import uuid
 from contextlib import nullcontext
 import logging
@@ -368,7 +369,7 @@ def run_scryfall_refresh_inline(kind: str, force_download: bool = False) -> dict
     emit_job_event("scryfall", "queued", job_id=job_id, dataset=kind)
     emit_job_event("scryfall", "started", job_id=job_id, dataset=kind, rq_id=None)
     try:
-        info = _download_bulk_to(kind, force=force_download)
+        info = _download_bulk_to(kind, force=force_download, job_id=job_id)
         if kind == "default_cards":
             ensure_cache_loaded(force=True)
         emit_job_event(
@@ -397,7 +398,7 @@ def run_scryfall_refresh_job(kind: str, job_id: str, force_download: bool = Fals
             rq_id=job.id if job else None,
         )
         try:
-            info = _download_bulk_to(kind, force=force_download)
+            info = _download_bulk_to(kind, force=force_download, job_id=job_id)
             if kind == "default_cards":
                 ensure_cache_loaded(force=True)
             emit_job_event(
@@ -411,11 +412,11 @@ def run_scryfall_refresh_job(kind: str, job_id: str, force_download: bool = Fals
         except Exception as exc:
             emit_job_event(
                 "scryfall",
-            "failed",
-            job_id=job_id,
-            dataset=kind,
-            error=str(exc),
-        )
+                "failed",
+                job_id=job_id,
+                dataset=kind,
+                error=str(exc),
+            )
             raise
 
 
@@ -522,7 +523,7 @@ def run_spellbook_refresh_inline(force_download: bool = False) -> dict:
         raise
 
 
-def _download_bulk_to(kind: str, force: bool = False) -> dict:
+def _download_bulk_to(kind: str, force: bool = False, *, job_id: str | None = None) -> dict:
     target = sc.get_bulk_metadata(kind)
     if not target:
         raise RuntimeError(f"Bulk dataset '{kind}' not found on Scryfall.")
@@ -548,7 +549,43 @@ def _download_bulk_to(kind: str, force: bool = False) -> dict:
             "bytes_downloaded": size,
         }
 
-    download_result = sc.stream_download_to(out_path, dl, force_download=force)
+    progress_cb = None
+    if job_id:
+        last_emit = {"ts": 0.0, "bytes": 0, "percent": -1}
+
+        def _emit_progress(written: int, total: int) -> None:
+            now = time.monotonic()
+            percent = int((written / total) * 100) if total else None
+            bytes_delta = written - last_emit["bytes"]
+            if percent is not None:
+                if (
+                    percent <= last_emit["percent"]
+                    and bytes_delta < 5 * 1024 * 1024
+                    and (now - last_emit["ts"]) < 2.0
+                ):
+                    return
+            else:
+                if bytes_delta < 5 * 1024 * 1024 and (now - last_emit["ts"]) < 2.0:
+                    return
+
+            last_emit["ts"] = now
+            last_emit["bytes"] = written
+            if percent is not None:
+                last_emit["percent"] = percent
+
+            emit_job_event(
+                "scryfall",
+                "progress",
+                job_id=job_id,
+                dataset=kind,
+                bytes=written,
+                total=total,
+                percent=percent,
+            )
+
+        progress_cb = _emit_progress
+
+    download_result = sc.stream_download_to(out_path, dl, force_download=force, progress_cb=progress_cb)
     if download_result.get("status") == "not_modified" and not os.path.exists(out_path):
         # ETag matched but we lack a local file; force full download once.
         download_result = sc.stream_download_to(out_path, dl, force_download=True)

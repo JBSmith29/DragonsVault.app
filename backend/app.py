@@ -1081,18 +1081,18 @@ def create_app():
 
     @app.cli.command("refresh-oracle-tags")
     def refresh_oracle_tags_cmd():
-        """Recompute oracle deck tags and evergreen keywords from the Scryfall cache."""
+        """Recompute oracle core roles and evergreen tags from the Scryfall cache."""
         if not (cache_exists() and load_cache()):
             click.echo("No local Scryfall cache found. Run: flask fetch-scryfall-bulk")
             return
         from worker.tasks import recompute_oracle_deck_tags
 
         recompute_oracle_deck_tags()
-        click.echo("Oracle deck tags + evergreen keywords refreshed from Scryfall cache.")
+        click.echo("Oracle core roles + evergreen tags refreshed from Scryfall cache.")
 
     @app.cli.command("refresh-oracle-tags-full")
     def refresh_oracle_tags_full_cmd():
-        """Recompute oracle roles, keywords, typal tags, deck tags, and evergreen keywords."""
+        """Recompute oracle roles, keywords, typal tags, core roles, deck tags, and evergreen tags."""
         if not (cache_exists() and load_cache()):
             click.echo("No local Scryfall cache found. Run: flask fetch-scryfall-bulk")
             return
