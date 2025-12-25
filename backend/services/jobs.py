@@ -426,7 +426,7 @@ def run_scryfall_refresh_job(kind: str, job_id: str, force_download: bool = Fals
 
 
 def _refresh_spellbook_dataset(force_download: bool = False) -> dict:
-    data_dir = Path(os.getenv("SCRYFALL_DATA_DIR", "data"))
+    data_dir = Path(sc.default_cards_path()).parent
     spellbook_path = data_dir / "spellbook_combos.json"
     existing_combo_total = None
     if spellbook_path.exists():

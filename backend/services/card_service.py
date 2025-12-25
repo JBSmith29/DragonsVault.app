@@ -23,7 +23,7 @@ from services import scryfall_cache as sc
 from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
-from services.deck_tags import DECK_TAG_GROUPS, TAG_CATEGORY_MAP
+from services.deck_tags import get_deck_tag_category, get_deck_tag_groups
 from services.deck_service import deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
 from services.request_cache import request_cached
 from services.scryfall_cache import (
@@ -1463,7 +1463,7 @@ def _deck_drawer_summary(folder: Folder) -> dict:
 
     deck_tag_label = None
     if folder.deck_tag:
-        for category, tags in DECK_TAG_GROUPS.items():
+        for category, tags in get_deck_tag_groups().items():
             if folder.deck_tag in tags:
                 deck_tag_label = f"{category}: {folder.deck_tag}"
                 break
@@ -1476,7 +1476,7 @@ def _deck_drawer_summary(folder: Folder) -> dict:
             "name": folder.name,
             "tag": folder.deck_tag,
             "tag_label": deck_tag_label,
-            "tag_category": TAG_CATEGORY_MAP.get(folder.deck_tag),
+            "tag_category": get_deck_tag_category(folder.deck_tag),
         },
         "commander": commander_payload,
         "bracket": {
@@ -3540,7 +3540,7 @@ def decks_overview():
         owner_summary=owner_summary,
         owner_names=_owner_names(decks),
         proxy_count=sum(1 for deck in decks if deck.get("is_proxy")),
-        deck_tag_groups=DECK_TAG_GROUPS,
+        deck_tag_groups=get_deck_tag_groups(),
     )
 
 
@@ -3579,7 +3579,7 @@ def deck_from_collection():
                 infos=infos,
                 conflicts=conflicts,
                 summary=summary,
-                deck_tag_groups=DECK_TAG_GROUPS,
+                deck_tag_groups=get_deck_tag_groups(),
                 stage="input",
             )
         if not form["deck_name"]:
@@ -3593,7 +3593,7 @@ def deck_from_collection():
                 infos=infos,
                 conflicts=conflicts,
                 summary=summary,
-                deck_tag_groups=DECK_TAG_GROUPS,
+                deck_tag_groups=get_deck_tag_groups(),
                 stage="input",
             )
 
@@ -3723,7 +3723,7 @@ def deck_from_collection():
                 infos=infos,
                 conflicts=conflicts,
                 summary=summary,
-                deck_tag_groups=DECK_TAG_GROUPS,
+                deck_tag_groups=get_deck_tag_groups(),
                 stage=stage,
             )
 
@@ -3828,7 +3828,7 @@ def deck_from_collection():
         infos=infos,
         conflicts=conflicts,
         summary=summary,
-        deck_tag_groups=DECK_TAG_GROUPS,
+        deck_tag_groups=get_deck_tag_groups(),
         stage=stage,
     )
 

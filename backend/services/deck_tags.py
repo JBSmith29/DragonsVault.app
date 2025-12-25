@@ -6,6 +6,7 @@ from collections import OrderedDict
 import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
+
 def slugify_theme(name: str) -> str:
     """Lightweight slugifier for deck themes."""
     if not name:
@@ -74,6 +75,7 @@ DECK_TAG_GROUPS: DeckTagGroups = OrderedDict(
                 "Explore",
                 "Flashback",
                 "Food",
+                "Forced Combat",
                 "Foretell",
                 "Graveyard",
                 "Historic",
@@ -376,3 +378,38 @@ def resolve_deck_tag_from_slug(slug: str) -> Optional[str]:
             return match
 
     return None
+
+
+def get_all_deck_tags() -> list[str]:
+    """
+    Returns all known deck tags sorted alphabetically.
+    """
+    return sorted(ALL_DECK_TAGS, key=lambda value: value.casefold())
+
+
+def get_deck_tag_groups(*, include_edhrec: bool = True) -> DeckTagGroups:
+    """
+    Return deck tag groups.
+
+    include_edhrec is retained for compatibility; EDHREC tags are no longer loaded.
+    """
+    _ = include_edhrec
+    return OrderedDict((category, list(tags)) for category, tags in DECK_TAG_GROUPS.items())
+
+
+def get_deck_tag_category(tag: str | None) -> str | None:
+    """
+    Return the display category for a deck tag.
+    """
+    if not tag:
+        return None
+    return TAG_CATEGORY_MAP.get(tag)
+
+
+def is_valid_deck_tag(tag: str | None) -> bool:
+    """
+    Validate deck tags against the canonical list.
+    """
+    if not tag:
+        return False
+    return tag in VALID_DECK_TAGS

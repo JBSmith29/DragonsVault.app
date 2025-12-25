@@ -156,6 +156,39 @@ services:
       retries: 5
       start_period: 20s
 
+  edhrec-service:
+    build:
+      context: .
+      dockerfile: backend/microservices/edhrec-service/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${EDHREC_SERVICE_CONCURRENCY:-2}
+      --threads ${EDHREC_SERVICE_THREADS:-2}
+      --worker-class gthread
+      --timeout ${EDHREC_SERVICE_TIMEOUT:-90}
+      "app:create_app()"
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      SERVICE_NAME: edhrec-service
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      DATABASE_SCHEMA: edhrec_service
+      EDHREC_CACHE_TTL_HOURS: ${EDHREC_CACHE_TTL_HOURS:-72}
+      EDHREC_REQUEST_TIMEOUT: ${EDHREC_REQUEST_TIMEOUT:-30}
+      EDHREC_HTTP_RETRIES: ${EDHREC_HTTP_RETRIES:-2}
+      EDHREC_REFRESH_CONCURRENCY: ${EDHREC_REFRESH_CONCURRENCY:-4}
+    depends_on:
+      - postgres
+      - pgbouncer
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   web:
     build:
       context: .
@@ -188,6 +221,9 @@ services:
       PRICE_SERVICE_URL: http://price-service:5000
       PRICE_SERVICE_HTTP_TIMEOUT: ${PRICE_SERVICE_HTTP_TIMEOUT:-3}
       PRICE_SERVICE_CACHE_TTL: ${PRICE_SERVICE_CACHE_TTL:-300}
+      EDHREC_SERVICE_URL: http://edhrec-service:5000
+      EDHREC_SERVICE_HTTP_TIMEOUT: ${EDHREC_SERVICE_HTTP_TIMEOUT:-5}
+      EDHREC_SERVICE_CACHE_TTL: ${EDHREC_SERVICE_CACHE_TTL:-600}
       WEB_CONCURRENCY: "12"
       WEB_THREADS: "3"
       WEB_TIMEOUT: "180"
@@ -209,6 +245,7 @@ services:
       - postgres
       - pgbouncer
       - price-service
+      - edhrec-service
     init: true
     mem_limit: 32g
     healthcheck:
@@ -261,6 +298,7 @@ services:
       - card-data
       - folder-service
       - price-service
+      - edhrec-service
       - web
       - django-api
     ports:
@@ -295,6 +333,9 @@ services:
       PRICE_SERVICE_URL: http://price-service:5000
       PRICE_SERVICE_HTTP_TIMEOUT: ${PRICE_SERVICE_HTTP_TIMEOUT:-3}
       PRICE_SERVICE_CACHE_TTL: ${PRICE_SERVICE_CACHE_TTL:-300}
+      EDHREC_SERVICE_URL: http://edhrec-service:5000
+      EDHREC_SERVICE_HTTP_TIMEOUT: ${EDHREC_SERVICE_HTTP_TIMEOUT:-5}
+      EDHREC_SERVICE_CACHE_TTL: ${EDHREC_SERVICE_CACHE_TTL:-600}
       WEB_CONCURRENCY: "12"
       WEB_THREADS: "3"
       WEB_TIMEOUT: "180"

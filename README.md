@@ -209,12 +209,19 @@ Key environment variables (defaults in parentheses):
 | `PRICE_SERVICE_URL` | `""` | Internal URL for the price microservice (e.g., `http://price-service:5000`). |
 | `PRICE_SERVICE_HTTP_TIMEOUT` | `3` | Seconds to wait for the price microservice. |
 | `PRICE_SERVICE_CACHE_TTL` | `300` | Seconds to cache price service responses in the web/worker processes. |
+| `EDHREC_SERVICE_URL` | `""` | Internal URL for the EDHREC microservice (e.g., `http://edhrec-service:5000`). |
+| `EDHREC_SERVICE_HTTP_TIMEOUT` | `5` | Seconds to wait for EDHREC microservice requests. |
+| `EDHREC_SERVICE_CACHE_TTL` | `600` | Seconds to cache EDHREC service responses in the web/worker processes. |
 | `MTGJSON_GRAPHQL_URL` | `https://graphql.mtgjson.com/` | MTGJSON GraphQL endpoint for price-service. |
 | `MTGJSON_API_TOKEN` | `""` | MTGJSON API token (required for price-service data access). |
 | `PRICE_CACHE_TTL` | `43200` | Seconds to cache MTGJSON prices inside price-service. |
 | `PRICE_REQUEST_TIMEOUT` | `20` | Seconds to wait on MTGJSON GraphQL requests. |
 | `PRICE_PROVIDER_PREFERENCE` | `tcgplayer,cardmarket,cardkingdom,mtgstocks` | Provider priority for normalized prices. |
 | `PRICE_LISTTYPE_PREFERENCE` | `retail,market` | Price list priority for normalized prices. |
+| `EDHREC_CACHE_TTL_HOURS` | `72` | Hours to cache EDHREC payloads inside the edhrec-service. |
+| `EDHREC_REQUEST_TIMEOUT` | `30` | Seconds to wait on EDHREC page fetches inside the edhrec-service. |
+| `EDHREC_HTTP_RETRIES` | `2` | Retry count for EDHREC HTTP fetches inside the edhrec-service. |
+| `EDHREC_REFRESH_CONCURRENCY` | `4` | Parallel fetches used by the EDHREC refresh endpoint. |
 
 `.env` files are loaded automatically by `python-dotenv`.
 
@@ -233,7 +240,7 @@ DragonsVault/
 |   +-- static/           # CSS, JS, mana symbol assets
 |   +-- scripts/          # Operational scripts + helpers
 |   +-- migrations/       # Alembic migration scripts
-|   +-- microservices/    # user-manager, card-data, folder-service, price-service
+|   +-- microservices/    # user-manager, card-data, folder-service, price-service, edhrec-service
 |   +-- requirements.txt  # Python dependency lock
 |   +-- django_api/       # Django + DRF API (migration work)
 +-- frontend/             # SPA front end (Vite + React)

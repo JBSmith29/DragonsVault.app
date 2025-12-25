@@ -29,6 +29,8 @@ from services.live_updates import emit_job_event, latest_job_events
 from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from services.authz import require_admin
 from services.audit import record_audit_event
+from services.commander_utils import primary_commander_name, primary_commander_oracle_id
+from services.edhrec_client import edhrec_cache_snapshot, edhrec_service_enabled, refresh_edhrec_cache
 from services.request_cache import request_cached
 from .base import limiter_key_user_or_ip
 from .auth import MIN_PASSWORD_LENGTH
@@ -430,7 +432,7 @@ def _build_data_ops_context(
         rulings_bulk_path,
     )
 
-    data_dir = Path(os.getenv("SCRYFALL_DATA_DIR", "data"))
+    data_dir = Path(DEFAULT_PATH).parent
     rulings_path = Path(rulings_bulk_path())
     prints_path = Path(DEFAULT_PATH)
     spellbook_path = data_dir / "spellbook_combos.json"
@@ -721,6 +723,105 @@ def admin_console():
             n /= 1024
         return f"{n:.1f} PB"
 
+    def _dedupe(items: List[str]) -> List[str]:
+        seen: set[str] = set()
+        ordered: List[str] = []
+        for item in items:
+            key = item.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ordered.append(item)
+        return ordered
+
+    def _collect_edhrec_targets() -> dict:
+        folders = Folder.query.order_by(func.lower(Folder.name)).all()
+        deck_folders = [folder for folder in folders if not folder.is_collection]
+        commander_names: List[str] = []
+        tag_names: List[str] = []
+        with_commander = 0
+        with_tag = 0
+        for folder in deck_folders:
+            tag = (folder.deck_tag or "").strip()
+            if tag:
+                with_tag += 1
+                tag_names.append(tag)
+            name = primary_commander_name(folder.commander_name)
+            if not name and folder.commander_oracle_id:
+                oid = primary_commander_oracle_id(folder.commander_oracle_id)
+                if oid:
+                    try:
+                        ensure_cache_loaded()
+                        prints = sc.prints_for_oracle(oid) or []
+                        if prints:
+                            name = prints[0].get("name")
+                    except Exception:
+                        name = None
+            if name:
+                with_commander += 1
+                commander_names.append(name)
+        return {
+            "deck_total": len(deck_folders),
+            "with_commander": with_commander,
+            "with_tag": with_tag,
+            "commander_names": _dedupe(commander_names),
+            "tag_names": _dedupe(tag_names),
+        }
+
+    def _refresh_edhrec(force_refresh: bool) -> dict:
+        job_id = f"inline-{uuid.uuid4().hex[:8]}"
+        emit_job_event("edhrec", "queued", job_id=job_id, dataset="synergy", force=int(force_refresh))
+        emit_job_event("edhrec", "started", job_id=job_id, dataset="synergy", rq_id=None)
+        if not edhrec_service_enabled():
+            message = "EDHREC service is not configured."
+            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
+            return {"status": "error", "message": message}
+        targets = _collect_edhrec_targets()
+        commander_names = targets.get("commander_names", [])
+        tag_names = targets.get("tag_names", [])
+        if not commander_names and not tag_names:
+            message = "No commander names or deck tags found to refresh."
+            emit_job_event("edhrec", "completed", job_id=job_id, dataset="synergy", status="info", message=message)
+            return {"status": "info", "message": message}
+        try:
+            result = refresh_edhrec_cache(
+                commanders=commander_names,
+                themes=tag_names,
+                force_refresh=force_refresh,
+            )
+        except Exception as exc:
+            message = f"EDHREC refresh failed: {exc}"
+            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
+            current_app.logger.exception("EDHREC refresh failed")
+            return {"status": "error", "message": message}
+        if result.get("status") == "error":
+            message = result.get("error") or "EDHREC refresh failed."
+            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
+            return {"status": "error", "message": message}
+        commander_summary = result.get("commanders") or {}
+        theme_summary = result.get("themes") or {}
+        message = (
+            f"EDHREC cache: {commander_summary.get('ok', 0)}/{commander_summary.get('requested', 0)} "
+            f"commanders, {theme_summary.get('ok', 0)}/{theme_summary.get('requested', 0)} deck tags."
+        )
+        errors = result.get("errors") or []
+        emit_job_event(
+            "edhrec",
+            "completed",
+            job_id=job_id,
+            dataset="synergy",
+            status=result.get("status", "success"),
+            message=message,
+            commanders=commander_summary,
+            themes=theme_summary,
+        )
+        return {
+            "status": result.get("status", "success"),
+            "message": message,
+            "errors": errors,
+            "targets": targets,
+        }
+
     if request.method == "POST":
         def _resolve_redirect_endpoint() -> str:
             requested = (request.form.get("redirect_to") or "").strip()
@@ -979,6 +1080,26 @@ def admin_console():
                 else:
                     summary_warnings.append(f"Commander Spellbook combos failed: {exc}")
 
+            try:
+                edhrec_info = _refresh_edhrec(force_refresh=True)
+                status = edhrec_info.get("status")
+                message = edhrec_info.get("message")
+                if status == "success":
+                    summary_success.append("EDHREC cache")
+                    if message:
+                        detail_success.append(message)
+                elif status in {"warning", "info"}:
+                    summary_warnings.append("EDHREC cache")
+                    if message:
+                        detail_warnings.append(message)
+                else:
+                    summary_warnings.append(message or "EDHREC refresh failed.")
+                for err in edhrec_info.get("errors") or []:
+                    detail_warnings.append(err)
+            except Exception as exc:
+                current_app.logger.exception("Refresh all: EDHREC refresh failed")
+                summary_warnings.append(f"EDHREC refresh failed to start: {exc}")
+
             if summary_success:
                 flash("Refresh all completed for: " + ", ".join(summary_success) + ".", "success")
             for msg in detail_success:
@@ -991,6 +1112,29 @@ def admin_console():
             if not summary_success and not detail_success and not summary_warnings and not detail_warnings:
                 flash("Refresh all completed without any actions.", "info")
             record_audit_event("admin_action", {"action": action})
+            return redirect(redirect_url)
+
+        if action == "refresh_edhrec":
+            force_refresh = bool(request.form.get("force_refresh"))
+            try:
+                info = _refresh_edhrec(force_refresh=force_refresh)
+                status = info.get("status", "info")
+                message = info.get("message", "EDHREC refresh completed.")
+                if status == "error":
+                    flash(message, "danger")
+                elif status == "warning":
+                    flash(message, "warning")
+                else:
+                    flash(message, "success")
+                for err in info.get("errors") or []:
+                    flash(err, "warning")
+                record_audit_event(
+                    "admin_action",
+                    {"action": action, "force": force_refresh},
+                )
+            except Exception as exc:
+                current_app.logger.exception("EDHREC refresh failed")
+                flash(f"Failed to refresh EDHREC cache: {exc}", "danger")
             return redirect(redirect_url)
     data_ops = _build_data_ops_context(
         symbols_json_path=symbols_json_path,
@@ -1005,6 +1149,18 @@ def admin_console():
         "collection": len(all_folders) - len(deck_folders),
         "total": len(all_folders),
     }
+    edhrec_snapshot = edhrec_cache_snapshot() if edhrec_service_enabled() else {"status": "disabled"}
+    edhrec_error = None
+    if edhrec_snapshot.get("status") == "error":
+        edhrec_error = edhrec_snapshot.get("error") or "EDHREC service unavailable."
+    elif edhrec_snapshot.get("status") == "disabled":
+        edhrec_error = "EDHREC service is not configured."
+    edhrec = {
+        "enabled": edhrec_service_enabled(),
+        "error": edhrec_error,
+        "commanders": edhrec_snapshot.get("commanders", {}),
+        "themes": edhrec_snapshot.get("themes", {}),
+    }
     user_context = _user_management_context(include_users=False)
     request_counts = _site_request_counts()
     return render_template(
@@ -1016,6 +1172,7 @@ def admin_console():
         stats=data_ops["stats"],
         symbols_enabled=data_ops["symbols_enabled"],
         folder_counts=folder_counts,
+        edhrec=edhrec,
         user_stats=user_context["user_stats"],
         request_counts=request_counts,
     )
@@ -1031,6 +1188,27 @@ def admin_data_operations():
         symbols_svg_dir=symbols_context.get("symbols_svg_dir"),
         symbols_enabled=bool(symbols_context.get("symbols_enabled")),
     )
+    all_folders = Folder.query.order_by(func.lower(Folder.name)).all()
+    deck_folders = [folder for folder in all_folders if not folder.is_collection]
+    edhrec_snapshot = edhrec_cache_snapshot() if edhrec_service_enabled() else {"status": "disabled"}
+    edhrec_error = None
+    if edhrec_snapshot.get("status") == "error":
+        edhrec_error = edhrec_snapshot.get("error") or "EDHREC service unavailable."
+    elif edhrec_snapshot.get("status") == "disabled":
+        edhrec_error = "EDHREC service is not configured."
+    edhrec = {
+        "enabled": edhrec_service_enabled(),
+        "error": edhrec_error,
+        "commanders": edhrec_snapshot.get("commanders", {}),
+        "themes": edhrec_snapshot.get("themes", {}),
+        "deck_totals": {
+            "total": len(deck_folders),
+            "with_commander": sum(
+                1 for folder in deck_folders if folder.commander_name or folder.commander_oracle_id
+            ),
+            "with_tag": sum(1 for folder in deck_folders if folder.deck_tag),
+        },
+    }
     return render_template(
         "admin/data_operations.html",
         prints=data_ops["prints"],
@@ -1039,6 +1217,7 @@ def admin_data_operations():
         symbols=data_ops["symbols"],
         stats=data_ops["stats"],
         symbols_enabled=data_ops["symbols_enabled"],
+        edhrec=edhrec,
     )
 
 

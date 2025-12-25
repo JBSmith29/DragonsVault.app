@@ -31,7 +31,7 @@ from services.commander_utils import (
     split_commander_oracle_ids,
 )
 from services.symbols_cache import colors_to_icons, render_mana_html
-from services.deck_tags import DECK_TAG_GROUPS, TAG_CATEGORY_MAP, VALID_DECK_TAGS
+from services.deck_tags import get_deck_tag_category, get_deck_tag_groups, is_valid_deck_tag
 from services.commander_brackets import (
     GAME_CHANGERS,
     BRACKET_REFERENCE,
@@ -700,7 +700,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         "views.list_cards",
         folder=folder_id,
     )
-    folder_tag_category = TAG_CATEGORY_MAP.get(folder.deck_tag)
+    folder_tag_category = get_deck_tag_category(folder.deck_tag)
     is_deck_folder = bool(folder and not folder.is_collection)
 
     base_types = ["Artifact", "Battle", "Creature", "Enchantment", "Instant", "Land", "Planeswalker", "Sorcery"]
@@ -804,7 +804,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         reverse=reverse,
         commander_bracket=commander_ctx,
         bracket_card_links=bracket_card_links,
-        deck_tag_groups=DECK_TAG_GROUPS,
+        deck_tag_groups=get_deck_tag_groups(),
         folder_tag_category=folder_tag_category,
         commander_media=commander_media,
         card_image_lookup=card_image_lookup,
@@ -1124,7 +1124,7 @@ def set_folder_tag(folder_id: int):
         flash(message, "danger")
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
-    if tag not in VALID_DECK_TAGS:
+    if not is_valid_deck_tag(tag):
         message = "Invalid tag selection."
         if request.is_json:
             return jsonify({"ok": False, "error": message}), 400
@@ -1157,7 +1157,7 @@ def set_folder_tag(folder_id: int):
 
     _safe_commit()
 
-    category = TAG_CATEGORY_MAP.get(tag)
+    category = get_deck_tag_category(tag)
     if request.is_json:
         return jsonify({"ok": True, "tag": tag, "category": category})
 

@@ -17,7 +17,7 @@
   </div>
 
   <div class="row g-3">
-    <div class="col-12 col-xl-6">
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-body">
           {% set prints_stats = stats.prints or {} %}
@@ -108,7 +108,7 @@
       </div>
     </div>
 
-    <div class="col-12 col-xl-6">
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
@@ -172,7 +172,7 @@
       </div>
     </div>
 
-    <div class="col-12 col-xl-6">
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
@@ -209,7 +209,7 @@
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
               <div>
                 <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                <p class="text-muted small mb-0 job-monitor__detail">
+                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
                   When a spellbook refresh runs the latest status appears here automatically.
                 </p>
               </div>
@@ -327,6 +327,85 @@
       </div>
     </div>
   </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <h5 class="card-title mb-0">EDHREC Synergy Cache</h5>
+              {% if edhrec.enabled and not edhrec.error %}
+                <span class="badge text-bg-success">Online</span>
+              {% else %}
+                <span class="badge text-bg-warning-subtle text-warning">Unavailable</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="small text-muted mb-2">Commander and deck tag synergy pulled from edhrec.com.</div>
+          {% if edhrec.enabled and not edhrec.error %}
+            <ul class="list-unstyled small mb-3">
+              <li>
+                Commanders cached: {{ edhrec.commanders.count or 0 }}
+                {% if edhrec.commanders.latest_slug %}
+                  <span class="text-muted"> (latest {{ edhrec.commanders.latest_slug }} @ {{ edhrec.commanders.latest_fetched_at or 'N/A' }})</span>
+                {% endif %}
+              </li>
+              <li>
+                Deck tags cached: {{ edhrec.themes.count or 0 }}
+                {% if edhrec.themes.latest_slug %}
+                  <span class="text-muted"> (latest {{ edhrec.themes.latest_slug }} @ {{ edhrec.themes.latest_fetched_at or 'N/A' }})</span>
+                {% endif %}
+              </li>
+              <li>
+                Decks tracked: {{ edhrec.deck_totals.total }}
+                <span class="text-muted">(commander set: {{ edhrec.deck_totals.with_commander }}, tagged: {{ edhrec.deck_totals.with_tag }})</span>
+              </li>
+            </ul>
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
+              <input type="hidden" name="action" value="refresh_edhrec">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" value="1" id="forceEdhrecDataOps" name="force_refresh">
+                <label class="form-check-label small" for="forceEdhrecDataOps">Force refresh (ignore cache age)</label>
+              </div>
+              <button class="btn btn-primary btn-sm" type="submit">Refresh EDHREC Data</button>
+            </form>
+            <p class="text-muted small mb-0 mt-2">Runs one request per unique commander/tag in your decks.</p>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+                 data-job-monitor
+                 data-job-scope="edhrec"
+                 data-job-dataset="synergy"
+                 data-job-label="EDHREC Synergy Cache">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    Queue a refresh to see live status updates as the cache warms.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <div class="mt-3 d-none" data-job-progress>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="small text-muted" data-job-progress-text>Working</span>
+                  <span class="small fw-semibold" data-job-progress-label>0%</span>
+                </div>
+                <div class="progress progress-striped" role="progressbar" aria-label="EDHREC cache progress" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+                </div>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          {% else %}
+            <div class="alert alert-warning small mb-0">
+              {{ edhrec.error or 'EDHREC service is unavailable.' }}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
 </div>
-<script src="{{ url_for('static', filename='js/job-monitor.js', v='2') }}" defer></script>
 {% endblock %}

@@ -39,18 +39,24 @@
         badgeTone: "info",
         badgeLabel: "Queued",
         summary: `${label} queued`,
-        detail: `Job ${jobId} is waiting for a worker.`,
+        detail: payload.detail || payload.message || `Job ${jobId} is waiting for a worker.`,
       };
     }
     if (type === "started") {
+      const detail = payload.detail || payload.message || (
+        payload.scope === "scryfall"
+          ? `Job ${jobId} is downloading the latest data from Scryfall.`
+          : `Job ${jobId} is running.`
+      );
       return {
         badgeTone: "warning",
         badgeLabel: "Running",
         summary: `${label} refresh started`,
-        detail: `Job ${jobId} is downloading the latest data from Scryfall.`,
+        detail,
       };
     }
     if (type === "progress") {
+      const override = payload.detail || payload.message || payload.progress_text;
       const bytes = formatBytes(payload.bytes);
       const total = formatBytes(payload.total);
       const percent = Number.isFinite(payload.percent) ? `${payload.percent}%` : null;
@@ -63,13 +69,15 @@
         badgeTone: "warning",
         badgeLabel: "Running",
         summary: `${label} refresh in progress`,
-        detail,
+        detail: override || detail,
       };
     }
     if (type === "completed") {
       const size = formatBytes(payload.bytes || payload.bytes_downloaded);
       const status = payload.status || payload.download_status || "OK";
-      const detail = size ? `Downloaded ${size} (status ${status}).` : `Finished with status ${status}.`;
+      const detail = payload.detail
+        || payload.message
+        || (size ? `Downloaded ${size} (status ${status}).` : `Finished with status ${status}.`);
       return {
         badgeTone: "success",
         badgeLabel: "Complete",
@@ -82,7 +90,7 @@
         badgeTone: "danger",
         badgeLabel: "Failed",
         summary: `${label} refresh failed`,
-        detail: payload.error || "Check the logs for details.",
+        detail: payload.detail || payload.message || payload.error || "Check the logs for details.",
       };
     }
     return {
@@ -235,22 +243,31 @@
       bar.setAttribute("aria-valuenow", String(clamped));
       if (label) label.textContent = `${clamped}%`;
       if (text) {
-        const totalLabel = formatBytes(total);
-        const bytesLabel = formatBytes(bytes);
-        text.textContent = totalLabel && bytesLabel
-          ? `Downloaded ${bytesLabel} of ${totalLabel}`
-          : "Downloading";
+        const custom = event.progress_text;
+        if (custom) {
+          text.textContent = custom;
+        } else {
+          const totalLabel = formatBytes(total);
+          const bytesLabel = formatBytes(bytes);
+          text.textContent = totalLabel && bytesLabel
+            ? `Downloaded ${bytesLabel} of ${totalLabel}`
+            : "Downloading";
+        }
       }
     } else {
       bar.style.width = type === "queued" ? "25%" : "100%";
       bar.setAttribute("aria-valuenow", "0");
       if (label) label.textContent = type === "queued" ? "Queued" : "Working";
       if (text) {
-        const bytesLabel = formatBytes(bytes);
-        if (bytesLabel) {
-          text.textContent = `Downloaded ${bytesLabel}`;
+        if (event.progress_text) {
+          text.textContent = event.progress_text;
         } else {
-          text.textContent = type === "queued" ? "Waiting for worker" : "Working";
+          const bytesLabel = formatBytes(bytes);
+          if (bytesLabel) {
+            text.textContent = `Downloaded ${bytesLabel}`;
+          } else {
+            text.textContent = type === "queued" ? "Waiting for worker" : "Working";
+          }
         }
       }
     }
@@ -312,30 +329,39 @@
     poll();
   }
 
-  function initJobTriggers() {
-    const forms = Array.from(document.querySelectorAll("[data-job-trigger]"));
+  function initJobTriggers(root) {
+    const scope = root || document;
+    const forms = Array.from(scope.querySelectorAll("[data-job-trigger]"));
     forms.forEach((form) => {
+      if (form.dataset.jobTriggerBound === "1") return;
+      form.dataset.jobTriggerBound = "1";
       form.addEventListener("submit", () => {
-        const scope = form.dataset.jobScope || "";
+        const jobScope = form.dataset.jobScope || "";
         const dataset = form.dataset.jobDataset || "";
-        storeTrigger(scope, dataset);
+        storeTrigger(jobScope, dataset);
       });
     });
   }
 
-  function initJobMonitor() {
-    initJobTriggers();
-    const nodes = Array.from(document.querySelectorAll("[data-job-monitor]"));
+  function initJobMonitor(root) {
+    const scope = root || document;
+    initJobTriggers(scope);
+    const nodes = Array.from(scope.querySelectorAll("[data-job-monitor]"));
     if (!nodes.length) return;
     nodes.forEach((node) => {
+      if (node.dataset.jobMonitorBound === "1") return;
+      node.dataset.jobMonitorBound = "1";
       setIdleState(node);
       startPolling(node);
     });
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initJobMonitor, { once: true });
+    document.addEventListener("DOMContentLoaded", () => initJobMonitor(document), { once: true });
   } else {
-    initJobMonitor();
+    initJobMonitor(document);
   }
+  document.addEventListener("htmx:afterSwap", (event) => {
+    initJobMonitor(event.target || document);
+  });
 })();

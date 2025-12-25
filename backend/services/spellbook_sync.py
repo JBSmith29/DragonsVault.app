@@ -25,6 +25,7 @@ __all__ = [
     "generate_spellbook_combo_dataset",
     "write_dataset_to_file",
     "DEFAULT_SPELLBOOK_CONCURRENCY",
+    "DEFAULT_SPELLBOOK_PAGE_CONCURRENCY",
 ]
 
 API_BASE_URL = "https://backend.commanderspellbook.com/variants/"
@@ -35,6 +36,10 @@ try:
     DEFAULT_SPELLBOOK_CONCURRENCY = int(os.getenv("COMMANDER_SPELLBOOK_CONCURRENCY", "6") or "6")
 except ValueError:
     DEFAULT_SPELLBOOK_CONCURRENCY = 6
+try:
+    DEFAULT_SPELLBOOK_PAGE_CONCURRENCY = int(os.getenv("COMMANDER_SPELLBOOK_PAGE_CONCURRENCY", "2") or "2")
+except ValueError:
+    DEFAULT_SPELLBOOK_PAGE_CONCURRENCY = 2
 _RETRY_STATUS = (408, 429, 500, 502, 503, 504)
 _thread_local = threading.local()
 
@@ -92,40 +97,84 @@ def _iter_variants(
     query = dict(params) if params else {"limit": PAGE_SIZE}
     fetched = 0
     total_count: Optional[int] = None
-    session = _get_spellbook_session()
 
-    while next_url:
-        response = session.get(
-            next_url,
-            params=query if next_url == API_BASE_URL else None,
-            timeout=SPELLBOOK_TIMEOUT,
-        )
-        response.raise_for_status()
-        payload = response.json()
+    def _report_total(payload: Dict[str, any]) -> None:
+        nonlocal total_count
+        if total_count is not None:
+            return
+        total_raw = payload.get("count")
+        if isinstance(total_raw, int):
+            total_count = total_raw
+            if total_callback:
+                try:
+                    total_callback(total_count)
+                except Exception:
+                    # Total reporting is best-effort.
+                    pass
 
-        if total_count is None:
-            total_raw = payload.get("count")
-            if isinstance(total_raw, int):
-                total_count = total_raw
-                if total_callback:
-                    try:
-                        total_callback(total_count)
-                    except Exception:
-                        # Total reporting is best-effort.
-                        pass
-
-        for item in payload.get("results", []):
+    def _yield_results(results: Iterable[Dict[str, any]]) -> Iterator[Dict[str, any]]:
+        nonlocal fetched
+        for item in results:
             fetched += 1
             if progress_callback:
                 try:
                     progress_callback(fetched, total_count)
                 except Exception:
-                    # Progress reporting is best-effort; ignore callback errors
+                    # Progress reporting is best-effort; ignore callback errors.
                     pass
             yield item
 
+    session = _get_spellbook_session()
+    response = session.get(
+        next_url,
+        params=query if next_url == API_BASE_URL else None,
+        timeout=SPELLBOOK_TIMEOUT,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    _report_total(payload)
+    yield from _yield_results(payload.get("results", []))
+
+    limit = int(query.get("limit") or PAGE_SIZE)
+    page_workers = max(1, int(DEFAULT_SPELLBOOK_PAGE_CONCURRENCY or 1))
+    offset_start = int(query.get("offset") or 0)
+
+    if (
+        page_workers <= 1
+        or not total_count
+        or total_count <= offset_start + limit
+    ):
         next_url = payload.get("next")
         query = None
+        while next_url:
+            response = session.get(next_url, timeout=SPELLBOOK_TIMEOUT)
+            response.raise_for_status()
+            payload = response.json()
+            yield from _yield_results(payload.get("results", []))
+            next_url = payload.get("next")
+        return
+
+    offsets = list(range(offset_start + limit, total_count, limit))
+    if not offsets:
+        return
+
+    q_value = query.get("q")
+
+    def _fetch_offset(offset: int) -> List[Dict[str, any]]:
+        params: Dict[str, str] = {"limit": str(limit), "offset": str(offset)}
+        if q_value:
+            params["q"] = q_value
+        sess = _get_spellbook_session()
+        resp = sess.get(API_BASE_URL, params=params, timeout=SPELLBOOK_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("results", []) or []
+
+    with ThreadPoolExecutor(max_workers=page_workers) as executor:
+        futures = [executor.submit(_fetch_offset, offset) for offset in offsets]
+        for future in as_completed(futures):
+            results = future.result()
+            yield from _yield_results(results)
 
 
 def collect_instant_win_variants(

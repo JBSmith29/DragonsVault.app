@@ -3,6 +3,7 @@ from __future__ import annotations
 
 
 import json
+import os
 
 import math
 
@@ -109,19 +110,47 @@ BRACKET_LABELS: Dict[int, str] = {
 
 BRACKET_RULESET_EPOCH = 3
 
-SPELLBOOK_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "spellbook_combos.json"
+
+def _spellbook_data_candidates() -> List[Path]:
+    candidates: List[Path] = []
+    try:
+        data_root = Path(sc.default_cards_path()).parent
+        candidates.append(data_root / "spellbook_combos.json")
+    except Exception:
+        pass
+    root_data = Path(os.getenv("SCRYFALL_DATA_DIR", "data")) / "spellbook_combos.json"
+    if root_data not in candidates:
+        candidates.append(root_data)
+    legacy = Path(__file__).resolve().parents[1] / "data" / "spellbook_combos.json"
+    if legacy not in candidates:
+        candidates.append(legacy)
+    return candidates
+
+
+def _spellbook_data_path() -> Path:
+    candidates = _spellbook_data_candidates()
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
+
+
+SPELLBOOK_DATA_PATH = _spellbook_data_path()
 
 
 def spellbook_dataset_epoch() -> int:
+    global SPELLBOOK_DATA_PATH
+    data_path = _spellbook_data_path()
+    SPELLBOOK_DATA_PATH = data_path
     try:
-        payload = json.loads(SPELLBOOK_DATA_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(data_path.read_text(encoding="utf-8"))
         fetched_at = payload.get("fetched_at")
         if fetched_at:
             return hash(fetched_at)
     except Exception:
         pass
     try:
-        return int(SPELLBOOK_DATA_PATH.stat().st_mtime)
+        return int(data_path.stat().st_mtime)
     except FileNotFoundError:
         return 0
 
@@ -1075,8 +1104,9 @@ def _build_spellbook_combo_collection(
 
 
 def _load_spellbook_combos() -> Dict[str, Any]:
-
-    data_path = Path(__file__).resolve().parents[1] / "data" / "spellbook_combos.json"
+    global SPELLBOOK_DATA_PATH
+    data_path = _spellbook_data_path()
+    SPELLBOOK_DATA_PATH = data_path
 
     if not data_path.exists():
 

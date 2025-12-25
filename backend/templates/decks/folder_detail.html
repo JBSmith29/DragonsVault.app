@@ -1206,7 +1206,13 @@
         <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
           {% for c, pip, n in land_mana_sources %}
             <span class="pill d-inline-flex align-items-center">
-              {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+              {% if pip %}
+                <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
+              {% elif c in ['C', 'Colorless'] %}
+                <img src="{{ url_for('static', filename='symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+              {% else %}
+                <span class="me-1">{{ c }}</span>
+              {% endif %}
               <span class="fw-semibold">{{ n }}</span>
             </span>
           {% endfor %}

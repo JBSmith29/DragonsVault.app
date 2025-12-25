@@ -177,11 +177,21 @@
                 <span class="badge text-bg-warning-subtle text-warning">Unavailable</span>
               {% endif %}
             </li>
+            <li>
+              EDHREC Synergy Cache:
+              {% if edhrec.enabled and not edhrec.error %}
+                <span class="badge text-bg-success">Online</span>
+                <span class="text-muted">(cmdr: {{ edhrec.commanders.count or 0 }}, tags: {{ edhrec.themes.count or 0 }})</span>
+              {% else %}
+                <span class="badge text-bg-warning-subtle text-warning">Unavailable</span>
+              {% endif %}
+            </li>
           </ul>
           <a class="btn btn-primary btn-sm" href="{{ url_for('views.admin_data_operations') }}">Open Data Operations</a>
         </div>
       </div>
     </div>
   </div>
+
 </div>
 {% endblock %}
