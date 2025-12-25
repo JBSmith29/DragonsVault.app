@@ -256,15 +256,16 @@
       <div class="small text-muted">Showing {{ results|length }} of {{ '{:,}'.format(total or 0) }} cards</div>
       <div class="dropdown">
         <button
-          class="btn btn-sm btn-outline-secondary dropdown-toggle"
+          class="btn btn-sm dv-select-toggle d-inline-flex align-items-center gap-2"
           type="button"
           data-bs-toggle="dropdown"
           data-bs-auto-close="outside"
           aria-expanded="false"
         >
-          Columns
+          <span>Columns</span>
+          <i class="bi bi-chevron-down" aria-hidden="true"></i>
         </button>
-        <div class="dropdown-menu dropdown-menu-end p-3" style="min-width:220px;">
+        <div class="dropdown-menu dropdown-menu-end dv-select-menu p-3" style="min-width:220px;">
           <div class="small text-muted mb-2">Show columns</div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="sfbColArt" data-columns-toggle="scryfall" data-col="art" checked>

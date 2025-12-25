@@ -103,16 +103,32 @@
                     <form method="post" class="d-flex flex-wrap align-items-center gap-2">
                       <input type="hidden" name="action" value="update_request_status">
                       <input type="hidden" name="request_id" value="{{ item.id }}">
-                      <label class="visually-hidden" for="status-{{ item.id }}">Status</label>
-                      <select
-                        class="form-select form-select-sm w-auto"
-                        id="status-{{ item.id }}"
-                        name="status"
-                      >
-                        {% for value, label in status_choices %}
-                          <option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                      </select>
+                      <label class="visually-hidden" for="statusToggle-{{ item.id }}">Status</label>
+                      <div class="dropdown dv-select dv-select-sm" data-dv-select="request-status-{{ item.id }}">
+                        <input type="hidden" name="status" data-dv-select-input value="{{ item.status }}">
+                        <button
+                          class="btn dv-select-toggle btn-sm d-inline-flex align-items-center gap-2"
+                          type="button"
+                          id="statusToggle-{{ item.id }}"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false">
+                          <span data-dv-select-label>{{ item.status_label }}</span>
+                          <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <ul class="dropdown-menu dv-select-menu dropdown-menu-end" aria-labelledby="statusToggle-{{ item.id }}">
+                          {% for value, label in status_choices %}
+                            <li>
+                              <button class="dropdown-item {% if item.status == value %}active{% endif %}"
+                                      type="button"
+                                      data-dv-select-option
+                                      data-value="{{ value }}"
+                                      data-label="{{ label }}">
+                                {{ label }}
+                              </button>
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </div>
                       <button class="btn btn-primary btn-sm" type="submit">Update</button>
                     </form>
                   </div>

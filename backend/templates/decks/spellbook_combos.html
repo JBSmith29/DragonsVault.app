@@ -226,11 +226,52 @@
             </div>
             <div class="col-sm-6 col-lg-3 col-xl-2">
               <label for="comboStage" class="form-label small text-muted text-uppercase fw-semibold">Game Stage</label>
-              <select id="comboStage" name="stage" class="form-select">
-                <option value="" {% if not selected_stage %}selected{% endif %}>All stages</option>
-                <option value="early" {% if selected_stage == 'early' %}selected{% endif %}>Early Game</option>
-                <option value="late" {% if selected_stage == 'late' %}selected{% endif %}>Late Game</option>
-              </select>
+              {% set stage_label = "All stages" %}
+              {% if selected_stage == 'early' %}
+                {% set stage_label = "Early Game" %}
+              {% elif selected_stage == 'late' %}
+                {% set stage_label = "Late Game" %}
+              {% endif %}
+              <div class="dropdown dv-select w-100" data-dv-select="spellbook-stage">
+                <input type="hidden" name="stage" data-dv-select-input value="{{ selected_stage or '' }}">
+                <button class="btn dv-select-toggle w-100 justify-content-between"
+                        type="button"
+                        id="comboStage"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false">
+                  <span data-dv-select-label>{{ stage_label }}</span>
+                  <i class="bi bi-chevron-down"></i>
+                </button>
+                <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="comboStage">
+                  <li>
+                    <button class="dropdown-item {% if not selected_stage %}active{% endif %}"
+                            type="button"
+                            data-dv-select-option
+                            data-value=""
+                            data-label="All stages">
+                      All stages
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item {% if selected_stage == 'early' %}active{% endif %}"
+                            type="button"
+                            data-dv-select-option
+                            data-value="early"
+                            data-label="Early Game">
+                      Early Game
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item {% if selected_stage == 'late' %}active{% endif %}"
+                            type="button"
+                            data-dv-select-option
+                            data-value="late"
+                            data-label="Late Game">
+                      Late Game
+                    </button>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -410,11 +451,30 @@
               <input type="hidden" name="{{ k }}" value="{{ v }}">
             {% endfor %}
             <label class="small text-muted mb-0" for="combosPerSelect">Rows per page</label>
-            <select id="combosPerSelect" name="per" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
-              {% for option in [25, 50, 100, 200] %}
-                <option value="{{ option }}" {{ 'selected' if per == option else '' }}>{{ option }}</option>
-              {% endfor %}
-            </select>
+            <div class="dropdown dv-select dv-select-sm" data-dv-select="spellbook-per" data-auto-submit="true">
+              <input type="hidden" name="per" data-dv-select-input value="{{ per }}">
+              <button class="btn dv-select-toggle btn-sm d-inline-flex align-items-center gap-2"
+                      type="button"
+                      id="combosPerSelect"
+                      data-bs-toggle="dropdown"
+                      aria-expanded="false">
+                <span data-dv-select-label>{{ per }}</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu dropdown-menu-end" aria-labelledby="combosPerSelect">
+                {% for option in [25, 50, 100, 200] %}
+                  <li>
+                    <button class="dropdown-item {% if per == option %}active{% endif %}"
+                            type="button"
+                            data-dv-select-option
+                            data-value="{{ option }}"
+                            data-label="{{ option }}">
+                      {{ option }}
+                    </button>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
             <input type="hidden" name="page" value="{{ page }}">
             <input type="hidden" name="sort" value="{{ sort }}">
             <input type="hidden" name="direction" value="{{ direction }}">

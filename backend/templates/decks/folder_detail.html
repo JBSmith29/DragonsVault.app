@@ -1255,6 +1255,111 @@
     <div class="stat-card"><div class="label">Total Value</div><div class="value">${{ '{:,.2f}'.format(total_value_usd or 0) }}</div></div>
   </div>
 
+  {% if folder.is_build %}
+    <div class="card mb-4">
+      <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+          <div class="fw-semibold">Build Recommendations</div>
+          <div class="small text-muted">
+            Commander synergy from EDHREC cache
+            {% if build_state and build_state.tags %}
+              &mdash; Tags: {{ build_state.tags|join(', ') }}
+            {% endif %}
+          </div>
+        </div>
+        <span class="badge text-bg-warning">Build Queue</span>
+      </div>
+      <div class="card-body">
+        {% if build_state and build_state.ok %}
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <div class="fw-semibold mb-2">Owned Synergy</div>
+              {% if build_state.recommendations and build_state.recommendations.owned %}
+                <div class="list-group list-group-flush">
+                  {% for rec in build_state.recommendations.owned %}
+                    <div class="list-group-item d-flex align-items-start justify-content-between gap-3">
+                      <div class="flex-grow-1">
+                        <div class="fw-semibold">{{ rec.name }}</div>
+                        <div class="small text-muted">
+                          Synergy: {{ '%.1f'|format(rec.synergy_score or 0) }}
+                          {% if rec.owned_qty %}&mdash; Owned: {{ rec.owned_qty }}{% endif %}
+                        </div>
+                        {% if rec.reasons %}
+                          <div class="small text-muted">{{ rec.reasons|join(' · ') }}</div>
+                        {% endif %}
+                      </div>
+                      <div class="text-end">
+                        {% if rec.in_deck %}
+                          <span class="badge text-bg-secondary">In Deck</span>
+                        {% else %}
+                          <form method="post"
+                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                class="d-inline"
+                                data-ux-submit>
+                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
+                              Add
+                            </button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="text-muted small">No owned synergy cards found yet.</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-lg-6">
+              <div class="fw-semibold mb-2">External Suggestions</div>
+              {% if build_state.recommendations and build_state.recommendations.external %}
+                <div class="list-group list-group-flush">
+                  {% for rec in build_state.recommendations.external %}
+                    <div class="list-group-item d-flex align-items-start justify-content-between gap-3">
+                      <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2">
+                          <div class="fw-semibold">{{ rec.name }}</div>
+                          <span class="badge text-bg-secondary">External</span>
+                        </div>
+                        <div class="small text-muted">
+                          Synergy: {{ '%.1f'|format(rec.synergy_score or 0) }}
+                        </div>
+                        {% if rec.reasons %}
+                          <div class="small text-muted">{{ rec.reasons|join(' · ') }}</div>
+                        {% endif %}
+                      </div>
+                      <div class="text-end">
+                        {% if rec.in_deck %}
+                          <span class="badge text-bg-secondary">In Deck</span>
+                        {% else %}
+                          <form method="post"
+                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                class="d-inline"
+                                data-ux-submit>
+                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
+                              Add
+                            </button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="text-muted small">No external suggestions available.</div>
+              {% endif %}
+            </div>
+          </div>
+        {% else %}
+          <div class="text-muted small">
+            {{ build_state.error if build_state and build_state.error else 'Build recommendations are not available.' }}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
   {# ===== Tokens section ===== #}
   {% if deck_tokens and deck_tokens|length %}
     <div class="card token-section mb-4">
@@ -1413,7 +1518,7 @@
                   aria-label="Choose export format">
             <span class="visually-hidden">Choose export format</span>
           </button>
-          <ul class="dropdown-menu dropdown-menu-end">
+          <ul class="dropdown-menu dropdown-menu-end dv-select-menu">
             <li>
               <button class="dropdown-item export-format" type="button" data-export-format="manavault">
                 Export for ManaVault

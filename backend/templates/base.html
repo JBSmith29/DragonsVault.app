@@ -688,57 +688,9 @@
 
     (function () {
       const hxEnabled = {{ 'true' if not (disable_hx | default(false)) else 'false' }};
-      const PRESERVE_SCROLL_KEY = 'dv:preserve-scroll';
-      const SCROLL_TOP_FLAG = 'dv:scroll-top-next';
-
-      const setPreserveState = (value) => {
-        try {
-          if (value) {
-            sessionStorage.setItem(PRESERVE_SCROLL_KEY, '1');
-          } else {
-            sessionStorage.removeItem(PRESERVE_SCROLL_KEY);
-          }
-        } catch (_) {
-          /* ignore session storage issues */
-        }
-        try {
-          if (value) {
-            localStorage.setItem(PRESERVE_SCROLL_KEY, '1');
-          } else {
-            localStorage.removeItem(PRESERVE_SCROLL_KEY);
-          }
-        } catch (_) {
-          /* ignore local storage issues */
-        }
-      };
-
-      const clearPreserveScroll = () => setPreserveState(false);
-      const markPreserveScroll = () => setPreserveState(true);
-
-      const shouldPreserveScroll = () => {
-        try {
-          if (sessionStorage.getItem(PRESERVE_SCROLL_KEY) === '1') {
-            return true;
-          }
-        } catch (_) {
-          /* ignore */
-        }
-        try {
-          return localStorage.getItem(PRESERVE_SCROLL_KEY) === '1';
-        } catch (_) {
-          return false;
-        }
-      };
 
       window.DV = window.DV || {};
       window.DV.hxEnabled = hxEnabled;
-      window.DV.scroll = {
-        key: PRESERVE_SCROLL_KEY,
-        flag: SCROLL_TOP_FLAG,
-        clear: clearPreserveScroll,
-        mark: markPreserveScroll,
-        should: shouldPreserveScroll,
-      };
 
       const measureViewport = () => {
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -750,10 +702,6 @@
 
       window.addEventListener('resize', measureViewport, { passive: true });
       measureViewport();
-
-      window.clearPreserveScroll = clearPreserveScroll;
-      window.markPreserveScroll = markPreserveScroll;
-      window.shouldPreserveScroll = shouldPreserveScroll;
 
       if ('scrollRestoration' in history) {
         history.scrollRestoration = 'manual';
@@ -806,43 +754,91 @@
         }
       };
 
-      if (window.DV && window.DV.scroll) {
-        window.DV.scroll.normalizePath = normalizePath;
-      }
+      window.DV.scroll = window.DV.scroll || {};
+      window.DV.scroll.normalizePath = normalizePath;
 
-      const readScrollPayload = () => {
+      const readScrollMap = () => {
         try {
           const raw = sessionStorage.getItem(SCROLL_STORE_KEY);
-          return raw ? JSON.parse(raw) : null;
+          if (!raw) return {};
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== "object") {
+            return {};
+          }
+          if (parsed.path && typeof parsed.y === "number") {
+            return { [parsed.path]: { y: parsed.y, ts: parsed.ts || Date.now() } };
+          }
+          return parsed;
         } catch (_) {
-          return null;
+          return {};
         }
+      };
+
+      const readScrollPayload = () => {
+        const map = readScrollMap();
+        const key = normalizePath(window.location.pathname);
+        const entry = map[key];
+        if (typeof entry === "number") {
+          return { y: entry, ts: 0 };
+        }
+        if (entry && typeof entry === "object" && typeof entry.y === "number") {
+          return entry;
+        }
+        return null;
       };
 
       const saveScrollPosition = () => {
         try {
+          const map = readScrollMap();
           const payload = {
-            path: normalizePath(window.location.pathname),
             y: getScrollTop(),
             ts: Date.now(),
           };
-          sessionStorage.setItem(SCROLL_STORE_KEY, JSON.stringify(payload));
+          map[normalizePath(window.location.pathname)] = payload;
+          sessionStorage.setItem(SCROLL_STORE_KEY, JSON.stringify(map));
         } catch (_) {
           /* ignore */
         }
       };
 
-      const restoreScrollPosition = () => {
+      const clearScrollPosition = () => {
+        try {
+          const map = readScrollMap();
+          const key = normalizePath(window.location.pathname);
+          if (key in map) {
+            delete map[key];
+            sessionStorage.setItem(SCROLL_STORE_KEY, JSON.stringify(map));
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      };
+
+      const restoreScrollPosition = (options = {}) => {
         const payload = readScrollPayload();
         if (!payload || typeof payload.y !== "number") return false;
-        const currentPath = normalizePath(window.location.pathname);
-        if (payload.path !== currentPath) return false;
+        const target = payload.y;
         const apply = () => {
-          setScrollTop(payload.y);
+          const current = getScrollTop();
+          if (Math.abs(current - target) < 2) {
+            return true;
+          }
+          setScrollTop(target);
+          return Math.abs(getScrollTop() - target) < 2;
         };
-        apply();
-        requestAnimationFrame(apply);
-        setTimeout(apply, 120);
+        const maxAttempts = Number.isFinite(options.attempts) ? options.attempts : 2;
+        let attempts = 0;
+        const tick = () => {
+          attempts += 1;
+          if (apply() || attempts >= maxAttempts) return;
+          requestAnimationFrame(tick);
+        };
+        tick();
+        if (!options.skipSettle && document.readyState !== 'complete') {
+          setTimeout(() => {
+            apply();
+          }, 160);
+        }
         return true;
       };
 
@@ -853,109 +849,68 @@
       window.DV.scroll.reset = resetScrollPosition;
       window.DV.scroll.reload = (preserve = true) => {
         if (preserve) {
-          markPreserveScroll();
           saveScrollPosition();
         } else {
-          clearPreserveScroll();
+          clearScrollPosition();
         }
         window.location.reload();
       };
 
-      const consumePreserveScroll = () => {
-        const wantsPreserve = shouldPreserveScroll();
-        if (!wantsPreserve) {
-          resetScrollPosition();
-          clearPreserveScroll();
-          return false;
-        }
-        const restored = restoreScrollPosition();
-        clearPreserveScroll();
-        if (!restored) {
-          resetScrollPosition();
-        }
-        return restored;
-      };
+      let earlyRestored = false;
+      let scrollSaveTimer = null;
+      let scrollSaveHandler = null;
+      let scrollSaveContainer = null;
 
-      const shouldPreserveFormScroll = (form) => {
-        if (!form) return false;
-        if (form.dataset && form.dataset.preserveScroll === "true") return true;
-        const action = form.getAttribute("action") || window.location.pathname || "/";
-        return normalizePath(action) === normalizePath(window.location.pathname);
-      };
-
-      const patchFormSubmit = () => {
-        if (!window.HTMLFormElement || HTMLFormElement.prototype.dvScrollPatched) {
+      const attachScrollSaver = () => {
+        const container = getScrollContainer();
+        if (!container || container === scrollSaveContainer) {
           return;
         }
-        const nativeSubmit = HTMLFormElement.prototype.submit;
-        HTMLFormElement.prototype.submit = function () {
-          try {
-            if (shouldPreserveFormScroll(this)) {
-              markPreserveScroll();
-              saveScrollPosition();
-            } else {
-              clearPreserveScroll();
-              sessionStorage.setItem(SCROLL_TOP_FLAG, "1");
-            }
-          } catch (_) {
-            /* ignore */
-          }
-          return nativeSubmit.apply(this, arguments);
+        if (scrollSaveContainer && scrollSaveHandler) {
+          scrollSaveContainer.removeEventListener("scroll", scrollSaveHandler);
+        }
+        scrollSaveContainer = container;
+        scrollSaveHandler = () => {
+          if (scrollSaveTimer) return;
+          scrollSaveTimer = setTimeout(() => {
+            scrollSaveTimer = null;
+            saveScrollPosition();
+          }, 120);
         };
-        HTMLFormElement.prototype.dvScrollPatched = true;
+        container.addEventListener("scroll", scrollSaveHandler, { passive: true });
       };
-
-      patchFormSubmit();
+      if (document.readyState === 'loading') {
+        earlyRestored = restoreScrollPosition({ attempts: 1, skipSettle: true });
+      }
 
       document.addEventListener('DOMContentLoaded', () => {
-        consumePreserveScroll();
+        restoreScrollPosition({ attempts: earlyRestored ? 1 : 2 });
+        attachScrollSaver();
       });
 
       window.addEventListener('pageshow', (evt) => {
-        if (evt.persisted) {
-          if (shouldPreserveScroll()) {
-            const restored = restoreScrollPosition();
-            clearPreserveScroll();
-            if (!restored) {
-              resetScrollPosition();
-            }
-          }
-          return;
-        }
-        consumePreserveScroll();
+        restoreScrollPosition({
+          attempts: (evt && evt.persisted) ? 1 : 2,
+          skipSettle: Boolean(evt && evt.persisted),
+        });
+        attachScrollSaver();
       });
 
       window.addEventListener('beforeunload', () => {
         saveScrollPosition();
-        if (!shouldPreserveScroll()) {
-          resetScrollPosition();
-          clearPreserveScroll();
-        }
       });
 
-      const scrollToTopInstant = () => {
-        if (shouldPreserveScroll()) {
-          return;
-        }
-        const setTop = resetScrollPosition;
-        clearPreserveScroll();
-        setTop();
-        requestAnimationFrame(setTop);
-        setTimeout(setTop, 0);
-      };
-
       if (hxEnabled && window.htmx) {
-        document.addEventListener('htmx:beforeRequest', scrollToTopInstant);
+        document.addEventListener('htmx:beforeRequest', saveScrollPosition);
         document.addEventListener('htmx:afterSwap', (evt) => {
           if (!(evt.target && evt.target.id === 'main')) return;
-          scrollToTopInstant();
-        });
-        document.addEventListener('htmx:afterSettle', (evt) => {
-          if (!(evt.target && evt.target.id === 'main')) return;
-          scrollToTopInstant();
+          attachScrollSaver();
+          restoreScrollPosition({ attempts: 2 });
         });
       }
-      window.addEventListener('popstate', scrollToTopInstant);
+      window.addEventListener('popstate', () => {
+        restoreScrollPosition({ attempts: 2 });
+      });
     })();
   </script>
 
@@ -985,6 +940,17 @@
       {% set account_url = url_for('views.login') %}
       {% set account_endpoints = ["views.login", "views.register"] %}
     {% endif %}
+    {% if user_is_authenticated %}
+      {% set user_display = current_user.display_name or current_user.username or current_user.email or "Local User" %}
+      {% if user_is_admin %}
+        {% set user_context = "Admin Mode" %}
+      {% else %}
+        {% set user_context = "Signed in" %}
+      {% endif %}
+    {% else %}
+      {% set user_display = "Guest" %}
+      {% set user_context = "Not signed in" %}
+    {% endif %}
     {% set sidebar_active = not (disable_sidebar | default(false)) %}
     <header class="app-header d-none d-md-flex">
       <a class="app-header__branding text-reset text-decoration-none" href="{{ url_for('views.dashboard') }}" data-hx-boost="false">
@@ -1000,13 +966,72 @@
           <i class="bi bi-sun theme-toggle__icon theme-toggle__icon--sun"></i>
           <i class="bi bi-moon theme-toggle__icon theme-toggle__icon--moon"></i>
         </button>
-        <a class="theme-toggle theme-toggle--solo btn-soft"
-           href="{{ account_url }}"
-           title="{{ account_label }}"
-           aria-label="{{ account_label }}"
-           data-hx-boost="false">
-          <i class="bi bi-person-fill" aria-hidden="true"></i>
-        </a>
+        <div class="dropdown">
+          <button
+            class="theme-toggle theme-toggle--solo btn-soft"
+            type="button"
+            id="userQuickActions"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="{{ account_label }}"
+            title="{{ account_label }}">
+            <i class="bi bi-person-fill" aria-hidden="true"></i>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end dv-select-menu shadow" aria-labelledby="userQuickActions">
+            <div class="dropdown-item-text">
+              <div class="small text-muted">{{ user_display }}</div>
+              <div class="small text-muted">{{ user_context }}</div>
+            </div>
+            <hr class="dropdown-divider">
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.dashboard') }}">
+              <i class="bi bi-speedometer2" aria-hidden="true"></i>
+              <span>Dashboard</span>
+            </a>
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.build_deck_landing') }}">
+              <i class="bi bi-hammer" aria-hidden="true"></i>
+              <span>Build a Deck</span>
+            </a>
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.import_csv') }}">
+              <i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i>
+              <span>Import Cards</span>
+            </a>
+            <hr class="dropdown-divider">
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.account_center') }}">
+              <i class="bi bi-gear" aria-hidden="true"></i>
+              <span>Settings</span>
+            </a>
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.dashboard') }}#dashboardModeToggle">
+              <i class="bi bi-layout-text-sidebar-reverse" aria-hidden="true"></i>
+              <span>Switch Dashboard View</span>
+            </a>
+            {% if user_is_admin %}
+              <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.admin_oracle_tags') }}">
+                <i class="bi bi-tags" aria-hidden="true"></i>
+                <span>Manage Tags</span>
+              </a>
+            {% endif %}
+            <hr class="dropdown-divider">
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ request.full_path }}">
+              <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+              <span>Refresh Data</span>
+            </a>
+            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.about_page') }}">
+              <i class="bi bi-question-circle" aria-hidden="true"></i>
+              <span>Help / About</span>
+            </a>
+            {% if user_is_authenticated %}
+              <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.logout') }}">
+                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                <span>Sign Out</span>
+              </a>
+            {% else %}
+              <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.login') }}">
+                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+                <span>Sign In</span>
+              </a>
+            {% endif %}
+          </div>
+        </div>
       </div>
     </header>
     {# Layout shell: fixed sidebar + scrolling content column. #}
@@ -1089,6 +1114,16 @@
                data-endpoints="views.decks_overview">
               <i class="bi bi-layers" aria-hidden="true"></i>
               <span class="sidebar-label">Decks</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'views.build_deck_landing' %}active{% endif %}"
+               href="{{ url_for('views.build_deck_landing') }}"
+               title="Build a Deck"
+               aria-label="Build a Deck"
+               data-endpoints="views.build_deck_landing">
+              <i class="bi bi-hammer" aria-hidden="true"></i>
+              <span class="sidebar-label">Build a Deck</span>
             </a>
           </li>
           <li class="nav-item">
@@ -1220,49 +1255,6 @@
     </div>
 
     {% block scripts %}
-      {% set _dv_scroll_allowed = [
-        "folder_details",
-        "views.folder_detail",
-        "views.shared_folder_detail"
-      ] %}
-      {% if request.endpoint in _dv_scroll_allowed
-            and (request.endpoint not in ["folder_details", "views.folder_detail", "views.shared_folder_detail"] or is_deck_folder|default(false)) %}
-      <script>
-        (function(){
-          const key = "scroll_" + window.location.pathname;
-          const container = document.getElementById("main");
-          let saveTimer = null;
-          const savePos = () => {
-            const y = container ? container.scrollTop : (window.scrollY || 0);
-            try { localStorage.setItem(key, String(y)); } catch (_e) { /* ignore */ }
-          };
-          const throttledSave = () => {
-            if (saveTimer) return;
-            saveTimer = setTimeout(() => { saveTimer = null; savePos(); }, 100);
-          };
-          try {
-            const saved = localStorage.getItem(key);
-            if (saved !== null) {
-              const y = parseInt(saved, 10);
-              if (!Number.isNaN(y)) {
-                if (container) {
-                  container.scrollTop = y;
-                } else {
-                  window.scrollTo(0, y);
-                }
-              }
-            }
-          } catch (_e) { /* ignore */ }
-          if (container) {
-            container.addEventListener("scroll", throttledSave, { passive: true });
-          } else {
-            window.addEventListener("scroll", throttledSave, { passive: true });
-          }
-          window.addEventListener("beforeunload", savePos);
-        })();
-      </script>
-      {% endif %}
-
     <script>
       (function () {
         const header = document.querySelector(".app-header");
@@ -1607,145 +1599,6 @@
       })();
     </script>
 
-    <script>
-      (function () {
-        const dvScroll = (window.DV && window.DV.scroll) || {};
-        const SCROLL_TOP_FLAG = dvScroll.flag || "dv:scroll-top-next";
-        const saveScroll = typeof dvScroll.save === "function" ? dvScroll.save : () => {};
-        const markPreserve = typeof dvScroll.mark === "function" ? dvScroll.mark : () => {};
-        const clearPreserve = typeof dvScroll.clear === "function" ? dvScroll.clear : () => {};
-        const resetScroll = typeof dvScroll.reset === "function"
-          ? dvScroll.reset
-          : () => {
-              window.scrollTo(0, 0);
-              document.documentElement.scrollTop = 0;
-              document.body.scrollTop = 0;
-            };
-        let pendingScroll = false;
-
-        const normalizePath = (value) => {
-          if (typeof dvScroll.normalizePath === "function") {
-            return dvScroll.normalizePath(value);
-          }
-          try {
-            const url = new URL(value || window.location.pathname, window.location.href);
-            let path = url.pathname || "/";
-            if (path.length > 1 && path.endsWith("/")) {
-              path = path.slice(0, -1);
-            }
-            return path;
-          } catch (_) {
-            return window.location.pathname || "/";
-          }
-        };
-
-        const shouldHandleEvent = (event) => {
-          if (!event) return true;
-          if (event.defaultPrevented) return false;
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
-          if (event.button !== 0) return false;
-          return true;
-        };
-
-        const markForScrollTop = () => {
-          try {
-            sessionStorage.setItem(SCROLL_TOP_FLAG, "1");
-          } catch (_) {
-            /* ignore */
-          }
-          pendingScroll = true;
-          clearPreserve();
-        };
-
-        const markForPreserve = () => {
-          markPreserve();
-          saveScroll();
-          pendingScroll = false;
-          try {
-            sessionStorage.removeItem(SCROLL_TOP_FLAG);
-          } catch (_) {
-            /* ignore */
-          }
-        };
-
-        const isSamePath = (target) => normalizePath(target) === normalizePath(window.location.pathname || "/");
-
-        const shouldPreserveFormScroll = (form) => {
-          if (!form) return false;
-          if (form.dataset && form.dataset.preserveScroll === "true") return true;
-          const action = form.getAttribute("action") || window.location.pathname || "/";
-          return normalizePath(action) === normalizePath(window.location.pathname);
-        };
-
-        const shouldIgnoreLink = (link) => {
-          if (!link || link.dataset.noScrollTop === "true") return true;
-          const href = link.getAttribute("href") || "";
-          if (!href || href.startsWith("#") || href.startsWith("javascript:")) return true;
-          const target = link.getAttribute("target");
-          if (target && target !== "_self") return true;
-          if (link.hasAttribute("download")) return true;
-          return false;
-        };
-
-        const attachHandlers = (root) => {
-          const scoped = root || document;
-          const linkSelector = 'a[href]:not([data-scroll-top-attached="true"])';
-          scoped.querySelectorAll(linkSelector).forEach((link) => {
-            if (shouldIgnoreLink(link)) return;
-            link.dataset.scrollTopAttached = "true";
-            link.addEventListener("click", (event) => {
-              if (!shouldHandleEvent(event)) return;
-              if (link.dataset.preserveScroll === "true" || isSamePath(link.getAttribute("href") || "")) {
-                markForPreserve();
-                return;
-              }
-              markForScrollTop();
-            });
-          });
-          scoped.querySelectorAll('form:not([data-scroll-top-attached="true"])').forEach((form) => {
-            form.dataset.scrollTopAttached = "true";
-            form.addEventListener("submit", (event) => {
-              if (event.defaultPrevented) return;
-              if (shouldPreserveFormScroll(form)) {
-                markForPreserve();
-                return;
-              }
-              markForScrollTop();
-            });
-          });
-        };
-
-        const applyScrollTop = () => {
-          if (pendingScroll || sessionStorage.getItem(SCROLL_TOP_FLAG)) {
-            pendingScroll = false;
-            sessionStorage.removeItem(SCROLL_TOP_FLAG);
-            resetScroll();
-            clearPreserve();
-          }
-        };
-
-        attachHandlers(document);
-
-        const observer = new MutationObserver((mutations) => {
-          mutations.forEach((mutation) => {
-            mutation.addedNodes.forEach((node) => {
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                attachHandlers(node);
-              }
-            });
-          });
-        });
-
-        observer.observe(document.body, { childList: true, subtree: true });
-
-        window.addEventListener("pageshow", applyScrollTop);
-        document.addEventListener("DOMContentLoaded", applyScrollTop);
-        document.addEventListener("htmx:afterSwap", () => {
-          attachHandlers(document);
-          applyScrollTop();
-        });
-      })();
-    </script>
     {% if session.get("force_full_refresh") %}
       {% set _ = session.pop("force_full_refresh", None) %}
       <script>

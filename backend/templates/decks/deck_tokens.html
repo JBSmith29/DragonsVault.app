@@ -208,12 +208,30 @@
         {% if deck_summaries %}
           <div class="d-flex align-items-center gap-2">
             <span class="small text-nowrap mb-0">Filter by deck</span>
-            <select id="deckFilterSelect" class="form-select form-select-sm" data-token-deck-filter>
-              <option value="" selected>All decks</option>
-              {% for deck in deck_summaries|sort(attribute='name') %}
-                <option value="{{ deck.id }}">{{ deck.name }} ({{ deck.token_count }})</option>
-              {% endfor %}
-            </select>
+            <div class="dropdown dv-select dv-select-sm" data-dv-select="token-deck-filter" data-token-deck-filter>
+              <input type="hidden" data-dv-select-input value="">
+              <button
+                class="btn dv-select-toggle btn-sm d-inline-flex align-items-center gap-2"
+                type="button"
+                id="deckFilterToggle"
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+                <span data-dv-select-label>All decks</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu dropdown-menu-end" aria-labelledby="deckFilterToggle">
+                <li>
+                  <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="All decks">All decks</button>
+                </li>
+                {% for deck in deck_summaries|sort(attribute='name') %}
+                  <li>
+                    <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck.id }}" data-label="{{ deck.name }} ({{ deck.token_count }})">
+                      {{ deck.name }} ({{ deck.token_count }})
+                    </button>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
           </div>
         {% endif %}
       </div>
@@ -312,6 +330,7 @@
   const cards = Array.from(document.querySelectorAll('.deck-token-card'));
   const visibleCount = document.getElementById('tokenVisibleCount');
   const deckFilter = document.querySelector('[data-token-deck-filter]');
+  const deckFilterInput = deckFilter ? deckFilter.querySelector('[data-dv-select-input]') : null;
   let selectedDeck = '';
 
   if (!cards.length) {
@@ -344,10 +363,11 @@
     searchInput.addEventListener('input', applyFilter);
   }
   if (deckFilter) {
-    deckFilter.addEventListener('change', () => {
-      selectedDeck = deckFilter.value || '';
+    deckFilter.addEventListener('dv-select:change', (event) => {
+      selectedDeck = (event.detail?.value ?? deckFilterInput?.value ?? '').trim();
       applyFilter();
     });
+    selectedDeck = (deckFilterInput?.value || '').trim();
   }
   applyFilter();
   if (clearBtn && searchInput) {
@@ -355,7 +375,12 @@
       searchInput.value = '';
       searchInput.focus();
       if (deckFilter) {
-        deckFilter.value = '';
+        const resetOption = deckFilter.querySelector('[data-dv-select-option][data-value=""]');
+        if (resetOption) {
+          resetOption.click();
+        } else if (deckFilterInput) {
+          deckFilterInput.value = '';
+        }
       }
       selectedDeck = '';
       applyFilter();

@@ -779,6 +779,16 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         commander_slot_count=len(folder.commander_name.split("//")) if folder.commander_name else 0,
     )
 
+    build_state = None
+    if folder.is_build:
+        try:
+            from services import build_deck_service
+
+            build_state = build_deck_service.get_build_state(folder.id)
+        except Exception as exc:
+            current_app.logger.warning("Build state load failed for folder %s: %s", folder.id, exc)
+            build_state = {"ok": False, "error": "Build recommendations unavailable."}
+
     move_targets = [
         FolderOptionVM(id=row.id, name=row.name)
         for row in (
@@ -819,6 +829,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         move_targets=move_targets,
         is_deck_folder=is_deck_folder,
         commander_media_list=commander_media_list,
+        build_state=build_state,
     )
 
 
@@ -1190,6 +1201,49 @@ def clear_folder_tag(folder_id: int):
         return jsonify({"ok": True})
 
     flash("Deck tag cleared.", "info")
+    return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+
+def build_add_card(folder_id: int):
+    folder = get_or_404(Folder, folder_id)
+    ensure_folder_access(folder, write=True)
+    if not folder.is_build:
+        message = "Cards can only be added through build decks."
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+    oracle_id = (request.form.get("oracle_id") or "").strip()
+    if not oracle_id:
+        message = "Card selection missing."
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+    try:
+        from services import build_deck_service
+
+        build_deck_service.add_card_to_build(folder_id, oracle_id)
+    except ValueError as exc:
+        message = str(exc) or "Unable to add card."
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+    except Exception as exc:
+        current_app.logger.exception("Build add card failed.")
+        message = f"Unable to add card: {exc}"
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 500
+        flash(message, "danger")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+    if request.is_json:
+        return jsonify({"ok": True})
+
+    flash("Card added to build deck.", "success")
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
 
@@ -1597,6 +1651,7 @@ __all__ = [
     "folder_detail",
     "folder_sharing",
     "clear_folder_tag",
+    "build_add_card",
     "set_folder_owner",
     "set_folder_proxy",
     "rename_proxy_deck",

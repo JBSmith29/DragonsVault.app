@@ -19,11 +19,31 @@
         <input type="email" class="form-control" id="dnsh-email" name="email" required>
       </div>
       <div>
-        <label class="form-label" for="dnsh-preference">Preference</label>
-        <select class="form-select" id="dnsh-preference" name="preference">
-          <option value="limit">Limit use of my data for cross-context behavioral advertising</option>
-          <option value="revoke">Revoke prior consent</option>
-        </select>
+        <label class="form-label" for="dnshPreferenceToggle">Preference</label>
+        <div class="dropdown dv-select w-100" data-dv-select="dnsh-preference">
+          <input type="hidden" name="preference" data-dv-select-input value="limit">
+          <button
+            class="btn dv-select-toggle w-100 justify-content-between"
+            type="button"
+            id="dnshPreferenceToggle"
+            data-bs-toggle="dropdown"
+            aria-expanded="false">
+            <span data-dv-select-label>Limit use of my data for cross-context behavioral advertising</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="dnshPreferenceToggle">
+            <li>
+              <button class="dropdown-item active" type="button" data-dv-select-option data-value="limit" data-label="Limit use of my data for cross-context behavioral advertising">
+                Limit use of my data for cross-context behavioral advertising
+              </button>
+            </li>
+            <li>
+              <button class="dropdown-item" type="button" data-dv-select-option data-value="revoke" data-label="Revoke prior consent">
+                Revoke prior consent
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
       <button class="btn btn-primary" type="submit">Submit Request</button>
     </div>

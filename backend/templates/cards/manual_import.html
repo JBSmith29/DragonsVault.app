@@ -201,10 +201,26 @@
                       </div>
                     </td>
                     <td>
-                      <select class="form-select form-select-sm" name="entry-{{ entry.index }}-finish">
-                        <option value="nonfoil">Nonfoil</option>
-                        <option value="foil">Foil</option>
-                      </select>
+                      <div class="dropdown dv-select dv-select-sm w-100" data-dv-select="entry-finish-{{ entry.index }}">
+                        <input type="hidden" name="entry-{{ entry.index }}-finish" data-dv-select-input value="nonfoil">
+                        <button
+                          class="btn dv-select-toggle btn-sm w-100 justify-content-between"
+                          type="button"
+                          id="entryFinishToggle{{ entry.index }}"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false">
+                          <span data-dv-select-label>Nonfoil</span>
+                          <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="entryFinishToggle{{ entry.index }}">
+                          <li>
+                            <button class="dropdown-item active" type="button" data-dv-select-option data-value="nonfoil" data-label="Nonfoil">Nonfoil</button>
+                          </li>
+                          <li>
+                            <button class="dropdown-item" type="button" data-dv-select-option data-value="foil" data-label="Foil">Foil</button>
+                          </li>
+                        </ul>
+                      </div>
                     </td>
                     <td>
                       {% set prefill_id = entry.prefill_folder_id|default('', true) %}

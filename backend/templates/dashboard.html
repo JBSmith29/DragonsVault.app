@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - DragonsVault{% endblock %}
+{% block content %}
+<style>
+  .section-label {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin: 0.25rem 0 0.5rem;
+  }
+
+  .quick-tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 76px;
+    padding: 1rem;
+  }
+
+  .quick-tile .qi {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+  }
+
+  .icon-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-primary);
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+  }
+
+  .stat-label {
+    font-size: 0.85rem;
+    color: var(--bs-secondary-color);
+  }
+
+  .stat-number {
+    font-size: clamp(1.75rem, 2.3vw + 1rem, 2.75rem);
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .tile.deck-tile {
+    padding: 1.25rem 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .tile.deck-tile {
+      padding: 1.5rem 1.75rem;
+    }
+  }
+
+  .deck-name {
+    font-weight: 700;
+    font-size: 1.05rem;
+  }
+
+  .badge.text-bg-secondary {
+    font-size: 0.9rem;
+    padding: 0.35em 0.6em;
+  }
+</style>
+
+<div class="page-section">
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <div>
+      <div class="section-label mb-0">Dashboard</div>
+      <div class="text-muted small">{{ dashboard.mode_description }}</div>
+    </div>
+    <form method="post" class="ms-auto" id="dashboardModeForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="d-flex align-items-center gap-2">
+        <span class="small text-muted">View</span>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Dashboard view toggle" id="dashboardModeToggle">
+          {% for option in dashboard.mode_options %}
+            {% set option_id = "dashboardMode-" ~ option.value %}
+            <input
+              type="radio"
+              class="btn-check"
+              name="dashboard_mode"
+              id="{{ option_id }}"
+              value="{{ option.value }}"
+              autocomplete="off"
+              {% if option.selected %}checked{% endif %}>
+            <label class="btn btn-outline-secondary" for="{{ option_id }}">{{ option.label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+    </form>
+  </div>
+
+  {% include dashboard.content_partial %}
+</div>
+
+<script>
+(function () {
+  const modeForm = document.getElementById('dashboardModeForm');
+  if (modeForm) {
+    modeForm.querySelectorAll('input[name="dashboard_mode"]').forEach(input => {
+      input.addEventListener('change', () => modeForm.submit());
+    });
+  }
+
+  const hoverTargets = document.querySelectorAll('.deck-hover-target[data-hover-src]');
+  if (!hoverTargets.length) {
+    return;
+  }
+
+  const globalHover = window.dvHoverPreview;
+  if (globalHover && typeof globalHover.show === 'function' && typeof globalHover.hide === 'function') {
+    hoverTargets.forEach(el => {
+      const src = el.getAttribute('data-hover-src');
+      el.addEventListener('mouseenter', (e) => globalHover.show(el, src, e));
+      el.addEventListener('mousemove', (e) => globalHover.show(el, src, e));
+      el.addEventListener('mouseleave', () => globalHover.hide());
+    });
+    return;
+  }
+
+  const preview = document.createElement('div');
+  preview.id = 'deckHoverPreview';
+  preview.style.position = 'fixed';
+  preview.style.pointerEvents = 'none';
+  preview.style.zIndex = '1080';
+  preview.style.display = 'none';
+  preview.innerHTML = '<img alt="Commander art" style="max-width:260px; max-height:360px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); background:#111;">';
+  document.body.appendChild(preview);
+
+  const imgEl = preview.querySelector('img');
+  function hidePreview() { preview.style.display = 'none'; imgEl.src = ''; }
+  function showPreview(src, evt) {
+    if (!src) return;
+    imgEl.src = src;
+    preview.style.display = 'block';
+    positionPreview(evt);
+  }
+  function positionPreview(evt) {
+    const pad = 16;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const rect = preview.getBoundingClientRect();
+    let x = evt.clientX + pad;
+    let y = evt.clientY + pad;
+    if (x + rect.width + pad > vw) x = evt.clientX - rect.width - pad;
+    if (y + rect.height + pad > vh) y = vh - rect.height - pad;
+    preview.style.left = `${x}px`;
+    preview.style.top = `${y}px`;
+  }
+
+  hoverTargets.forEach(el => {
+    const src = el.getAttribute('data-hover-src');
+    el.addEventListener('mouseenter', (e) => showPreview(src, e));
+    el.addEventListener('mousemove', positionPreview);
+    el.addEventListener('mouseleave', hidePreview);
+  });
+})();
+</script>
+{% endblock %}

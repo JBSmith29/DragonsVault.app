@@ -23,6 +23,17 @@ def create_proxy_deck_bulk():
     return deck_service.create_proxy_deck_bulk()
 
 
+@views.post("/decks/build")
+@login_required
+def start_build_deck():
+    return deck_service.start_build_deck()
+
+
+@views.get("/decks/build")
+def build_deck_landing():
+    return deck_service.build_deck_landing()
+
+
 @views.post("/api/decks/proxy/fetch")
 @limiter.limit("10 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @limiter.limit("50 per hour", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
@@ -121,4 +132,6 @@ __all__ = [
     "opening_hand_draw",
     "decks_overview",
     "list_cards",
+    "start_build_deck",
+    "build_deck_landing",
 ]

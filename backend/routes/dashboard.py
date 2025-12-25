@@ -12,7 +12,7 @@ def index():
     return card_service.dashboard_index()
 
 
-@views.route("/dashboard")
+@views.route("/dashboard", methods=["GET", "POST"])
 def dashboard():
     """Render the high-level collection overview tiles and deck summaries."""
     return card_service.dashboard()

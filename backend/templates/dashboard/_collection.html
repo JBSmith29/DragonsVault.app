@@ -1,0 +1,24 @@
+<div class="section-label">Collection overview</div>
+<div class="row g-3 mb-4">
+  {% for tile in dashboard.collection_tiles %}
+    <div class="col-6 col-md-3">
+      <a class="tile d-block p-3 hover-lift card-hover-shadow" href="{{ tile.href }}">
+        <div class="icon-circle"><i class="bi {{ tile.icon }}"></i></div>
+        <div class="stat-label">{{ tile.label }}</div>
+        <div class="stat-number">{{ tile.value }}</div>
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="section-label">Collection tools</div>
+<div class="row g-3 mb-4">
+  {% for action in dashboard.collection_actions %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <a class="tile quick-tile d-block hover-lift" href="{{ action.href }}"
+         {% if action.external %}target="_blank" rel="noopener"{% endif %}>
+        <span class="qi"><i class="bi {{ action.icon }}"></i> {{ action.label }}</span>
+      </a>
+    </div>
+  {% endfor %}
+</div>

@@ -377,6 +377,18 @@ def create_proxy_deck_bulk():
     return card_service.create_proxy_deck_bulk()
 
 
+def start_build_deck():
+    from services import card_service
+
+    return card_service.start_build_deck()
+
+
+def build_deck_landing():
+    from services import card_service
+
+    return card_service.build_deck_landing()
+
+
 def api_fetch_proxy_deck():
     from services import card_service
 
@@ -430,6 +442,8 @@ __all__ = [
     "api_fetch_proxy_deck",
     "create_proxy_deck",
     "create_proxy_deck_bulk",
+    "start_build_deck",
+    "build_deck_landing",
     "deck_curve_rows",
     "deck_from_collection",
     "deck_land_mana_sources",

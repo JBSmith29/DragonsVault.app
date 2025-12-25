@@ -40,11 +40,27 @@
           </div>
           <input type="hidden" name="form_kind" value="site_request">
           <div>
-            <label class="form-label" for="request-type">Type</label>
-            <select class="form-select" id="request-type" name="request_type">
-              <option value="bug">Bug</option>
-              <option value="feature">Feature</option>
-            </select>
+            <label class="form-label" for="requestTypeToggle">Type</label>
+            <div class="dropdown dv-select w-100" data-dv-select="contact-request-type">
+              <input type="hidden" name="request_type" data-dv-select-input value="bug">
+              <button
+                class="btn dv-select-toggle w-100 justify-content-between"
+                type="button"
+                id="requestTypeToggle"
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+                <span data-dv-select-label>Bug</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="requestTypeToggle">
+                <li>
+                  <button class="dropdown-item active" type="button" data-dv-select-option data-value="bug" data-label="Bug">Bug</button>
+                </li>
+                <li>
+                  <button class="dropdown-item" type="button" data-dv-select-option data-value="feature" data-label="Feature">Feature</button>
+                </li>
+              </ul>
+            </div>
           </div>
           <div>
             <label class="form-label" for="request-title">Title</label>

@@ -1,0 +1,90 @@
+{% from "shared/components/macros.html" import commander_chip %}
+
+<div class="section-label">Deck overview</div>
+<div class="row g-3 mb-4">
+  {% for tile in dashboard.deck_tiles %}
+    <div class="col-6 col-md-3">
+      <a class="tile d-block p-3 hover-lift card-hover-shadow" href="{{ tile.href }}">
+        <div class="icon-circle"><i class="bi {{ tile.icon }}"></i></div>
+        <div class="stat-label">{{ tile.label }}</div>
+        <div class="stat-number">{{ tile.value }}</div>
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="section-label">Deck tools</div>
+<div class="row g-3 mb-4">
+  {% for action in dashboard.deck_actions %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <a class="tile quick-tile d-block hover-lift" href="{{ action.href }}"
+         {% if action.external %}target="_blank" rel="noopener"{% endif %}>
+        <span class="qi"><i class="bi {{ action.icon }}"></i> {{ action.label }}</span>
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <div class="section-label mb-0">All Decks</div>
+  <div class="ms-auto" style="max-width: 280px;">
+    <input id="deckFilter" type="search" class="form-control form-control-sm" placeholder="Filter decks..." aria-label="Filter decks">
+  </div>
+</div>
+
+{% if dashboard.decks and dashboard.decks|length %}
+  <div class="row g-3 mb-4" id="deckGrid">
+    {% for d in dashboard.decks %}
+      {% set cmd = d.commander %}
+      <div class="col-12 col-sm-12 col-md-6 col-lg-6" data-deck-name="{{ (d.name or '')|lower }}">
+        <a class="tile d-block h-100 deck-tile hover-lift card-hover-shadow"
+           href="{{ url_for('views.folder_detail', folder_id=d.id) }}">
+          <div class="d-flex align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3 min-w-0">
+              <span class="deck-hover-target" {% if cmd and cmd.large %}data-hover-src="{{ cmd.large }}"{% endif %}>
+                {{ commander_chip(cmd, 80) }}
+              </span>
+              <div class="min-w-0">
+                <div class="deck-name text-truncate deck-hover-target"
+                     title="{{ d.name }}"
+                     {% if cmd and cmd.large %}data-hover-src="{{ cmd.large }}"{% endif %}>
+                  {{ d.name }}
+                </div>
+                <div class="small text-muted">
+                  {% if d.ci_html %}
+                    <span class="pip-row">{{ d.ci_html | safe }}</span>
+                    <span class="ms-1">{{ d.ci_name }}</span>
+                  {% else %}
+                    <span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>
+                    <span class="ms-1">Colorless</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <span class="badge text-bg-secondary" title="Total cards">{{ '{:,}'.format(d.qty or 0) }}</span>
+          </div>
+        </a>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-secondary mb-4">
+    No decks yet. Create a folder for a deck or visit the <a href="{{ url_for('views.decks_overview') }}" class="alert-link">Decks page</a>.
+  </div>
+{% endif %}
+
+<script>
+(function () {
+  const input = document.getElementById('deckFilter');
+  if (!input) {
+    return;
+  }
+  input.addEventListener('input', () => {
+    const term = input.value.trim().toLowerCase();
+    document.querySelectorAll('#deckGrid [data-deck-name]').forEach(col => {
+      const name = col.getAttribute('data-deck-name') || '';
+      col.style.display = !term || name.includes(term) ? '' : 'none';
+    });
+  });
+})();
+</script>

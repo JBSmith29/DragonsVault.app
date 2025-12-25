@@ -32,6 +32,12 @@ def clear_folder_tag(folder_id: int):
     return folder_service.clear_folder_tag(folder_id)
 
 
+@views.post("/folders/<int:folder_id>/build/add-card")
+@login_required
+def build_add_card(folder_id: int):
+    return folder_service.build_add_card(folder_id)
+
+
 @views.post("/folders/<int:folder_id>/owner/set")
 @login_required
 def set_folder_owner(folder_id: int):
@@ -122,6 +128,7 @@ __all__ = [
     "clear_commander",
     "clear_folder_commander",
     "clear_folder_tag",
+    "build_add_card",
     "commander_brackets_info",
     "commander_spellbook_combos",
     "folder_cards_json",
