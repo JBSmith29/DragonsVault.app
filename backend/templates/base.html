@@ -81,12 +81,34 @@
       }
       body * {
         cursor: default !important;
+        -webkit-user-select: none;
+        user-select: none;
       }
       input[type="text"],
       input[type="search"],
+      input[type="email"],
+      input[type="url"],
+      input[type="password"],
+      input[type="number"],
+      input[type="tel"],
       textarea,
+      [contenteditable="true"],
       .dv-select-search {
         cursor: text !important;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      a,
+      button,
+      .btn,
+      .nav-link,
+      .dropdown-item,
+      .form-check-input,
+      .form-select,
+      [role="button"],
+      [type="button"],
+      [type="submit"] {
+        cursor: pointer !important;
       }
       .htmx-indicator { display: none; }
       .htmx-indicator.htmx-request { display: block; }

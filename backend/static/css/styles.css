@@ -206,6 +206,13 @@ td, th {
   opacity: 1;
   transform: scale(1);
 }
+#btn-import.btn-progress.is-loading .btn-progress__idle {
+  opacity: 1;
+  animation: dv-spin 0.9s linear infinite;
+}
+#btn-import.btn-progress.is-loading .btn-progress__spinner {
+  opacity: 0;
+}
 .btn-soft:focus-visible {
   transform: translateY(-1px);
   box-shadow: var(--dv-glow-primary);
@@ -262,6 +269,11 @@ td, th {
   to {
     transform: scale(12);
     opacity: 0;
+  }
+}
+@keyframes dv-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

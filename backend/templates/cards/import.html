@@ -415,7 +415,7 @@
 </div>
 
 {% set import_success = request.args.get('import_success') %}
-{% if import_success and folder_export_options %}
+{% if folder_export_options %}
 <div class="modal fade" id="postImportFolderModal" tabindex="-1" aria-labelledby="postImportFolderLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -495,6 +495,7 @@
     const statusEndpoint = "{{ url_for('views.import_status') }}";
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
     const STATS_KEY = "dv-import-stats";
+    const FOLDER_MODAL_KEY = "dv-import-show-folders";
     let pollTimer = null;
     let activeJobId = null;
     let submitLocked = false;
@@ -609,8 +610,12 @@
         };
         try {
           sessionStorage.setItem(STATS_KEY, JSON.stringify(summaryPayload));
+          sessionStorage.setItem(FOLDER_MODAL_KEY, "1");
         } catch (e) {}
         renderCompletionSummary(summaryPayload);
+        if (!completeUrl && typeof window.showPostImportFolderModal === "function") {
+          window.showPostImportFolderModal();
+        }
         if (completeUrl && !redirectPending) {
           redirectPending = true;
           setProgressText("Finalizing...");
@@ -913,12 +918,12 @@
   })();
 </script>
 
-{% if import_success and folder_export_options %}
+{% if folder_export_options %}
 <script>
 (function(){
   const modalEl = document.getElementById('postImportFolderModal');
-  if (!modalEl || !window.bootstrap) return;
-  const modal = new bootstrap.Modal(modalEl);
+  if (!modalEl) return;
+  let modal = null;
   const saveBtn = document.getElementById('postImportFolderSave');
   const statusEl = document.getElementById('postImportFolderStatus');
   const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -929,6 +934,37 @@
     statusEl.className = 'me-auto small';
     if (variant) statusEl.classList.add('text-' + variant);
     else statusEl.classList.add('text-muted');
+  }
+
+  function ensureModal(){
+    if (!window.bootstrap) return null;
+    if (!modal) {
+      modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    }
+    return modal;
+  }
+
+  function wantsShow(){
+    return {{ 'true' if import_success else 'false' }} || sessionStorage.getItem('dv-import-show-folders') === '1';
+  }
+
+  function requestShow(){
+    if (!wantsShow()) return;
+    const inst = ensureModal();
+    if (inst) {
+      sessionStorage.removeItem('dv-import-show-folders');
+      inst.show();
+      return;
+    }
+    window.addEventListener('load', () => {
+      if (wantsShow()) {
+        const delayed = ensureModal();
+        if (delayed) {
+          sessionStorage.removeItem('dv-import-show-folders');
+          delayed.show();
+        }
+      }
+    }, { once: true });
   }
 
   async function handleSave(){
@@ -954,7 +990,10 @@
         throw new Error(data.error || 'Unable to save folder categories.');
       }
       setStatus(`Saved ${data.updated || 0} folder categories.`, 'success');
-      setTimeout(() => modal.hide(), 600);
+      const inst = ensureModal();
+      if (inst) {
+        setTimeout(() => inst.hide(), 600);
+      }
     } catch (err){
       setStatus(err.message || 'Unable to save folder categories.', 'danger');
     } finally {
@@ -963,7 +1002,8 @@
   }
 
   if (saveBtn) saveBtn.addEventListener('click', handleSave);
-  modal.show();
+  window.showPostImportFolderModal = requestShow;
+  requestShow();
 })();
 </script>
 {% endif %}
