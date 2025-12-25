@@ -433,6 +433,8 @@
                     data-deck-name="{{ d.name }}"
                     data-current-tag="{{ d.tag or '' }}"
                     data-current-label="{{ d.tag_label or d.tag or '' }}"
+                    data-tag-source="manual"
+                    title="{{ 'Manual deck tag' if d.tag_label else 'Set a manual deck tag' }}"
                   >
                     {{ d.tag_label or 'Set tag' }}
                   </button>
@@ -748,6 +750,7 @@
       const tagLine = document.createElement('div');
       tagLine.className = 'small text-muted text-truncate';
       tagLine.textContent = deck.tag_label;
+      tagLine.title = 'Manual deck tag';
       meta.appendChild(tagLine);
     }
     if (commander.name) {
@@ -998,6 +1001,17 @@
     if (level === 'success') statusEl.classList.add('text-success');
   }
 
+  function setBusy(isBusy, label) {
+    tagButtons.forEach(btn => {
+      btn.disabled = isBusy;
+    });
+    if (clearBtn) clearBtn.disabled = isBusy;
+    if (filterInput) filterInput.disabled = isBusy;
+    if (isBusy) {
+      setStatus(label || 'Saving tag...');
+    }
+  }
+
   function setCurrentLabel(tag) {
     if (!currentEl) return;
     const text = (tag || '').trim();
@@ -1038,7 +1052,9 @@
 
   async function submitTag(tag) {
     if (!activeFolderId || !tag) return;
-    setStatus('Saving tag...');
+    if (modalEl.dataset.saving === '1') return;
+    modalEl.dataset.saving = '1';
+    setBusy(true, 'Saving tag...');
     try {
       const resp = await fetch('/folders/' + activeFolderId + '/tag/set', {
         method: 'POST',
@@ -1063,10 +1079,13 @@
         const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
         setTimeout(() => bsModal.hide(), 300);
       } else {
-        setStatus((data && data.error) || 'Unable to save tag.', 'error');
+        setStatus((data && data.error) || 'Unable to save tag. Please try again.', 'error');
       }
     } catch (err) {
-      setStatus('Unable to save tag.', 'error');
+      setStatus('Unable to save tag. Please try again.', 'error');
+    } finally {
+      modalEl.dataset.saving = '';
+      setBusy(false);
     }
   }
 
@@ -1117,7 +1136,9 @@
   if (clearBtn) {
     clearBtn.addEventListener('click', async () => {
       if (!activeFolderId) return;
-      setStatus('Clearing tag...');
+      if (modalEl.dataset.saving === '1') return;
+      modalEl.dataset.saving = '1';
+      setBusy(true, 'Clearing tag...');
       try {
         const resp = await fetch('/folders/' + activeFolderId + '/tag/clear', {
           method: 'POST',
@@ -1141,10 +1162,13 @@
           const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
           setTimeout(() => bsModal.hide(), 250);
         } else {
-          setStatus((data && data.error) || 'Unable to clear tag.', 'error');
+          setStatus((data && data.error) || 'Unable to clear tag. Please try again.', 'error');
         }
       } catch (err) {
-        setStatus('Unable to clear tag.', 'error');
+        setStatus('Unable to clear tag. Please try again.', 'error');
+      } finally {
+        modalEl.dataset.saving = '';
+        setBusy(false);
       }
     });
   }

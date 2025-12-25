@@ -691,8 +691,8 @@
   const deckSourceCard = document.getElementById('deckSourceCard');
   const openingLayout = document.querySelector('.opening-hand-layout');
   const placeholderImage = "{{ url_for('static', filename='img/card-placeholder.svg') }}";
-  const deckCardLookup = {{ deck_card_lookup | tojson | safe }} || {};
-  const deckTokenLookup = {{ deck_token_lookup | tojson | safe }} || {};
+  const deckCardLookup = {{ deck_card_lookup_json | safe }} || {};
+  const deckTokenLookup = {{ deck_token_lookup_json | safe }} || {};
   const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
 
   const boardContainers = {
@@ -853,6 +853,12 @@
             image: null,
             hover: null,
             type_line: '',
+            is_creature: false,
+            is_land: false,
+            is_instant: false,
+            is_sorcery: false,
+            is_permanent: true,
+            zone_hint: 'permanents',
           };
         }
         updateDvSelect(wrapper, trimmed, trimmed, { trigger: true, hide: true });
@@ -915,6 +921,12 @@
         hover: entry.hover || entry.image || null,
         type_line: typeLine,
         mana_value: manaValueRaw,
+        is_creature: Boolean(entry.is_creature),
+        is_land: Boolean(entry.is_land),
+        is_instant: Boolean(entry.is_instant),
+        is_sorcery: Boolean(entry.is_sorcery),
+        is_permanent: Boolean(entry.is_permanent),
+        zone_hint: entry.zone_hint || '',
         filter: `${lowerName} ${lowerType} ${manaValue}`.trim(),
       };
 
@@ -1084,7 +1096,18 @@
         btn.className = 'btn btn-outline-secondary w-100';
         btn.textContent = 'Add a generic token to the battlefield';
         btn.addEventListener('click', function () {
-          addTokenToBoard({ name: 'Token', image: null, hover: null, type_line: 'Token' });
+          addTokenToBoard({
+            name: 'Token',
+            image: null,
+            hover: null,
+            type_line: 'Token',
+            is_creature: false,
+            is_land: false,
+            is_instant: false,
+            is_sorcery: false,
+            is_permanent: true,
+            zone_hint: 'permanents',
+          });
         });
         col.appendChild(btn);
         tokenPickerList.appendChild(col);
@@ -1134,6 +1157,12 @@
       image: token && token.image ? token.image : placeholderImage,
       hover: token && (token.hover || token.image) ? (token.hover || token.image) : placeholderImage,
       type_line: token && token.type_line ? token.type_line : 'Token',
+      is_creature: Boolean(token && token.is_creature),
+      is_land: Boolean(token && token.is_land),
+      is_instant: Boolean(token && token.is_instant),
+      is_sorcery: Boolean(token && token.is_sorcery),
+      is_permanent: Boolean(token && token.is_permanent),
+      zone_hint: token && token.zone_hint ? token.zone_hint : 'permanents',
     });
     if (!payload) return;
     moveCardToBoard(payload, 'permanents');
@@ -1184,6 +1213,12 @@
     copy.hover = copy.hover || card.hover || card.hover_image || card.hoverImage || copy.image;
     copy.type_line = copy.type_line || card.type_line || card.typeLine || '';
     copy.tapped = Boolean(card.tapped);
+    copy.is_creature = Boolean(copy.is_creature ?? card.is_creature ?? card.isCreature);
+    copy.is_land = Boolean(copy.is_land ?? card.is_land ?? card.isLand);
+    copy.is_instant = Boolean(copy.is_instant ?? card.is_instant ?? card.isInstant);
+    copy.is_sorcery = Boolean(copy.is_sorcery ?? card.is_sorcery ?? card.isSorcery);
+    copy.is_permanent = Boolean(copy.is_permanent ?? card.is_permanent ?? card.isPermanent);
+    copy.zone_hint = copy.zone_hint || card.zone_hint || card.zoneHint || 'permanents';
 
     return copy;
   }
@@ -1404,7 +1439,7 @@
       stackWrap.className = 'card-stack';
       const allCards = [card].concat(children);
       const isCreature = function (c) {
-        return (c.type_line || '').toLowerCase().indexOf('creature') !== -1;
+        return Boolean(c && c.is_creature);
       };
       allCards.sort(function (a, b) {
         return (isCreature(a) ? 1 : 0) - (isCreature(b) ? 1 : 0);
@@ -1461,32 +1496,24 @@
     if (card.boardZone && boardState[card.boardZone]) {
       return card.boardZone;
     }
-
-    const typeLine = (card.type_line || '').toLowerCase();
-
-    if (!typeLine && card.lastBoardZone && boardState[card.lastBoardZone]) {
+    const hintedZone = card.zone_hint || card.zoneHint || '';
+    if (hintedZone && boardState[hintedZone]) {
+      return hintedZone;
+    }
+    if (card.lastBoardZone && boardState[card.lastBoardZone]) {
       return card.lastBoardZone;
     }
-
-    if (typeLine.indexOf('land') !== -1) {
+    if (card.is_land) {
       return 'lands';
     }
-    if (typeLine.indexOf('creature') !== -1) {
+    if (card.is_creature) {
       return 'creatures';
     }
-    if (typeLine.indexOf('instant') !== -1 || typeLine.indexOf('sorcery') !== -1) {
+    if (card.is_instant || card.is_sorcery) {
       return 'graveyard';
     }
-    if (
-      typeLine.indexOf('artifact') !== -1 ||
-      typeLine.indexOf('enchantment') !== -1 ||
-      typeLine.indexOf('planeswalker') !== -1 ||
-      typeLine.indexOf('battle') !== -1
-    ) {
+    if (card.is_permanent) {
       return 'permanents';
-    }
-    if (typeLine.indexOf('instant') !== -1 || typeLine.indexOf('sorcery') !== -1) {
-      return 'graveyard';
     }
     return 'permanents';
   }
@@ -2072,12 +2099,24 @@
       const inferredImage = selectedOption ? (selectedOption.image || selectedOption.hover || null) : null;
       const inferredHover = selectedOption ? (selectedOption.hover || selectedOption.image || null) : null;
       const inferredTypeLine = selectedOption ? selectedOption.type_line : '';
+      const inferredIsCreature = selectedOption ? Boolean(selectedOption.is_creature) : false;
+      const inferredIsLand = selectedOption ? Boolean(selectedOption.is_land) : false;
+      const inferredIsInstant = selectedOption ? Boolean(selectedOption.is_instant) : false;
+      const inferredIsSorcery = selectedOption ? Boolean(selectedOption.is_sorcery) : false;
+      const inferredIsPermanent = selectedOption ? Boolean(selectedOption.is_permanent) : false;
+      const inferredZoneHint = selectedOption ? (selectedOption.zone_hint || '') : '';
 
       const payload = normalizeCard({
         name: cardName,
         image: imageUrl || inferredImage || placeholderImage,
         hover: imageUrl || inferredHover || inferredImage || placeholderImage,
         type_line: inferredTypeLine,
+        is_creature: inferredIsCreature,
+        is_land: inferredIsLand,
+        is_instant: inferredIsInstant,
+        is_sorcery: inferredIsSorcery,
+        is_permanent: inferredIsPermanent,
+        zone_hint: inferredZoneHint || 'permanents',
       });
 
       if (!payload) {

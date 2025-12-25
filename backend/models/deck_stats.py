@@ -13,6 +13,8 @@ class DeckStats(db.Model):
     avg_mana = db.Column(db.Float, nullable=True)
     curve_json = db.Column(db.Text, nullable=True)
     color_pips_json = db.Column(db.Text, nullable=True)
+    version = db.Column(db.Integer, nullable=False, default=1)
+    source_version = db.Column(db.Text, nullable=True)
     last_updated = db.Column(db.DateTime, nullable=True, default=utcnow, onupdate=utcnow)
 
     folder = db.relationship("Folder", back_populates="deck_stats")

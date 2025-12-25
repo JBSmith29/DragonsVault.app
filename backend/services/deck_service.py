@@ -1,13 +1,17 @@
-"""Deck-related service functions."""
+"""
+Canonical service for deck stats computation.
+Other services may read, but MUST NOT compute or write deck stats.
+"""
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Iterable
 
 from flask import current_app, has_app_context
-from sqlalchemy import event, inspect
+from sqlalchemy import event, inspect, func
 
 from extensions import db
 from models import Card, DeckStats, FolderRole
@@ -15,6 +19,7 @@ from services.symbols_cache import colors_to_icons
 from utils.time import utcnow
 
 RE_COST_SYMBOL = re.compile(r"\{([^}]+)\}")
+DECK_STATS_VERSION = 1
 _DECK_STATS_DIRTY_KEY = "deck_stats_dirty"
 _DECK_STATS_RECOMPUTING = "deck_stats_recomputing"
 _LISTENERS_REGISTERED = False
@@ -142,6 +147,17 @@ def _deck_stats_payload(folder_id: int) -> dict[str, Any]:
     }
 
 
+def _deck_stats_source_version(folder_id: int) -> str:
+    row = (
+        db.session.query(func.max(Card.updated_at), func.count(Card.id))
+        .filter(Card.folder_id == folder_id)
+        .one()
+    )
+    max_updated_at, count = row
+    ts = max_updated_at.isoformat() if max_updated_at else "none"
+    return f"cards:{ts}|{count}"
+
+
 def _is_deck_folder(folder_id: int) -> bool:
     if not folder_id:
         return False
@@ -156,7 +172,7 @@ def _is_deck_folder(folder_id: int) -> bool:
     return bool(exists)
 
 
-def recompute_deck_stats(folder_id: int) -> DeckStats | None:
+def recompute_deck_stats(folder_id: int, *, source_version: str | None = None) -> DeckStats | None:
     if not folder_id:
         return None
     if not _is_deck_folder(folder_id):
@@ -164,10 +180,13 @@ def recompute_deck_stats(folder_id: int) -> DeckStats | None:
         return None
 
     payload = _deck_stats_payload(folder_id)
+    source_version = source_version or _deck_stats_source_version(folder_id)
     stats = db.session.get(DeckStats, folder_id) or DeckStats(folder_id=folder_id)
     stats.avg_mana = payload.get("avg_mana")
     stats.curve_json = json.dumps(payload.get("curve") or {}, ensure_ascii=True)
     stats.color_pips_json = json.dumps(payload.get("pips") or {}, ensure_ascii=True)
+    stats.version = DECK_STATS_VERSION
+    stats.source_version = source_version
     stats.last_updated = utcnow()
     db.session.add(stats)
     return stats
@@ -185,10 +204,21 @@ def _load_json(text: str | None) -> dict:
 
 def get_deck_stats(folder_id: int) -> dict[str, Any]:
     stats = db.session.get(DeckStats, folder_id)
-    if not stats:
-        stats = recompute_deck_stats(folder_id)
-        if stats:
-            db.session.commit()
+    try:
+        expected_source = _deck_stats_source_version(folder_id) if stats else None
+        if (
+            not stats
+            or stats.version != DECK_STATS_VERSION
+            or stats.source_version != (expected_source or "")
+        ):
+            stats = recompute_deck_stats(folder_id, source_version=expected_source)
+            if stats:
+                db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger = current_app.logger if has_app_context() and current_app else logging.getLogger(__name__)
+        logger.error("Deck stats recompute failed.", exc_info=True)
+        return {"avg_mana": None, "curve": {}, "pips": {}, "last_updated": None}
     if not stats:
         return {"avg_mana": None, "curve": {}, "pips": {}, "last_updated": None}
     return {

@@ -1,4 +1,7 @@
-"""Import/export service functions."""
+"""
+Canonical service for Scryfall normalization during imports.
+Other services may read normalized data, but MUST NOT normalize Scryfall input elsewhere.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +11,7 @@ import re
 import time
 from io import BytesIO, StringIO
 from pathlib import Path
+from typing import Any
 
 from flask import (
     Response,
@@ -32,6 +36,7 @@ from services.csv_importer import FileValidationError, HeaderValidationError, pr
 from services.jobs import enqueue_csv_import
 from services.live_updates import latest_job_events
 from services.scryfall_cache import ensure_cache_loaded, find_by_set_cn, find_by_set_cn_loose, metadata_from_print, search_prints
+from viewmodels.folder_vm import FolderExportVM
 from routes.base import _collector_number_numeric, _move_folder_choices, _name_sort_expr, _safe_commit
 from utils.validation import ValidationError, log_validation_error, parse_optional_positive_int, parse_positive_int_list
 
@@ -56,6 +61,16 @@ def _normalize_quantity_mode(raw: str | None) -> str:
     if value in {"purge", "clear", "reset"}:
         return "purge"
     return "new_only"
+
+
+def normalize_set_code(value: str | None) -> str:
+    """Normalize a Scryfall set code for imports."""
+    return (value or "").strip().lower()
+
+
+def normalize_collector_number(value: Any) -> str:
+    """Normalize a collector number for Scryfall lookups."""
+    return str(value).strip()
 
 
 def _parse_manual_card_list(raw: str) -> list[dict]:
@@ -201,14 +216,17 @@ def _export_context(session_obj) -> dict:
             .all()
         )
     folder_export_options = [
-        {
-            "id": folder.id,
-            "name": folder.name,
-            "category": folder.category or Folder.CATEGORY_DECK,
-            "category_label": folder_category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
-            "is_proxy": bool(folder.is_proxy),
-            "is_public": bool(folder.is_public),
-        }
+        FolderExportVM(
+            id=folder.id,
+            name=folder.name,
+            category=folder.category or Folder.CATEGORY_DECK,
+            category_label=folder_category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
+            is_proxy=bool(folder.is_proxy),
+            is_public=bool(folder.is_public),
+            is_deck=bool(folder.is_deck),
+            is_collection=bool(folder.is_collection),
+            is_build=bool(folder.is_build),
+        )
         for folder in user_folders
     ]
     export_format_options = [
@@ -659,7 +677,7 @@ def export_cards() -> Response:
 def manual_import(*, session_obj) -> ServiceResult:
     """Manual import wizard for pasted decklists."""
     folder_options = _move_folder_choices()
-    folder_lookup = {str(option["id"]): option["name"] for option in folder_options}
+    folder_lookup = {str(option.id): option.name for option in folder_options}
     card_list = request.form.get("card_list") or session_obj.pop("manual_import_seed", "") or ""
     parsed_entries: list[dict] = []
     step = "input"
@@ -712,7 +730,6 @@ def manual_import(*, session_obj) -> ServiceResult:
             folder = Folder(
                 name=fallback_name,
                 owner_user_id=current_user.id,
-                category=default_folder_category,
             )
             folder.set_primary_role(default_folder_category)
             db.session.add(folder)
@@ -925,7 +942,6 @@ def api_update_folder_categories() -> Response:
         if not folder:
             continue
         if folder.category != cat:
-            folder.category = cat
             folder.set_primary_role(cat)
             updated += 1
     _safe_commit()

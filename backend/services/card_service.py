@@ -95,7 +95,8 @@ from viewmodels.deck_vm import (
     DeckTokenVM,
     DeckVM,
 )
-from viewmodels.folder_vm import CollectionBucketVM, FolderOptionVM, FolderVM
+from viewmodels.folder_vm import CollectionBucketVM, FolderOptionVM, FolderVM, SharedFolderEntryVM
+from viewmodels.opening_hand_vm import OpeningHandCardVM, OpeningHandTokenVM
 
 HAND_SIZE = 7
 
@@ -111,6 +112,35 @@ def _color_letters_list(value) -> list[str]:
     else:
         raw = [ch for ch in str(value).upper()]
     return [ch for ch in raw if ch in {"W", "U", "B", "R", "G"}]
+
+
+def _card_type_flags(type_line: str | None) -> dict[str, object]:
+    lowered = (type_line or "").lower()
+    is_land = "land" in lowered
+    is_creature = "creature" in lowered
+    is_instant = "instant" in lowered
+    is_sorcery = "sorcery" in lowered
+    is_permanent = any(
+        token in lowered for token in ("artifact", "enchantment", "planeswalker", "battle", "land", "creature")
+    )
+    if is_land:
+        zone_hint = "lands"
+    elif is_creature:
+        zone_hint = "creatures"
+    elif is_instant or is_sorcery:
+        zone_hint = "graveyard"
+    elif is_permanent:
+        zone_hint = "permanents"
+    else:
+        zone_hint = "permanents"
+    return {
+        "is_land": is_land,
+        "is_creature": is_creature,
+        "is_instant": is_instant,
+        "is_sorcery": is_sorcery,
+        "is_permanent": is_permanent,
+        "zone_hint": zone_hint,
+    }
 
 
 def _request_cached_find_by_set_cn(set_code: str | None, collector_number, name: str | None):
@@ -748,6 +778,7 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
     small = entry.get("small") or entry.get("normal") or entry.get("large") or placeholder
     hover = entry.get("large") or entry.get("normal") or entry.get("small") or placeholder
     detail_url = entry.get("detail_url") or entry.get("external_url")
+    flags = _card_type_flags(entry.get("type_line"))
     return {
         "name": entry.get("name") or "Card",
         "image": normal,
@@ -755,6 +786,12 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
         "hover": hover,
         "detail_url": detail_url,
         "type_line": entry.get("type_line") or "",
+        "is_creature": bool(flags["is_creature"]),
+        "is_land": bool(flags["is_land"]),
+        "is_instant": bool(flags["is_instant"]),
+        "is_sorcery": bool(flags["is_sorcery"]),
+        "is_permanent": bool(flags["is_permanent"]),
+        "zone_hint": str(flags["zone_hint"]),
     }
 
 
@@ -830,7 +867,6 @@ def _clone_deck_to_playground(source: Folder) -> Folder:
 
     playground = Folder(
         name=final_name,
-        category=Folder.CATEGORY_BUILD,
         commander_oracle_id=source.commander_oracle_id,
         commander_name=source.commander_name,
         deck_tag=source.deck_tag,
@@ -913,7 +949,6 @@ def _create_proxy_deck_from_lines(
 
     folder = Folder(
         name=final_name,
-        category=Folder.CATEGORY_DECK,
         owner=owner.strip() if owner else None,
         owner_user_id=current_user.id if current_user.is_authenticated else None,
         is_proxy=True,
@@ -1652,14 +1687,15 @@ def dashboard():
             if pr:
                 add_image_from_print(pr)
 
-            if oracle_ids:
-                for oid in oracle_ids:
-                    try:
-                        prints = prints_for_oracle(oid) or []
-                    except Exception:
-                        prints = []
-                    if prints:
-                        add_image_from_print(prints[0])
+            if not images and oracle_ids:
+                primary_oid = primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)) if f else None
+                target_oid = primary_oid or oracle_ids[0]
+                try:
+                    prints = prints_for_oracle(target_oid) or []
+                except Exception:
+                    prints = []
+                if prints:
+                    add_image_from_print(prints[0])
 
             if not images:
                 target_oid = primary_commander_oracle_id(getattr(f, "commander_oracle_id", None)) if f else None
@@ -2075,7 +2111,6 @@ def list_cards():
                 set_options=set_options,
                 rarity_options=rarity_options,
                 per_page=per,
-                folder_obj=folder_obj,
                 is_deck_folder=is_deck_folder,
                 collection_folders=collection_names,
                 move_folder_options=move_folder_options,
@@ -2387,9 +2422,6 @@ def list_cards():
     set_options = _set_options_with_names(sets)
     rarity_options = _rarity_options()
     move_folder_options = _move_folder_choices()
-    all_roles = Role.query.order_by(Role.label).all()
-    all_subroles = SubRole.query.order_by(SubRole.label).all()
-
     return render_template(
         "cards/cards.html",
         cards=cards_vm,
@@ -2423,11 +2455,8 @@ def list_cards():
         langs=langs,
         set_options=set_options,
         rarity_options=rarity_options,
-        all_roles=all_roles,
-        all_subroles=all_subroles,
         role_query_text=role_query_text,
         per_page=per,
-        folder_obj=folder_obj,
         is_deck_folder=is_deck_folder,
         collection_folders=collection_names,
         move_folder_options=move_folder_options,
@@ -2445,6 +2474,11 @@ def shared_folders():
         .all()
     )
     shared_with_me = []
+    category_labels = {
+        Folder.CATEGORY_DECK: "Deck",
+        Folder.CATEGORY_COLLECTION: "Collection",
+        Folder.CATEGORY_BUILD: "Build Queue",
+    }
     for share in shared_rows:
         folder = share.folder
         owner_label = None
@@ -2455,10 +2489,13 @@ def shared_folders():
             id=folder.id,
             name=folder.name,
             category=folder.category,
+            category_label=category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
             owner=folder.owner,
             owner_label=owner_label,
             owner_user_id=folder.owner_user_id,
             is_collection=bool(folder.is_collection),
+            is_deck=bool(folder.is_deck),
+            is_build=bool(folder.is_build),
             is_proxy=bool(getattr(folder, "is_proxy", False)),
             is_public=bool(getattr(folder, "is_public", False)),
             deck_tag=folder.deck_tag,
@@ -2468,13 +2505,12 @@ def shared_folders():
             commander_slot_count=len(folder.commander_name.split("//")) if folder.commander_name else 0,
         )
         shared_with_me.append(
-            {
-                "folder": folder_vm,
-                "owner": folder.owner_user,
-                "share": share,
-            }
+            SharedFolderEntryVM(
+                folder=folder_vm,
+                owner_label=owner_label or "Unknown",
+            )
         )
-    shared_ids = {entry["folder"].id for entry in shared_with_me if entry["folder"]}
+    shared_ids = {entry.folder.id for entry in shared_with_me if entry.folder}
 
     public_query = (
         Folder.query.options(selectinload(Folder.owner_user))
@@ -2493,10 +2529,13 @@ def shared_folders():
             id=folder.id,
             name=folder.name,
             category=folder.category,
+            category_label=category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
             owner=folder.owner,
             owner_label=owner_label,
             owner_user_id=folder.owner_user_id,
             is_collection=bool(folder.is_collection),
+            is_deck=bool(folder.is_deck),
+            is_build=bool(folder.is_build),
             is_proxy=bool(getattr(folder, "is_proxy", False)),
             is_public=bool(getattr(folder, "is_public", False)),
             deck_tag=folder.deck_tag,
@@ -2949,7 +2988,7 @@ def api_update_card_printing(card_id: int):
             db.session.delete(card)
         else:
             card.name = new_name
-            card.oracle_id = new_oracle
+            card.set_oracle_id(new_oracle)
             card.set_code = set_code
             card.collector_number = collector_number
             card.lang = lang
@@ -3730,7 +3769,6 @@ def deck_from_collection():
         deck_name = _generate_unique_folder_name(form["deck_name"])
         folder = Folder(
             name=deck_name,
-            category=Folder.CATEGORY_DECK,
             deck_tag=form["deck_tag"] or None,
             owner=current_user.username or current_user.email or None,
             owner_user_id=current_user.id,
@@ -4078,7 +4116,10 @@ def opening_hand():
         .order_by(Folder.name.asc())
         .all()
     )
-    deck_options = [{"id": deck.id, "name": deck.name or f"Deck {deck.id}"} for deck in decks]
+    deck_options = [
+        FolderOptionVM(id=deck.id, name=deck.name or f"Deck {deck.id}")
+        for deck in decks
+    ]
 
     deck_card_lookup: dict[str, list[dict]] = {}
     deck_token_lookup: dict[str, list[dict]] = {}
@@ -4151,15 +4192,22 @@ def opening_hand():
                     pr = None
 
             imgs = _image_from_print(pr)
-            entry = {
-                "value": value_token,
-                "name": card_name,
-                "image": imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder_image,
-                "hover": imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
-                "type_line": type_line or "",
-                "mana_value": mana_value,
-            }
-            entries.append(entry)
+            flags = _card_type_flags(type_line)
+            entry_vm = OpeningHandCardVM(
+                value=value_token,
+                name=card_name,
+                image=imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder_image,
+                hover=imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
+                type_line=type_line or "",
+                mana_value=mana_value,
+                is_creature=bool(flags["is_creature"]),
+                is_land=bool(flags["is_land"]),
+                is_instant=bool(flags["is_instant"]),
+                is_sorcery=bool(flags["is_sorcery"]),
+                is_permanent=bool(flags["is_permanent"]),
+                zone_hint=str(flags["zone_hint"]),
+            )
+            entries.append(entry_vm.to_payload())
 
             text = oracle_text or _oracle_text_from_faces(faces_json)
             tokens = _token_stubs_from_oracle_text(text)
@@ -4176,15 +4224,21 @@ def opening_hand():
                         continue
                     seen_tokens.add(token_key)
                     token_imgs = token.get("images") or {}
-                    token_bucket.append(
-                        {
-                            "id": token_id,
-                            "name": token_name,
-                            "type_line": token_type,
-                            "image": token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
-                            "hover": token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
-                        }
+                    token_flags = _card_type_flags(token_type)
+                    token_vm = OpeningHandTokenVM(
+                        id=token_id,
+                        name=token_name,
+                        type_line=token_type,
+                        image=token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                        hover=token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                        is_creature=bool(token_flags["is_creature"]),
+                        is_land=bool(token_flags["is_land"]),
+                        is_instant=bool(token_flags["is_instant"]),
+                        is_sorcery=bool(token_flags["is_sorcery"]),
+                        is_permanent=bool(token_flags["is_permanent"]),
+                        zone_hint=str(token_flags["zone_hint"]),
                     )
+                    token_bucket.append(token_vm.to_payload())
 
         for entries in deck_card_lookup.values():
             entries.sort(key=lambda item: (item.get("name") or "").lower())
@@ -4195,11 +4249,14 @@ def opening_hand():
         deck_card_lookup.setdefault(str(deck.id), [])
         deck_token_lookup.setdefault(str(deck.id), [])
 
+    deck_card_lookup_json = json.dumps(deck_card_lookup, ensure_ascii=True)
+    deck_token_lookup_json = json.dumps(deck_token_lookup, ensure_ascii=True)
+
     return render_template(
         "decks/opening_hand.html",
         deck_options=deck_options,
-        deck_card_lookup=deck_card_lookup,
-        deck_token_lookup=deck_token_lookup,
+        deck_card_lookup_json=deck_card_lookup_json,
+        deck_token_lookup_json=deck_token_lookup_json,
     )
 
 
@@ -4380,7 +4437,7 @@ def card_detail(card_id):
         found = _request_cached_find_by_set_cn(card.set_code, card.collector_number, card.name)
         if found and found.get("oracle_id"):
             oid = found["oracle_id"]
-            card.oracle_id = oid
+            card.set_oracle_id(oid)
             db.session.commit()
 
     prints = []
@@ -4398,7 +4455,7 @@ def card_detail(card_id):
             prints = [live]
             oid = oid or live.get("oracle_id") or oid
             if live.get("oracle_id") and not card.oracle_id:
-                card.oracle_id = live.get("oracle_id")
+                card.set_oracle_id(live.get("oracle_id"))
                 db.session.commit()
 
     owned_set = (card.set_code or "").lower()
@@ -4503,6 +4560,9 @@ def card_detail(card_id):
         "legalities": legalities,
         "commander_legality": commander_legality,
     }
+    purchase_uris: dict = {}
+    related_uris: dict = {}
+    prices: dict = {}
     if best:
         purchase_uris = best.get("purchase_uris") or {}
         related_uris = best.get("related_uris") or {}
@@ -4550,6 +4610,25 @@ def card_detail(card_id):
     primary_role_label = _request_cached_primary_role_label(card.id)
     evergreen_labels = _request_cached_evergreen_labels(oid)
 
+    commander_legality = info.get("commander_legality")
+    commander_label = None
+    commander_class = None
+    if commander_legality:
+        leg_norm = str(commander_legality)
+        commander_label = "Not legal" if leg_norm == "not_legal" else leg_norm.replace("_", " ").capitalize()
+        if leg_norm == "legal":
+            commander_class = "bg-success"
+        elif leg_norm == "banned":
+            commander_class = "bg-danger"
+        elif leg_norm == "restricted":
+            commander_class = "bg-warning text-dark"
+        else:
+            commander_class = "bg-secondary"
+
+    prices_json = json.dumps(prices or {}, ensure_ascii=True)
+    has_oracle_text = bool(info.get("oracle_text_html")) and info.get("oracle_text_html") != "—"
+    has_mana_cost = bool(info.get("mana_cost_html"))
+
     info_vm = CardInfoVM(
         name=info.get("name"),
         mana_cost_html=info.get("mana_cost_html"),
@@ -4565,16 +4644,21 @@ def card_detail(card_id):
         collector_number=info.get("collector_number"),
         scryfall_uri=info.get("scryfall_uri"),
         scryfall_set_uri=info.get("scryfall_set_uri"),
-        legalities=info.get("legalities") or {},
-        commander_legality=info.get("commander_legality"),
-        purchase_uris=info.get("purchase_uris") or {},
-        related_uris=info.get("related_uris") or {},
-        prices=info.get("prices") or {},
+        commander_legality=commander_legality,
+        commander_legality_label=commander_label,
+        commander_legality_class=commander_class,
+        has_commander_legality=bool(commander_label),
         price_text=info.get("price_text"),
         tcgplayer_url=info.get("tcgplayer_url"),
         prints_search_uri=info.get("prints_search_uri"),
         lang=info.get("lang"),
         oracle_id=info.get("oracle_id"),
+        prices_json=prices_json,
+        has_prices=bool(prices),
+        has_oracle_text=has_oracle_text,
+        has_mana_cost=has_mana_cost,
+        has_scryfall_uri=bool(info.get("scryfall_uri")),
+        has_scryfall_set_uri=bool(info.get("scryfall_set_uri")),
     )
 
     print_images = []

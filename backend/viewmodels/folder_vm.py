@@ -13,10 +13,13 @@ class FolderVM:
     id: int
     name: str
     category: Optional[str]
+    category_label: Optional[str]
     owner: Optional[str]
     owner_label: Optional[str]
     owner_user_id: Optional[int]
     is_collection: bool
+    is_deck: bool
+    is_build: bool
     is_proxy: bool
     is_public: bool
     deck_tag: Optional[str]
@@ -30,6 +33,36 @@ class FolderVM:
 class FolderOptionVM:
     id: int
     name: str
+
+
+@dataclass(slots=True)
+class FolderMoveOptionVM:
+    """Presentation-ready move target for card bulk actions."""
+    id: int
+    name: str
+    is_collection: bool
+    is_proxy: bool
+
+
+@dataclass(slots=True)
+class FolderExportVM:
+    """Folder export row data for import/export UI."""
+    id: int
+    name: str
+    category: str
+    category_label: str
+    is_proxy: bool
+    is_public: bool
+    is_deck: bool
+    is_collection: bool
+    is_build: bool
+
+
+@dataclass(slots=True)
+class SharedFolderEntryVM:
+    """Shared folder summary for the shared folders view."""
+    folder: FolderVM
+    owner_label: str
 
 
 @dataclass(slots=True)

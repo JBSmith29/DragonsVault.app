@@ -115,6 +115,9 @@
     .printing-card .thumb { border-radius:.5rem; background:var(--bs-secondary-bg); width:100%; }
     .printing-card .meta { font-size:.9rem; margin-top:.5rem; }
     .printing-card .badge { font-size:.75rem; }
+    .cards-table thead th[data-col] { cursor: grab; }
+    .cards-table thead th.col-dragging { opacity: .6; }
+    .cards-table thead th.col-drop-target { outline: 2px dashed rgba(108,117,125,.4); outline-offset: -4px; }
   </style>
 
   {# Search + filter form controls the query params for the list view. #}
@@ -593,7 +596,7 @@
               <td class="col-tags" data-col="core_role">
                 {% if card.core_roles_display %}
                   {% for role in card.core_roles_display %}
-                    <span class="badge text-bg-secondary">{{ role }}</span>
+                    <span class="badge text-bg-secondary" title="Automated tag derived from card text.">{{ role }}</span>
                   {% endfor %}
                   {% if card.core_roles_overflow %}
                     <span class="text-muted small">+{{ card.core_roles_overflow }}</span>
@@ -605,7 +608,7 @@
               <td class="col-tags" data-col="evergreen">
                 {% if card.evergreen_display %}
                   {% for tag in card.evergreen_display %}
-                    <span class="badge text-bg-secondary">{{ tag }}</span>
+                    <span class="badge text-bg-secondary" title="Automated tag derived from card text.">{{ tag }}</span>
                   {% endfor %}
                   {% if card.evergreen_overflow %}
                     <span class="text-muted small">+{{ card.evergreen_overflow }}</span>
@@ -885,9 +888,12 @@
   const columnReset = document.querySelector('[data-columns-reset="cards"]');
   if (columnTable && columnToggles.length) {
     const storageKey = 'dv:columns:cards';
+    const orderKey = 'dv:columns:cards:order';
     const availableCols = new Set(
       columnToggles.map((toggle) => toggle.getAttribute('data-col')).filter(Boolean)
     );
+    const headerCells = () => Array.from(columnTable.querySelectorAll('thead th[data-col]'));
+    const defaultOrder = headerCells().map((cell) => cell.getAttribute('data-col')).filter(Boolean);
 
     const readHidden = () => {
       try {
@@ -925,7 +931,58 @@
       });
     };
 
+    const readOrder = () => {
+      try {
+        const raw = window.localStorage?.getItem(orderKey);
+        if (!raw) return [...defaultOrder];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [...defaultOrder];
+        const ordered = [];
+        const seen = new Set();
+        parsed.forEach((col) => {
+          if (availableCols.has(col) && !seen.has(col)) {
+            ordered.push(col);
+            seen.add(col);
+          }
+        });
+        defaultOrder.forEach((col) => {
+          if (!seen.has(col)) ordered.push(col);
+        });
+        return ordered;
+      } catch (_err) {
+        return [...defaultOrder];
+      }
+    };
+
+    const writeOrder = (order) => {
+      try {
+        window.localStorage?.setItem(orderKey, JSON.stringify(order));
+      } catch (_err) {
+        /* ignore storage failures */
+      }
+    };
+
+    const applyOrder = (order) => {
+      if (!order || order.length < 2) return;
+      columnTable.querySelectorAll('thead tr, tbody tr').forEach((row) => {
+        const cells = Array.from(row.querySelectorAll('[data-col]'));
+        if (!cells.length) return;
+        const map = new Map(cells.map((cell) => [cell.getAttribute('data-col'), cell]));
+        const ordered = [];
+        order.forEach((col) => {
+          const cell = map.get(col);
+          if (cell) ordered.push(cell);
+        });
+        cells.forEach((cell) => {
+          if (!ordered.includes(cell)) ordered.push(cell);
+        });
+        ordered.forEach((cell) => row.appendChild(cell));
+      });
+    };
+
     const storedHidden = readHidden();
+    const storedOrder = readOrder();
+    applyOrder(storedOrder);
     if (storedHidden.length === availableCols.size) {
       writeHidden([]);
       applyHidden([]);
@@ -963,8 +1020,65 @@
         });
         writeHidden([]);
         applyHidden([]);
+        writeOrder(defaultOrder);
+        applyOrder(defaultOrder);
       });
     }
+
+    let dragCol = null;
+
+    const clearDragClasses = () => {
+      headerCells().forEach((cell) => {
+        cell.classList.remove('col-dragging', 'col-drop-target');
+      });
+    };
+
+    headerCells().forEach((cell) => {
+      if (!cell.getAttribute('data-col')) return;
+      cell.setAttribute('draggable', 'true');
+      cell.setAttribute('title', 'Drag to reorder columns');
+
+      cell.addEventListener('dragstart', (evt) => {
+        dragCol = cell.getAttribute('data-col');
+        cell.classList.add('col-dragging');
+        if (evt.dataTransfer) {
+          evt.dataTransfer.effectAllowed = 'move';
+          evt.dataTransfer.setData('text/plain', dragCol || '');
+        }
+      });
+
+      cell.addEventListener('dragover', (evt) => {
+        evt.preventDefault();
+        if (cell.getAttribute('data-col') !== dragCol) {
+          cell.classList.add('col-drop-target');
+        }
+      });
+
+      cell.addEventListener('dragleave', () => {
+        cell.classList.remove('col-drop-target');
+      });
+
+      cell.addEventListener('drop', (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const targetCol = cell.getAttribute('data-col');
+        if (!dragCol || !targetCol || dragCol === targetCol) return;
+        const current = headerCells().map((c) => c.getAttribute('data-col')).filter(Boolean);
+        const fromIdx = current.indexOf(dragCol);
+        const toIdx = current.indexOf(targetCol);
+        if (fromIdx < 0 || toIdx < 0) return;
+        current.splice(fromIdx, 1);
+        current.splice(toIdx, 0, dragCol);
+        applyOrder(current);
+        writeOrder(current);
+        clearDragClasses();
+      });
+
+      cell.addEventListener('dragend', () => {
+        dragCol = null;
+        clearDragClasses();
+      });
+    });
   }
 
   // --- Drawer (unchanged) ---

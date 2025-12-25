@@ -754,14 +754,22 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
 
     card_image_lookup = {card.id: card.image_small for card in card_vms if card.image_small}
 
+    category_labels = {
+        Folder.CATEGORY_DECK: "Deck",
+        Folder.CATEGORY_COLLECTION: "Collection",
+        Folder.CATEGORY_BUILD: "Build Queue",
+    }
     folder_vm = FolderVM(
         id=folder.id,
         name=folder.name,
         category=folder.category,
+        category_label=category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
         owner=folder.owner,
         owner_label=folder.owner,
         owner_user_id=folder.owner_user_id,
         is_collection=bool(folder.is_collection),
+        is_deck=bool(folder.is_deck),
+        is_build=bool(folder.is_build),
         is_proxy=bool(getattr(folder, "is_proxy", False)),
         is_public=bool(getattr(folder, "is_public", False)),
         deck_tag=folder.deck_tag,
@@ -1517,14 +1525,22 @@ def folder_sharing(folder_id: int):
     )
     token = session.pop("share_token_preview", None)
     share_link = url_for("views.shared_folder_by_token", share_token=token, _external=True) if token else None
+    category_labels = {
+        Folder.CATEGORY_DECK: "Deck",
+        Folder.CATEGORY_COLLECTION: "Collection",
+        Folder.CATEGORY_BUILD: "Build Queue",
+    }
     folder_vm = FolderVM(
         id=folder.id,
         name=folder.name,
         category=folder.category,
+        category_label=category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
         owner=folder.owner,
         owner_label=folder.owner,
         owner_user_id=folder.owner_user_id,
         is_collection=bool(folder.is_collection),
+        is_deck=bool(folder.is_deck),
+        is_build=bool(folder.is_build),
         is_proxy=bool(getattr(folder, "is_proxy", False)),
         is_public=bool(getattr(folder, "is_public", False)),
         deck_tag=folder.deck_tag,

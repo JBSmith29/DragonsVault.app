@@ -110,6 +110,8 @@ class Folder(db.Model):
         normalized = FolderRole.normalize(role)
         if not normalized:
             return
+        if normalized in FolderRole.PRIMARY_ROLES:
+            self.category = normalized
         keep = {r for r in self.role_names if r not in FolderRole.PRIMARY_ROLES}
         keep.add(normalized)
         self.role_entries = [FolderRole(role=r) for r in sorted(keep)]

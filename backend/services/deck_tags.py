@@ -1,4 +1,7 @@
-"""Deck tag taxonomy used for classifying deck folders."""
+"""
+Canonical service for deck tag vocabulary.
+Other services may read, but MUST NOT write deck tags.
+"""
 
 from __future__ import annotations
 

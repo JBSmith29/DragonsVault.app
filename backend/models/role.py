@@ -136,6 +136,8 @@ class OracleDeckTag(db.Model):
     tag = db.Column(db.String(128), nullable=False, index=True)
     category = db.Column(db.String(128), nullable=True)
     source = db.Column(db.String(64), nullable=False, default="derived")
+    version = db.Column(db.Integer, nullable=False, default=1)
+    source_version = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
 
     __table_args__ = (

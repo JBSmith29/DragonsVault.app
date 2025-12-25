@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from typing import Iterable, Optional
 
 
 @dataclass(slots=True)
@@ -60,6 +60,7 @@ class CardListItemVM:
 
 @dataclass(slots=True)
 class CardInfoVM:
+    """Presentation-ready card detail info for templates."""
     name: Optional[str]
     mana_cost_html: Optional[str]
     cmc: Optional[float]
@@ -74,16 +75,21 @@ class CardInfoVM:
     collector_number: Optional[str]
     scryfall_uri: Optional[str]
     scryfall_set_uri: Optional[str]
-    legalities: dict[str, Any]
     commander_legality: Optional[str]
-    purchase_uris: dict[str, Any]
-    related_uris: dict[str, Any]
-    prices: dict[str, Any]
+    commander_legality_label: Optional[str]
+    commander_legality_class: Optional[str]
+    has_commander_legality: bool
     price_text: Optional[str]
     tcgplayer_url: Optional[str]
     prints_search_uri: Optional[str]
     lang: Optional[str] = None
     oracle_id: Optional[str] = None
+    prices_json: str = ""
+    has_prices: bool = False
+    has_oracle_text: bool = False
+    has_mana_cost: bool = False
+    has_scryfall_uri: bool = False
+    has_scryfall_set_uri: bool = False
 
 
 @dataclass(slots=True)

@@ -8,10 +8,10 @@
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
-      <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline-flex">
+      <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline-flex" data-ux-submit>
         <input type="hidden" name="action" value="refresh_all">
         <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-        <button class="btn btn-outline-primary btn-sm" type="submit">Refresh All Data</button>
+        <button class="btn btn-outline-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh All Data</button>
       </form>
     </div>
   </div>
@@ -46,17 +46,17 @@
             <form method="post" action="{{ url_for('views.admin_console') }}" data-job-trigger data-job-scope="scryfall" data-job-dataset="default_cards">
               <input type="hidden" name="action" value="refresh_default_cards">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-primary btn-sm" type="submit">Download Latest Bulk File</button>
+              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Downloading...">Download Latest Bulk File</button>
             </form>
-            <form method="post" action="{{ url_for('views.admin_console') }}">
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
               <input type="hidden" name="action" value="reload_default_cache">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-outline-primary btn-sm" type="submit">Reload In-Memory Cache</button>
+              <button class="btn btn-outline-primary btn-sm" type="submit" data-progress-label="Reloading...">Reload In-Memory Cache</button>
             </form>
-            <form method="post" action="{{ url_for('views.admin_console') }}">
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
               <input type="hidden" name="action" value="clear_cache">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-outline-danger btn-sm" type="submit">Clear Cache Files</button>
+              <button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="Delete the cached Scryfall files? This cannot be undone." data-progress-label="Clearing...">Clear Cache Files</button>
             </form>
           </div>
           <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
@@ -132,7 +132,7 @@
             <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="scryfall" data-job-dataset="rulings">
               <input type="hidden" name="action" value="refresh_rulings">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-primary btn-sm" type="submit">Refresh Rulings</button>
+              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Rulings</button>
             </form>
           </div>
           <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
@@ -198,7 +198,7 @@
             <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="spellbook" data-job-dataset="spellbook">
               <input type="hidden" name="action" value="refresh_spellbook_combos">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-primary btn-sm" type="submit">Refresh Spellbook Combos</button>
+              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Spellbook Combos</button>
             </form>
           </div>
           <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
@@ -279,7 +279,7 @@
               <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="symbols" data-job-dataset="symbology">
                 <input type="hidden" name="action" value="refresh_symbols">
                 <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-                <button class="btn btn-primary btn-sm" type="submit">Refresh Symbols</button>
+                <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Symbols</button>
               </form>
             </div>
             <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
@@ -369,7 +369,7 @@
                 <input class="form-check-input" type="checkbox" value="1" id="forceEdhrecDataOps" name="force_refresh">
                 <label class="form-check-label small" for="forceEdhrecDataOps">Force refresh (ignore cache age)</label>
               </div>
-              <button class="btn btn-primary btn-sm" type="submit">Refresh EDHREC Data</button>
+              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh EDHREC Data</button>
             </form>
             <p class="text-muted small mb-0 mt-2">Runs one request per unique commander/tag in your decks.</p>
             <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"

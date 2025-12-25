@@ -248,10 +248,14 @@ def _to_int(v: Any, default=1) -> int:
         return default
 
 def _norm_set_code(v: str) -> str:
-    return (v or "").strip().lower()
+    from services import import_service
+
+    return import_service.normalize_set_code(v)
 
 def _norm_cn(v: Any) -> str:
-    return str(v).strip()
+    from services import import_service
+
+    return import_service.normalize_collector_number(v)
 
 _FOLDER_CATEGORY_KEYWORDS = {
     "deck": Folder.CATEGORY_DECK,
@@ -300,7 +304,6 @@ def _ensure_folder_for_owner(
     folder = _folder_query_for_owner(folder_name, owner_user_id).first()
     if folder:
         if folder_category and folder.category != folder_category:
-            folder.category = folder_category
             folder.set_primary_role(folder_category)
         if owner_user_id and not folder.owner_user_id:
             folder.owner_user_id = owner_user_id
@@ -310,10 +313,9 @@ def _ensure_folder_for_owner(
 
     folder = Folder(name=folder_name)
     if folder_category:
-        folder.category = folder_category
+        folder.set_primary_role(folder_category)
     if not folder.category:
-        folder.category = Folder.CATEGORY_DECK
-    folder.set_primary_role(folder.category)
+        folder.set_primary_role(Folder.CATEGORY_DECK)
     if owner_user_id:
         folder.owner_user_id = owner_user_id
     if owner_name:
@@ -335,10 +337,9 @@ def _ensure_folder_for_owner(
             if not conflict:
                 alt = Folder(name=candidate)
                 if folder_category:
-                    alt.category = folder_category
+                    alt.set_primary_role(folder_category)
                 if not alt.category:
-                    alt.category = Folder.CATEGORY_DECK
-                alt.set_primary_role(alt.category)
+                    alt.set_primary_role(Folder.CATEGORY_DECK)
                 if owner_user_id:
                     alt.owner_user_id = owner_user_id
                 if owner_name:
@@ -730,7 +731,7 @@ def process_csv(
                 if (existing.oracle_id in (None, "")) and _ensure_cache_loaded():
                     found = find_by_set_cn(set_code, collector_number, name)
                     if found:
-                        existing.oracle_id = found.get("oracle_id")
+                        existing.set_oracle_id(found.get("oracle_id"))
                         metadata = metadata_from_print(found)
                         changed = True
 

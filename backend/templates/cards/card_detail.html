@@ -65,17 +65,9 @@
   </div>
 
   <!-- ---------- Commander legality badge ---------- -->
-  {% set leg = info.commander_legality or (info.legalities.commander if info.legalities is defined else None) %}
-  {% if leg %}
-    {% set leg_norm = (leg|string) %}
-    {% set label = 'Not legal' if leg_norm == 'not_legal' else leg_norm|replace('_',' ')|capitalize %}
-    {% set cls = 'bg-secondary' %}
-    {% if leg_norm == 'legal' %}{% set cls = 'bg-success' %}
-    {% elif leg_norm == 'banned' %}{% set cls = 'bg-danger' %}
-    {% elif leg_norm == 'restricted' %}{% set cls = 'bg-warning text-dark' %}
-    {% elif leg_norm == 'not_legal' %}{% set cls = 'bg-secondary' %}{% endif %}
-    <div class="mb-3"><span class="badge {{ cls }}">Commander: {{ label }}</span></div>
-  {% endif %}
+{% if info.has_commander_legality %}
+  <div class="mb-3"><span class="badge {{ info.commander_legality_class }}">Commander: {{ info.commander_legality_label }}</span></div>
+{% endif %}
 
   {% set initial_tcg_url = info.tcgplayer_url %}
 
@@ -105,7 +97,7 @@
                    data-cn="{{ info.collector_number or '' }}"
                    data-lang="{{ (info.lang or '')|upper }}"
                    data-rarity="{{ info.rarity or '' }}"
-                   data-prices='{{ (info.prices or {})|tojson }}'
+                   data-prices='{{ info.prices_json | safe }}'
                    data-name="{{ info.name or (card.name if card else name) }}"
                    data-scry-uri="{{ info.scryfall_uri or '' }}"
                    data-tcg-uri="{{ initial_tcg_url or '' }}">
@@ -153,7 +145,7 @@
 
       <!-- ---------- Details / Rulings ---------- -->
       {# Left column: oracle text, tokens, and external resource links. #}
-      {% if info.oracle_text_html and info.oracle_text_html != '—' %}
+      {% if info.has_oracle_text %}
         <div class="mb-3">
           <div class="fw-semibold">Card Text</div>
           <div>{{ info.oracle_text_html | safe }}</div>
@@ -191,7 +183,7 @@
 
       <div class="mb-3">
         <div class="d-flex flex-wrap gap-2">
-          {% set has_scry = info.scryfall_uri %}
+          {% set has_scry = info.has_scryfall_uri %}
           <a id="detail-scry-link"
              class="btn btn-sm btn-outline-primary {% if not has_scry %}disabled{% endif %}"
              href="{{ info.scryfall_uri or '#' }}"
@@ -203,7 +195,7 @@
              href="{{ initial_tcg_url or '#' }}"
              data-default-href="{{ initial_tcg_url or '' }}"
              {% if has_tcg %}target="_blank" rel="noopener"{% else %}tabindex="-1" aria-disabled="true"{% endif %}>Buy on TCGplayer</a>
-          {% if info.scryfall_set_uri %}
+          {% if info.has_scryfall_set_uri %}
             <a class="btn btn-sm btn-outline-primary" href="{{ info.scryfall_set_uri }}" target="_blank" rel="noopener">Open Set on Scryfall</a>
           {% endif %}
         </div>
@@ -236,12 +228,12 @@
           <span class="d-flex flex-wrap gap-1 justify-content-end text-end">
             {% if primary_role_label %}
               {% set primary_role_slug = primary_role_label|lower|replace(' ', '-')|replace('/', '-') %}
-              <span class="badge role-{{ primary_role_slug }}">Primary: {{ primary_role_label }}</span>
+              <span class="badge role-{{ primary_role_slug }}" title="Automated tag derived from card text.">Primary: {{ primary_role_label }}</span>
             {% endif %}
             {% for role in role_labels %}
               {% if role != primary_role_label %}
                 {% set role_slug = role|lower|replace(' ', '-')|replace('/', '-') %}
-                <span class="badge role-{{ role_slug }}">{{ role }}</span>
+                <span class="badge role-{{ role_slug }}" title="Automated tag derived from card text.">{{ role }}</span>
               {% endif %}
             {% endfor %}
             {% if not primary_role_label and not role_labels %}
@@ -254,7 +246,7 @@
           <span class="d-flex flex-wrap gap-1 justify-content-end text-end">
             {% if evergreen_labels %}
               {% for tag in evergreen_labels %}
-                <span class="badge text-bg-secondary">{{ tag|replace('_', ' ')|replace('-', ' ')|title }}</span>
+                <span class="badge text-bg-secondary" title="Automated tag derived from card text.">{{ tag|replace('_', ' ')|replace('-', ' ')|title }}</span>
               {% endfor %}
             {% else %}
               <span class="text-muted">—</span>

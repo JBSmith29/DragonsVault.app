@@ -446,15 +446,15 @@
                 <td>
                   <div class="d-flex flex-wrap gap-3">
                     <div class="form-check">
-                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-deck" value="{{ deck_category }}" {% if folder.category == deck_category %}checked{% endif %}>
+                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-deck" value="{{ deck_category }}" {% if folder.is_deck %}checked{% endif %}>
                       <label class="form-check-label" for="cat-{{ folder.id }}-deck">Deck</label>
                     </div>
                     <div class="form-check">
-                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-collection" value="{{ collection_category }}" {% if folder.category == collection_category %}checked{% endif %}>
+                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-collection" value="{{ collection_category }}" {% if folder.is_collection %}checked{% endif %}>
                       <label class="form-check-label" for="cat-{{ folder.id }}-collection">Collection</label>
                     </div>
                     <div class="form-check">
-                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-build" value="{{ build_category }}" {% if folder.category == build_category %}checked{% endif %}>
+                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-build" value="{{ build_category }}" {% if folder.is_build %}checked{% endif %}>
                       <label class="form-check-label" for="cat-{{ folder.id }}-build">Build Queue</label>
                     </div>
                   </div>

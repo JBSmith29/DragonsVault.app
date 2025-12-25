@@ -7,9 +7,9 @@
       <h1 class="mb-0">Draconic Attunement</h1>
       <div class="text-muted small">Core roles, evergreen tags, and deck-tag synergies derived from the Scryfall cache.</div>
     </div>
-    <form method="post" class="d-flex gap-2">
+    <form method="post" class="d-flex gap-2" data-ux-submit>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-primary" type="submit">Refresh Draconic Attunement</button>
+      <button class="btn btn-primary" type="submit" data-progress-label="Refreshing...">Refresh Draconic Attunement</button>
     </form>
   </div>
 

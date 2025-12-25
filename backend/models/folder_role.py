@@ -1,3 +1,8 @@
+"""
+Canonical source for folder meaning and roles.
+Other services may read folder roles, but MUST NOT define folder meaning elsewhere.
+"""
+
 from extensions import db
 
 

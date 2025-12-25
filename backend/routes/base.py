@@ -319,9 +319,10 @@ def _folder_id_name_map() -> dict[int, str]:
     return {fid: name for fid, name in rows}
 
 
-def _move_folder_choices(exclude_folder_id: int | None = None) -> list[dict]:
+def _move_folder_choices(exclude_folder_id: int | None = None) -> list:
     """Return folder options that the current user is allowed to move cards into."""
     from flask_login import current_user
+    from viewmodels.folder_vm import FolderMoveOptionVM
 
     if not current_user.is_authenticated:
         return []
@@ -331,17 +332,17 @@ def _move_folder_choices(exclude_folder_id: int | None = None) -> list[dict]:
         query = query.filter(or_(Folder.owner_user_id == current_user.id, Folder.owner_user_id.is_(None)))
     folders = query.order_by(func.lower(Folder.name)).all()
 
-    options: list[dict] = []
+    options: list[FolderMoveOptionVM] = []
     for folder in folders:
         if exclude_folder_id and folder.id == exclude_folder_id:
             continue
         options.append(
-            {
-                "id": folder.id,
-                "name": folder.name or f"Folder {folder.id}",
-                "is_collection": folder.is_collection,
-                "is_proxy": folder.is_proxy_deck,
-            }
+            FolderMoveOptionVM(
+                id=folder.id,
+                name=folder.name or f"Folder {folder.id}",
+                is_collection=bool(folder.is_collection),
+                is_proxy=bool(folder.is_proxy_deck),
+            )
         )
     return options
 

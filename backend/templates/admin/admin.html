@@ -7,9 +7,9 @@
       <div class="text-muted small">Operate users, data pipelines, and cache health from one place.</div>
     </div>
     <div class="d-flex flex-wrap align-items-center gap-2">
-      <form method="post" class="d-inline-flex">
+      <form method="post" class="d-inline-flex" data-ux-submit>
         <input type="hidden" name="action" value="refresh_all">
-        <button class="btn btn-outline-primary btn-sm" type="submit">
+        <button class="btn btn-outline-primary btn-sm" type="submit" data-progress-label="Refreshing...">
           Refresh All Data
         </button>
       </form>
@@ -133,13 +133,13 @@
           <h5 class="card-title mb-2">Draconic Attunement</h5>
           <div class="small text-muted mb-3">Core roles and evergreen tags derived from the local Scryfall cache.</div>
           <div class="d-flex flex-wrap gap-2">
-            <form method="post" class="d-inline">
+            <form method="post" class="d-inline" data-ux-submit>
               <input type="hidden" name="action" value="refresh_oracle_tags">
-              <button class="btn btn-primary btn-sm" type="submit">Refresh Draconic Attunement</button>
+              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Draconic Attunement</button>
             </form>
-            <form method="post" class="d-inline">
+            <form method="post" class="d-inline" data-ux-submit>
               <input type="hidden" name="action" value="refresh_oracle_enrichment_full">
-              <button class="btn btn-outline-secondary btn-sm" type="submit">Full Oracle Rebuild</button>
+              <button class="btn btn-outline-secondary btn-sm" type="submit" data-progress-label="Rebuilding...">Full Oracle Rebuild</button>
             </form>
             <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.admin_oracle_tags') }}">View Draconic Attunement</a>
           </div>

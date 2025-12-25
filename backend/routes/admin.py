@@ -29,8 +29,9 @@ from services.live_updates import emit_job_event, latest_job_events
 from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from services.authz import require_admin
 from services.audit import record_audit_event
-from services.commander_utils import primary_commander_name, primary_commander_oracle_id
-from services.edhrec_client import edhrec_cache_snapshot, edhrec_service_enabled, refresh_edhrec_cache
+from services.background.edhrec_sync import refresh_edhrec_synergy_cache
+from services.background.oracle_recompute import ORACLE_DECK_TAG_VERSION, oracle_deck_tag_source_version
+from services.edhrec_client import edhrec_cache_snapshot, edhrec_service_enabled
 from services.request_cache import request_cached
 from .base import limiter_key_user_or_ip
 from .auth import MIN_PASSWORD_LENGTH
@@ -723,104 +724,30 @@ def admin_console():
             n /= 1024
         return f"{n:.1f} PB"
 
-    def _dedupe(items: List[str]) -> List[str]:
-        seen: set[str] = set()
-        ordered: List[str] = []
-        for item in items:
-            key = item.strip().lower()
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            ordered.append(item)
-        return ordered
-
-    def _collect_edhrec_targets() -> dict:
-        folders = Folder.query.order_by(func.lower(Folder.name)).all()
-        deck_folders = [folder for folder in folders if not folder.is_collection]
-        commander_names: List[str] = []
-        tag_names: List[str] = []
-        with_commander = 0
-        with_tag = 0
-        for folder in deck_folders:
-            tag = (folder.deck_tag or "").strip()
-            if tag:
-                with_tag += 1
-                tag_names.append(tag)
-            name = primary_commander_name(folder.commander_name)
-            if not name and folder.commander_oracle_id:
-                oid = primary_commander_oracle_id(folder.commander_oracle_id)
-                if oid:
-                    try:
-                        ensure_cache_loaded()
-                        prints = sc.prints_for_oracle(oid) or []
-                        if prints:
-                            name = prints[0].get("name")
-                    except Exception:
-                        name = None
-            if name:
-                with_commander += 1
-                commander_names.append(name)
-        return {
-            "deck_total": len(deck_folders),
-            "with_commander": with_commander,
-            "with_tag": with_tag,
-            "commander_names": _dedupe(commander_names),
-            "tag_names": _dedupe(tag_names),
-        }
-
     def _refresh_edhrec(force_refresh: bool) -> dict:
         job_id = f"inline-{uuid.uuid4().hex[:8]}"
         emit_job_event("edhrec", "queued", job_id=job_id, dataset="synergy", force=int(force_refresh))
         emit_job_event("edhrec", "started", job_id=job_id, dataset="synergy", rq_id=None)
-        if not edhrec_service_enabled():
-            message = "EDHREC service is not configured."
+        result = refresh_edhrec_synergy_cache(force_refresh=force_refresh)
+        status = result.get("status") or "error"
+        message = result.get("message") or "EDHREC refresh failed."
+        if status == "error":
             emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
-            return {"status": "error", "message": message}
-        targets = _collect_edhrec_targets()
-        commander_names = targets.get("commander_names", [])
-        tag_names = targets.get("tag_names", [])
-        if not commander_names and not tag_names:
-            message = "No commander names or deck tags found to refresh."
+            return result
+        if status == "info":
             emit_job_event("edhrec", "completed", job_id=job_id, dataset="synergy", status="info", message=message)
-            return {"status": "info", "message": message}
-        try:
-            result = refresh_edhrec_cache(
-                commanders=commander_names,
-                themes=tag_names,
-                force_refresh=force_refresh,
-            )
-        except Exception as exc:
-            message = f"EDHREC refresh failed: {exc}"
-            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
-            current_app.logger.exception("EDHREC refresh failed")
-            return {"status": "error", "message": message}
-        if result.get("status") == "error":
-            message = result.get("error") or "EDHREC refresh failed."
-            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
-            return {"status": "error", "message": message}
-        commander_summary = result.get("commanders") or {}
-        theme_summary = result.get("themes") or {}
-        message = (
-            f"EDHREC cache: {commander_summary.get('ok', 0)}/{commander_summary.get('requested', 0)} "
-            f"commanders, {theme_summary.get('ok', 0)}/{theme_summary.get('requested', 0)} deck tags."
-        )
-        errors = result.get("errors") or []
+            return result
         emit_job_event(
             "edhrec",
             "completed",
             job_id=job_id,
             dataset="synergy",
-            status=result.get("status", "success"),
+            status=status,
             message=message,
-            commanders=commander_summary,
-            themes=theme_summary,
+            commanders=result.get("commanders") or {},
+            themes=result.get("themes") or {},
         )
-        return {
-            "status": result.get("status", "success"),
-            "message": message,
-            "errors": errors,
-            "targets": targets,
-        }
+        return result
 
     if request.method == "POST":
         def _resolve_redirect_endpoint() -> str:
@@ -1310,6 +1237,14 @@ def _deck_synergy_counts() -> dict[str, int]:
     )
 
 
+def _oracle_deck_tag_query():
+    source_version = oracle_deck_tag_source_version()
+    return OracleDeckTag.query.filter(
+        OracleDeckTag.version == ORACLE_DECK_TAG_VERSION,
+        OracleDeckTag.source_version == source_version,
+    )
+
+
 @views.route("/admin/oracle-tags", methods=["GET", "POST"])
 @login_required
 def admin_oracle_tags():
@@ -1359,7 +1294,7 @@ def admin_oracle_tags():
         core_rows=core_rows,
         evergreen_rows=evergreen_rows,
         core_total=OracleCoreRoleTag.query.count(),
-        deck_total=OracleDeckTag.query.count(),
+        deck_total=_oracle_deck_tag_query().count(),
         evergreen_total=OracleEvergreenTag.query.count(),
         synergy_core_total=synergy_counts["core"],
         synergy_evergreen_total=synergy_counts["evergreen"],
@@ -1454,7 +1389,7 @@ def admin_oracle_deck_tags():
         page = max(1, int(request.args.get("page", 1)))
     except ValueError:
         page = 1
-    query = OracleDeckTag.query
+    query = _oracle_deck_tag_query()
     if q:
         like = f"%{q}%"
         name_match = _oracle_name_match_subquery(like)

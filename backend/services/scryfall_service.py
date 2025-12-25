@@ -30,6 +30,7 @@ from services.scryfall_search import build_query, search_cards
 from services.symbols_cache import colors_to_icons, ensure_symbols_cache, render_mana_html, render_oracle_html
 from services.request_cache import request_cached
 from viewmodels.card_vm import ScryfallCardVM, SetGalleryCardVM
+from viewmodels.set_vm import SetSummaryVM
 
 from routes.base import (
     API_PAGE_SIZE,
@@ -513,7 +514,7 @@ def sets_overview():
         name_map = {code: set_name_for_code(code) for code in codes}
         release_map = {code: set_release_for_code(code) for code in codes}
 
-    items = []
+    items: list[SetSummaryVM] = []
     for code in sorted(codes):
         display_code = code.upper()
         name = name_map.get(code) if have_cache else None
@@ -525,40 +526,37 @@ def sets_overview():
             except Exception:
                 release_display = release
         stats = owned_stats.get(code, {"rows": 0, "qty": 0})
-        rec = {
-            "set_code": code,
-            "set_name": name or display_code,
-            "rows": stats.get("rows", 0),
-            "qty": stats.get("qty", 0),
-            "release_iso": release,
-            "release_display": release_display,
-        }
-        if q and (q not in code) and (q not in (rec["set_name"] or "").lower()):
+        rec = SetSummaryVM(
+            set_code=code,
+            set_name=name or display_code,
+            rows=int(stats.get("rows", 0) or 0),
+            qty=int(stats.get("qty", 0) or 0),
+            release_iso=release,
+            release_display=release_display,
+        )
+        if q and (q not in code) and (q not in (rec.set_name or "").lower()):
             continue
         items.append(rec)
 
     if sort == "code":
-        items.sort(key=lambda r: r["set_code"], reverse=reverse)
+        items.sort(key=lambda r: r.set_code, reverse=reverse)
     elif sort == "name":
-        items.sort(key=lambda r: (r["set_name"] or "").lower(), reverse=reverse)
+        items.sort(key=lambda r: (r.set_name or "").lower(), reverse=reverse)
     elif sort == "rows":
-        items.sort(key=lambda r: r["rows"], reverse=reverse)
+        items.sort(key=lambda r: r.rows, reverse=reverse)
     elif sort == "qty":
-        items.sort(key=lambda r: r["qty"], reverse=reverse)
+        items.sort(key=lambda r: r.qty, reverse=reverse)
     elif sort == "release":
         def release_key(r):
-            iso = r.get("release_iso")
+            iso = r.release_iso
             if iso:
                 return iso
             return "0000-00-00" if reverse else "9999-12-31"
 
         items.sort(key=release_key, reverse=reverse)
     else:
-        items.sort(key=lambda r: (r["set_name"] or "").lower())
-        items.sort(
-            key=lambda r: r.get("release_iso") or "0000-00-00",
-            reverse=True,
-        )
+        items.sort(key=lambda r: (r.set_name or "").lower())
+        items.sort(key=lambda r: r.release_iso or "0000-00-00", reverse=True)
 
     return render_template(
         "cards/sets.html",

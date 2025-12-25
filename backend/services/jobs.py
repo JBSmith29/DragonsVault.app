@@ -15,7 +15,6 @@ from typing import Optional
 
 from flask import current_app, has_app_context
 
-from extensions import db
 _jobs_disabled = os.getenv("DISABLE_BACKGROUND_JOBS", "0").lower() in {"1", "true", "yes", "on"}
 if _jobs_disabled:
     get_current_job = None  # type: ignore
@@ -30,13 +29,9 @@ else:  # pragma: no cover - optional dependency
         get_current_job = None  # type: ignore
         get_queue = None  # type: ignore
         _jobs_available = False
+from services.background.imports import run_csv_import
+from services.csv_importer import FileValidationError, HeaderValidationError, validate_import_file
 from services.live_updates import emit_job_event
-from services.import_helpers import (
-    purge_cards_preserve_commanders,
-    restore_commander_metadata,
-    delete_empty_folders,
-)
-from services.csv_importer import FileValidationError, process_csv, HeaderValidationError, validate_import_file
 from services.scryfall_cache import ensure_cache_loaded
 from services import scryfall_cache as sc
 from services.spellbook_sync import (
@@ -287,34 +282,27 @@ def _process_csv_import(
         overwrite=overwrite,
         user_id=owner_user_id,
     )
-    preserved: Optional[dict] = None
-    removed = 0
     try:
-        with db.session.begin():
-            if overwrite or quantity_mode in {"absolute", "purge"}:
-                preserved = purge_cards_preserve_commanders(commit=False)
-            stats, per_folder = process_csv(
-                filepath,
-                default_folder="Unsorted",
-                dry_run=False,
-                quantity_mode=quantity_mode,
-                job_id=import_job_id,
-                owner_user_id=owner_user_id,
-                owner_username=owner_username,
-                commit=False,
-            )
-            if preserved:
-                restore_commander_metadata(preserved, commit=False)
-                removed = delete_empty_folders(commit=False)
+        result = run_csv_import(
+            filepath=filepath,
+            quantity_mode=quantity_mode,
+            overwrite=overwrite,
+            import_job_id=import_job_id,
+            owner_user_id=owner_user_id,
+            owner_username=owner_username,
+        )
+        stats = result.get("stats")
+        per_folder = result.get("per_folder")
+        summary = result.get("summary") or {}
         emit_job_event(
             "import",
             "completed",
-            job_id=stats.job_id,
-            added=stats.added,
-            updated=stats.updated,
-            skipped=stats.skipped,
-            errors=stats.errors,
-            removed_folders=removed,
+            job_id=summary.get("job_id") or getattr(stats, "job_id", None),
+            added=summary.get("added") if summary else getattr(stats, "added", None),
+            updated=summary.get("updated") if summary else getattr(stats, "updated", None),
+            skipped=summary.get("skipped") if summary else getattr(stats, "skipped", None),
+            errors=summary.get("errors") if summary else getattr(stats, "errors", None),
+            removed_folders=summary.get("removed_folders", 0),
             user_id=owner_user_id,
         )
         return stats, per_folder
@@ -369,6 +357,8 @@ def enqueue_scryfall_refresh(kind: str, *, force_download: bool = False) -> str:
 def run_scryfall_refresh_inline(kind: str, force_download: bool = False) -> dict:
     """Execute a Scryfall refresh synchronously inside the current request."""
     job_id = f"inline-{uuid.uuid4().hex[:8]}"
+    log = _get_logger()
+    log.info("Scryfall refresh started (inline): kind=%s force=%s job_id=%s", kind, force_download, job_id)
     emit_job_event("scryfall", "queued", job_id=job_id, dataset=kind)
     emit_job_event("scryfall", "started", job_id=job_id, dataset=kind, rq_id=None)
     try:
@@ -383,8 +373,10 @@ def run_scryfall_refresh_inline(kind: str, force_download: bool = False) -> dict
             bytes=info.get("bytes_downloaded"),
             status=info.get("download_status"),
         )
+        log.info("Scryfall refresh completed (inline): kind=%s job_id=%s", kind, job_id)
         return info
     except Exception as exc:
+        log.error("Scryfall refresh failed (inline): kind=%s job_id=%s error=%s", kind, job_id, exc, exc_info=True)
         emit_job_event("scryfall", "failed", job_id=job_id, dataset=kind, error=str(exc))
         raise
 
@@ -393,6 +385,8 @@ def run_scryfall_refresh_job(kind: str, job_id: str, force_download: bool = Fals
     app = _create_app()
     with app.app_context():
         job = get_current_job()
+        log = _get_logger()
+        log.info("Scryfall refresh started (job): kind=%s job_id=%s", kind, job_id)
         emit_job_event(
             "scryfall",
             "started",
@@ -412,7 +406,9 @@ def run_scryfall_refresh_job(kind: str, job_id: str, force_download: bool = Fals
                 bytes=info.get("bytes_downloaded"),
                 status=info.get("download_status"),
             )
+            log.info("Scryfall refresh completed (job): kind=%s job_id=%s", kind, job_id)
         except Exception as exc:
+            log.error("Scryfall refresh failed (job): kind=%s job_id=%s error=%s", kind, job_id, exc, exc_info=True)
             emit_job_event(
                 "scryfall",
                 "failed",
@@ -488,6 +484,8 @@ def run_spellbook_refresh_job(force_download: bool, job_id: str):
     app = _create_app()
     with app.app_context():
         job = get_current_job()
+        log = _get_logger()
+        log.info("Spellbook refresh started (job): job_id=%s force=%s", job_id, force_download)
         emit_job_event("spellbook", "started", job_id=job_id, dataset="spellbook", rq_id=getattr(job, "id", None))
         try:
             info = _refresh_spellbook_dataset(force_download=force_download)
@@ -499,8 +497,13 @@ def run_spellbook_refresh_job(force_download: bool, job_id: str):
                 status=info.get("status"),
                 total=info.get("total"),
             )
+            if info.get("status") == "warning":
+                log.warning("Spellbook refresh completed with warnings: job_id=%s", job_id)
+            else:
+                log.info("Spellbook refresh completed (job): job_id=%s", job_id)
             return info
         except Exception as exc:
+            log.error("Spellbook refresh failed (job): job_id=%s error=%s", job_id, exc, exc_info=True)
             emit_job_event("spellbook", "failed", job_id=job_id, dataset="spellbook", error=str(exc))
             raise
 
@@ -508,6 +511,8 @@ def run_spellbook_refresh_job(force_download: bool, job_id: str):
 def run_spellbook_refresh_inline(force_download: bool = False) -> dict:
     """Inline fallback with job events for progress tracking."""
     job_id = f"inline-{uuid.uuid4().hex[:8]}"
+    log = _get_logger()
+    log.info("Spellbook refresh started (inline): job_id=%s force=%s", job_id, force_download)
     emit_job_event("spellbook", "queued", job_id=job_id, dataset="spellbook")
     emit_job_event("spellbook", "started", job_id=job_id, dataset="spellbook", rq_id=None)
     try:
@@ -520,8 +525,13 @@ def run_spellbook_refresh_inline(force_download: bool = False) -> dict:
             status=info.get("status"),
             total=info.get("total"),
         )
+        if info.get("status") == "warning":
+            log.warning("Spellbook refresh completed with warnings: job_id=%s", job_id)
+        else:
+            log.info("Spellbook refresh completed (inline): job_id=%s", job_id)
         return info
     except Exception as exc:
+        log.error("Spellbook refresh failed (inline): job_id=%s error=%s", job_id, exc, exc_info=True)
         emit_job_event("spellbook", "failed", job_id=job_id, dataset="spellbook", error=str(exc))
         raise
 

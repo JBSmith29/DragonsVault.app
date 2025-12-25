@@ -1,3 +1,8 @@
+"""
+Canonical card identity is `oracle_id`.
+Other services may read or store aliases, but MUST NOT treat other fields as primary identity.
+"""
+
 from extensions import db
 from utils.time import utcnow
 
@@ -58,3 +63,12 @@ class Card(db.Model):
 
     def __repr__(self):
         return f"<Card {self.name} [{self.set_code} #{self.collector_number}] x{self.quantity}>"
+
+    def set_oracle_id(self, oracle_id: str | None) -> bool:
+        """Update the canonical oracle_id, returning True if a change was made."""
+        normalized = (oracle_id or "").strip()
+        value = normalized or None
+        if self.oracle_id != value:
+            self.oracle_id = value
+            return True
+        return False

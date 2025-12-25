@@ -1,5 +1,6 @@
 (() => {
   const RIPPLE_SELECTOR = "[data-ripple]";
+  const CONFIRM_SELECTOR = "[data-confirm]";
 
   function createRipple(evt) {
     const target = evt.currentTarget;
@@ -40,6 +41,27 @@
     root.querySelectorAll(RIPPLE_SELECTOR).forEach(bindRipple);
   }
 
+  function applySubmitFeedback(form, submitter) {
+    if (!form) return;
+    if (!form.hasAttribute("data-ux-submit") && !form.hasAttribute("data-job-trigger")) {
+      if (!submitter || !submitter.hasAttribute("data-ux-submit")) return;
+    }
+    const btn = submitter || form.querySelector('button[type="submit"], input[type="submit"]');
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.uxFeedbackApplied === "1") return;
+    const label = btn.dataset.progressLabel || "Working...";
+    btn.dataset.uxFeedbackApplied = "1";
+    if (!btn.dataset.uxOriginalLabel) {
+      btn.dataset.uxOriginalLabel = btn.tagName === "INPUT" ? btn.value : btn.innerHTML;
+    }
+    btn.disabled = true;
+    if (btn.tagName === "INPUT") {
+      btn.value = label;
+    } else {
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${label}`;
+    }
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => init(document));
   } else {
@@ -49,5 +71,47 @@
   document.addEventListener("htmx:afterSwap", (evt) => {
     if (!evt || !evt.target) return;
     init(evt.target);
+  });
+
+  document.addEventListener("submit", (evt) => {
+    const form = evt.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    const submitter = evt.submitter instanceof HTMLElement ? evt.submitter : null;
+    let confirmMsg = (submitter && submitter.getAttribute("data-confirm"))
+      || form.getAttribute("data-confirm");
+    if (submitter && submitter.dataset.confirmed === "1") {
+      submitter.dataset.confirmed = "";
+      confirmMsg = null;
+    }
+    if (confirmMsg) {
+      const ok = window.confirm(confirmMsg);
+      if (!ok) {
+        evt.preventDefault();
+        return;
+      }
+    }
+    applySubmitFeedback(form, submitter);
+  });
+
+  document.addEventListener("click", (evt) => {
+    const target = evt.target instanceof Element ? evt.target.closest(CONFIRM_SELECTOR) : null;
+    if (!target) return;
+    const confirmMsg = target.getAttribute("data-confirm");
+    if (!confirmMsg) return;
+    if (target.closest("form")) {
+      const ok = window.confirm(confirmMsg);
+      if (!ok) {
+        evt.preventDefault();
+        evt.stopImmediatePropagation();
+        return;
+      }
+      target.dataset.confirmed = "1";
+      return;
+    }
+    const ok = window.confirm(confirmMsg);
+    if (!ok) {
+      evt.preventDefault();
+      evt.stopImmediatePropagation();
+    }
   });
 })();
