@@ -13,10 +13,20 @@ from typing import List, Optional, Set
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 
 from extensions import db, limiter
-from models import Folder, FolderShare, SiteRequest, User, AuditLog
+from models import (
+    AuditLog,
+    CommanderBracketCache,
+    DeckBuildSession,
+    DeckStats,
+    Folder,
+    FolderRole,
+    FolderShare,
+    SiteRequest,
+    User,
+)
 from services import scryfall_cache as sc
 from services.scryfall_cache import ensure_cache_loaded
 from services.jobs import (
@@ -31,7 +41,11 @@ from services.authz import require_admin
 from services.audit import record_audit_event
 from services.background.edhrec_sync import refresh_edhrec_synergy_cache
 from services.background.oracle_recompute import ORACLE_DECK_TAG_VERSION, oracle_deck_tag_source_version
-from services.edhrec_client import edhrec_cache_snapshot, edhrec_service_enabled
+from services.edhrec_cache_service import edhrec_cache_snapshot
+from services.edhrec_client import edhrec_service_enabled
+from services.deck_service import recompute_deck_stats
+from services.deck_tags import get_all_deck_tags, is_valid_deck_tag
+from services.fts import reindex_fts
 from services.request_cache import request_cached
 from .base import limiter_key_user_or_ip
 from .auth import MIN_PASSWORD_LENGTH
@@ -92,14 +106,20 @@ def _folder_categories_page(admin_mode: bool):
                     return redirect(url_for(target_endpoint))
 
                 deleted_info = []
+                deleted_cards = 0
                 for folder_to_delete in to_delete:
                     folder_name = folder_to_delete.name or "Folder"
                     deleted_info.append((folder_to_delete.id, folder_name))
-                    db.session.delete(folder_to_delete)
+                    counts = _purge_folder(folder_to_delete)
+                    deleted_cards += counts.get("cards", 0)
                 _safe_commit()
                 record_audit_event(
                     "folder_deleted",
-                    {"folder_ids": [fid for fid, _ in deleted_info], "names": [name for _, name in deleted_info]},
+                    {
+                        "folder_ids": [fid for fid, _ in deleted_info],
+                        "names": [name for _, name in deleted_info],
+                        "cards_deleted": deleted_cards,
+                    },
                 )
                 if len(deleted_info) == 1:
                     flash(f'Deleted folder "{deleted_info[0][1]}" and all associated cards.', "success")
@@ -578,6 +598,49 @@ def _handle_reset_user_password(target_endpoint: str):
     return redirect(redirect_target)
 
 
+def _purge_folder(folder: Folder) -> dict[str, int]:
+    folder_id = folder.id
+    deleted_cards = (
+        db.session.query(Card)
+        .filter(Card.folder_id == folder_id)
+        .delete(synchronize_session=False)
+    )
+    deleted_roles = (
+        db.session.query(FolderRole)
+        .filter(FolderRole.folder_id == folder_id)
+        .delete(synchronize_session=False)
+    )
+    deleted_shares = (
+        db.session.query(FolderShare)
+        .filter(FolderShare.folder_id == folder_id)
+        .delete(synchronize_session=False)
+    )
+    deleted_stats = (
+        db.session.query(DeckStats)
+        .filter(DeckStats.folder_id == folder_id)
+        .delete(synchronize_session=False)
+    )
+    deleted_build_sessions = (
+        db.session.query(DeckBuildSession)
+        .filter(DeckBuildSession.folder_id == folder_id)
+        .delete(synchronize_session=False)
+    )
+    deleted_bracket_cache = (
+        db.session.query(CommanderBracketCache)
+        .filter(CommanderBracketCache.folder_id == folder_id)
+        .delete(synchronize_session=False)
+    )
+    db.session.delete(folder)
+    return {
+        "cards": deleted_cards,
+        "roles": deleted_roles,
+        "shares": deleted_shares,
+        "stats": deleted_stats,
+        "build_sessions": deleted_build_sessions,
+        "bracket_cache": deleted_bracket_cache,
+    }
+
+
 def _handle_delete_user(target_endpoint: str):
     """Shared handler for admin account deletions."""
     redirect_target = url_for(target_endpoint)
@@ -605,9 +668,19 @@ def _handle_delete_user(target_endpoint: str):
         if remaining_admins == 0:
             flash("Cannot delete the last administrator.", "warning")
             return redirect(redirect_target)
-    folders_unlinked = (
-        Folder.query.filter(Folder.owner_user_id == target_user.id)
-        .update({Folder.owner_user_id: None}, synchronize_session=False)
+    owned_folders = Folder.query.filter(Folder.owner_user_id == target_user.id).all()
+    deleted_folders = 0
+    deleted_cards = 0
+    deleted_folder_names: list[str] = []
+    for folder in owned_folders:
+        deleted_folders += 1
+        deleted_folder_names.append(folder.name or "Folder")
+        counts = _purge_folder(folder)
+        deleted_cards += counts.get("cards", 0)
+    removed_shares = (
+        db.session.query(FolderShare)
+        .filter(FolderShare.shared_user_id == target_user.id)
+        .delete(synchronize_session=False)
     )
     audit_entries_detached = (
         AuditLog.query.filter(AuditLog.user_id == target_user.id)
@@ -623,11 +696,20 @@ def _handle_delete_user(target_endpoint: str):
             "target_id": target_user_id,
             "email": removed_email,
             "username": removed_username,
-            "folders_unlinked": folders_unlinked,
+            "folders_deleted": deleted_folders,
+            "folder_names": deleted_folder_names,
+            "cards_deleted": deleted_cards,
+            "shares_removed": removed_shares,
             "audit_entries_detached": audit_entries_detached,
         },
     )
-    flash(f"Deleted user {removed_email}.", "success")
+    if deleted_folders:
+        flash(
+            f"Deleted user {removed_email} along with {deleted_folders} folder(s) and {deleted_cards} card(s).",
+            "success",
+        )
+    else:
+        flash(f"Deleted user {removed_email}.", "success")
     return redirect(redirect_target)
 
 
@@ -748,6 +830,93 @@ def admin_console():
             themes=result.get("themes") or {},
         )
         return result
+
+    def _recompute_all_deck_stats() -> dict:
+        job_id = f"deckstats-{uuid.uuid4().hex[:8]}"
+        emit_job_event("deck_stats", "queued", job_id=job_id, dataset="recompute")
+        emit_job_event("deck_stats", "started", job_id=job_id, dataset="recompute", rq_id=None)
+
+        deck_ids = (
+            db.session.query(Folder.id)
+            .filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
+            .all()
+        )
+        total = len(deck_ids)
+        updated = 0
+        errors = 0
+
+        for idx, (folder_id,) in enumerate(deck_ids, start=1):
+            try:
+                recompute_deck_stats(folder_id)
+                db.session.commit()
+                updated += 1
+            except Exception as exc:
+                db.session.rollback()
+                errors += 1
+                current_app.logger.warning("Deck stats recompute failed for folder %s: %s", folder_id, exc)
+
+            if total and (idx == total or idx % 10 == 0):
+                percent = int(round((idx / total) * 100))
+                emit_job_event(
+                    "deck_stats",
+                    "progress",
+                    job_id=job_id,
+                    dataset="recompute",
+                    percent=percent,
+                    progress_text=f"{idx}/{total} decks",
+                )
+
+        status = "success" if errors == 0 else "warning"
+        message = f"Recomputed deck stats for {updated}/{total} decks."
+        if errors:
+            message = f"{message} {errors} deck(s) failed."
+        emit_job_event(
+            "deck_stats",
+            "completed",
+            job_id=job_id,
+            dataset="recompute",
+            status=status,
+            message=message,
+        )
+        return {"job_id": job_id, "total": total, "updated": updated, "errors": errors}
+
+    def _rebuild_search_index() -> dict:
+        job_id = f"search-{uuid.uuid4().hex[:8]}"
+        emit_job_event("search_index", "queued", job_id=job_id, dataset="cards")
+        emit_job_event("search_index", "started", job_id=job_id, dataset="cards", rq_id=None)
+
+        if db.engine.dialect.name != "sqlite":
+            message = "Search index rebuild is only required for SQLite deployments."
+            emit_job_event(
+                "search_index",
+                "completed",
+                job_id=job_id,
+                dataset="cards",
+                status="skipped",
+                message=message,
+            )
+            return {"job_id": job_id, "status": "skipped", "message": message}
+
+        try:
+            reindex_fts()
+            emit_job_event(
+                "search_index",
+                "completed",
+                job_id=job_id,
+                dataset="cards",
+                status="ok",
+                message="Search index rebuilt.",
+            )
+            return {"job_id": job_id, "status": "success"}
+        except Exception as exc:
+            emit_job_event(
+                "search_index",
+                "failed",
+                job_id=job_id,
+                dataset="cards",
+                error="Search index rebuild failed.",
+            )
+            raise exc
 
     if request.method == "POST":
         def _resolve_redirect_endpoint() -> str:
@@ -1063,6 +1232,97 @@ def admin_console():
                 current_app.logger.exception("EDHREC refresh failed")
                 flash(f"Failed to refresh EDHREC cache: {exc}", "danger")
             return redirect(redirect_url)
+
+        if action == "recompute_deck_stats":
+            try:
+                info = _recompute_all_deck_stats()
+                updated = info.get("updated", 0)
+                total = info.get("total", 0)
+                errors = info.get("errors", 0)
+                if errors:
+                    flash(f"Recomputed deck stats for {updated}/{total} decks with {errors} error(s).", "warning")
+                else:
+                    flash(f"Recomputed deck stats for {updated}/{total} decks.", "success")
+                record_audit_event("admin_action", {"action": action, "updated": updated, "errors": errors})
+            except Exception as exc:
+                current_app.logger.exception("Deck stats recompute failed")
+                flash(f"Failed to recompute deck stats: {exc}", "danger")
+            return redirect(redirect_url)
+
+        if action == "rebuild_search_index":
+            try:
+                info = _rebuild_search_index()
+                status = info.get("status")
+                message = info.get("message")
+                if status == "skipped":
+                    flash(message or "Search index rebuild skipped.", "warning")
+                else:
+                    flash("Search index rebuilt successfully.", "success")
+                record_audit_event("admin_action", {"action": action, "status": status})
+            except Exception as exc:
+                current_app.logger.exception("Search index rebuild failed")
+                flash("Failed to rebuild search index. Check logs for details.", "danger")
+            return redirect(redirect_url)
+
+        if action == "validate_database":
+            try:
+                if db.engine.dialect.name == "sqlite":
+                    result = db.session.execute(text("PRAGMA integrity_check;")).scalar()
+                    if str(result).strip().lower() == "ok":
+                        flash("Database integrity check passed.", "success")
+                    else:
+                        flash("Database integrity check returned warnings.", "warning")
+                else:
+                    db.session.execute(text("SELECT 1"))
+                    flash("Database connectivity check passed.", "success")
+                record_audit_event("admin_action", {"action": action})
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Database validation failed")
+                flash("Database validation failed. Check logs for details.", "danger")
+            return redirect(redirect_url)
+
+        if action == "check_orphaned_decks":
+            try:
+                orphaned = (
+                    db.session.query(Folder.id)
+                    .outerjoin(Card, Card.folder_id == Folder.id)
+                    .filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
+                    .group_by(Folder.id)
+                    .having(func.count(Card.id) == 0)
+                    .all()
+                )
+                count = len(orphaned)
+                if count:
+                    flash(f"Found {count} deck(s) with no cards.", "warning")
+                else:
+                    flash("No orphaned decks found.", "success")
+                record_audit_event("admin_action", {"action": action, "count": count})
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Orphaned deck check failed")
+                flash("Failed to check orphaned decks. Check logs for details.", "danger")
+            return redirect(redirect_url)
+
+        if action == "verify_tag_integrity":
+            try:
+                deck_folders = Folder.query.filter(
+                    Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
+                ).all()
+                invalid = [
+                    folder for folder in deck_folders
+                    if folder.deck_tag and not is_valid_deck_tag(folder.deck_tag)
+                ]
+                if invalid:
+                    flash(f"Found {len(invalid)} deck(s) with unknown tags.", "warning")
+                else:
+                    flash("All deck tags match the current vocabulary.", "success")
+                record_audit_event("admin_action", {"action": action, "count": len(invalid)})
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Tag integrity check failed")
+                flash("Failed to verify tag integrity. Check logs for details.", "danger")
+            return redirect(redirect_url)
     data_ops = _build_data_ops_context(
         symbols_json_path=symbols_json_path,
         symbols_svg_dir=symbols_svg_dir,
@@ -1086,7 +1346,7 @@ def admin_console():
         "enabled": edhrec_service_enabled(),
         "error": edhrec_error,
         "commanders": edhrec_snapshot.get("commanders", {}),
-        "themes": edhrec_snapshot.get("themes", {}),
+        "themes": edhrec_snapshot.get("tags", {}),
     }
     user_context = _user_management_context(include_users=False)
     request_counts = _site_request_counts()
@@ -1115,8 +1375,24 @@ def admin_data_operations():
         symbols_svg_dir=symbols_context.get("symbols_svg_dir"),
         symbols_enabled=bool(symbols_context.get("symbols_enabled")),
     )
-    all_folders = Folder.query.order_by(func.lower(Folder.name)).all()
-    deck_folders = [folder for folder in all_folders if not folder.is_collection]
+
+    db_status = {"label": "OK", "tone": "success"}
+    try:
+        db.session.execute(text("SELECT 1"))
+    except Exception:
+        db.session.rollback()
+        db_status = {"label": "Warning", "tone": "warning"}
+
+    card_count = db.session.query(func.count(Card.id)).scalar() or 0
+    deck_count = (
+        db.session.query(Folder.id)
+        .filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
+        .count()
+    )
+    last_import = data_ops.get("prints", {}).get("mtime") or "N/A"
+    tag_count = len(get_all_deck_tags())
+    tag_status = "Loaded" if tag_count else "Missing"
+
     edhrec_snapshot = edhrec_cache_snapshot() if edhrec_service_enabled() else {"status": "disabled"}
     edhrec_error = None
     if edhrec_snapshot.get("status") == "error":
@@ -1127,23 +1403,18 @@ def admin_data_operations():
         "enabled": edhrec_service_enabled(),
         "error": edhrec_error,
         "commanders": edhrec_snapshot.get("commanders", {}),
-        "themes": edhrec_snapshot.get("themes", {}),
-        "deck_totals": {
-            "total": len(deck_folders),
-            "with_commander": sum(
-                1 for folder in deck_folders if folder.commander_name or folder.commander_oracle_id
-            ),
-            "with_tag": sum(1 for folder in deck_folders if folder.deck_tag),
-        },
+        "themes": edhrec_snapshot.get("tags", {}),
     }
     return render_template(
         "admin/data_operations.html",
-        prints=data_ops["prints"],
-        rulings=data_ops["rulings"],
-        spellbook=data_ops["spellbook"],
-        symbols=data_ops["symbols"],
-        stats=data_ops["stats"],
-        symbols_enabled=data_ops["symbols_enabled"],
+        system_health={
+            "database": db_status,
+            "card_count": card_count,
+            "deck_count": deck_count,
+            "last_import": last_import,
+            "tag_status": tag_status,
+            "tag_count": tag_count,
+        },
         edhrec=edhrec,
     )
 

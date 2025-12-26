@@ -73,10 +73,18 @@ def _collection_rows_with_fallback() -> list[tuple[int | None, str | None]]:
     except SQLAlchemyError:
         current_app.logger.exception("Failed to load collection folders (primary query)")
         db.session.rollback()
+        return [(None, name.title()) for name in sorted(DEFAULT_COLLECTION_FOLDERS)]
     if rows:
         return rows
-
-    # Last-resort hard-coded defaults so the UI can still render
+    try:
+        has_folders = db.session.query(Folder.id).limit(1).first()
+    except SQLAlchemyError:
+        current_app.logger.exception("Failed to check folder existence (collection fallback)")
+        db.session.rollback()
+        return [(None, name.title()) for name in sorted(DEFAULT_COLLECTION_FOLDERS)]
+    if has_folders:
+        return []
+    # Last-resort hard-coded defaults so the UI can still render on empty installs.
     return [(None, name.title()) for name in sorted(DEFAULT_COLLECTION_FOLDERS)]
 
 
@@ -433,7 +441,7 @@ def _commander_candidates_for_folder(folder_id: int, limit: int = 60):
     out = []
     for c in qs:
         pr = _lookup_print_data(c.set_code, c.collector_number, c.name, c.oracle_id)
-        tline = getattr(c, "type_line", "") or ""
+        tline = getattr(c, "type_line", "") or pr.get("type_line") or ""
         tl = tline.lower()
         if ("legendary" in tl) and ("creature" in tl or "artifact" in tl):
             out.append(

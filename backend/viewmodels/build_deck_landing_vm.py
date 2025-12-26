@@ -16,6 +16,8 @@ class BuildLandingCommanderVM:
     coverage_label: str
     reason: str
     tag_label: str | None = None
+    tag_hints: list[str] = field(default_factory=list)
+    color_hint: str | None = None
 
 
 @dataclass(slots=True)

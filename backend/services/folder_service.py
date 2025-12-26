@@ -689,10 +689,9 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         elif sort == "cmc":
             def _cmc_key(card):
                 val = cmc_map.get(card.id)
-                name_key = (card.name or "").lower()
                 if val is None:
-                    return (1, 0.0, name_key)
-                return (0, (-val if reverse else val), name_key)
+                    return (1, 0.0)
+                return (0, (-val if reverse else val))
 
             deck_cards.sort(key=_cmc_key)
 

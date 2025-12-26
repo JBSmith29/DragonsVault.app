@@ -361,18 +361,17 @@ def scryfall_browser():
         rec["owned_total"] = owned_by_oid.get(rec.get("oracle_id"), 0)
 
     sort_key_map = {
-        "name": lambda r: ((r.get("name") or "").casefold(), r.get("collector_sort")),
+        "name": lambda r: (r.get("name") or "").casefold(),
         "cmc": lambda r: (
-            float(r.get("cmc_value")) if r.get("cmc_value") is not None else float("inf"),
-            (r.get("name") or "").casefold(),
+            float(r.get("cmc_value")) if r.get("cmc_value") is not None else float("inf")
         ),
-        "rarity": lambda r: (r.get("rarity_rank", 99), (r.get("name") or "").casefold()),
-        "set": lambda r: (r.get("set") or "", r.get("collector_sort")),
+        "rarity": lambda r: r.get("rarity_rank", 99),
+        "set": lambda r: (r.get("set") or ""),
         "collector": lambda r: r.get("collector_sort"),
-        "mana": lambda r: ((r.get("mana_cost") or ""), (r.get("name") or "").casefold()),
-        "type": lambda r: ((r.get("type_line") or "").casefold(), (r.get("name") or "").casefold()),
-        "price": lambda r: ((r.get("price_value") or 0.0), (r.get("name") or "").casefold()),
-        "art": lambda r: (0 if r.get("thumb") else 1, (r.get("name") or "").casefold()),
+        "mana": lambda r: (r.get("mana_cost") or ""),
+        "type": lambda r: (r.get("type_line") or "").casefold(),
+        "price": lambda r: (r.get("price_value") or 0.0),
+        "art": lambda r: (0 if r.get("thumb") else 1),
     }
     sort_key = sort_key_map.get(sort_field)
     if sort_key:

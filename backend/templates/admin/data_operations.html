@@ -4,294 +4,109 @@
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
       <h1 class="mb-1">Data Operations</h1>
-      <div class="text-muted small">Dataset refreshes and cache inspections.</div>
+      <div class="text-muted small">Maintenance tools and system confidence checks.</div>
     </div>
-    <div class="d-flex flex-wrap gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
-      <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline-flex" data-ux-submit>
-        <input type="hidden" name="action" value="refresh_all">
-        <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-        <button class="btn btn-outline-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh All Data</button>
-      </form>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
+  </div>
+
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h2 class="h5 mb-0">System Health</h2>
+      <span class="text-muted small">Read-only status indicators.</span>
+    </div>
+    <div class="row g-3">
+      <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="text-muted small">Database</div>
+              <span class="badge text-bg-{{ system_health.database.tone }}">{{ system_health.database.label }}</span>
+            </div>
+            <div class="fs-6 fw-semibold">Connection status</div>
+            <div class="text-muted small">{{ system_health.database.label }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="text-muted small mb-2">Card Count</div>
+            <div class="fs-4 fw-semibold">{{ '{:,}'.format(system_health.card_count or 0) }}</div>
+            <div class="text-muted small">Cards tracked in the collection.</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="text-muted small mb-2">Deck Count</div>
+            <div class="fs-4 fw-semibold">{{ '{:,}'.format(system_health.deck_count or 0) }}</div>
+            <div class="text-muted small">Deck folders currently available.</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="text-muted small mb-2">Last Import Time</div>
+            <div class="fs-6 fw-semibold">{{ system_health.last_import }}</div>
+            <div class="text-muted small">Latest bulk data refresh timestamp.</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="text-muted small">Tag Vocabulary</div>
+              <span class="badge text-bg-{{ 'success' if system_health.tag_count else 'warning' }}">
+                {{ system_health.tag_status }}
+              </span>
+            </div>
+            <div class="fs-6 fw-semibold">{{ system_health.tag_count }} tags</div>
+            <div class="text-muted small">Canonical deck tags available.</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="row g-3">
-    <div class="col-12">
-      <div class="card h-100">
-        <div class="card-body">
-          {% set prints_stats = stats.prints or {} %}
-          {% set status_badge = 'success' if prints.exists else 'danger' %}
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-              <h5 class="card-title mb-0">Scryfall Default Cards</h5>
-              <span class="badge text-bg-{{ status_badge }}">{{ 'Loaded' if prints.exists else 'Missing' }}</span>
-              {% if prints.exists %}
-                <span class="badge text-bg-{{ 'warning' if prints.stale else 'secondary' }}">{{ 'Stale' if prints.stale else 'Fresh' }}</span>
-              {% endif %}
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h2 class="h5 mb-0">Data Operations</h2>
+      <span class="text-muted small">Actions that change cached or derived data.</span>
+    </div>
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="card-title mb-0">Import Cards</h5>
+              <span class="badge text-bg-danger">High impact</span>
             </div>
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#defaultCardsDetails"
-              aria-expanded="false"
-              aria-controls="defaultCardsDetails"
-            >
-              Details
-            </button>
-          </div>
-          <div class="small text-muted mb-3">Bulk dataset powering art thumbnails, print lookups, and commander heuristics.</div>
-          <div class="d-flex flex-wrap gap-2 mb-2">
-            <form method="post" action="{{ url_for('views.admin_console') }}" data-job-trigger data-job-scope="scryfall" data-job-dataset="default_cards">
+            <div class="small text-muted mb-3">
+              Downloads the latest Scryfall bulk file to refresh card data and commander lookups.
+            </div>
+            <form method="post" action="{{ url_for('views.admin_console') }}"
+                  data-job-trigger data-job-scope="scryfall" data-job-dataset="default_cards">
               <input type="hidden" name="action" value="refresh_default_cards">
               <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Downloading...">Download Latest Bulk File</button>
-            </form>
-            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
-              <input type="hidden" name="action" value="reload_default_cache">
-              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-outline-primary btn-sm" type="submit" data-progress-label="Reloading...">Reload In-Memory Cache</button>
-            </form>
-            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
-              <input type="hidden" name="action" value="clear_cache">
-              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="Delete the cached Scryfall files? This cannot be undone." data-progress-label="Clearing...">Clear Cache Files</button>
-            </form>
-          </div>
-          <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
-               data-job-monitor
-               data-job-scope="scryfall"
-               data-job-dataset="default_cards"
-               data-job-label="Default cards">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-              <div>
-                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                  Queue a refresh to see live status updates as workers download the dataset.
-                </p>
-              </div>
-              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-            </div>
-            <div class="mt-3 d-none" data-job-progress>
-              <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="small text-muted" data-job-progress-text>Working</span>
-                <span class="small fw-semibold" data-job-progress-label>0%</span>
-              </div>
-              <div class="progress progress-striped" role="progressbar" aria-label="Default cards progress" aria-valuemin="0" aria-valuemax="100">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
-              </div>
-            </div>
-            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
-          </div>
-          <div class="collapse mt-3" id="defaultCardsDetails">
-            <div class="row g-3 small mb-3">
-              <div class="col-12 col-md-6">
-                <div class="border rounded-3 p-3 bg-body-secondary-subtle h-100">
-                  <div class="fw-semibold text-uppercase text-muted mb-2">File</div>
-                  <div>Path: <code>{{ prints.path }}</code></div>
-                  <div>Size: {{ '{:,}'.format(prints.size or 0) }} bytes</div>
-                  <div>Updated: {{ prints.mtime or 'N/A' }}</div>
-                </div>
-              </div>
-              <div class="col-12 col-md-6">
-                <div class="border rounded-3 p-3 bg-body-secondary-subtle h-100">
-                  <div class="fw-semibold text-uppercase text-muted mb-2">In-memory cache</div>
-                  <div>Records: {{ '{:,}'.format(prints_stats.records or 0) }}</div>
-                  <div>Unique oracles: {{ '{:,}'.format(prints_stats.unique_oracles or 0) }}</div>
-                  <div>Tracked sets: {{ '{:,}'.format(prints_stats.unique_sets or 0) }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-              <h5 class="card-title mb-0">Scryfall Rulings</h5>
-              <span class="badge text-bg-{{ 'success' if rulings.exists else 'danger' }}">{{ 'Present' if rulings.exists else 'Missing' }}</span>
-            </div>
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#rulingsDetails"
-              aria-expanded="false"
-              aria-controls="rulingsDetails"
-            >
-              Details
-            </button>
-          </div>
-          <div class="small text-muted mb-3">Bulk rulings by oracle ID.</div>
-          <div class="d-flex flex-wrap gap-2 mb-2">
-            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="scryfall" data-job-dataset="rulings">
-              <input type="hidden" name="action" value="refresh_rulings">
-              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Rulings</button>
-            </form>
-          </div>
-          <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
-               data-job-monitor
-               data-job-scope="scryfall"
-               data-job-dataset="rulings"
-               data-job-label="Rulings">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-              <div>
-                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                  When a rulings refresh runs the latest status appears here automatically.
-                </p>
-              </div>
-              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-            </div>
-            <div class="mt-3 d-none" data-job-progress>
-              <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="small text-muted" data-job-progress-text>Working</span>
-                <span class="small fw-semibold" data-job-progress-label>0%</span>
-              </div>
-              <div class="progress progress-striped" role="progressbar" aria-label="Rulings progress" aria-valuemin="0" aria-valuemax="100">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
-              </div>
-            </div>
-            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
-          </div>
-          <div class="collapse mt-3" id="rulingsDetails">
-            <ul class="list-unstyled small mb-3">
-              <li>Status: {{ 'Present' if rulings.exists else 'Missing' }}</li>
-              <li>Path: <code>{{ rulings.path }}</code></li>
-              <li>Size: {{ rulings.size }} bytes</li>
-              <li>Updated: {{ rulings.mtime or 'N/A' }}</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-              <h5 class="card-title mb-0">Commander Spellbook Combos</h5>
-              <span class="badge text-bg-{{ 'success' if spellbook.exists else 'danger' }}">{{ 'Present' if spellbook.exists else 'Missing' }}</span>
-            </div>
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#spellbookDetails"
-              aria-expanded="false"
-              aria-controls="spellbookDetails"
-            >
-              Details
-            </button>
-          </div>
-          <div class="small text-muted mb-3">
-            Two-card lines pulled from Commander Spellbook (early <= {{ spellbook.early_threshold }}, late >= {{ spellbook.late_threshold }} total mana).
-          </div>
-          <div class="d-flex flex-wrap gap-2 mb-2">
-            <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="spellbook" data-job-dataset="spellbook">
-              <input type="hidden" name="action" value="refresh_spellbook_combos">
-              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Spellbook Combos</button>
-            </form>
-          </div>
-          <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
-               data-job-monitor
-               data-job-scope="spellbook"
-               data-job-dataset="spellbook"
-               data-job-label="Commander Spellbook">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-              <div>
-                <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
-                <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                  When a spellbook refresh runs the latest status appears here automatically.
-                </p>
-              </div>
-              <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
-            </div>
-            <div class="mt-3 d-none" data-job-progress>
-              <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="small text-muted" data-job-progress-text>Working</span>
-                <span class="small fw-semibold" data-job-progress-label>0%</span>
-              </div>
-              <div class="progress progress-striped" role="progressbar" aria-label="Spellbook progress" aria-valuemin="0" aria-valuemax="100">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
-              </div>
-            </div>
-            <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
-          </div>
-          <div class="collapse mt-3" id="spellbookDetails">
-            <ul class="list-unstyled small mb-3">
-              <li>Status: {{ 'Present' if spellbook.exists else 'Missing' }}</li>
-              <li>Path: <code>{{ spellbook.path }}</code></li>
-              <li>Size: {{ spellbook.size }} bytes</li>
-              <li>Updated: {{ spellbook.mtime or 'N/A' }}</li>
-              <li>Combos: {{ spellbook.counts.total }} total ({{ spellbook.counts.early }} early, {{ spellbook.counts.late }} late)</li>
-              {% if spellbook.categories %}
-                <li>Tracked categories:
-                  <ul class="mb-0">
-                    {% for label, value in spellbook.categories.items() %}
-                      <li>{{ label.replace('_', ' ') }}: {{ value }}</li>
-                    {% endfor %}
-                  </ul>
-                </li>
-              {% endif %}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-              <h5 class="card-title mb-0">Scryfall Symbols</h5>
-              {% if symbols_enabled %}
-                <span class="badge text-bg-{{ 'success' if symbols.exists else 'danger' }}">{{ 'Present' if symbols.exists else 'Missing' }}</span>
-              {% else %}
-                <span class="badge text-bg-warning-subtle text-warning">Unavailable</span>
-              {% endif %}
-            </div>
-            {% if symbols_enabled %}
-              <button
-                class="btn btn-outline-secondary btn-sm"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#symbolsDetails"
-                aria-expanded="false"
-                aria-controls="symbolsDetails"
-              >
-                Details
+              <button class="btn btn-primary btn-sm" type="submit"
+                      data-confirm="Download the latest bulk card file? This may take a few minutes."
+                      data-progress-label="Downloading...">
+                Download Latest Bulk File
               </button>
-            {% endif %}
-          </div>
-          <div class="small text-muted mb-3">Mana symbols cache (JSON + SVGs in <code>/static/symbols</code>).</div>
-          {% if symbols_enabled %}
-            <div class="d-flex flex-wrap gap-2 mb-2">
-              <form method="post" action="{{ url_for('views.admin_console') }}" class="d-inline" data-job-trigger data-job-scope="symbols" data-job-dataset="symbology">
-                <input type="hidden" name="action" value="refresh_symbols">
-                <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-                <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh Symbols</button>
-              </form>
-            </div>
+            </form>
             <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
                  data-job-monitor
-                 data-job-scope="symbols"
-                 data-job-dataset="symbology"
-                 data-job-label="Scryfall Symbols">
+                 data-job-scope="scryfall"
+                 data-job-dataset="default_cards"
+                 data-job-label="Card import">
               <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
                   <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
                   <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                    When a symbols refresh runs the latest status appears here automatically.
+                    Start the import to see live status updates.
                   </p>
                 </div>
                 <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
@@ -301,87 +116,55 @@
                   <span class="small text-muted" data-job-progress-text>Working</span>
                   <span class="small fw-semibold" data-job-progress-label>0%</span>
                 </div>
-                <div class="progress progress-striped" role="progressbar" aria-label="Symbols progress" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress progress-striped" role="progressbar" aria-label="Card import progress" aria-valuemin="0" aria-valuemax="100">
                   <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
                 </div>
               </div>
               <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
             </div>
-            <div class="collapse mt-3" id="symbolsDetails">
-              <ul class="list-unstyled small mb-3">
-                <li>Status: {{ 'Present' if symbols.exists else 'Missing' }}</li>
-                <li>Path: <code>{{ symbols.path }}</code></li>
-                <li>Size: {{ symbols.size }} bytes</li>
-                <li>Updated: {{ symbols.mtime or 'N/A' }}</li>
-                <li>Entries: {{ symbols.entries }}</li>
-                <li>SVG cache: {{ symbols.svg_count }} icons ({{ 'Present' if symbols.svg_exists else 'Missing' }})<br>
-                  <span class="text-muted">Directory: <code>{{ symbols.svg_dir }}</code></span></li>
-              </ul>
-            </div>
-          {% else %}
-            <div class="alert alert-warning small mb-0">
-              Symbols module not available. Make sure <code>services/symbols_cache.py</code> exists and is importable.
-            </div>
-          {% endif %}
+          </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <div class="row g-3 mt-1">
-    <div class="col-12">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-              <h5 class="card-title mb-0">EDHREC Synergy Cache</h5>
-              {% if edhrec.enabled and not edhrec.error %}
-                <span class="badge text-bg-success">Online</span>
-              {% else %}
-                <span class="badge text-bg-warning-subtle text-warning">Unavailable</span>
-              {% endif %}
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="card-title mb-0">Update EDHREC Tags</h5>
+              <span class="badge text-bg-warning">Medium impact</span>
             </div>
-          </div>
-          <div class="small text-muted mb-2">Commander and deck tag synergy pulled from edhrec.com.</div>
-          {% if edhrec.enabled and not edhrec.error %}
-            <ul class="list-unstyled small mb-3">
-              <li>
-                Commanders cached: {{ edhrec.commanders.count or 0 }}
-                {% if edhrec.commanders.latest_slug %}
-                  <span class="text-muted"> (latest {{ edhrec.commanders.latest_slug }} @ {{ edhrec.commanders.latest_fetched_at or 'N/A' }})</span>
-                {% endif %}
-              </li>
-              <li>
-                Deck tags cached: {{ edhrec.themes.count or 0 }}
-                {% if edhrec.themes.latest_slug %}
-                  <span class="text-muted"> (latest {{ edhrec.themes.latest_slug }} @ {{ edhrec.themes.latest_fetched_at or 'N/A' }})</span>
-                {% endif %}
-              </li>
-              <li>
-                Decks tracked: {{ edhrec.deck_totals.total }}
-                <span class="text-muted">(commander set: {{ edhrec.deck_totals.with_commander }}, tagged: {{ edhrec.deck_totals.with_tag }})</span>
-              </li>
-            </ul>
-            <form method="post" action="{{ url_for('views.admin_console') }}" data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
-              <input type="hidden" name="action" value="refresh_edhrec">
-              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" value="1" id="forceEdhrecDataOps" name="force_refresh">
-                <label class="form-check-label small" for="forceEdhrecDataOps">Force refresh (ignore cache age)</label>
+            <div class="small text-muted mb-2">
+              Refreshes EDHREC-derived tag and synergy data used for recommendations.
+            </div>
+            {% if edhrec.enabled and not edhrec.error %}
+              <div class="small text-muted mb-3">
+                Cached: {{ edhrec.commanders.count or 0 }} commanders &middot; {{ edhrec.themes.count or 0 }} tags
               </div>
-              <button class="btn btn-primary btn-sm" type="submit" data-progress-label="Refreshing...">Refresh EDHREC Data</button>
-            </form>
-            <p class="text-muted small mb-0 mt-2">Runs one request per unique commander/tag in your decks.</p>
+              <form method="post" action="{{ url_for('views.admin_console') }}"
+                    data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
+                <input type="hidden" name="action" value="refresh_edhrec">
+                <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+                <button class="btn btn-primary btn-sm" type="submit"
+                        data-confirm="Refresh EDHREC cache data now?"
+                        data-progress-label="Refreshing...">
+                  Refresh EDHREC Cache
+                </button>
+              </form>
+            {% else %}
+              <div class="alert alert-warning small mb-3">
+                {{ edhrec.error or 'EDHREC service is unavailable.' }}
+              </div>
+            {% endif %}
             <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
                  data-job-monitor
                  data-job-scope="edhrec"
                  data-job-dataset="synergy"
-                 data-job-label="EDHREC Synergy Cache">
+                 data-job-label="EDHREC cache">
               <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
                   <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
                   <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
-                    Queue a refresh to see live status updates as the cache warms.
+                    Start a refresh to see the latest EDHREC status.
                   </p>
                 </div>
                 <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
@@ -391,21 +174,168 @@
                   <span class="small text-muted" data-job-progress-text>Working</span>
                   <span class="small fw-semibold" data-job-progress-label>0%</span>
                 </div>
-                <div class="progress progress-striped" role="progressbar" aria-label="EDHREC cache progress" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress progress-striped" role="progressbar" aria-label="EDHREC progress" aria-valuemin="0" aria-valuemax="100">
                   <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
                 </div>
               </div>
               <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
             </div>
-          {% else %}
-            <div class="alert alert-warning small mb-0">
-              {{ edhrec.error or 'EDHREC service is unavailable.' }}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="card-title mb-0">Recompute Deck Stats</h5>
+              <span class="badge text-bg-warning">Medium impact</span>
             </div>
-          {% endif %}
+            <div class="small text-muted mb-3">
+              Recalculates mana curves and deck analytics to match the current card lists.
+            </div>
+            <form method="post" action="{{ url_for('views.admin_console') }}"
+                  data-job-trigger data-job-scope="deck_stats" data-job-dataset="recompute">
+              <input type="hidden" name="action" value="recompute_deck_stats">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-primary btn-sm" type="submit"
+                      data-confirm="Recompute deck stats for all decks?"
+                      data-progress-label="Recomputing...">
+                Recompute Deck Stats
+              </button>
+            </form>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+                 data-job-monitor
+                 data-job-scope="deck_stats"
+                 data-job-dataset="recompute"
+                 data-job-label="Deck stats">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    Recompute to refresh deck analytics.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <div class="mt-3 d-none" data-job-progress>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="small text-muted" data-job-progress-text>Working</span>
+                  <span class="small fw-semibold" data-job-progress-label>0%</span>
+                </div>
+                <div class="progress progress-striped" role="progressbar" aria-label="Deck stats progress" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+                </div>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="card-title mb-0">Rebuild Search Index</h5>
+              <span class="badge text-bg-secondary">Low impact</span>
+            </div>
+            <div class="small text-muted mb-3">
+              Rebuilds the internal search index used by filters and quick search.
+            </div>
+            <form method="post" action="{{ url_for('views.admin_console') }}"
+                  data-job-trigger data-job-scope="search_index" data-job-dataset="cards">
+              <input type="hidden" name="action" value="rebuild_search_index">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-primary btn-sm" type="submit"
+                      data-confirm="Rebuild the search index now?"
+                      data-progress-label="Rebuilding...">
+                Rebuild Search Index
+              </button>
+            </form>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+                 data-job-monitor
+                 data-job-scope="search_index"
+                 data-job-dataset="cards"
+                 data-job-label="Search index">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    Rebuild the index if searches feel stale.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <div class="mt-3 d-none" data-job-progress>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="small text-muted" data-job-progress-text>Working</span>
+                  <span class="small fw-semibold" data-job-progress-label>0%</span>
+                </div>
+                <div class="progress progress-striped" role="progressbar" aria-label="Search index progress" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+                </div>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  </div>
 
+  <div>
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h2 class="h5 mb-0">Diagnostics &amp; Maintenance</h2>
+      <span class="text-muted small">Read-only checks and advisory tools.</span>
+    </div>
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Validate Database</h5>
+            <div class="small text-muted mb-3">Runs a quick integrity check to confirm the database is healthy.</div>
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
+              <input type="hidden" name="action" value="validate_database">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-outline-secondary btn-sm" type="submit" data-progress-label="Checking...">
+                Run Check
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Check Orphaned Decks</h5>
+            <div class="small text-muted mb-3">Finds deck folders with no cards attached.</div>
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
+              <input type="hidden" name="action" value="check_orphaned_decks">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-outline-secondary btn-sm" type="submit" data-progress-label="Checking...">
+                Run Check
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Verify Tag Integrity</h5>
+            <div class="small text-muted mb-3">Confirms deck tags match the current vocabulary.</div>
+            <form method="post" action="{{ url_for('views.admin_console') }}" data-ux-submit>
+              <input type="hidden" name="action" value="verify_tag_integrity">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-outline-secondary btn-sm" type="submit" data-progress-label="Checking...">
+                Run Check
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -597,13 +597,17 @@
         updateProgress(100);
         setBtnState("complete");
         const stats = event.stats || {};
-        const detail = `Done · ${stats.added || 0} added, ${stats.updated || 0} updated, ${stats.skipped || 0} skipped`;
+        const added = Number(stats.added ?? event.added ?? 0);
+        const updated = Number(stats.updated ?? event.updated ?? 0);
+        const skipped = Number(stats.skipped ?? event.skipped ?? 0);
+        const errors = Number(stats.errors ?? event.errors ?? 0);
+        const detail = `Done · ${added} added, ${updated} updated, ${skipped} skipped`;
         setProgressText(detail);
         const summaryPayload = {
-          added: stats.added || 0,
-          updated: stats.updated || 0,
-          skipped: stats.skipped || 0,
-          errors: stats.errors || 0,
+          added,
+          updated,
+          skipped,
+          errors,
           processed: event.processed || stats.processed || 0,
           total_rows: event.total_rows || event.total || stats.total_rows || 0,
           file: event.file || "",
@@ -613,6 +617,13 @@
           sessionStorage.setItem(FOLDER_MODAL_KEY, "1");
         } catch (e) {}
         renderCompletionSummary(summaryPayload);
+        if (!completeUrl) {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("import_success", "1");
+            completeUrl = url.toString();
+          } catch (e) {}
+        }
         if (!completeUrl && typeof window.showPostImportFolderModal === "function") {
           window.showPostImportFolderModal();
         }

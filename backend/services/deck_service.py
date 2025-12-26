@@ -12,6 +12,7 @@ from typing import Any, Iterable
 
 from flask import current_app, has_app_context
 from sqlalchemy import event, inspect, func
+from sqlalchemy.orm import Session
 
 from extensions import db
 from models import Card, DeckStats, FolderRole
@@ -71,7 +72,8 @@ def _colors_from_oracle_text_add(text: str | None) -> set[str]:
     return out
 
 
-def _deck_stats_payload(folder_id: int) -> dict[str, Any]:
+def _deck_stats_payload(folder_id: int, *, session=None) -> dict[str, Any]:
+    sess = session or db.session
     mana_pip_all = {c: 0 for c in ["W", "U", "B", "R", "G"]}
     mana_pip_non_land = {c: 0 for c in ["W", "U", "B", "R", "G"]}
     production_counts = {c: 0 for c in ["W", "U", "B", "R", "G", "C"]}
@@ -81,7 +83,7 @@ def _deck_stats_payload(folder_id: int) -> dict[str, Any]:
     total_mana_qty = 0
 
     rows = (
-        db.session.query(
+        sess.query(
             Card.quantity,
             Card.type_line,
             Card.mana_value,
@@ -147,9 +149,10 @@ def _deck_stats_payload(folder_id: int) -> dict[str, Any]:
     }
 
 
-def _deck_stats_source_version(folder_id: int) -> str:
+def _deck_stats_source_version(folder_id: int, *, session=None) -> str:
+    sess = session or db.session
     row = (
-        db.session.query(func.max(Card.updated_at), func.count(Card.id))
+        sess.query(func.max(Card.updated_at), func.count(Card.id))
         .filter(Card.folder_id == folder_id)
         .one()
     )
@@ -158,11 +161,12 @@ def _deck_stats_source_version(folder_id: int) -> str:
     return f"cards:{ts}|{count}"
 
 
-def _is_deck_folder(folder_id: int) -> bool:
+def _is_deck_folder(folder_id: int, *, session=None) -> bool:
     if not folder_id:
         return False
+    sess = session or db.session
     exists = (
-        db.session.query(FolderRole.folder_id)
+        sess.query(FolderRole.folder_id)
         .filter(
             FolderRole.folder_id == folder_id,
             FolderRole.role.in_(FolderRole.DECK_ROLES),
@@ -172,23 +176,29 @@ def _is_deck_folder(folder_id: int) -> bool:
     return bool(exists)
 
 
-def recompute_deck_stats(folder_id: int, *, source_version: str | None = None) -> DeckStats | None:
+def recompute_deck_stats(
+    folder_id: int,
+    *,
+    source_version: str | None = None,
+    session=None,
+) -> DeckStats | None:
     if not folder_id:
         return None
-    if not _is_deck_folder(folder_id):
-        db.session.query(DeckStats).filter(DeckStats.folder_id == folder_id).delete(synchronize_session=False)
+    sess = session or db.session
+    if not _is_deck_folder(folder_id, session=sess):
+        sess.query(DeckStats).filter(DeckStats.folder_id == folder_id).delete(synchronize_session=False)
         return None
 
-    payload = _deck_stats_payload(folder_id)
-    source_version = source_version or _deck_stats_source_version(folder_id)
-    stats = db.session.get(DeckStats, folder_id) or DeckStats(folder_id=folder_id)
+    payload = _deck_stats_payload(folder_id, session=sess)
+    source_version = source_version or _deck_stats_source_version(folder_id, session=sess)
+    stats = sess.get(DeckStats, folder_id) or DeckStats(folder_id=folder_id)
     stats.avg_mana = payload.get("avg_mana")
     stats.curve_json = json.dumps(payload.get("curve") or {}, ensure_ascii=True)
     stats.color_pips_json = json.dumps(payload.get("pips") or {}, ensure_ascii=True)
     stats.version = DECK_STATS_VERSION
     stats.source_version = source_version
     stats.last_updated = utcnow()
-    db.session.add(stats)
+    sess.add(stats)
     return stats
 
 
@@ -205,13 +215,13 @@ def _load_json(text: str | None) -> dict:
 def get_deck_stats(folder_id: int) -> dict[str, Any]:
     stats = db.session.get(DeckStats, folder_id)
     try:
-        expected_source = _deck_stats_source_version(folder_id) if stats else None
+        expected_source = _deck_stats_source_version(folder_id, session=db.session) if stats else None
         if (
             not stats
             or stats.version != DECK_STATS_VERSION
             or stats.source_version != (expected_source or "")
         ):
-            stats = recompute_deck_stats(folder_id, source_version=expected_source)
+            stats = recompute_deck_stats(folder_id, source_version=expected_source, session=db.session)
             if stats:
                 db.session.commit()
     except Exception:
@@ -346,23 +356,17 @@ def register_deck_stats_listeners() -> None:
 
     @event.listens_for(db.session, "after_commit")
     def _rebuild_deck_stats(session):
-        if session.info.get(_DECK_STATS_RECOMPUTING):
-            session.info.pop(_DECK_STATS_RECOMPUTING, None)
-            return
         folder_ids = session.info.pop(_DECK_STATS_DIRTY_KEY, set())
         if not folder_ids:
             return
-        session.info[_DECK_STATS_RECOMPUTING] = True
         try:
-            for folder_id in sorted(folder_ids):
-                recompute_deck_stats(folder_id)
-            db.session.commit()
+            with Session(db.engine) as isolated_session:
+                for folder_id in sorted(folder_ids):
+                    recompute_deck_stats(folder_id, session=isolated_session)
+                isolated_session.commit()
         except Exception:
-            db.session.rollback()
             if has_app_context():
                 current_app.logger.exception("Failed to recompute deck stats")
-        finally:
-            session.info.pop(_DECK_STATS_RECOMPUTING, None)
 
 
 def create_proxy_deck():

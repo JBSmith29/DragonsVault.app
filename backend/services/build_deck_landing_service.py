@@ -2,29 +2,30 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import os
-import re
 from typing import Iterable
 
-from sqlalchemy import text
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
-from models import Card, Folder, FolderRole
+from models import Card, EdhrecCommanderCard, Folder, FolderRole
 from services import scryfall_cache as sc
-from services.commander_utils import split_commander_names, split_commander_oracle_ids
-from services.edhrec_client import slugify_theme
-from services.edhrec_recommendation_service import get_commander_synergy
+from services.commander_utils import split_commander_oracle_ids
+from services.edhrec_cache_service import (
+    cache_ready,
+    get_commander_synergy,
+    get_commander_tags,
+    get_tag_commanders,
+)
 from services.request_cache import request_cached
 
 _LOG = logging.getLogger(__name__)
 
-_COMMANDER_POOL_LIMIT = 120
-_TAG_POOL_LIMIT = 80
+_COMMANDER_POOL_LIMIT = 160
 _HIGH_SYNERGY_LIMIT = 60
 _RESULT_LIMIT = 8
+_TAG_HINT_LIMIT = 2
 
 
 def _preferred_print(oracle_id: str) -> dict | None:
@@ -63,33 +64,8 @@ def _card_color_mask(card_oracle_id: str) -> tuple[int, bool]:
     return int(meta.get("color_identity_mask") or 0), True
 
 
-def _safe_schema_name(value: str) -> str:
-    value = (value or "").strip()
-    if not value or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", value):
-        return "edhrec_service"
-    return value
-
-
-_EDHREC_SCHEMA = _safe_schema_name(os.getenv("EDHREC_SERVICE_SCHEMA", "edhrec_service"))
-
-
-def _is_postgres() -> bool:
-    try:
-        return db.engine.dialect.name == "postgresql"
-    except Exception:
-        return False
-
-
-def _normalize_payload(raw: object) -> dict | None:
-    if isinstance(raw, dict):
-        return raw
-    if isinstance(raw, str):
-        try:
-            parsed = json.loads(raw)
-        except Exception:
-            return None
-        return parsed if isinstance(parsed, dict) else None
-    return None
+def _bit_count(value: int) -> int:
+    return bin(value).count("1") if value else 0
 
 
 def _collection_folder_ids(user_id: int | None) -> list[int]:
@@ -128,73 +104,63 @@ def _owned_oracle_ids(user_id: int | None) -> set[str]:
     return request_cached(cache_key, _load)
 
 
-def _load_commander_candidates(theme_slug: str | None, limit: int) -> list[dict]:
-    if not _is_postgres() or limit <= 0:
+def _commander_name(commander_oracle_id: str) -> str | None:
+    names: list[str] = []
+    for oid in split_commander_oracle_ids(commander_oracle_id):
+        pr = _preferred_print(oid)
+        if pr and pr.get("name"):
+            names.append(pr.get("name"))
+    if not names:
+        return None
+    return " // ".join(names)
+
+
+def _load_commander_candidates(limit: int) -> list[str]:
+    if limit <= 0:
         return []
+    cache_key = ("build_landing_candidates", limit)
 
-    cache_key = ("build_landing_candidates", theme_slug or "", limit)
-
-    def _load() -> list[dict]:
-        if theme_slug:
-            sql = text(
-                f"""
-                SELECT slug, theme_slug, name, payload, fetched_at
-                FROM {_EDHREC_SCHEMA}.edhrec_commanders
-                WHERE theme_slug = :theme_slug
-                ORDER BY fetched_at DESC NULLS LAST, name ASC
-                LIMIT :limit
-                """
-            )
-            params = {"theme_slug": theme_slug, "limit": limit}
-        else:
-            sql = text(
-                f"""
-                SELECT slug, theme_slug, name, payload, fetched_at
-                FROM {_EDHREC_SCHEMA}.edhrec_commanders
-                WHERE theme_slug IS NULL
-                ORDER BY fetched_at DESC NULLS LAST, name ASC
-                LIMIT :limit
-                """
-            )
-            params = {"limit": limit}
-
+    def _load() -> list[str]:
         try:
-            rows = db.session.execute(sql, params).mappings().all()
+            rows = (
+                db.session.query(
+                    EdhrecCommanderCard.commander_oracle_id,
+                    func.max(EdhrecCommanderCard.synergy_score).label("top_score"),
+                )
+                .group_by(EdhrecCommanderCard.commander_oracle_id)
+                .order_by(func.max(EdhrecCommanderCard.synergy_score).desc())
+                .limit(limit)
+                .all()
+            )
         except SQLAlchemyError as exc:
             db.session.rollback()
             _LOG.warning("EDHREC commander cache lookup failed: %s", exc)
             return []
-        return list(rows)
+        return [row[0] for row in rows if row and row[0]]
 
     return request_cached(cache_key, _load)
 
 
-def _commander_name_from_row(row: dict) -> str | None:
-    name = (row.get("name") or "").strip()
-    if name:
-        return name
-    payload = _normalize_payload(row.get("payload")) or {}
-    name = (payload.get("name") or "").strip()
-    return name or None
+def _color_coverage_bonus(commander_oracle_id: str, owned_oracle_ids: list[str]) -> tuple[float, int, int]:
+    commander_mask, commander_ok = _commander_color_mask(commander_oracle_id)
+    if not commander_ok or commander_mask <= 0:
+        return 0.0, 0, 0
 
+    owned_mask = 0
+    mask_cache: dict[str, int] = {}
+    for oracle_id in owned_oracle_ids:
+        if oracle_id not in mask_cache:
+            mask_val, card_ok = _card_color_mask(oracle_id)
+            mask_cache[oracle_id] = mask_val if card_ok else 0
+        owned_mask |= mask_cache[oracle_id]
 
-def _commander_oracle_id_from_name(name: str, cache: dict[str, str | None]) -> str | None:
-    key = (name or "").strip().casefold()
-    if not key:
-        return None
-    if key in cache:
-        return cache[key]
-    oracle_ids: list[str] = []
-    for part in split_commander_names(name):
-        try:
-            oid = sc.unique_oracle_by_name(part)
-        except Exception:
-            oid = None
-        if oid:
-            oracle_ids.append(oid)
-    value = ",".join(oracle_ids) if oracle_ids else None
-    cache[key] = value
-    return value
+    total_colors = _bit_count(commander_mask)
+    covered_colors = _bit_count(commander_mask & owned_mask)
+    if total_colors == 0:
+        return 0.0, 0, 0
+    coverage_ratio = covered_colors / total_colors
+    bonus = coverage_ratio * 6.0
+    return bonus, covered_colors, total_colors
 
 
 def _build_fit_summary(
@@ -203,6 +169,7 @@ def _build_fit_summary(
     owned_oracle_ids: set[str],
     *,
     tag: str | None = None,
+    tag_cache: dict[str, list[str]] | None = None,
 ) -> dict | None:
     recs = get_commander_synergy(commander_oracle_id, [tag] if tag else None)
     if not recs:
@@ -226,18 +193,7 @@ def _build_fit_summary(
         if not recs:
             return None
 
-    relevant = recs
-    if tag:
-        tag_key = tag.casefold()
-        tagged = []
-        for rec in recs:
-            matches = rec.get("tag_matches") or []
-            if any(tag_key == str(match).casefold() for match in matches):
-                tagged.append(rec)
-        if tagged:
-            relevant = tagged
-
-    top = list(relevant[:_HIGH_SYNERGY_LIMIT])
+    top = list(recs[:_HIGH_SYNERGY_LIMIT])
     if not top:
         return None
 
@@ -247,7 +203,24 @@ def _build_fit_summary(
         return None
 
     owned_synergy = sum(float(rec.get("synergy_score") or 0.0) for rec in owned)
-    score = (owned_count * 3.0) + owned_synergy
+    owned_ids = [rec.get("oracle_id") for rec in owned if rec.get("oracle_id")]
+    coverage_bonus, covered_colors, total_colors = _color_coverage_bonus(
+        commander_oracle_id,
+        owned_ids,
+    )
+
+    commander_tags = tag_cache.get(commander_oracle_id) if tag_cache is not None else None
+    if commander_tags is None:
+        commander_tags = get_commander_tags(commander_oracle_id)
+        if tag_cache is not None:
+            tag_cache[commander_oracle_id] = commander_tags
+
+    tag_match = bool(tag and tag in commander_tags)
+    if tag and not tag_match:
+        return None
+
+    tag_bonus = 8.0 if tag_match else 0.0
+    score = (owned_count * 3.0) + owned_synergy + tag_bonus + coverage_bonus
     coverage_pct = int(round((owned_count / len(top)) * 100)) if top else 0
 
     return {
@@ -258,11 +231,15 @@ def _build_fit_summary(
         "coverage_pct": coverage_pct,
         "score": score,
         "tag": tag,
+        "tag_match": tag_match,
+        "tag_hints": commander_tags[:_TAG_HINT_LIMIT],
+        "color_covered": covered_colors,
+        "color_total": total_colors,
     }
 
 
 def _rank_candidates(
-    rows: Iterable[dict],
+    commander_ids: Iterable[str],
     owned_oracle_ids: set[str],
     *,
     tag: str | None = None,
@@ -276,20 +253,20 @@ def _rank_candidates(
         _LOG.warning("Scryfall cache unavailable for build landing: %s", exc)
         return []
 
-    oracle_cache: dict[str, str | None] = {}
+    tag_cache: dict[str, list[str]] = {}
     results: list[dict] = []
-    for row in rows:
-        commander_name = _commander_name_from_row(row)
-        if not commander_name:
-            continue
-        commander_oracle_id = _commander_oracle_id_from_name(commander_name, oracle_cache)
+    for commander_oracle_id in commander_ids:
         if not commander_oracle_id:
+            continue
+        commander_name = _commander_name(commander_oracle_id)
+        if not commander_name:
             continue
         summary = _build_fit_summary(
             commander_oracle_id,
             commander_name,
             owned_oracle_ids,
             tag=tag,
+            tag_cache=tag_cache,
         )
         if summary:
             results.append(summary)
@@ -318,22 +295,25 @@ def get_build_landing_data(
 
     owned_oracle_ids = _owned_oracle_ids(user_id)
     collection_count = len(owned_oracle_ids)
-
-    base_rows = _load_commander_candidates(None, _COMMANDER_POOL_LIMIT)
-    edhrec_ready = bool(base_rows)
+    edhrec_ready = cache_ready()
 
     collection_fits: list[dict] = []
     if owned_oracle_ids and edhrec_ready:
-        collection_fits = _rank_candidates(base_rows, owned_oracle_ids, limit=limit)
+        commander_ids = _load_commander_candidates(_COMMANDER_POOL_LIMIT)
+        collection_fits = _rank_candidates(commander_ids, owned_oracle_ids, limit=limit)
 
     tag_fits: list[dict] = []
     tag_candidates = 0
     if selected_tag:
-        theme_slug = slugify_theme(selected_tag)
-        tag_rows = _load_commander_candidates(theme_slug, _TAG_POOL_LIMIT)
-        tag_candidates = len(tag_rows)
-        if owned_oracle_ids and tag_rows:
-            tag_fits = _rank_candidates(tag_rows, owned_oracle_ids, tag=selected_tag, limit=limit)
+        commander_ids = get_tag_commanders(selected_tag)
+        tag_candidates = len(commander_ids)
+        if owned_oracle_ids and commander_ids:
+            tag_fits = _rank_candidates(
+                commander_ids,
+                owned_oracle_ids,
+                tag=selected_tag,
+                limit=limit,
+            )
 
     return {
         "collection_count": collection_count,

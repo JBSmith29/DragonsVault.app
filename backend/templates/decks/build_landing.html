@@ -14,8 +14,8 @@
     <div class="card-body">
       <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
         <div>
-          <div class="section-label mb-1">Start from what you want</div>
-          <div class="text-muted small">You asked for this. Choose a commander and optional tags, then start a build.</div>
+          <div class="section-label mb-1">Start from what you already know you want</div>
+          <div class="text-muted small">You choose the commander and any tags. Nothing is suggested or applied automatically.</div>
         </div>
         <span class="badge text-bg-primary">User intent</span>
       </div>
@@ -75,7 +75,7 @@
   <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
     <div>
       <div class="section-label mb-1">Good fits based on your collection</div>
-      <div class="text-muted small">Recommended because of the cards you already own.</div>
+      <div class="text-muted small">Strong options based on cards you already own.</div>
     </div>
     <span class="badge text-bg-secondary">App guidance</span>
   </div>
@@ -84,11 +84,21 @@
     <div class="row g-3 mb-4">
       {% for fit in landing.collection_fits %}
         <div class="col-12 col-md-6 col-lg-4">
-          <div class="card h-100 border-0 shadow-sm">
+            <div class="card h-100 border-0 shadow-sm">
             <div class="card-body d-flex flex-column">
               <div class="fw-semibold mb-1">{{ fit.commander_name }}</div>
+              {% if fit.tag_hints %}
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                  {% for hint in fit.tag_hints %}
+                    <span class="badge text-bg-light border text-muted">{{ hint }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
               <div class="small text-muted mb-2">{{ fit.owned_label }}</div>
               <div class="small text-muted mb-3">{{ fit.reason }}</div>
+              {% if fit.color_hint %}
+                <div class="small text-muted mb-3">{{ fit.color_hint }}</div>
+              {% endif %}
               <form method="post" action="{{ url_for('views.start_build_deck') }}" data-ux-submit class="mt-auto">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="commander_oracle_id" value="{{ fit.commander_oracle_id }}">
@@ -118,8 +128,8 @@
     <div class="card-body">
       <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
         <div>
-          <div class="section-label mb-1">Explore by playstyle (based on what you own)</div>
-          <div class="text-muted small">You choose a tag, then we suggest commanders that fit your collection.</div>
+          <div class="section-label mb-1">Explore by playstyle (using your collection)</div>
+          <div class="text-muted small">You pick a tag, then we suggest commanders based on the cards you own.</div>
         </div>
         <span class="badge text-bg-secondary">App guidance</span>
       </div>
@@ -188,8 +198,18 @@
               <div class="card h-100 border-0 shadow-sm">
                 <div class="card-body d-flex flex-column">
                   <div class="fw-semibold mb-1">{{ fit.commander_name }}</div>
+                  {% if fit.tag_hints %}
+                    <div class="d-flex flex-wrap gap-1 mb-2">
+                      {% for hint in fit.tag_hints %}
+                        <span class="badge text-bg-light border text-muted">{{ hint }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
                   <div class="small text-muted mb-2">{{ fit.coverage_label }}</div>
                   <div class="small text-muted mb-3">{{ fit.reason }}</div>
+                  {% if fit.color_hint %}
+                    <div class="small text-muted mb-3">{{ fit.color_hint }}</div>
+                  {% endif %}
                   <form method="post" action="{{ url_for('views.start_build_deck') }}" data-ux-submit class="mt-auto">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="commander_oracle_id" value="{{ fit.commander_oracle_id }}">

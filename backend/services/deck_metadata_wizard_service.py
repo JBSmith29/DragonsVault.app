@@ -7,6 +7,8 @@ from typing import Any, Iterable
 from flask import url_for
 
 from models import Folder
+from services import scryfall_cache as sc
+from services.commander_utils import primary_commander_oracle_id
 from services.deck_tags import get_deck_tag_groups
 
 
@@ -15,6 +17,29 @@ def build_deck_metadata_wizard_payload(
     *,
     tag_groups: dict | None = None,
 ) -> dict[str, Any]:
+    cache_ready = False
+    try:
+        cache_ready = bool(sc.ensure_cache_loaded())
+    except Exception:
+        cache_ready = False
+
+    def _resolve_commander_name(folder: Folder) -> str:
+        name = (folder.commander_name or "").strip()
+        if name:
+            return name
+        if not cache_ready:
+            return ""
+        oracle_id = primary_commander_oracle_id(folder.commander_oracle_id)
+        if not oracle_id:
+            return ""
+        try:
+            prints = sc.prints_for_oracle(oracle_id) or []
+        except Exception:
+            return ""
+        if prints:
+            return (prints[0].get("name") or "").strip()
+        return ""
+
     decks: list[dict[str, Any]] = []
     for folder in folders:
         if not folder or not folder.is_deck:
@@ -27,7 +52,7 @@ def build_deck_metadata_wizard_payload(
             {
                 "id": folder.id,
                 "name": folder.name or "Deck",
-                "commander_name": folder.commander_name or "",
+                "commander_name": _resolve_commander_name(folder),
                 "deck_tag": folder.deck_tag or "",
                 "missing_commander": missing_commander,
                 "missing_tag": missing_tag,

@@ -66,6 +66,15 @@
   let tagPickerVisible = true;
   let busy = false;
 
+  function clearFilters() {
+    if (els.commanderFilter) {
+      els.commanderFilter.value = "";
+    }
+    if (els.tagFilter) {
+      els.tagFilter.value = "";
+    }
+  }
+
   function showAlert(message, tone = "warning") {
     if (!els.alert) return;
     if (!message) {
@@ -451,14 +460,9 @@
     tagAction = hasTag ? ACTION_KEEP : ACTION_SET;
     selectedCommanders = [];
     selectedTag = hasTag ? deck.deck_tag : "";
-    if (els.commanderFilter) {
-      els.commanderFilter.value = "";
-    }
-    if (els.tagFilter) {
-      els.tagFilter.value = "";
-    }
-    commanderPickerVisible = !hasCommander;
-    tagPickerVisible = !hasTag;
+    clearFilters();
+    commanderPickerVisible = true;
+    tagPickerVisible = true;
     showAlert("");
     setFooterStatus("");
     updateDeckHeader();
@@ -599,6 +603,7 @@
           ? selectedTag
           : currentDeck.deck_tag;
       updateDeckRow(commanderLabel, tagLabel);
+      clearFilters();
       advanceDeck();
     } catch (error) {
       showAlert(error?.message || "Unable to save changes right now.", "danger");

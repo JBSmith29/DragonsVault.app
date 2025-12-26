@@ -2509,127 +2509,6 @@ def list_cards():
                 move_folder_options=move_folder_options,
             )
 
-    # Sorting (DB-native where possible)
-    if sort == "qty":
-        order_col = func.coalesce(Card.quantity, 0)
-    elif sort == "set":
-        order_col = func.lower(Card.set_code)
-    elif sort == "cn":
-        order_col = func.lower(Card.collector_number)
-    elif sort == "foil":
-        order_col = Card.is_foil
-    elif sort in {"ctype", "type"}:
-        order_col = func.lower(func.coalesce(Card.type_line, ""))
-    elif sort in {"rar", "rarity"}:
-        order_col = func.lower(func.coalesce(Card.rarity, ""))
-    elif sort in {"colors", "colour"}:
-        order_col = func.coalesce(Card.color_identity_mask, 0)
-    elif sort in {"core_role", "core"}:
-        core_subq = (
-            db.session.query(
-                OracleCoreRoleTag.oracle_id.label("oracle_id"),
-                func.min(func.lower(OracleCoreRoleTag.role)).label("core_role"),
-            )
-            .group_by(OracleCoreRoleTag.oracle_id)
-            .subquery()
-        )
-        query = query.outerjoin(core_subq, core_subq.c.oracle_id == Card.oracle_id)
-        order_col = func.coalesce(core_subq.c.core_role, "")
-    elif sort in {"evergreen", "evergreen_tag"}:
-        evergreen_subq = (
-            db.session.query(
-                OracleEvergreenTag.oracle_id.label("oracle_id"),
-                func.min(func.lower(OracleEvergreenTag.keyword)).label("evergreen_tag"),
-            )
-            .group_by(OracleEvergreenTag.oracle_id)
-            .subquery()
-        )
-        query = query.outerjoin(evergreen_subq, evergreen_subq.c.oracle_id == Card.oracle_id)
-        order_col = func.coalesce(evergreen_subq.c.evergreen_tag, "")
-    elif sort in {"price", "art"}:
-        order_col = func.lower(Card.name)
-    elif sort == "folder":
-        query = query.outerjoin(Folder, Folder.id == Card.folder_id)
-        order_col = func.lower(Folder.name)
-    else:
-        order_col = func.lower(Card.name)
-
-    if reverse:
-        query = query.order_by(order_col.desc(), func.lower(Card.name).asc())
-    else:
-        query = query.order_by(order_col.asc(), func.lower(Card.name).asc())
-
-    # Pagination
-    total = query.count()
-    pages = max(1, ceil(total / per)) if per else 1
-    page = min(page, pages)
-    start = (page - 1) * per + 1 if total else 0
-    end = min(start + per - 1, total) if total else 0
-    card_columns = (
-        Card.id,
-        Card.name,
-        Card.set_code,
-        Card.collector_number,
-        Card.oracle_id,
-        Card.lang,
-        Card.is_foil,
-        Card.folder_id,
-        Card.quantity,
-        Card.type_line,
-        Card.rarity,
-        Card.colors,
-        Card.color_identity,
-        Card.color_identity_mask,
-    )
-    cards = (
-        query.options(
-            load_only(*card_columns),
-            selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
-        )
-        .limit(per)
-        .offset((page - 1) * per)
-        .all()
-    )
-
-    oracle_ids = {c.oracle_id for c in cards if c.oracle_id}
-    core_role_map: dict[str, list[str]] = {}
-    evergreen_map: dict[str, list[str]] = {}
-    if oracle_ids:
-        core_rows = (
-            db.session.query(OracleCoreRoleTag.oracle_id, OracleCoreRoleTag.role)
-            .filter(OracleCoreRoleTag.oracle_id.in_(oracle_ids))
-            .order_by(OracleCoreRoleTag.role.asc())
-            .all()
-        )
-        for oracle_id, role in core_rows:
-            if not role:
-                continue
-            bucket = core_role_map.setdefault(oracle_id, [])
-            if role not in bucket:
-                bucket.append(role)
-        evergreen_rows = (
-            db.session.query(OracleEvergreenTag.oracle_id, OracleEvergreenTag.keyword)
-            .filter(OracleEvergreenTag.oracle_id.in_(oracle_ids))
-            .order_by(OracleEvergreenTag.keyword.asc())
-            .all()
-        )
-        for oracle_id, keyword in evergreen_rows:
-            if not keyword:
-                continue
-            bucket = evergreen_map.setdefault(oracle_id, [])
-            if keyword not in bucket:
-                bucket.append(keyword)
-
-    # Build template display maps (use normalized fields; Scryfall only for art)
-    if not sc.cache_ready():
-        sc.ensure_cache_loaded()
-    image_map, hover_map = {}, {}
-    type_map = {}
-
-    print_map = _bulk_print_lookup(cards)
-    price_text_map: dict[int, str | None] = {}
-    price_value_map: dict[int, float | None] = {}
-
     def _image_from_print(pr):
         if not pr:
             return None
@@ -2696,6 +2575,182 @@ def list_cards():
             if val is not None:
                 return val
         return None
+
+    card_columns = (
+        Card.id,
+        Card.name,
+        Card.set_code,
+        Card.collector_number,
+        Card.oracle_id,
+        Card.lang,
+        Card.is_foil,
+        Card.folder_id,
+        Card.quantity,
+        Card.type_line,
+        Card.rarity,
+        Card.colors,
+        Card.color_identity,
+        Card.color_identity_mask,
+    )
+
+    # Sorting (DB-native where possible)
+    if sort == "qty":
+        order_col = func.coalesce(Card.quantity, 0)
+    elif sort == "set":
+        order_col = func.lower(Card.set_code)
+    elif sort == "cn":
+        order_col = func.lower(Card.collector_number)
+    elif sort == "foil":
+        order_col = Card.is_foil
+    elif sort in {"ctype", "type"}:
+        order_col = func.lower(func.coalesce(Card.type_line, ""))
+    elif sort in {"rar", "rarity"}:
+        order_col = func.lower(func.coalesce(Card.rarity, ""))
+    elif sort in {"colors", "colour"}:
+        order_col = func.coalesce(Card.color_identity_mask, 0)
+    elif sort in {"core_role", "core"}:
+        core_subq = (
+            db.session.query(
+                OracleCoreRoleTag.oracle_id.label("oracle_id"),
+                func.min(func.lower(OracleCoreRoleTag.role)).label("core_role"),
+            )
+            .group_by(OracleCoreRoleTag.oracle_id)
+            .subquery()
+        )
+        query = query.outerjoin(core_subq, core_subq.c.oracle_id == Card.oracle_id)
+        order_col = func.coalesce(core_subq.c.core_role, "")
+    elif sort in {"evergreen", "evergreen_tag"}:
+        evergreen_subq = (
+            db.session.query(
+                OracleEvergreenTag.oracle_id.label("oracle_id"),
+                func.min(func.lower(OracleEvergreenTag.keyword)).label("evergreen_tag"),
+            )
+            .group_by(OracleEvergreenTag.oracle_id)
+            .subquery()
+        )
+        query = query.outerjoin(evergreen_subq, evergreen_subq.c.oracle_id == Card.oracle_id)
+        order_col = func.coalesce(evergreen_subq.c.evergreen_tag, "")
+    elif sort in {"price", "art"}:
+        order_col = Card.id
+    elif sort == "folder":
+        query = query.outerjoin(Folder, Folder.id == Card.folder_id)
+        order_col = func.lower(Folder.name)
+    else:
+        order_col = func.lower(Card.name)
+
+    ordered_ids: list[int] = []
+    total = 0
+    if sort in {"price", "art"}:
+        all_cards = (
+            query.order_by(Card.id.asc())
+            .options(load_only(*card_columns))
+            .all()
+        )
+        total = len(all_cards)
+
+        if not sc.cache_ready():
+            sc.ensure_cache_loaded()
+        full_print_map = _bulk_print_lookup(all_cards)
+
+        if sort == "price":
+            price_values = {}
+            for c in all_cards:
+                pr = full_print_map.get(c.id, {})
+                prices = _prices_for_print_exact(pr) if pr else {}
+                price_values[c.id] = _price_value_from_prices(prices, bool(c.is_foil))
+
+            def _price_sort_key(card):
+                value = price_values.get(card.id)
+                missing = value is None
+                if reverse:
+                    return (missing, -(value or 0.0))
+                return (missing, value or 0.0)
+
+            ordered_ids = [card.id for card in sorted(all_cards, key=_price_sort_key)]
+        else:
+            art_missing = {}
+            for c in all_cards:
+                pr = full_print_map.get(c.id, {})
+                img_package = sc.image_for_print(pr) if pr else {}
+                thumb_src = img_package.get("small") or img_package.get("normal") or img_package.get("large")
+                if not thumb_src:
+                    thumb_src = _image_from_print(pr)
+                art_missing[c.id] = 0 if thumb_src else 1
+
+            ordered_ids = [
+                card.id
+                for card in sorted(
+                    all_cards,
+                    key=lambda card: art_missing.get(card.id, 1),
+                    reverse=reverse,
+                )
+            ]
+    else:
+        order_expr = order_col.desc() if reverse else order_col.asc()
+        ordered_ids = [
+            cid
+            for (cid,) in query.with_entities(Card.id).order_by(order_expr).all()
+        ]
+        total = len(ordered_ids)
+
+    pages = max(1, ceil(total / per)) if per else 1
+    page = min(page, pages)
+    start = (page - 1) * per + 1 if total else 0
+    end = min(start + per - 1, total) if total else 0
+    offset = (page - 1) * per
+    page_ids = ordered_ids[offset: offset + per]
+    if page_ids:
+        page_cards = (
+            query.options(
+                load_only(*card_columns),
+                selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
+            )
+            .filter(Card.id.in_(page_ids))
+            .all()
+        )
+        page_map = {c.id: c for c in page_cards}
+        cards = [page_map[card_id] for card_id in page_ids if card_id in page_map]
+    else:
+        cards = []
+
+    oracle_ids = {c.oracle_id for c in cards if c.oracle_id}
+    core_role_map: dict[str, list[str]] = {}
+    evergreen_map: dict[str, list[str]] = {}
+    if oracle_ids:
+        core_rows = (
+            db.session.query(OracleCoreRoleTag.oracle_id, OracleCoreRoleTag.role)
+            .filter(OracleCoreRoleTag.oracle_id.in_(oracle_ids))
+            .order_by(OracleCoreRoleTag.role.asc())
+            .all()
+        )
+        for oracle_id, role in core_rows:
+            if not role:
+                continue
+            bucket = core_role_map.setdefault(oracle_id, [])
+            if role not in bucket:
+                bucket.append(role)
+        evergreen_rows = (
+            db.session.query(OracleEvergreenTag.oracle_id, OracleEvergreenTag.keyword)
+            .filter(OracleEvergreenTag.oracle_id.in_(oracle_ids))
+            .order_by(OracleEvergreenTag.keyword.asc())
+            .all()
+        )
+        for oracle_id, keyword in evergreen_rows:
+            if not keyword:
+                continue
+            bucket = evergreen_map.setdefault(oracle_id, [])
+            if keyword not in bucket:
+                bucket.append(keyword)
+
+    # Build template display maps (use normalized fields; Scryfall only for art)
+    if not sc.cache_ready():
+        sc.ensure_cache_loaded()
+    image_map, hover_map = {}, {}
+    type_map = {}
+
+    print_map = _bulk_print_lookup(cards)
+    price_text_map: dict[int, str | None] = {}
+    price_value_map: dict[int, float | None] = {}
 
     for c in cards:
         pr = print_map.get(c.id, {})
@@ -2780,24 +2835,6 @@ def list_cards():
                 price_text=price_text_map.get(c.id),
             )
         )
-
-    if sort == "price":
-        def _price_sort_key(card_vm: CardListItemVM):
-            value = price_value_map.get(card_vm.id)
-            missing = value is None
-            name_key = (card_vm.display_name or card_vm.name or "").lower()
-            if reverse:
-                return (missing, -(value or 0.0), name_key)
-            return (missing, value or 0.0, name_key)
-
-        cards_vm.sort(key=_price_sort_key)
-    elif sort == "art":
-        def _art_sort_key(card_vm: CardListItemVM):
-            missing = 1 if not card_vm.image_small else 0
-            name_key = (card_vm.display_name or card_vm.name or "").lower()
-            return (missing, name_key)
-
-        cards_vm.sort(key=_art_sort_key, reverse=reverse)
 
     def _url_with(page_num: int):
         args = request.args.to_dict(flat=False)
@@ -3607,7 +3644,14 @@ def build_deck_landing():
         if tag_label:
             reason = f"Suggested for {tag_label} because you own {coverage_pct}% of key cards."
         else:
-            reason = f"Recommended because you own {owned_count} high-synergy {_pluralize(owned_count, 'card')}."
+            reason = f"Suggested because you own {owned_count} high-synergy {_pluralize(owned_count, 'card')}."
+
+        tag_hints = list(item.get("tag_hints") or [])
+        color_hint = None
+        covered_colors = int(item.get("color_covered") or 0)
+        total_colors = int(item.get("color_total") or 0)
+        if total_colors:
+            color_hint = f"Color coverage: {covered_colors}/{total_colors} commander colors represented."
         return BuildLandingCommanderVM(
             commander_name=commander_name,
             commander_oracle_id=commander_oracle_id,
@@ -3618,6 +3662,8 @@ def build_deck_landing():
             coverage_label=coverage_label,
             reason=reason,
             tag_label=tag_label,
+            tag_hints=tag_hints,
+            color_hint=color_hint,
         )
 
     collection_fits = [
@@ -3666,18 +3712,18 @@ def decks_overview():
         .outerjoin(Card, Card.folder_id == Folder.id)
         .filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
     )
-    rows = (
-        deck_query.group_by(
-            Folder.id,
-            Folder.name,
-            Folder.commander_oracle_id,
-            Folder.commander_name,
-            Folder.owner,
-            Folder.is_proxy,
-        )
-        .order_by(func.coalesce(func.sum(Card.quantity), 0).desc(), Folder.name.asc())
-        .all()
+    grouped = deck_query.group_by(
+        Folder.id,
+        Folder.name,
+        Folder.commander_oracle_id,
+        Folder.commander_name,
+        Folder.owner,
+        Folder.is_proxy,
     )
+    if sort:
+        rows = grouped.all()
+    else:
+        rows = grouped.order_by(func.coalesce(func.sum(Card.quantity), 0).desc()).all()
 
     # normalize for the template
     decks = []
@@ -3965,7 +4011,6 @@ def decks_overview():
             decks.sort(
                 key=lambda d: (
                     deck_bracket_map.get(d["id"], {}).get("level") or 0,
-                    d.get("name") or "",
                 ),
                 reverse=reverse,
             )
@@ -3973,7 +4018,6 @@ def decks_overview():
             decks.sort(
                 key=lambda d: (
                     (d.get("owner") or "").lower(),
-                    d.get("name") or "",
                 ),
                 reverse=reverse,
             )

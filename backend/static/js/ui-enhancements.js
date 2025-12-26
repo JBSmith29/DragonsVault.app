@@ -49,6 +49,27 @@
     const btn = submitter || form.querySelector('button[type="submit"], input[type="submit"]');
     if (!btn || btn.disabled) return;
     if (btn.dataset.uxFeedbackApplied === "1") return;
+    const submitName = btn.getAttribute("name");
+    if (submitName) {
+      const hasField = Array.from(form.elements).some((el) => {
+        if (!(el instanceof HTMLInputElement)) return false;
+        if (el === btn) return false;
+        if (el.name !== submitName) return false;
+        const type = (el.type || "").toLowerCase();
+        return type !== "submit" && type !== "button" && type !== "image";
+      });
+      if (!hasField) {
+        let mirror = form.querySelector(`input[data-ux-submit-mirror="1"][name="${submitName}"]`);
+        if (!mirror) {
+          mirror = document.createElement("input");
+          mirror.type = "hidden";
+          mirror.name = submitName;
+          mirror.dataset.uxSubmitMirror = "1";
+          form.appendChild(mirror);
+        }
+        mirror.value = btn.getAttribute("value") || "";
+      }
+    }
     const label = btn.dataset.progressLabel || "Working...";
     btn.dataset.uxFeedbackApplied = "1";
     if (!btn.dataset.uxOriginalLabel) {
