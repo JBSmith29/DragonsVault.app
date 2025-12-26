@@ -30,6 +30,7 @@ from services.deck_tags import (
     get_deck_tag_groups,
     is_valid_deck_tag,
 )
+from services.deck_metadata_wizard_service import build_deck_metadata_wizard_payload
 from services.deck_service import deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
 from services.request_cache import request_cached
 from services.scryfall_cache import (
@@ -4032,13 +4033,17 @@ def decks_overview():
             )
         )
 
+    deck_tag_groups = get_deck_tag_groups()
+    wizard_payload = build_deck_metadata_wizard_payload(folders, tag_groups=deck_tag_groups)
+
     return render_template(
         "decks/decks.html",
         decks=deck_vms,
         owner_summary=owner_summary,
         owner_names=_owner_names(decks),
         proxy_count=sum(1 for deck in decks if deck.get("is_proxy")),
-        deck_tag_groups=get_deck_tag_groups(),
+        deck_tag_groups=deck_tag_groups,
+        deck_metadata_wizard=wizard_payload,
     )
 
 

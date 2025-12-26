@@ -1,0 +1,87 @@
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade" id="deckMetadataWizardModal" tabindex="-1" aria-labelledby="deckMetadataWizardLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="deckMetadataWizardLabel">Complete Deck Metadata</h5>
+          <div class="text-muted small">Fill in missing commanders and deck tags one deck at a time.</div>
+        </div>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="deckMetadataWizardAlert" class="alert alert-warning d-none" role="alert"></div>
+        <div id="deckMetadataWizardBody">
+          <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+            <div>
+              <div class="text-muted small">Deck</div>
+              <div class="h5 mb-0" id="deckMetadataWizardDeckName">—</div>
+            </div>
+            <div class="text-muted small" id="deckMetadataWizardProgress"></div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <div class="badge bg-secondary-subtle text-dark" id="deckMetadataWizardCommanderBadge">
+              Commander: <span id="deckMetadataWizardCommanderCurrent">Not set</span>
+            </div>
+            <div class="badge bg-secondary-subtle text-dark" id="deckMetadataWizardTagBadge">
+              Tag: <span id="deckMetadataWizardTagCurrent">Not set</span>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <section class="mb-4" id="deckMetadataWizardCommanderSection">
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <h6 class="mb-0">Commander</h6>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="deckMetadataWizardCommanderChangeBtn">Change commander</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="deckMetadataWizardCommanderKeepBtn">Keep current</button>
+                <button type="button" class="btn btn-sm btn-outline-danger d-none" id="deckMetadataWizardCommanderClearBtn">Clear commander</button>
+              </div>
+            </div>
+            <div class="text-muted small mt-2" id="deckMetadataWizardCommanderHint"></div>
+            <div class="mt-3 d-none" id="deckMetadataWizardCommanderPicker">
+              <input type="text" class="form-control form-control-sm" id="deckMetadataWizardCommanderFilter" placeholder="Filter commanders...">
+              <div class="legend-grid wizard-commander-list mt-3" id="deckMetadataWizardCommanderList"></div>
+            </div>
+          </section>
+
+          <section class="mb-4" id="deckMetadataWizardTagSection">
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <h6 class="mb-0">Deck Tag</h6>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="deckMetadataWizardTagChangeBtn">Change tag</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="deckMetadataWizardTagKeepBtn">Keep current</button>
+                <button type="button" class="btn btn-sm btn-outline-danger d-none" id="deckMetadataWizardTagClearBtn">Clear tag</button>
+              </div>
+            </div>
+            <div class="text-muted small mt-2" id="deckMetadataWizardTagHint"></div>
+            <div class="mt-3 d-none" id="deckMetadataWizardTagPicker">
+              <input type="text" class="form-control form-control-sm" id="deckMetadataWizardTagFilter" placeholder="Filter tags...">
+              <div class="wizard-tag-list mt-3" id="deckMetadataWizardTagGroups"></div>
+              <div class="text-muted small fst-italic text-center d-none mt-3" id="deckMetadataWizardTagEmpty">No tags match this filter.</div>
+            </div>
+          </section>
+
+          <section id="deckMetadataWizardConfirmSection">
+            <h6>Confirm changes</h6>
+            <div class="small text-muted" id="deckMetadataWizardSummary">No changes selected yet.</div>
+          </section>
+        </div>
+        <div id="deckMetadataWizardComplete" class="text-center py-4 d-none">
+          <h5 class="mb-2">All set.</h5>
+          <p class="text-muted mb-0">Every deck in this list now has a commander and a tag.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="text-muted small me-auto" id="deckMetadataWizardFooterStatus" aria-live="polite"></div>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-secondary" id="deckMetadataWizardSkipBtn">Skip deck</button>
+        <button type="button" class="btn btn-primary" id="deckMetadataWizardApplyBtn">Apply &amp; Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}

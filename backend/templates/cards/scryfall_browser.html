@@ -655,7 +655,6 @@
 <script>
 (function(){
   const KEY_URL = 'sfb:lastURL';
-  const KEY_SCROLL = 'sfb:scrollY';
   const pathRoot = "{{ url_for('views.scryfall_browser') }}";
   const current = location.pathname + location.search;
   const hasQuery = !!(location.search && location.search.length > 1);
@@ -675,27 +674,10 @@
 
   localStorage.setItem(KEY_URL, current);
 
-  const y = sessionStorage.getItem(KEY_SCROLL);
-  if (y) {
-    const yy = parseInt(y, 10);
-    if (!Number.isNaN(yy)) window.scrollTo(0, yy);
-  }
-
-  window.addEventListener('beforeunload', () => {
-    sessionStorage.setItem(KEY_SCROLL, String(window.scrollY || 0));
-  });
-
   document.getElementById('sfbReset')?.addEventListener('click', () => {
     localStorage.removeItem(KEY_URL);
-    sessionStorage.removeItem(KEY_SCROLL);
   });
 
-document.addEventListener('click', (e) => {
-  const a = e.target.closest('.pagination a, a.page-link');
-  if (a && a.href) {
-    sessionStorage.setItem(KEY_SCROLL, String(window.scrollY || 0));
-  }
-});
 })();
 </script>
 

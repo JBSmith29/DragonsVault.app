@@ -266,6 +266,21 @@
   .legend-card .btn {
     margin-top:.5rem;
   }
+  .wizard-commander-list,
+  .wizard-tag-list {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .wizard-tag-list {
+    max-height: 260px;
+  }
+  .wizard-commander-card.active {
+    border-color: rgba(var(--bs-primary-rgb), 0.7);
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.2);
+  }
+  .wizard-tag-option.active {
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.3);
+  }
 
   @media (min-width: 768px) {
     #deckDrawer.offcanvas { width: 540px; }
@@ -280,13 +295,18 @@
 </style>
 
 {% include "decks/deck_tag_modal.html" %}
+{% include "decks/deck_metadata_wizard_modal.html" %}
+
+<script type="application/json" id="deckMetadataWizardData">
+  {{ deck_metadata_wizard | tojson }}
+</script>
 
 <div class="page-section">
   {% set total_decks = decks|length if decks is defined else 0 %}
   {% set proxy_total = proxy_count or 0 %}
   {% set owned_total = total_decks - proxy_total %}
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-    <div>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+      <div>
       <h1 class="h3 mb-1">Decks</h1>
       <div class="text-muted small d-flex flex-wrap align-items-center gap-3">
         <span>Total: <strong>{{ '{:,}'.format(total_decks) }}</strong></span>
@@ -348,6 +368,11 @@
   {% endif %}
 
   {% if decks and decks|length %}
+    <div class="d-flex justify-content-start mb-2">
+      <button class="btn btn-outline-info btn-sm" type="button" id="deckMetadataWizardBtn">
+        Finish Deck Setup
+      </button>
+    </div>
     <div class="table-responsive">
       <table class="table table-sm align-middle cards-table">
         {# Determine the next direction for each sortable column link #}
@@ -1008,6 +1033,27 @@
   let activeFolderId = null;
   let activeBadge = null;
   let activeButton = null;
+  let focusTimer = null;
+
+  function focusFilterInput() {
+    if (!filterInput) return;
+    if (focusTimer) {
+      clearTimeout(focusTimer);
+      focusTimer = null;
+    }
+    const applyFocus = () => {
+      try {
+        filterInput.focus({ preventScroll: true });
+      } catch (_) {
+        filterInput.focus();
+      }
+      filterInput.select();
+    };
+    requestAnimationFrame(() => {
+      applyFocus();
+      focusTimer = setTimeout(applyFocus, 120);
+    });
+  }
 
   function setStatus(msg, level) {
     if (!statusEl) return;
@@ -1139,12 +1185,7 @@
     setStatus('');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
-    if (filterInput) {
-      requestAnimationFrame(() => {
-        filterInput.focus();
-        filterInput.select();
-      });
-    }
+    focusFilterInput();
   }
 
   const pendingFolderId = (() => {
@@ -1168,10 +1209,7 @@
   }
 
   modalEl.addEventListener('shown.bs.modal', () => {
-    if (filterInput) {
-      filterInput.focus();
-      filterInput.select();
-    }
+    focusFilterInput();
   });
 
   if (clearBtn) {
@@ -1215,6 +1253,8 @@
   }
 })();
 </script>
+
+<script src="{{ url_for('static', filename='js/deck_metadata_wizard.js') }}" defer></script>
 
 <script>
 (function(){
