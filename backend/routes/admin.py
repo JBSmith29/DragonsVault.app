@@ -806,11 +806,18 @@ def admin_console():
             n /= 1024
         return f"{n:.1f} PB"
 
-    def _refresh_edhrec(force_refresh: bool) -> dict:
+    def _refresh_edhrec(force_refresh: bool, scope: str) -> dict:
         job_id = f"inline-{uuid.uuid4().hex[:8]}"
-        emit_job_event("edhrec", "queued", job_id=job_id, dataset="synergy", force=int(force_refresh))
-        emit_job_event("edhrec", "started", job_id=job_id, dataset="synergy", rq_id=None)
-        result = refresh_edhrec_synergy_cache(force_refresh=force_refresh, scope="all")
+        emit_job_event(
+            "edhrec",
+            "queued",
+            job_id=job_id,
+            dataset="synergy",
+            force=int(force_refresh),
+            scope=scope,
+        )
+        emit_job_event("edhrec", "started", job_id=job_id, dataset="synergy", rq_id=None, scope=scope)
+        result = refresh_edhrec_synergy_cache(force_refresh=force_refresh, scope=scope)
         status = result.get("status") or "error"
         message = result.get("message") or "EDHREC refresh failed."
         if status == "error":
@@ -1177,7 +1184,7 @@ def admin_console():
                     summary_warnings.append(f"Commander Spellbook combos failed: {exc}")
 
             try:
-                edhrec_info = _refresh_edhrec(force_refresh=True)
+                edhrec_info = _refresh_edhrec(force_refresh=True, scope="full")
                 status = edhrec_info.get("status")
                 message = edhrec_info.get("message")
                 if status == "success":
@@ -1212,8 +1219,9 @@ def admin_console():
 
         if action == "refresh_edhrec":
             force_refresh = bool(request.form.get("force_refresh"))
+            refresh_scope = (request.form.get("refresh_scope") or "delta").strip().lower()
             try:
-                info = _refresh_edhrec(force_refresh=force_refresh)
+                info = _refresh_edhrec(force_refresh=force_refresh, scope=refresh_scope)
                 status = info.get("status", "info")
                 message = info.get("message", "EDHREC refresh completed.")
                 if status == "error":
@@ -1226,7 +1234,7 @@ def admin_console():
                     flash(err, "warning")
                 record_audit_event(
                     "admin_action",
-                    {"action": action, "force": force_refresh},
+                    {"action": action, "force": force_refresh, "scope": refresh_scope},
                 )
             except Exception as exc:
                 current_app.logger.exception("EDHREC refresh failed")
@@ -1347,6 +1355,7 @@ def admin_console():
         "error": edhrec_error,
         "commanders": edhrec_snapshot.get("commanders", {}),
         "themes": edhrec_snapshot.get("tags", {}),
+        "metadata": edhrec_snapshot.get("metadata", {}) or {},
     }
     user_context = _user_management_context(include_users=False)
     request_counts = _site_request_counts()
@@ -1404,6 +1413,7 @@ def admin_data_operations():
         "error": edhrec_error,
         "commanders": edhrec_snapshot.get("commanders", {}),
         "themes": edhrec_snapshot.get("tags", {}),
+        "metadata": edhrec_snapshot.get("metadata", {}) or {},
     }
     return render_template(
         "admin/data_operations.html",

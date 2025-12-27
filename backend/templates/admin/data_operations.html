@@ -130,26 +130,50 @@
         <div class="card h-100">
           <div class="card-body">
             <div class="d-flex align-items-center justify-content-between mb-2">
-              <h5 class="card-title mb-0">Update EDHREC Tags</h5>
+              <h5 class="card-title mb-0">Update EDHREC Cache</h5>
               <span class="badge text-bg-warning">Medium impact</span>
             </div>
             <div class="small text-muted mb-2">
               Refreshes EDHREC-derived tag and synergy data used for recommendations.
             </div>
+            <div class="small text-muted mb-3">
+              Delta refresh fills missing commanders; full refresh re-pulls everything.
+            </div>
             {% if edhrec.enabled and not edhrec.error %}
               <div class="small text-muted mb-3">
                 Cached: {{ edhrec.commanders.count or 0 }} commanders &middot; {{ edhrec.themes.count or 0 }} tags
+                {% if edhrec.metadata.last_updated %}
+                  <br>Last updated: {{ edhrec.metadata.last_updated }}
+                {% endif %}
+                {% if edhrec.metadata.source_version %}
+                  <br>Source version: {{ edhrec.metadata.source_version }}
+                {% endif %}
               </div>
-              <form method="post" action="{{ url_for('views.admin_console') }}"
-                    data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
-                <input type="hidden" name="action" value="refresh_edhrec">
-                <input type="hidden" name="redirect_to" value="views.admin_data_operations">
-                <button class="btn btn-primary btn-sm" type="submit"
-                        data-confirm="Refresh EDHREC cache data now?"
-                        data-progress-label="Refreshing...">
-                  Refresh EDHREC Cache
-                </button>
-              </form>
+              <div class="d-flex flex-wrap gap-2">
+                <form method="post" action="{{ url_for('views.admin_console') }}"
+                      data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
+                  <input type="hidden" name="action" value="refresh_edhrec">
+                  <input type="hidden" name="refresh_scope" value="delta">
+                  <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+                  <button class="btn btn-primary btn-sm" type="submit"
+                          data-confirm="Refresh EDHREC cache for commanders missing data?"
+                          data-progress-label="Refreshing...">
+                    Delta Refresh
+                  </button>
+                </form>
+                <form method="post" action="{{ url_for('views.admin_console') }}"
+                      data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
+                  <input type="hidden" name="action" value="refresh_edhrec">
+                  <input type="hidden" name="refresh_scope" value="full">
+                  <input type="hidden" name="force_refresh" value="1">
+                  <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+                  <button class="btn btn-outline-primary btn-sm" type="submit"
+                          data-confirm="Run a full EDHREC refresh? This can take a while."
+                          data-progress-label="Refreshing...">
+                    Full Refresh
+                  </button>
+                </form>
+              </div>
             {% else %}
               <div class="alert alert-warning small mb-3">
                 {{ edhrec.error or 'EDHREC service is unavailable.' }}

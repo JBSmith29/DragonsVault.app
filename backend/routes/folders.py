@@ -38,6 +38,12 @@ def build_add_card(folder_id: int):
     return folder_service.build_add_card(folder_id)
 
 
+@views.post("/folders/<int:folder_id>/build/remove-cards")
+@login_required
+def build_remove_cards(folder_id: int):
+    return folder_service.build_remove_cards(folder_id)
+
+
 @views.post("/folders/<int:folder_id>/build/finish")
 @login_required
 def finish_build(folder_id: int):
@@ -135,6 +141,7 @@ __all__ = [
     "clear_folder_commander",
     "clear_folder_tag",
     "build_add_card",
+    "build_remove_cards",
     "finish_build",
     "commander_brackets_info",
     "commander_spellbook_combos",

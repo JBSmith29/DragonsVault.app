@@ -343,6 +343,18 @@ td, th {
   line-height: 1;
 }
 
+.build-tag-badge {
+  background: rgba(var(--bs-info-rgb), 0.22);
+  border: 1px solid rgba(var(--bs-info-rgb), 0.5);
+  color: var(--bs-info);
+}
+
+.build-commander-image {
+  height: 140px;
+  object-fit: cover;
+  object-position: 50% 20%;
+}
+
 /* Defaults (used when no specific override exists) */
 .badge-type   { background:#475569; color:#ffffff; } /* slate */
 .badge-folder { background:#334155; color:#e2e8f0; } /* darker slate */

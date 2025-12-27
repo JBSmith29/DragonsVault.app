@@ -14,9 +14,10 @@
 <div id="folderDetailRoot"
      data-folder-id="{{ folder.id }}"
      data-export-url="{{ url_for('views.export_cards', folder=folder.id) }}"
-     data-bulk-delete-url="{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}"
+     data-bulk-delete-url="{{ url_for('views.build_remove_cards', folder_id=folder.id) if folder.is_build else url_for('views.bulk_delete_cards', folder_id=folder.id) }}"
      data-bulk-move-url="{{ url_for('views.bulk_move_cards') }}"
-     data-counts-url="{{ url_for('views.folder_counts', folder_id=folder.id) }}">
+     data-counts-url="{{ url_for('views.folder_counts', folder_id=folder.id) }}"
+     data-folder-is-build="{{ 'true' if folder.is_build else 'false' }}">
 
 <style>
   :root {
@@ -1713,7 +1714,9 @@
     </table>
   </div>
   <div class="mt-3 d-flex justify-content-end">
-    <button type="button" class="btn btn-outline-danger btn-sm" id="folderBottomDelete" disabled>Delete</button>
+    <button type="button" class="btn btn-outline-danger btn-sm" id="folderBottomDelete" disabled>
+      {{ 'Remove from Build' if folder.is_build else 'Delete' }}
+    </button>
   </div>
 </div>
 
@@ -1747,7 +1750,9 @@
       </div>
       <div class="col-12 col-lg-5 d-flex gap-2 justify-content-end flex-wrap mt-2 mt-lg-0">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="folderActionEditBtn" disabled>Edit printing</button>
-        <button type="button" class="btn btn-outline-danger btn-sm" id="folderActionDelete" disabled>Delete selected</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" id="folderActionDelete" disabled>
+          {{ 'Remove from Build' if folder.is_build else 'Delete selected' }}
+        </button>
         <button type="button" class="btn btn-primary btn-sm" id="folderActionMoveBtn" disabled>Move selected</button>
       </div>
     </div>
@@ -2034,8 +2039,11 @@
   const bottomDeleteBtn = document.getElementById('folderBottomDelete');
   const bulkEditBtn = document.getElementById('folderActionEditBtn');
   const selectAllToggle = document.getElementById('folderSelectAll');
-const statUniqueEl = document.querySelector('[data-stat-unique]');
-const statTotalEl = document.querySelector('[data-stat-total]');
+  const folderRoot = document.getElementById('folderDetailRoot');
+  const isBuildFolder = folderRoot?.dataset?.folderIsBuild === 'true';
+  const bulkDeleteUrl = folderRoot?.dataset?.bulkDeleteUrl || "{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}";
+  const statUniqueEl = document.querySelector('[data-stat-unique]');
+  const statTotalEl = document.querySelector('[data-stat-total]');
 let rowCheckboxes = Array.from(document.querySelectorAll('#folderCardsTable .card-select'));
 const csrfToken = window.csrfToken || document.querySelector('meta[name=\"csrf-token\"]')?.content || '';
 const csrfHeader = window.csrfHeader || (csrfToken ? {"X-CSRFToken": csrfToken} : {});
@@ -2132,12 +2140,15 @@ let bulkStatusTimer = null;
     const ids = selectedCheckboxes().map(cb => cb.value);
     if (!ids.length) return;
     const count = ids.length;
-    if (!window.confirm(`Delete ${count} card(s)? This cannot be undone.`)) return;
+    const confirmMessage = isBuildFolder
+      ? `Remove ${count} card(s) from this build? Cards in your collection will remain.`
+      : `Delete ${count} card(s)? This cannot be undone.`;
+    if (!window.confirm(confirmMessage)) return;
     if (bulkDeleteBtn) bulkDeleteBtn.disabled = true;
     if (bottomDeleteBtn) bottomDeleteBtn.disabled = true;
-    setBulkStatus(`Deleting ${count} card(s)...`, 'warning');
+    setBulkStatus(`${isBuildFolder ? 'Removing' : 'Deleting'} ${count} card(s)...`, 'warning');
     try {
-      const res = await fetch("{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}", {
+      const res = await fetch(bulkDeleteUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2155,12 +2166,12 @@ let bulkStatusTimer = null;
       updateStatsFromRows();
       applyFilters();
       updateBulkBar();
-      setBulkStatus(`Deleted ${count} card(s).`, 'success');
+      setBulkStatus(`${isBuildFolder ? 'Removed' : 'Deleted'} ${count} card(s).`, 'success');
     } catch (err) {
       console.error("Bulk delete failed", err);
       if (bulkDeleteBtn) bulkDeleteBtn.disabled = false;
       if (bottomDeleteBtn) bottomDeleteBtn.disabled = false;
-      setBulkStatus('Delete failed. Please try again.', 'danger');
+      setBulkStatus(isBuildFolder ? 'Remove failed. Please try again.' : 'Delete failed. Please try again.', 'danger');
     }
   }
 

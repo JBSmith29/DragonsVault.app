@@ -7,43 +7,42 @@ import logging
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
-from services.edhrec_cache_service import refresh_edhrec_cache
+from services.edhrec.edhrec_ingestion_service import run_monthly_edhrec_ingestion
 
 _LOG = logging.getLogger(__name__)
 
 
 def refresh_edhrec_synergy_cache(*, force_refresh: bool, scope: str = "all") -> dict:
-    _LOG.info("EDHREC refresh started (force=%s, scope=%s).", force_refresh, scope)
+    _LOG.info("EDHREC ingestion started (force=%s, scope=%s).", force_refresh, scope)
+    scope_key = (scope or "all").strip().lower()
+    full_refresh = bool(force_refresh) or scope_key in {"all", "full"}
     try:
-        result = refresh_edhrec_cache(force_refresh=force_refresh, scope=scope)
+        summary = run_monthly_edhrec_ingestion(full_refresh=full_refresh)
     except SQLAlchemyError:
         db.session.rollback()
-        _LOG.error("EDHREC refresh failed due to database error.", exc_info=True)
+        _LOG.error("EDHREC ingestion failed due to database error.", exc_info=True)
         return {"status": "error", "message": "Database error while refreshing EDHREC cache."}
     except Exception as exc:
-        _LOG.exception("EDHREC refresh failed")
+        _LOG.exception("EDHREC ingestion failed")
         return {
             "status": "error",
             "message": f"EDHREC refresh failed: {exc}",
         }
 
-    if result.get("status") == "error":
-        return {
-            "status": "error",
-            "message": result.get("message") or "EDHREC refresh failed.",
-            "targets": result.get("targets"),
-        }
-
-    commander_summary = result.get("commanders") or {}
-    message = result.get("message") or "EDHREC cache updated."
-    if result.get("errors"):
-        _LOG.warning("EDHREC refresh completed with errors: %s", len(result.get("errors") or []))
-    _LOG.info("EDHREC refresh completed: %s", message)
+    errors = summary.get("errors") or 0
+    commanders = summary.get("commanders_processed") or 0
+    cards = summary.get("cards_inserted") or 0
+    tags = summary.get("tags_inserted") or 0
+    status = "success" if commanders else "warning"
+    message = f"EDHREC cache updated for {commanders} commanders ({cards} cards, {tags} tags)."
+    if errors:
+        status = "warning" if commanders else "error"
+        _LOG.warning("EDHREC ingestion completed with %s error(s).", errors)
+    _LOG.info("EDHREC ingestion completed: %s", message)
     return {
-        "status": result.get("status", "success"),
+        "status": status,
         "message": message,
-        "errors": result.get("errors") or [],
-        "targets": result.get("targets") or {},
-        "commanders": commander_summary,
-        "themes": result.get("tags") or {},
+        "errors": [f"{errors} error(s) encountered."] if errors else [],
+        "commanders": {"processed": commanders, "cards": cards},
+        "themes": {"count": tags},
     }

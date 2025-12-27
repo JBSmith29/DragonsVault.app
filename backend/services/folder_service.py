@@ -47,7 +47,7 @@ from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_
 from services.authz import ensure_folder_access
 from services.deck_service import deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
 from utils.db import get_or_404
-from utils.validation import ValidationError, log_validation_error, parse_positive_int
+from utils.validation import ValidationError, log_validation_error, parse_positive_int, parse_positive_int_list
 
 from routes.base import (
     _bulk_print_lookup,
@@ -1224,6 +1224,95 @@ def build_add_card(folder_id: int):
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
 
+def build_remove_cards(folder_id: int):
+    folder = get_or_404(Folder, folder_id)
+    ensure_folder_access(folder, write=True)
+    if not folder.is_build:
+        message = "Cards can only be removed from build decks."
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+    json_payload = request.get_json(silent=True) or {}
+    wants_json = request.is_json or bool(json_payload) or "application/json" in (request.headers.get("Accept") or "")
+    redirect_target = (
+        request.form.get("redirect_to")
+        or request.referrer
+        or url_for("views.folder_detail", folder_id=folder_id)
+    )
+
+    def _gather_raw_ids() -> list[str]:
+        raw: list[str] = []
+
+        def _extend(value):
+            if value is None:
+                return
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    _extend(item)
+            else:
+                raw.append(str(value))
+
+        _extend(json_payload.get("card_ids") or json_payload.get("cardIds"))
+        if not raw:
+            _extend(request.form.getlist("card_ids"))
+            _extend(request.form.getlist("card_ids[]"))
+        if not raw:
+            single = request.form.get("card_id")
+            if single:
+                raw.append(single)
+        return raw
+
+    try:
+        card_ids = parse_positive_int_list(_gather_raw_ids(), field="card id(s)")
+    except ValidationError as exc:
+        log_validation_error(exc, context="build_remove_cards")
+        message = "Invalid card id(s) supplied."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(redirect_target)
+    if not card_ids:
+        message = "Select at least one card to remove."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(redirect_target)
+
+    cards = (
+        Card.query.filter(Card.id.in_(card_ids), Card.folder_id == folder.id)
+        .order_by(Card.id.asc())
+        .all()
+    )
+    if not cards:
+        message = "No matching cards were found in this build."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 404
+        flash(message, "warning")
+        return redirect(redirect_target)
+
+    removed_qty = 0
+    for card in cards:
+        removed_qty += card.quantity or 0
+        db.session.delete(card)
+
+    from services.deck_service import recompute_deck_stats
+
+    recompute_deck_stats(folder.id)
+    _safe_commit()
+
+    message = (
+        f"Removed {len(cards)} card{'s' if len(cards) != 1 else ''} "
+        f"from this build ({removed_qty} cop{'ies' if removed_qty != 1 else 'y'})."
+    )
+    if wants_json:
+        return jsonify({"ok": True, "message": message, "removed": len(cards), "removed_qty": removed_qty})
+
+    flash(message, "success")
+    return redirect(redirect_target)
+
+
 def finish_build(folder_id: int):
     folder = get_or_404(Folder, folder_id)
     ensure_folder_access(folder, write=True)
@@ -1664,6 +1753,7 @@ __all__ = [
     "folder_sharing",
     "clear_folder_tag",
     "build_add_card",
+    "build_remove_cards",
     "finish_build",
     "set_folder_owner",
     "set_folder_proxy",

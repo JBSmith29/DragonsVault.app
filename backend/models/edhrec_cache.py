@@ -8,6 +8,7 @@ class EdhrecCommanderCard(db.Model):
 
     commander_oracle_id = db.Column(db.String(36), primary_key=True)
     card_oracle_id = db.Column(db.String(36), primary_key=True)
+    synergy_rank = db.Column(db.Integer, nullable=True)
     synergy_score = db.Column(db.Float, nullable=True)
 
 
@@ -23,3 +24,10 @@ class EdhrecTagCommander(db.Model):
 
     tag = db.Column(db.String(120), primary_key=True)
     commander_oracle_id = db.Column(db.String(36), primary_key=True)
+
+
+class EdhrecMetadata(db.Model):
+    __tablename__ = "edhrec_metadata"
+
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.Text, nullable=False)

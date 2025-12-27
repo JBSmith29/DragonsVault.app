@@ -85,12 +85,15 @@
       {% for fit in landing.collection_fits %}
         <div class="col-12 col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm">
+            {% if fit.commander_image %}
+              <img src="{{ fit.commander_image }}" class="card-img-top build-commander-image" alt="{{ fit.commander_name }}" loading="lazy">
+            {% endif %}
             <div class="card-body d-flex flex-column">
               <div class="fw-semibold mb-1">{{ fit.commander_name }}</div>
               {% if fit.tag_hints %}
                 <div class="d-flex flex-wrap gap-1 mb-2">
                   {% for hint in fit.tag_hints %}
-                    <span class="badge text-bg-light border text-muted">{{ hint }}</span>
+                    <span class="badge build-tag-badge">{{ hint }}</span>
                   {% endfor %}
                 </div>
               {% endif %}
@@ -196,12 +199,15 @@
           {% for fit in landing.tag_fits %}
             <div class="col-12 col-md-6 col-lg-4">
               <div class="card h-100 border-0 shadow-sm">
+                {% if fit.commander_image %}
+                  <img src="{{ fit.commander_image }}" class="card-img-top build-commander-image" alt="{{ fit.commander_name }}" loading="lazy">
+                {% endif %}
                 <div class="card-body d-flex flex-column">
                   <div class="fw-semibold mb-1">{{ fit.commander_name }}</div>
                   {% if fit.tag_hints %}
                     <div class="d-flex flex-wrap gap-1 mb-2">
                       {% for hint in fit.tag_hints %}
-                        <span class="badge text-bg-light border text-muted">{{ hint }}</span>
+                        <span class="badge build-tag-badge">{{ hint }}</span>
                       {% endfor %}
                     </div>
                   {% endif %}

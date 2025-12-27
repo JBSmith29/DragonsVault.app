@@ -32,6 +32,36 @@ class FetchResult:
     url: str
 
 
+def _get_with_backoff(
+    session: requests.Session,
+    url: str,
+    timeout: int,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    max_attempts: int = 8,
+) -> requests.Response:
+    request_delay = getattr(session, "edhrec_request_delay", 0.0) or 0.0
+    last_response: Optional[requests.Response] = None
+    for attempt in range(max_attempts):
+        if request_delay > 0:
+            time.sleep(request_delay)
+        response = session.get(url, timeout=timeout, headers=headers)
+        last_response = response
+        if response.status_code != 429:
+            return response
+        retry_after = response.headers.get("Retry-After")
+        try:
+            sleep_for = int(retry_after) if retry_after else 0
+        except (TypeError, ValueError):
+            sleep_for = 0
+        if sleep_for <= 0:
+            sleep_for = min(60, 5 * (attempt + 1))
+        time.sleep(sleep_for)
+    if last_response is None:
+        raise EdhrecError(f"EDHREC request failed for {url}")
+    return last_response
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -178,7 +208,7 @@ def _fetch_panels_from_json_api(session: requests.Session, url: str, timeout: in
     api_path = "/".join(slug_parts)
     json_url = f"https://json.edhrec.com/pages/{category}/{api_path}.json"
     try:
-        response = session.get(json_url, timeout=timeout)
+        response = _get_with_backoff(session, json_url, timeout)
         if response.status_code == 404:
             return {}
         response.raise_for_status()
@@ -246,7 +276,7 @@ def _download_json_dict(
     *,
     commander_slug: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, str]]]:
-    response = session.get(url, timeout=timeout)
+    response = _get_with_backoff(session, url, timeout)
     if response.status_code == 404:
         raise EdhrecError(f"EDHREC page not found: {url}")
     response.raise_for_status()
@@ -276,7 +306,7 @@ def _download_index_json_dict(
     url: str,
     timeout: int,
 ) -> Dict[str, Any]:
-    response = session.get(url, timeout=timeout)
+    response = _get_with_backoff(session, url, timeout)
     if response.status_code == 404:
         raise EdhrecError(f"EDHREC page not found: {url}")
     response.raise_for_status()
@@ -365,7 +395,7 @@ def _download_index_page(
     referer: str,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     headers = {"Referer": referer, "Accept": "application/json"}
-    response = session.get(url, timeout=timeout, headers=headers)
+    response = _get_with_backoff(session, url, timeout, headers=headers)
     if response.status_code == 404:
         return [], None
     response.raise_for_status()
@@ -410,6 +440,7 @@ def _payload_from_json_dict(
 class EdhrecFetcher:
     def __init__(self, config: ServiceConfig) -> None:
         self._timeout = max(1, int(config.request_timeout))
+        self._request_delay = max(0.0, float(config.request_delay))
         self._session = requests.Session()
         self._session.headers.update(
             {
@@ -419,6 +450,7 @@ class EdhrecFetcher:
                 "Connection": "keep-alive",
             }
         )
+        self._session.edhrec_request_delay = self._request_delay
         retries = max(0, int(config.http_retries))
         if retries:
             retry = Retry(
@@ -427,6 +459,8 @@ class EdhrecFetcher:
                 read=retries,
                 backoff_factor=0.3,
                 status_forcelist=(429, 500, 502, 503, 504),
+                raise_on_status=False,
+                respect_retry_after_header=True,
                 allowed_methods=("GET",),
             )
             adapter = HTTPAdapter(max_retries=retry)
@@ -516,7 +550,7 @@ class EdhrecFetcher:
                     allow_sanitized=True,
                 )
             )
-            time.sleep(0.2)
+            time.sleep(max(0.2, self._request_delay))
         return entries
 
     def fetch_theme_index(self, *, max_pages: Optional[int] = None) -> List[Dict[str, str]]:
@@ -556,5 +590,5 @@ class EdhrecFetcher:
                     allow_sanitized=False,
                 )
             )
-            time.sleep(0.2)
+            time.sleep(max(0.2, self._request_delay))
         return entries

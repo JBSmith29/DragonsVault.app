@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Iterable
 
-from sqlalchemy import func
+from sqlalchemy import func, inspect, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
@@ -13,6 +15,7 @@ from models import (
     EdhrecCommanderCard,
     EdhrecCommanderTag,
     EdhrecTagCommander,
+    EdhrecMetadata,
     Folder,
 )
 from services import scryfall_cache as sc
@@ -39,10 +42,50 @@ def _ensure_tables() -> None:
                 EdhrecCommanderCard.__table__,
                 EdhrecCommanderTag.__table__,
                 EdhrecTagCommander.__table__,
+                EdhrecMetadata.__table__,
             ],
         )
+        _ensure_columns()
     except Exception as exc:
         _LOG.error("Failed to ensure EDHREC cache tables: %s", exc)
+
+
+def _ensure_columns() -> None:
+    try:
+        inspector = inspect(db.engine)
+        columns = {col["name"] for col in inspector.get_columns("edhrec_commander_cards")}
+        if "synergy_rank" not in columns:
+            db.session.execute(text("ALTER TABLE edhrec_commander_cards ADD COLUMN synergy_rank INTEGER"))
+            db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        _LOG.warning("Failed to ensure EDHREC cache columns: %s", exc)
+
+
+def _bulk_upsert(model, rows: list[dict], index_elements: list[str], update_cols: list[str]) -> None:
+    if not rows:
+        return
+    bind = db.session.get_bind()
+    dialect = bind.dialect.name if bind is not None else ""
+    table = model.__table__
+    if dialect == "postgresql":
+        insert_stmt = pg_insert(table).values(rows)
+    elif dialect == "sqlite":
+        insert_stmt = sqlite_insert(table).values(rows)
+    else:
+        for row in rows:
+            db.session.merge(model(**row))
+        return
+
+    if update_cols:
+        update_map = {col: getattr(insert_stmt.excluded, col) for col in update_cols}
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=index_elements,
+            set_=update_map,
+        )
+    else:
+        stmt = insert_stmt.on_conflict_do_nothing(index_elements=index_elements)
+    db.session.execute(stmt)
 
 
 def _dedupe(values: Iterable[str]) -> list[str]:
@@ -271,28 +314,40 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
 
         commander_tags = _extract_commander_tags(payload)
 
+        card_rows = []
+        for rank, (oracle_id, score) in enumerate(top_cards, start=1):
+            card_rows.append(
+                {
+                    "commander_oracle_id": commander_oracle_id,
+                    "card_oracle_id": oracle_id,
+                    "synergy_rank": rank,
+                    "synergy_score": score,
+                }
+            )
+        tag_rows = [
+            {"commander_oracle_id": commander_oracle_id, "tag": tag}
+            for tag in commander_tags
+        ]
         try:
-            EdhrecCommanderCard.query.filter_by(
-                commander_oracle_id=commander_oracle_id
-            ).delete(synchronize_session=False)
-            for oracle_id, score in top_cards:
-                db.session.add(
-                    EdhrecCommanderCard(
-                        commander_oracle_id=commander_oracle_id,
-                        card_oracle_id=oracle_id,
-                        synergy_score=score,
-                    )
+            with db.session.no_autoflush:
+                EdhrecCommanderCard.query.filter_by(
+                    commander_oracle_id=commander_oracle_id
+                ).delete(synchronize_session=False)
+                _bulk_upsert(
+                    EdhrecCommanderCard,
+                    card_rows,
+                    ["commander_oracle_id", "card_oracle_id"],
+                    ["synergy_rank", "synergy_score"],
                 )
 
-            EdhrecCommanderTag.query.filter_by(
-                commander_oracle_id=commander_oracle_id
-            ).delete(synchronize_session=False)
-            for tag in commander_tags:
-                db.session.add(
-                    EdhrecCommanderTag(
-                        commander_oracle_id=commander_oracle_id,
-                        tag=tag,
-                    )
+                EdhrecCommanderTag.query.filter_by(
+                    commander_oracle_id=commander_oracle_id
+                ).delete(synchronize_session=False)
+                _bulk_upsert(
+                    EdhrecCommanderTag,
+                    tag_rows,
+                    ["commander_oracle_id", "tag"],
+                    [],
                 )
             db.session.commit()
         except SQLAlchemyError as exc:
@@ -365,15 +420,18 @@ def edhrec_cache_snapshot() -> dict:
         tag_count = db.session.query(
             func.count(func.distinct(EdhrecCommanderTag.tag))
         ).scalar()
+        meta_rows = db.session.query(EdhrecMetadata).all()
     except SQLAlchemyError as exc:
         db.session.rollback()
         _LOG.warning("Failed to read EDHREC cache snapshot: %s", exc)
         return {"status": "error", "error": "Unable to read EDHREC cache."}
 
+    metadata = {row.key: row.value for row in meta_rows if row.key and row.value}
     return {
         "status": "ok",
         "commanders": {"count": int(commander_count or 0), "cards": int(card_rows or 0)},
         "tags": {"count": int(tag_count or 0)},
+        "metadata": metadata,
     }
 
 
@@ -433,7 +491,10 @@ def _get_commander_synergy(commander_oracle_id: str, tags: Iterable[str] | None)
     try:
         rows = (
             EdhrecCommanderCard.query.filter_by(commander_oracle_id=commander_oracle_id)
-            .order_by(EdhrecCommanderCard.synergy_score.desc())
+            .order_by(
+                func.coalesce(EdhrecCommanderCard.synergy_score, 0).desc(),
+                func.coalesce(EdhrecCommanderCard.synergy_rank, 999999).asc(),
+            )
             .limit(_MAX_SYNERGY_CARDS)
             .all()
         )
@@ -458,6 +519,7 @@ def _get_commander_synergy(commander_oracle_id: str, tags: Iterable[str] | None)
                 "oracle_id": oracle_id,
                 "name": name,
                 "synergy_score": float(row.synergy_score or 0.0),
+                "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
                 "source": "edhrec",
                 "tag_matches": list(tag_matches),
             }

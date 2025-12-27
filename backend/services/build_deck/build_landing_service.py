@@ -115,6 +115,22 @@ def _commander_name(commander_oracle_id: str) -> str | None:
     return " // ".join(names)
 
 
+def _commander_image(commander_oracle_id: str) -> str | None:
+    for oid in split_commander_oracle_ids(commander_oracle_id):
+        pr = _preferred_print(oid)
+        if not pr:
+            continue
+        meta = sc.metadata_from_print(pr)
+        faces = meta.get("faces_json") or []
+        if faces:
+            image_uris = faces[0].get("image_uris") or {}
+            for key in ("normal", "large", "small"):
+                url = image_uris.get(key)
+                if url:
+                    return url
+    return None
+
+
 def _load_commander_candidates(limit: int) -> list[str]:
     if limit <= 0:
         return []
@@ -222,10 +238,12 @@ def _build_fit_summary(
     tag_bonus = 8.0 if tag_match else 0.0
     score = (owned_count * 3.0) + owned_synergy + tag_bonus + coverage_bonus
     coverage_pct = int(round((owned_count / len(top)) * 100)) if top else 0
+    commander_image = _commander_image(commander_oracle_id)
 
     return {
         "commander_name": commander_name,
         "commander_oracle_id": commander_oracle_id,
+        "commander_image": commander_image,
         "owned_count": owned_count,
         "total_considered": len(top),
         "coverage_pct": coverage_pct,
