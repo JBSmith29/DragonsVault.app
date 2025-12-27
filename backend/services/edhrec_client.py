@@ -21,6 +21,7 @@ __all__ = [
     "commander_cardviews",
     "theme_cardviews",
     "merge_cardviews",
+    "edhrec_index",
     "edhrec_cache_snapshot",
     "edhrec_service_enabled",
     "refresh_edhrec_cache",
@@ -186,11 +187,16 @@ def ensure_commander_data(
     theme_slug: Optional[str] = None,
     force_refresh: bool = False,
     max_age_hours: Optional[int] = None,
+    slug_override: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[Dict[str, Any]], Optional[str]]:
     if not commander_name:
         return None, None, "Commander name is missing."
-    slug_source = commander_name.partition("//")[0].strip()
-    slug = slugify_commander(slug_source or commander_name)
+    slug_override = (slug_override or "").strip()
+    if slug_override:
+        slug = slug_override.lower()
+    else:
+        slug_source = commander_name.partition("//")[0].strip()
+        slug = slugify_commander(slug_source or commander_name)
     if not slug:
         return None, None, f"Unable to derive EDHREC slug for '{commander_name}'."
 
@@ -365,6 +371,28 @@ def _full_edhrec_url(url: Optional[str]) -> Optional[str]:
     if not url.startswith("/"):
         url = f"/{url}"
     return f"https://edhrec.com{url}"
+
+
+def edhrec_index(
+    *,
+    include_commanders: bool = True,
+    include_themes: bool = True,
+    max_pages: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> Dict[str, Any]:
+    params = {
+        "commanders": int(bool(include_commanders)),
+        "themes": int(bool(include_themes)),
+    }
+    if isinstance(max_pages, int) and max_pages > 0:
+        params["max_pages"] = max_pages
+    if isinstance(limit, int) and limit > 0:
+        params["limit"] = limit
+
+    response = _service_request("GET", "/v1/edhrec/index", params=params)
+    if response.get("status") != "ok":
+        raise EdhrecError(response.get("error") or "EDHREC index lookup failed.")
+    return response
 
 
 def edhrec_cache_snapshot() -> Dict[str, Any]:

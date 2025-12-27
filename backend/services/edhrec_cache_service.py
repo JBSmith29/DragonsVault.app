@@ -18,7 +18,12 @@ from models import (
 from services import scryfall_cache as sc
 from services.commander_utils import primary_commander_name, primary_commander_oracle_id
 from services.deck_tags import resolve_deck_tag_from_slug
-from services.edhrec_client import commander_cardviews, edhrec_service_enabled, ensure_commander_data
+from services.edhrec_client import (
+    commander_cardviews,
+    edhrec_index,
+    edhrec_service_enabled,
+    ensure_commander_data,
+)
 from services.request_cache import request_cached
 
 _LOG = logging.getLogger(__name__)
@@ -119,6 +124,30 @@ def collect_edhrec_targets() -> dict:
     }
 
 
+def collect_edhrec_index_targets(*, include_themes: bool = True) -> dict:
+    index = edhrec_index(
+        include_commanders=True,
+        include_themes=include_themes,
+    )
+    commanders = index.get("commanders") or []
+    tag_names: list[str] = []
+    if include_themes:
+        for entry in index.get("themes") or []:
+            if isinstance(entry, dict):
+                name = entry.get("name")
+                if isinstance(name, str) and name.strip():
+                    tag_names.append(name.strip())
+
+    deduped_tags = _dedupe(tag_names)
+    return {
+        "source": "edhrec",
+        "commanders": commanders,
+        "tags": deduped_tags,
+        "commanders_total": len(commanders),
+        "tags_total": len(deduped_tags),
+    }
+
+
 def _oracle_id_for_name(name: str, cache: dict[str, str | None]) -> str | None:
     key = (name or "").strip().casefold()
     if not key:
@@ -151,23 +180,35 @@ def _extract_commander_tags(payload: dict) -> list[str]:
     return _dedupe(tags)
 
 
-def refresh_edhrec_cache(*, force_refresh: bool = False) -> dict:
+def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> dict:
     _ensure_tables()
     if not edhrec_service_enabled():
         message = "EDHREC service is not configured."
         _LOG.warning(message)
         return {"status": "error", "message": message}
 
-    try:
-        targets = collect_edhrec_targets()
-    except SQLAlchemyError:
-        db.session.rollback()
-        _LOG.error("EDHREC refresh failed due to database error.", exc_info=True)
-        return {"status": "error", "message": "Database error while collecting EDHREC targets."}
+    scope_key = (scope or "all").strip().lower()
+    if scope_key == "all":
+        try:
+            targets = collect_edhrec_index_targets(include_themes=True)
+        except Exception as exc:
+            _LOG.warning("EDHREC index lookup failed: %s", exc)
+            return {"status": "error", "message": "EDHREC index lookup failed."}
+    else:
+        try:
+            targets = collect_edhrec_targets()
+        except SQLAlchemyError:
+            db.session.rollback()
+            _LOG.error("EDHREC refresh failed due to database error.", exc_info=True)
+            return {"status": "error", "message": "Database error while collecting EDHREC targets."}
 
     commander_targets = targets.get("commanders") or []
     if not commander_targets:
-        message = "No commander data found to refresh."
+        message = (
+            "No commander data found to refresh."
+            if scope_key != "all"
+            else "No commander data found from EDHREC index."
+        )
         _LOG.warning(message)
         return {"status": "info", "message": message, "targets": targets}
 
@@ -183,15 +224,29 @@ def refresh_edhrec_cache(*, force_refresh: bool = False) -> dict:
     total_tags = 0
     oracle_cache: dict[str, str | None] = {}
 
-    for target in commander_targets:
-        commander_name = (target.get("name") or "").strip()
-        commander_oracle_id = (target.get("oracle_id") or "").strip()
-        if not commander_name or not commander_oracle_id:
+    total_targets = len(commander_targets)
+    for idx, target in enumerate(commander_targets, start=1):
+        if isinstance(target, dict):
+            commander_name = (target.get("name") or "").strip()
+            commander_oracle_id = (target.get("oracle_id") or "").strip()
+            slug_override = (target.get("slug") or "").strip()
+        else:
+            commander_name = str(target or "").strip()
+            commander_oracle_id = ""
+            slug_override = ""
+
+        if not commander_name:
+            continue
+
+        if not commander_oracle_id:
+            commander_oracle_id = _oracle_id_for_name(commander_name, oracle_cache) or ""
+        if not commander_oracle_id:
             continue
 
         slug, payload, warning = ensure_commander_data(
             commander_name,
             force_refresh=force_refresh,
+            slug_override=slug_override or None,
         )
         if warning:
             errors.append(warning)
@@ -249,6 +304,12 @@ def refresh_edhrec_cache(*, force_refresh: bool = False) -> dict:
         commander_ok += 1
         total_cards += len(top_cards)
         total_tags += len(commander_tags)
+        if idx == total_targets or idx % 100 == 0:
+            _LOG.info(
+                "EDHREC refresh progress: %s/%s commanders processed.",
+                idx,
+                total_targets,
+            )
 
     tag_count = 0
     try:

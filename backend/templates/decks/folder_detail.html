@@ -1267,12 +1267,25 @@
             {% endif %}
           </div>
         </div>
-        <span class="badge text-bg-warning">Build Queue</span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge text-bg-warning">Build Queue</span>
+          <form method="post"
+                action="{{ url_for('views.finish_build', folder_id=folder.id) }}"
+                data-ux-submit>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-success"
+                    type="submit"
+                    data-confirm="Finish this build and convert it into a normal deck?"
+                    data-progress-label="Finishing...">
+              Finish Build
+            </button>
+          </form>
+        </div>
       </div>
       <div class="card-body">
         {% if build_state and build_state.ok %}
           <div class="row g-3">
-            <div class="col-12 col-lg-6">
+            <div class="col-12 col-lg-4">
               <div class="fw-semibold mb-2">Owned Synergy</div>
               {% if build_state.recommendations and build_state.recommendations.owned %}
                 <div class="list-group list-group-flush">
@@ -1310,8 +1323,8 @@
                 <div class="text-muted small">No owned synergy cards found yet.</div>
               {% endif %}
             </div>
-            <div class="col-12 col-lg-6">
-              <div class="fw-semibold mb-2">External Suggestions</div>
+            <div class="col-12 col-lg-4">
+              <div class="fw-semibold mb-2">EDHREC Suggestions</div>
               {% if build_state.recommendations and build_state.recommendations.external %}
                 <div class="list-group list-group-flush">
                   {% for rec in build_state.recommendations.external %}
@@ -1348,6 +1361,43 @@
                 </div>
               {% else %}
                 <div class="text-muted small">No external suggestions available.</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-lg-4">
+              <div class="fw-semibold mb-2">App-Specific Suggestions</div>
+              {% if build_state.recommendations and build_state.recommendations.app %}
+                <div class="list-group list-group-flush">
+                  {% for rec in build_state.recommendations.app %}
+                    <div class="list-group-item d-flex align-items-start justify-content-between gap-3">
+                      <div class="flex-grow-1">
+                        <div class="fw-semibold">{{ rec.name }}</div>
+                        <div class="small text-muted">
+                          {% if rec.owned_qty %}Owned: {{ rec.owned_qty }}{% endif %}
+                        </div>
+                        {% if rec.reasons %}
+                          <div class="small text-muted">{{ rec.reasons|join(' · ') }}</div>
+                        {% endif %}
+                      </div>
+                      <div class="text-end">
+                        {% if rec.in_deck %}
+                          <span class="badge text-bg-secondary">In Deck</span>
+                        {% else %}
+                          <form method="post"
+                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                class="d-inline"
+                                data-ux-submit>
+                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
+                              Add
+                            </button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="text-muted small">No app-specific suggestions right now.</div>
               {% endif %}
             </div>
           </div>

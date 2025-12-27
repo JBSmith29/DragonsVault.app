@@ -810,7 +810,7 @@ def admin_console():
         job_id = f"inline-{uuid.uuid4().hex[:8]}"
         emit_job_event("edhrec", "queued", job_id=job_id, dataset="synergy", force=int(force_refresh))
         emit_job_event("edhrec", "started", job_id=job_id, dataset="synergy", rq_id=None)
-        result = refresh_edhrec_synergy_cache(force_refresh=force_refresh)
+        result = refresh_edhrec_synergy_cache(force_refresh=force_refresh, scope="all")
         status = result.get("status") or "error"
         message = result.get("message") or "EDHREC refresh failed."
         if status == "error":

@@ -533,6 +533,35 @@ def create_app() -> Flask:
         finally:
             session.close()
 
+    @app.get("/v1/edhrec/index")
+    def edhrec_index():
+        include_commanders = _parse_bool(request.args.get("commanders", "1"))
+        include_themes = _parse_bool(request.args.get("themes", "1"))
+        max_pages = _parse_int(request.args.get("max_pages"), 0)
+        max_pages = max_pages if max_pages > 0 else None
+        limit = _parse_int(request.args.get("limit"), 0)
+        limit = limit if limit > 0 else None
+
+        try:
+            commanders = (
+                fetcher.fetch_commander_index(max_pages=max_pages)
+                if include_commanders
+                else []
+            )
+            themes = (
+                fetcher.fetch_theme_index(max_pages=max_pages)
+                if include_themes
+                else []
+            )
+        except Exception as exc:
+            return jsonify(status="error", error=str(exc)), 500
+
+        if limit:
+            commanders = commanders[:limit]
+            themes = themes[:limit]
+
+        return jsonify(status="ok", commanders=commanders, themes=themes)
+
     @app.post("/v1/edhrec/refresh")
     def edhrec_refresh():
         payload = request.get_json(silent=True) or {}

@@ -1151,28 +1151,6 @@ def set_folder_tag(folder_id: int):
 
     folder.deck_tag = tag
 
-    # Keep the commander card present when changing tags in build decks.
-    commander_name = (folder.commander_name or "").strip()
-    if commander_name and folder.is_build:
-        existing_cmd = (
-            Card.query.filter(Card.folder_id == folder.id, func.lower(Card.name) == func.lower(commander_name))
-            .options(load_only(Card.id))
-            .first()
-        )
-        if not existing_cmd:
-            try:
-                # Import lazily to avoid circular imports at module load.
-                from .build import _add_card_to_folder  # type: ignore
-
-                _add_card_to_folder(folder, commander_name)
-            except Exception as exc:  # pragma: no cover - best-effort guard
-                current_app.logger.warning(
-                    "Unable to re-add commander card '%s' after tag update for folder %s: %s",
-                    commander_name,
-                    folder.id,
-                    exc,
-                )
-
     _safe_commit()
 
     category = get_deck_tag_category(tag)
@@ -1243,6 +1221,41 @@ def build_add_card(folder_id: int):
         return jsonify({"ok": True})
 
     flash("Card added to build deck.", "success")
+    return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+
+def finish_build(folder_id: int):
+    folder = get_or_404(Folder, folder_id)
+    ensure_folder_access(folder, write=True)
+    if not folder.is_build:
+        message = "Only build decks can be finished."
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+    try:
+        from services import build_deck_service
+
+        build_deck_service.finish_build(folder_id)
+    except ValueError as exc:
+        message = str(exc) or "Unable to finish build."
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+    except Exception as exc:
+        current_app.logger.exception("Finish build failed.")
+        message = f"Unable to finish build: {exc}"
+        if request.is_json:
+            return jsonify({"ok": False, "error": message}), 500
+        flash(message, "danger")
+        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
+
+    if request.is_json:
+        return jsonify({"ok": True})
+
+    flash("Build finished. Deck is now standard.", "success")
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
 
@@ -1651,6 +1664,7 @@ __all__ = [
     "folder_sharing",
     "clear_folder_tag",
     "build_add_card",
+    "finish_build",
     "set_folder_owner",
     "set_folder_proxy",
     "rename_proxy_deck",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -270,6 +271,112 @@ def _download_json_dict(
     return json_dict, panels, theme_options
 
 
+def _download_index_json_dict(
+    session: requests.Session,
+    url: str,
+    timeout: int,
+) -> Dict[str, Any]:
+    response = session.get(url, timeout=timeout)
+    if response.status_code == 404:
+        raise EdhrecError(f"EDHREC page not found: {url}")
+    response.raise_for_status()
+    html = response.text
+    match = _NEXT_DATA_RE.search(html)
+    if not match:
+        raise EdhrecError("EDHREC index page did not contain Next.js payload.")
+    raw = json.loads(match.group(1))
+    try:
+        container = raw["props"]["pageProps"]["data"]["container"]
+    except KeyError as exc:
+        raise EdhrecError(f"Unexpected EDHREC index payload structure for {url}") from exc
+    json_dict = container.get("json_dict")
+    if not isinstance(json_dict, dict):
+        raise EdhrecError("EDHREC index JSON container was not a dictionary.")
+    return json_dict
+
+
+def _extract_index_cardviews(json_dict: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    cardlists = json_dict.get("cardlists") or []
+    cardviews: List[Dict[str, Any]] = []
+    more: Optional[str] = None
+    for entry in cardlists:
+        if not isinstance(entry, dict):
+            continue
+        raw_views = entry.get("cardviews") or []
+        if isinstance(raw_views, list):
+            cardviews.extend([view for view in raw_views if isinstance(view, dict)])
+        if not more:
+            raw_more = entry.get("more")
+            if isinstance(raw_more, str) and raw_more.strip():
+                more = raw_more.strip()
+    return cardviews, more
+
+
+def _parse_index_slug(url: Any, *, prefixes: Tuple[str, ...]) -> Optional[str]:
+    if not isinstance(url, str) or not url.strip():
+        return None
+    raw = url.strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        raw = urlparse(raw).path
+    raw = raw.strip("/")
+    for prefix in prefixes:
+        prefix = prefix.strip("/")
+        if raw.startswith(prefix + "/"):
+            return raw[len(prefix) + 1 :].strip("/") or None
+    if raw:
+        return raw.split("/")[-1].strip() or None
+    return None
+
+
+def _extract_index_entries(
+    cardviews: List[Dict[str, Any]],
+    *,
+    prefixes: Tuple[str, ...],
+    slugify_fn,
+    seen: set[str],
+    allow_sanitized: bool = False,
+) -> List[Dict[str, str]]:
+    entries: List[Dict[str, str]] = []
+    for view in cardviews:
+        name = view.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        raw_url = view.get("url")
+        slug = _parse_index_slug(raw_url, prefixes=prefixes)
+        if not slug and allow_sanitized:
+            sanitized = view.get("sanitized")
+            if isinstance(sanitized, str) and sanitized.strip():
+                slug = sanitized.strip()
+        if not slug:
+            slug = slugify_fn(name)
+        slug = (slug or "").strip().lower()
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        entries.append({"slug": slug, "name": name.strip()})
+    return entries
+
+
+def _download_index_page(
+    session: requests.Session,
+    url: str,
+    timeout: int,
+    *,
+    referer: str,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    headers = {"Referer": referer, "Accept": "application/json"}
+    response = session.get(url, timeout=timeout, headers=headers)
+    if response.status_code == 404:
+        return [], None
+    response.raise_for_status()
+    data = response.json()
+    raw_views = data.get("cardviews") or []
+    cardviews = [view for view in raw_views if isinstance(view, dict)]
+    raw_more = data.get("more")
+    more = raw_more.strip() if isinstance(raw_more, str) and raw_more.strip() else None
+    return cardviews, more
+
+
 def _payload_from_json_dict(
     *,
     kind: str,
@@ -371,3 +478,83 @@ class EdhrecFetcher:
             panels=panels,
         )
         return FetchResult(payload=payload, url=url)
+
+    def fetch_commander_index(self, *, max_pages: Optional[int] = None) -> List[Dict[str, str]]:
+        base_url = "https://edhrec.com/commanders"
+        json_dict = _download_index_json_dict(self._session, base_url, self._timeout)
+        cardviews, more = _extract_index_cardviews(json_dict)
+
+        seen: set[str] = set()
+        entries = _extract_index_entries(
+            cardviews,
+            prefixes=("commanders",),
+            slugify_fn=slugify_commander,
+            seen=seen,
+            allow_sanitized=True,
+        )
+
+        page_count = 0
+        while more:
+            page_count += 1
+            if max_pages and page_count > max_pages:
+                break
+            page_url = more
+            if not page_url.startswith("http"):
+                page_url = f"https://json.edhrec.com/pages/{page_url.lstrip('/')}"
+            cardviews, more = _download_index_page(
+                self._session,
+                page_url,
+                self._timeout,
+                referer=base_url,
+            )
+            entries.extend(
+                _extract_index_entries(
+                    cardviews,
+                    prefixes=("commanders",),
+                    slugify_fn=slugify_commander,
+                    seen=seen,
+                    allow_sanitized=True,
+                )
+            )
+            time.sleep(0.2)
+        return entries
+
+    def fetch_theme_index(self, *, max_pages: Optional[int] = None) -> List[Dict[str, str]]:
+        base_url = "https://edhrec.com/themes"
+        json_dict = _download_index_json_dict(self._session, base_url, self._timeout)
+        cardviews, more = _extract_index_cardviews(json_dict)
+
+        seen: set[str] = set()
+        entries = _extract_index_entries(
+            cardviews,
+            prefixes=("themes", "tags"),
+            slugify_fn=slugify_theme,
+            seen=seen,
+            allow_sanitized=False,
+        )
+
+        page_count = 0
+        while more:
+            page_count += 1
+            if max_pages and page_count > max_pages:
+                break
+            page_url = more
+            if not page_url.startswith("http"):
+                page_url = f"https://json.edhrec.com/pages/{page_url.lstrip('/')}"
+            cardviews, more = _download_index_page(
+                self._session,
+                page_url,
+                self._timeout,
+                referer=base_url,
+            )
+            entries.extend(
+                _extract_index_entries(
+                    cardviews,
+                    prefixes=("themes", "tags"),
+                    slugify_fn=slugify_theme,
+                    seen=seen,
+                    allow_sanitized=False,
+                )
+            )
+            time.sleep(0.2)
+        return entries
