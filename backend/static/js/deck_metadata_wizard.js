@@ -38,8 +38,10 @@
     tagPicker: document.getElementById("deckMetadataWizardTagPicker"),
     commanderFilter: document.getElementById("deckMetadataWizardCommanderFilter"),
     commanderList: document.getElementById("deckMetadataWizardCommanderList"),
-    tagFilter: document.getElementById("deckMetadataWizardTagFilter"),
-    tagGroups: document.getElementById("deckMetadataWizardTagGroups"),
+    tagSelect: document.getElementById("deckMetadataWizardTagSelect"),
+    tagInput: document.getElementById("deckMetadataWizardTagInput"),
+    tagMenu: document.getElementById("deckMetadataWizardTagMenu"),
+    tagSearch: document.getElementById("deckMetadataWizardTagSearch"),
     tagEmpty: document.getElementById("deckMetadataWizardTagEmpty"),
     summary: document.getElementById("deckMetadataWizardSummary"),
     footerStatus: document.getElementById("deckMetadataWizardFooterStatus"),
@@ -70,8 +72,9 @@
     if (els.commanderFilter) {
       els.commanderFilter.value = "";
     }
-    if (els.tagFilter) {
-      els.tagFilter.value = "";
+    if (els.tagSearch) {
+      els.tagSearch.value = "";
+      els.tagSearch.dispatchEvent(new Event("input"));
     }
   }
 
@@ -193,6 +196,7 @@
     if (pickerVisible) {
       renderTagSelection();
     }
+    syncTagSelectLabel();
   }
 
   function updateSummary() {
@@ -370,68 +374,80 @@
     }
   }
 
-  function buildTagGroups() {
-    if (!els.tagGroups) return;
-    els.tagGroups.innerHTML = "";
+  function buildTagOptions() {
+    if (!els.tagMenu) return;
+    const existing = els.tagMenu.querySelectorAll("[data-wizard-tag-option], [data-wizard-tag-category]");
+    existing.forEach(node => node.remove());
     tagButtons = [];
     const fragment = document.createDocumentFragment();
-
     Object.entries(tagGroups).forEach(([category, tags]) => {
-      const section = document.createElement("div");
-      section.className = "tag-category mb-3";
-      section.dataset.category = (category || "").toLowerCase();
-      const heading = document.createElement("div");
-      heading.className = "small text-uppercase text-muted fw-semibold mb-2";
-      heading.textContent = category;
-      section.appendChild(heading);
-      const wrap = document.createElement("div");
-      wrap.className = "d-flex flex-wrap gap-2";
+      const categoryRow = document.createElement("li");
+      categoryRow.className = "dropdown-header text-uppercase small text-muted fw-semibold";
+      categoryRow.dataset.wizardTagCategory = "true";
+      categoryRow.setAttribute("data-dv-select-category", "");
+      categoryRow.textContent = category;
+      fragment.appendChild(categoryRow);
       (tags || []).forEach(tag => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "type-pill wizard-tag-option";
-      btn.textContent = tag;
+        const li = document.createElement("li");
+        li.dataset.wizardTagOption = "true";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "dropdown-item wizard-tag-option";
+        btn.textContent = tag;
         btn.dataset.tag = tag;
-        btn.dataset.label = String(tag || "").toLowerCase();
-        btn.dataset.category = (category || "").toLowerCase();
-      btn.addEventListener("click", () => {
-        selectedTag = tag;
-        tagAction = ACTION_SET;
-        renderTagSelection();
-        updateSummary();
-      });
+        btn.setAttribute("data-dv-select-option", "");
+        btn.dataset.value = tag;
+        btn.dataset.label = tag;
+        btn.addEventListener("click", () => {
+          selectedTag = tag;
+          tagAction = ACTION_SET;
+          syncTagSelectLabel();
+          renderTagSelection();
+          updateSummary();
+        });
         tagButtons.push(btn);
-        wrap.appendChild(btn);
+        li.appendChild(btn);
+        fragment.appendChild(li);
       });
-      section.appendChild(wrap);
-      fragment.appendChild(section);
     });
-    els.tagGroups.appendChild(fragment);
+    els.tagMenu.appendChild(fragment);
   }
 
   function renderTagSelection() {
     if (!currentDeck) return;
     if (!tagButtons.length) {
-      buildTagGroups();
+      buildTagOptions();
     }
-    const query = (els.tagFilter?.value || "").trim().toLowerCase();
-    let visibleCount = 0;
     tagButtons.forEach(btn => {
-      const label = btn.dataset.label || "";
-      const category = btn.dataset.category || "";
-      const match = !query || label.includes(query) || category.includes(query);
-      btn.classList.toggle("d-none", !match);
-      if (match) visibleCount += 1;
-      btn.classList.toggle("active", tagAction === ACTION_SET && selectedTag === btn.dataset.tag);
+      const isActive = selectedTag && selectedTag === btn.dataset.tag;
+      btn.classList.toggle("active", Boolean(isActive));
     });
-    const sections = els.tagGroups?.querySelectorAll(".tag-category") || [];
-    sections.forEach(section => {
-      const hasVisible = Boolean(section.querySelector(".wizard-tag-option:not(.d-none)"));
-      section.classList.toggle("d-none", !hasVisible);
-    });
-    if (els.tagEmpty) {
-      els.tagEmpty.classList.toggle("d-none", visibleCount > 0);
+    syncTagSelectLabel();
+    updateTagEmptyState();
+  }
+
+  function syncTagSelectLabel() {
+    const labelEl = els.tagSelect?.querySelector("[data-dv-select-label]");
+    const tagValue = selectedTag || "";
+    if (labelEl) {
+      labelEl.textContent = tagValue || "Select tag...";
     }
+    if (els.tagInput) {
+      els.tagInput.value = tagValue;
+    }
+  }
+
+  function updateTagEmptyState() {
+    if (!els.tagEmpty) return;
+    const visible = tagButtons.some(btn => {
+      const node = btn.closest("li") || btn;
+      return node && node.style.display !== "none";
+    });
+    els.tagEmpty.classList.toggle("d-none", visible);
+  }
+
+  if (Object.keys(tagGroups || {}).length) {
+    buildTagOptions();
   }
 
   function updateDeckHeader() {
@@ -654,8 +670,15 @@
   if (els.commanderFilter) {
     els.commanderFilter.addEventListener("input", renderCommanderCandidates);
   }
-  if (els.tagFilter) {
-    els.tagFilter.addEventListener("input", renderTagSelection);
+  if (els.tagSearch) {
+    els.tagSearch.addEventListener("input", () => {
+      window.setTimeout(updateTagEmptyState, 0);
+    });
+  }
+  if (els.tagSelect) {
+    els.tagSelect.addEventListener("shown.bs.dropdown", () => {
+      window.setTimeout(updateTagEmptyState, 0);
+    });
   }
   if (els.skipBtn) {
     els.skipBtn.addEventListener("click", skipDeck);

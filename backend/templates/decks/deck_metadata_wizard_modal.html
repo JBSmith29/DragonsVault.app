@@ -59,9 +59,25 @@
             </div>
             <div class="text-muted small mt-2" id="deckMetadataWizardTagHint"></div>
             <div class="mt-3 d-none" id="deckMetadataWizardTagPicker">
-              <input type="text" class="form-control form-control-sm" id="deckMetadataWizardTagFilter" placeholder="Filter tags...">
-              <div class="wizard-tag-list mt-3" id="deckMetadataWizardTagGroups"></div>
-              <div class="text-muted small fst-italic text-center d-none mt-3" id="deckMetadataWizardTagEmpty">No tags match this filter.</div>
+              <div class="dropdown dv-select w-100" id="deckMetadataWizardTagSelect" data-dv-select="wizard-tag" data-allow-reselect="true" data-bs-auto-close="outside">
+                <input type="hidden" id="deckMetadataWizardTagInput" data-dv-select-input value="">
+                <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="deckMetadataWizardTagToggle" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span data-dv-select-label>Select tag...</span>
+                  <i class="bi bi-chevron-down"></i>
+                </button>
+                <ul class="dropdown-menu dv-select-menu w-100 p-2 wizard-tag-menu" aria-labelledby="deckMetadataWizardTagToggle" id="deckMetadataWizardTagMenu">
+                  <li class="px-2 mb-2">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           id="deckMetadataWizardTagSearch"
+                           placeholder="Search tags..."
+                           autocomplete="off"
+                           data-dv-select-search>
+                  </li>
+                  <li class="text-muted small fst-italic text-center d-none mt-2" id="deckMetadataWizardTagEmpty">No tags match this search.</li>
+                  <li><hr class="dropdown-divider"></li>
+                </ul>
+              </div>
             </div>
           </section>
 

@@ -12,15 +12,34 @@ from flask import has_request_context
 from flask_login import current_user
 
 from extensions import db
-from models import Card, DeckBuildSession, Folder
+from models import Card, DeckBuildSession, Folder, OracleCoreRoleTag
 from services import scryfall_cache as sc
 from services.commander_utils import split_commander_oracle_ids
 from services.deck_service import get_deck_stats, recompute_deck_stats
 from services.deck_tags import is_valid_deck_tag
+from services.symbols_cache import colors_to_icons
 from . import build_constraints_service as constraints
 from .build_recommendation_service import get_build_recommendations
 
 _LOG = logging.getLogger(__name__)
+
+_TYPE_GROUPS = [
+    ("Creatures", "Creature"),
+    ("Instants", "Instant"),
+    ("Sorceries", "Sorcery"),
+    ("Artifacts", "Artifact"),
+    ("Enchantments", "Enchantment"),
+    ("Planeswalkers", "Planeswalker"),
+    ("Lands", "Land"),
+    ("Battles", "Battle"),
+]
+
+_ROLE_TARGETS = {
+    "ramp": 8,
+    "draw": 8,
+    "removal": 6,
+    "wipe": 2,
+}
 
 
 def _normalize_tags(tags: Iterable[str] | None) -> list[str]:
@@ -68,6 +87,82 @@ def _preferred_print(oracle_id: str) -> dict | None:
         if (pr.get("lang") or "en").lower() == "en":
             return pr
     return prints[0]
+
+
+def _type_group_label(type_line: str) -> str:
+    lowered = (type_line or "").lower()
+    for label, token in _TYPE_GROUPS:
+        if token.lower() in lowered:
+            return label
+    return "Other"
+
+
+def _group_by_type(items: list[dict]) -> list[dict]:
+    group_map: dict[str, list[dict]] = {label: [] for label, _ in _TYPE_GROUPS}
+    other: list[dict] = []
+    for item in items:
+        label = item.get("type_group") or "Other"
+        if label in group_map:
+            group_map[label].append(item)
+        else:
+            other.append(item)
+    groups: list[dict] = []
+    for label, _ in _TYPE_GROUPS:
+        cards = group_map.get(label, [])
+        groups.append({"label": label, "cards": cards, "count": len(cards)})
+    if other:
+        groups.append({"label": "Other", "cards": other, "count": len(other)})
+    return groups
+
+
+def _commander_image(commander_oracle_id: str | None) -> str | None:
+    if not commander_oracle_id:
+        return None
+    for oid in split_commander_oracle_ids(commander_oracle_id):
+        pr = _preferred_print(oid)
+        if not pr:
+            continue
+        image = sc.image_for_print(pr)
+        for key in ("normal", "large", "small"):
+            url = image.get(key)
+            if url:
+                return url
+    return None
+
+
+def _commander_color_identity(commander_oracle_id: str | None) -> list[str]:
+    colors: set[str] = set()
+    for oid in split_commander_oracle_ids(commander_oracle_id):
+        pr = _preferred_print(oid)
+        if not pr:
+            continue
+        meta = sc.metadata_from_print(pr)
+        for color in meta.get("color_identity") or []:
+            colors.add(str(color).upper())
+    order = ["W", "U", "B", "R", "G"]
+    return [c for c in order if c in colors]
+
+
+def _deck_role_counts(deck_oracle_ids: set[str]) -> dict[str, int]:
+    if not deck_oracle_ids:
+        return {}
+    rows = (
+        db.session.query(OracleCoreRoleTag.role, func.count(OracleCoreRoleTag.oracle_id))
+        .filter(OracleCoreRoleTag.oracle_id.in_(list(deck_oracle_ids)))
+        .group_by(OracleCoreRoleTag.role)
+        .all()
+    )
+    return {str(role).strip(): int(total or 0) for role, total in rows if role}
+
+
+def _deck_health_hints(deck_oracle_ids: set[str]) -> list[str]:
+    role_counts = _deck_role_counts(deck_oracle_ids)
+    hints: list[str] = []
+    for role, target in _ROLE_TARGETS.items():
+        count = int(role_counts.get(role, 0) or 0)
+        if count < target:
+            hints.append(f"Low {role} ({count}/{target})")
+    return hints
 
 
 def _commander_names_from_oracle_ids(commander_oracle_id: str) -> str | None:
@@ -265,6 +360,27 @@ def get_build_state(folder_id: int) -> dict:
                 "quantity": qty,
             }
 
+    deck_card_details: list[dict] = []
+    for entry in deck_card_map.values():
+        oracle_id = (entry.get("oracle_id") or "").strip()
+        pr = _preferred_print(oracle_id) if oracle_id else None
+        meta = sc.metadata_from_print(pr) if pr else {}
+        type_line = meta.get("type_line") or ""
+        image = sc.image_for_print(pr) if pr else {}
+        deck_card_details.append(
+            {
+                **entry,
+                "type_line": type_line,
+                "type_group": _type_group_label(type_line),
+                "image_small": image.get("small"),
+                "image_normal": image.get("normal") or image.get("large") or image.get("small"),
+                "image_large": image.get("large") or image.get("normal") or image.get("small"),
+            }
+        )
+
+    total_qty = sum(int(entry.get("quantity") or 0) for entry in deck_card_details)
+    total_unique = len(deck_card_details)
+
     recommendations = get_build_recommendations(
         commander_oracle_id=folder.commander_oracle_id or "",
         tags=tags,
@@ -272,16 +388,39 @@ def get_build_state(folder_id: int) -> dict:
         owner_user_id=folder.owner_user_id,
     )
 
+    edhrec_recs = list((recommendations.get("owned") or []) + (recommendations.get("external") or []))
+    edhrec_recs.sort(
+        key=lambda item: (
+            -(item.get("synergy_score") or 0.0),
+            item.get("synergy_rank") if item.get("synergy_rank") is not None else 999999,
+            (item.get("name") or "").lower(),
+        )
+    )
+    edhrec_groups = _group_by_type(edhrec_recs)
+    app_groups = _group_by_type(recommendations.get("app") or [])
+    deck_groups = _group_by_type(deck_card_details)
+    commander_colors = _commander_color_identity(folder.commander_oracle_id)
+    commander_color_icons = colors_to_icons(commander_colors)
+
     return {
         "ok": True,
         "folder_id": folder.id,
         "folder_name": folder.name,
         "commander_oracle_id": folder.commander_oracle_id,
         "commander_name": folder.commander_name,
+        "commander_image": _commander_image(folder.commander_oracle_id),
+        "color_identity": commander_colors,
+        "color_icons": commander_color_icons,
         "tags": tags,
-        "deck_cards": list(deck_card_map.values()),
+        "deck_cards": deck_card_details,
+        "deck_groups": deck_groups,
+        "deck_total_qty": total_qty,
+        "deck_total_unique": total_unique,
         "deck_stats": get_deck_stats(folder.id),
         "recommendations": recommendations,
+        "edhrec_groups": edhrec_groups,
+        "app_groups": app_groups,
+        "health_hints": _deck_health_hints(set(deck_card_map.keys())),
     }
 
 

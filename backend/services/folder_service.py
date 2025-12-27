@@ -12,11 +12,11 @@ from urllib.parse import quote_plus
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for, current_app, session
 from flask_login import current_user
-from sqlalchemy import case, func
+from sqlalchemy import case, func, text
 from sqlalchemy.orm import load_only
 
 from extensions import cache, db
-from models import Card, Folder, FolderShare, User
+from models import Card, Folder, FolderShare, User, UserSetting
 from services import scryfall_cache as sc
 from services.scryfall_cache import cache_epoch, cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
@@ -60,6 +60,108 @@ from routes.base import (
 )
 from viewmodels.folder_vm import FolderCardVM, FolderOptionVM, FolderVM
 
+_BUILD_VIEW_SETTING_KEY = "build_view_mode"
+_DEFAULT_BUILD_VIEW = "gallery"
+_BUILD_VIEW_MODES = {"gallery", "list"}
+
+
+def _normalize_build_view_mode(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in _BUILD_VIEW_MODES:
+        return normalized
+    return _DEFAULT_BUILD_VIEW
+
+
+def _is_missing_table_error(exc: Exception, table_name: str) -> bool:
+    message = str(exc).lower()
+    return table_name.lower() in message and ("does not exist" in message or "undefinedtable" in message)
+
+
+def _ensure_user_settings_table() -> bool:
+    try:
+        db.session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+                """
+            )
+        )
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Failed to ensure user_settings table.")
+        return False
+
+
+def _load_build_view_mode() -> str:
+    try:
+        setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
+    except Exception as exc:
+        db.session.rollback()
+        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
+            try:
+                setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Failed to load build view mode preference after ensuring table.")
+                return _DEFAULT_BUILD_VIEW
+        else:
+            current_app.logger.exception("Failed to load build view mode preference.")
+            return _DEFAULT_BUILD_VIEW
+    if setting and setting.value:
+        return _normalize_build_view_mode(setting.value)
+    return _DEFAULT_BUILD_VIEW
+
+
+def _persist_build_view_mode(mode: str) -> None:
+    mode = _normalize_build_view_mode(mode)
+    try:
+        setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
+        if setting:
+            setting.value = mode
+        else:
+            db.session.add(UserSetting(key=_BUILD_VIEW_SETTING_KEY, value=mode))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
+            try:
+                setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
+                if setting:
+                    setting.value = mode
+                else:
+                    db.session.add(UserSetting(key=_BUILD_VIEW_SETTING_KEY, value=mode))
+                db.session.commit()
+                return
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Failed to update build view mode preference after ensuring table.")
+                return
+        current_app.logger.exception("Failed to update build view mode preference.")
+
+
+_CARD_TYPE_GROUPS = [
+    ("Creatures", "Creature"),
+    ("Instants", "Instant"),
+    ("Sorceries", "Sorcery"),
+    ("Artifacts", "Artifact"),
+    ("Enchantments", "Enchantment"),
+    ("Planeswalkers", "Planeswalker"),
+    ("Lands", "Land"),
+    ("Battles", "Battle"),
+]
+
+
+def _type_group_label(type_line: str) -> str:
+    lowered = (type_line or "").lower()
+    for label, token in _CARD_TYPE_GROUPS:
+        if token.lower() in lowered:
+            return label
+    return "Other"
 
 def _folder_name_exists_excluding(name: str, exclude_id: int | None = None) -> bool:
     normalized = (name or "").strip().lower()
@@ -224,6 +326,16 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     """
     folder = get_or_404(Folder, folder_id)
     ensure_folder_access(folder, write=False if not allow_shared else False, allow_shared=allow_shared, share_token=share_token)
+    if request.method == "POST" and not allow_shared:
+        view_mode = request.form.get("build_view_mode")
+        if view_mode:
+            if not current_user.is_authenticated:
+                return jsonify({"ok": False, "error": "Authentication required."}), 401
+            normalized = _normalize_build_view_mode(view_mode)
+            _persist_build_view_mode(normalized)
+            if request.is_json or "application/json" in (request.headers.get("Accept") or ""):
+                return jsonify({"ok": True, "mode": normalized})
+            return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
     commander_candidates = _commander_candidates_for_folder(folder_id)
     owner_name_options = sorted(
         {
@@ -751,6 +863,22 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             )
         )
 
+    group_map: dict[str, list[FolderCardVM]] = {label: [] for label, _ in _CARD_TYPE_GROUPS}
+    other_cards: list[FolderCardVM] = []
+    for card in card_vms:
+        label = _type_group_label(card.type_line)
+        if label in group_map:
+            group_map[label].append(card)
+        else:
+            other_cards.append(card)
+
+    card_groups: list[dict[str, Any]] = []
+    for label, _ in _CARD_TYPE_GROUPS:
+        cards = group_map.get(label, [])
+        card_groups.append({"label": label, "cards": cards, "count": len(cards)})
+    if other_cards:
+        card_groups.append({"label": "Other", "cards": other_cards, "count": len(other_cards)})
+
     card_image_lookup = {card.id: card.image_small for card in card_vms if card.image_small}
 
     category_labels = {
@@ -758,6 +886,21 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         Folder.CATEGORY_COLLECTION: "Collection",
         Folder.CATEGORY_BUILD: "Build Queue",
     }
+    role_label_map = {
+        "deck": "Deck",
+        "collection": "Binder",
+        "build": "Build Queue",
+        "wishlist": "Wishlist",
+        "binder": "Binder",
+    }
+    raw_roles = set(folder.role_names) if hasattr(folder, "role_names") else set()
+    if not raw_roles and folder.category:
+        raw_roles.add(folder.category)
+    role_labels = [
+        role_label_map.get(role, role.replace("_", " ").title())
+        for role in sorted(raw_roles)
+        if role
+    ]
     folder_vm = FolderVM(
         id=folder.id,
         name=folder.name,
@@ -776,6 +919,8 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         commander_name=folder.commander_name,
         commander_oracle_id=folder.commander_oracle_id,
         commander_slot_count=len(folder.commander_name.split("//")) if folder.commander_name else 0,
+        notes=folder.notes,
+        role_labels=role_labels,
     )
 
     build_state = None
@@ -800,8 +945,9 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         )
     ]
 
+    template_name = "decks/build.html" if folder.is_build else "decks/folder_detail.html"
     return render_template(
-        "decks/folder_detail.html",
+        template_name,
         folder=folder_vm,
         commander_candidates=commander_candidates,
         total_rows=total_rows,
@@ -813,6 +959,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         curve_rows=curve_rows,
         deck_tokens=deck_tokens,
         deck_cards=card_vms,
+        card_groups=card_groups,
         cards_link=cards_link,
         owner_name_options=owner_name_options,
         folder_names=folder_names,
@@ -829,6 +976,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         is_deck_folder=is_deck_folder,
         commander_media_list=commander_media_list,
         build_state=build_state,
+        build_view_mode=_load_build_view_mode(),
     )
 
 

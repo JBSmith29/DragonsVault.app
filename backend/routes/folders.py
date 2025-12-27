@@ -111,7 +111,7 @@ def folder_sharing(folder_id: int):
     return folder_service.folder_sharing(folder_id)
 
 
-@views.route("/folders/<int:folder_id>")
+@views.route("/folders/<int:folder_id>", methods=["GET", "POST"])
 @login_required
 def folder_detail(folder_id):
     return folder_service.folder_detail(folder_id)

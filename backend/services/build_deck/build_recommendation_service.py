@@ -24,6 +24,55 @@ ROLE_TARGETS = {
 MAX_RECS = 40
 MAX_APP_RECS = 16
 
+_TYPE_GROUPS = [
+    ("Creatures", "Creature"),
+    ("Instants", "Instant"),
+    ("Sorceries", "Sorcery"),
+    ("Artifacts", "Artifact"),
+    ("Enchantments", "Enchantment"),
+    ("Planeswalkers", "Planeswalker"),
+    ("Lands", "Land"),
+    ("Battles", "Battle"),
+]
+
+
+def _type_group_label(type_line: str) -> str:
+    lowered = (type_line or "").lower()
+    for label, token in _TYPE_GROUPS:
+        if token.lower() in lowered:
+            return label
+    return "Other"
+
+
+def _preferred_print(oracle_id: str) -> dict | None:
+    prints = sc.prints_for_oracle(oracle_id) or ()
+    if not prints:
+        return None
+    for pr in prints:
+        if pr.get("digital"):
+            continue
+        if (pr.get("lang") or "en").lower() == "en":
+            return pr
+    return prints[0]
+
+
+def _card_display_meta(oracle_id: str, cache: dict[str, dict]) -> dict:
+    if oracle_id in cache:
+        return cache[oracle_id]
+    pr = _preferred_print(oracle_id)
+    meta = sc.metadata_from_print(pr) if pr else {}
+    type_line = meta.get("type_line") or ""
+    image = sc.image_for_print(pr) if pr else {}
+    payload = {
+        "type_line": type_line,
+        "type_group": _type_group_label(type_line),
+        "image_small": image.get("small"),
+        "image_normal": image.get("normal") or image.get("large") or image.get("small"),
+        "image_large": image.get("large") or image.get("normal") or image.get("small"),
+    }
+    cache[oracle_id] = payload
+    return payload
+
 
 def _collection_folder_ids(owner_user_id: int | None) -> list[int]:
     if not owner_user_id:
@@ -158,10 +207,14 @@ def _app_suggestions(
 
     tag_weights = _tag_role_weights(tags)
     results: list[dict] = []
+    meta_cache: dict[str, dict] = {}
     for oid, entry in candidates.items():
         card_mask, card_ok = constraints.card_color_mask(oid)
+        legal = True
+        legal_reason = None
         if commander_mask_ok and card_ok and commander_mask & card_mask != card_mask:
-            continue
+            legal = False
+            legal_reason = "Outside commander color identity."
         roles = entry.get("roles") or set()
         gap_roles = [r for r in roles if r in missing_roles]
         if not gap_roles:
@@ -172,6 +225,7 @@ def _app_suggestions(
             gap_roles=gap_roles,
             tag_bonus=tag_bonus,
         )
+        meta = _card_display_meta(oid, meta_cache)
         results.append(
             {
                 "oracle_id": oid,
@@ -182,6 +236,11 @@ def _app_suggestions(
                 "source": "app",
                 "score": score,
                 "reasons": reasons,
+                "legal": legal,
+                "legal_reason": legal_reason,
+                "can_add": legal,
+                "disabled_reason": legal_reason if not legal else None,
+                **meta,
             }
         )
 
@@ -223,14 +282,18 @@ def get_build_recommendations(
     owned_counts = _owned_counts(owner_user_id, rec_oracle_ids)
     owned_recs: list[dict] = []
     external_recs: list[dict] = []
+    meta_cache: dict[str, dict] = {}
 
     for rec in recs:
         oracle_id = (rec.get("oracle_id") or "").strip()
         if not oracle_id:
             continue
         card_mask, card_ok = constraints.card_color_mask(oracle_id)
+        legal = True
+        legal_reason = None
         if commander_mask_ok and card_ok and commander_mask & card_mask != card_mask:
-            continue
+            legal = False
+            legal_reason = "Outside commander color identity."
         owned_qty = owned_counts.get(oracle_id, 0)
         in_deck = oracle_id in deck_oracle_ids
         gap_roles = [r for r in role_map.get(oracle_id, set()) if r in missing_roles]
@@ -240,6 +303,13 @@ def get_build_recommendations(
             tag_matches=rec.get("tag_matches") or [],
             gap_roles=gap_roles,
         )
+        meta = _card_display_meta(oracle_id, meta_cache)
+        can_add = legal and not in_deck
+        disabled_reason = None
+        if not legal:
+            disabled_reason = legal_reason
+        elif in_deck:
+            disabled_reason = "Already in deck."
         payload = {
             **rec,
             "oracle_id": oracle_id,
@@ -248,6 +318,11 @@ def get_build_recommendations(
             "in_deck": in_deck,
             "score": score,
             "reasons": reasons,
+            "legal": legal,
+            "legal_reason": legal_reason,
+            "can_add": can_add,
+            "disabled_reason": disabled_reason,
+            **meta,
         }
         if owned_qty:
             owned_recs.append(payload)

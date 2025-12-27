@@ -27,6 +27,8 @@ class FolderVM:
     commander_name: Optional[str]
     commander_oracle_id: Optional[str]
     commander_slot_count: int
+    notes: Optional[str] = None
+    role_labels: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

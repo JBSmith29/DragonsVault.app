@@ -45,12 +45,21 @@
                 <span data-multi-select-label>No tags selected</span>
                 <i class="bi bi-chevron-down"></i>
               </button>
-              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="landingDeckTagsToggle">
+              <ul class="dropdown-menu dv-select-menu w-100 build-landing-tags-menu" aria-labelledby="landingDeckTagsToggle">
+                <li class="px-2 pb-2">
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         id="landingDeckTagsSearch"
+                         placeholder="Search tags..."
+                         autocomplete="off">
+                </li>
+                <li class="text-muted small fst-italic text-center d-none mt-2" id="landingDeckTagsEmpty">No tags match this search.</li>
+                <li><hr class="dropdown-divider"></li>
                 {% for category, tags in deck_tag_groups.items() %}
-                  <li class="dropdown-header text-muted small">{{ category }}</li>
+                  <li class="dropdown-header text-muted small" data-tag-category="{{ category|lower }}">{{ category }}</li>
                   {% for tag in tags %}
                     {% set tag_id = "landingTag-" ~ category|replace(' ', '-') ~ "-" ~ loop.index %}
-                    <li>
+                    <li data-tag-item data-tag-label="{{ tag|lower }}" data-tag-category="{{ category|lower }}">
                       <div class="dropdown-item">
                         <div class="form-check m-0">
                           <input class="form-check-input" type="checkbox" value="{{ tag }}" id="{{ tag_id }}" data-multi-select-option>
@@ -256,6 +265,10 @@
   const label = multiSelect.querySelector('[data-multi-select-label]');
   const valuesContainer = multiSelect.querySelector('[data-multi-select-values]');
   const options = Array.from(multiSelect.querySelectorAll('[data-multi-select-option]'));
+  const searchInput = document.getElementById('landingDeckTagsSearch');
+  const emptyState = document.getElementById('landingDeckTagsEmpty');
+  const tagItems = Array.from(multiSelect.querySelectorAll('[data-tag-item]'));
+  const categoryHeaders = Array.from(multiSelect.querySelectorAll('[data-tag-category]'));
 
   function sync() {
     const selected = options.filter(opt => opt.checked).map(opt => opt.value);
@@ -275,8 +288,45 @@
     }
   }
 
+  function applySearch() {
+    if (!searchInput) return;
+    const query = searchInput.value.trim().toLowerCase();
+    const visibleByCategory = new Set();
+    let visibleCount = 0;
+
+    tagItems.forEach(item => {
+      const tagLabel = item.dataset.tagLabel || '';
+      const tagCategory = item.dataset.tagCategory || '';
+      const match = !query || tagLabel.includes(query) || tagCategory.includes(query);
+      item.classList.toggle('d-none', !match);
+      if (match) {
+        visibleByCategory.add(tagCategory);
+        visibleCount += 1;
+      }
+    });
+
+    categoryHeaders.forEach(header => {
+      const cat = header.dataset.tagCategory || '';
+      header.classList.toggle('d-none', !!query && !visibleByCategory.has(cat));
+    });
+
+    if (emptyState) {
+      emptyState.classList.toggle('d-none', visibleCount > 0 || !query);
+    }
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', applySearch);
+    multiSelect.addEventListener('shown.bs.dropdown', () => {
+      searchInput.value = '';
+      applySearch();
+      setTimeout(() => searchInput.focus(), 10);
+    });
+  }
+
   options.forEach(opt => opt.addEventListener('change', sync));
   sync();
+  applySearch();
 })();
 </script>
 

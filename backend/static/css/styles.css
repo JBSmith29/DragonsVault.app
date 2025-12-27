@@ -355,6 +355,10 @@ td, th {
   object-position: 50% 20%;
 }
 
+.build-landing-tags-menu {
+  z-index: 2300;
+}
+
 /* Defaults (used when no specific override exists) */
 .badge-type   { background:#475569; color:#ffffff; } /* slate */
 .badge-folder { background:#334155; color:#e2e8f0; } /* darker slate */

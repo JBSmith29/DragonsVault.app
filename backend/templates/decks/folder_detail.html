@@ -30,8 +30,8 @@
   .cards-table thead th a{color: var(--bs-primary); text-decoration: none; }
   .cards-table thead th a:hover{color: var(--bs-link-hover-color, var(--bs-primary)); text-decoration: underline;}
   .cards-table td, .cards-table th { vertical-align:middle; white-space:normal; }
-  .cards-table tbody tr.deck-row { cursor: pointer; transition: background-color .12s ease; }
-  .cards-table tbody tr.deck-row:focus-visible { outline:0; box-shadow:0 0 0 .2rem rgba(var(--bs-primary-rgb), .35); }
+  .deck-row { transition: background-color .12s ease; }
+  .deck-row:focus-visible { outline:0; box-shadow:0 0 0 .2rem rgba(var(--bs-primary-rgb), .35); }
 
   .nowrap { white-space:nowrap !important; }
 
@@ -75,6 +75,45 @@
     padding:0 .25rem;
   }
   .art-thumb{ width:48px; height:auto; border-radius:.5rem; display:block; }
+
+  .folder-commander-thumb{
+    width:96px;
+    flex:0 0 96px;
+  }
+  .folder-commander-img{
+    width:100%;
+    border-radius:.75rem;
+    display:block;
+  }
+
+  .card-list{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+  }
+  .card-group{
+    border:1px solid var(--bs-border-color);
+    border-radius:.85rem;
+    background:var(--bs-body-bg);
+    overflow:visible;
+  }
+  .card-group-header{
+    position:sticky;
+    top:0;
+    z-index:1;
+    background:var(--bs-body-bg);
+    border-bottom:1px solid var(--bs-border-color);
+    padding:.6rem 1rem;
+  }
+  .card-group-body .deck-row{
+    padding:.75rem 1rem;
+    border-bottom:1px solid var(--bs-border-color);
+    transition:background-color .12s ease;
+  }
+  .card-group-body .deck-row:last-child{ border-bottom:0; }
+  .deck-row:hover{ background:var(--bs-tertiary-bg); }
+  .card-group-empty{ padding:.75rem 1rem; }
+  .card-meta-line{ font-size:.85rem; }
 
   .pip-row{ gap:.25rem; }
   .pip{ height:1.05em; vertical-align:text-bottom; }
@@ -731,18 +770,66 @@
 
 
 <div class="page-section">
-  <!-- Page header -->
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
-      <h1 class="h3 mb-0">
-        <a class="text-decoration-none text-reset"
-           href="{{ cards_link }}">{{ folder.name }}</a>
-      </h1>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-      <a class="btn btn-sm btn-outline-primary"
-         href="{{ cards_link }}">View cards</a>
+  <div class="card mb-3">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+      <div>
+        <h1 class="h3 mb-1">{{ folder.name }}</h1>
+        {% set formatted_deck_tag = folder_tag_category ~ ': ' ~ folder.deck_tag if folder_tag_category else folder.deck_tag %}
+        <div class="d-flex flex-wrap gap-2">
+          {% for role in folder.role_labels %}
+            <span class="badge text-bg-primary">{{ role }}</span>
+          {% endfor %}
+          {% if folder.deck_tag %}
+            <span class="badge text-bg-secondary">{{ formatted_deck_tag }}</span>
+          {% endif %}
+          {% if folder.is_deck and folder.commander_name %}
+            <span class="badge text-bg-info">Commander: {{ folder.commander_name }}</span>
+          {% endif %}
+          <span class="badge text-bg-dark">{{ total_qty }} cards</span>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        {% if folder.is_deck %}
+          {% if folder.is_build %}
+            <a class="btn btn-outline-success btn-sm" href="{{ url_for('views.folder_detail', folder_id=folder.id) }}">Continue Build</a>
+          {% else %}
+            <a class="btn btn-outline-success btn-sm" href="{{ url_for('views.build_deck_landing') }}">Build a Deck</a>
+          {% endif %}
+        {% endif %}
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#ownerModal">
+          Edit Folder
+        </button>
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false">
+            More Actions
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end dv-select-menu">
+            <li><a class="dropdown-item" href="{{ cards_link }}">View cards</a></li>
+            <li>
+              <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#tagPickerModal">
+                Manage tags
+              </button>
+            </li>
+            {% if not folder.is_collection %}
+              <li>
+                <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#commanderPickerModal">
+                  Commander settings
+                </button>
+              </li>
+            {% endif %}
+            {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+              <li><a class="dropdown-item" href="{{ url_for('views.folder_sharing', folder_id=folder.id) }}">Sharing</a></li>
+            {% endif %}
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item export-format" type="button" data-export-format="csv">Export all (CSV)</button></li>
+            <li><button class="dropdown-item export-format" type="button" data-export-format="manavault">Export for ManaVault</button></li>
+            <li><button class="dropdown-item export-format" type="button" data-export-format="dragonshield">Export for Dragon Shield</button></li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1166,557 +1253,547 @@
     {% endcall %}
   {% endif %}
 
-  <!-- ===== SUMMARY ===== -->
-  <div class="summary-row mb-3">
-    <div>
-      {% if type_breakdown and type_breakdown|length %}
-        <div class="section-title">Type Breakdown</div>
-        <div class="d-flex flex-wrap justify-content-center gap-2 type-pill-group">
-          {% for t, n in type_breakdown %}
-            <button type="button"
-                    class="pill type-pill"
-                    data-type="{{ t|lower }}"
-                    data-type-label="{{ t }}"
-                    aria-pressed="false">
-              {{ t }} <span class="ms-1 badge text-bg-light">{{ n }}</span>
+  <!-- ===== Folder Layout ===== -->
+  <div class="row g-4">
+    <div class="col-12 col-lg-4">
+      <div class="card mb-3">
+        <div class="card-header py-2">
+          <div class="fw-semibold">Folder Info</div>
+        </div>
+        <div class="card-body">
+          {% if folder.notes %}
+            <div class="small text-uppercase text-muted fw-semibold">Description</div>
+            <div class="mb-0">{{ folder.notes }}</div>
+          {% else %}
+            <div class="text-muted small">No description yet.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if folder.is_deck %}
+        <div class="card mb-3">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <div class="fw-semibold">Commander</div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#commanderPickerModal">
+              {{ 'Change commander' if folder.commander_name else 'Set commander' }}
             </button>
-          {% endfor %}
-        </div>
-        <div id="typeFilterHint" class="small text-muted text-center mt-2 d-none">
-          Filtering by <strong data-type-name></strong>.
-          <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="typeFilterClear">Clear</button>
-        </div>
-      {% endif %}
-    </div>
-
-    <div class="summary-center">
-      {% if mana_pip_dist and mana_pip_dist|length %}
-        <div class="section-title">Color Distribution (from mana costs)</div>
-        <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
-          {% for c, pip, n in mana_pip_dist %}
-            <span class="pill d-inline-flex align-items-center">
-              {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
-              <span class="fw-semibold">{{ n }}</span>
-            </span>
-          {% endfor %}
-        </div>
-      {% endif %}
-
-      {% if land_mana_sources and land_mana_sources|length %}
-        <div class="section-title">Mana Sources</div>
-        <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
-          {% for c, pip, n in land_mana_sources %}
-            <span class="pill d-inline-flex align-items-center">
-              {% if pip %}
-                <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
-              {% elif c in ['C', 'Colorless'] %}
-                <img src="{{ url_for('static', filename='symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
-              {% else %}
-                <span class="me-1">{{ c }}</span>
-              {% endif %}
-              <span class="fw-semibold">{{ n }}</span>
-            </span>
-          {% endfor %}
-        </div>
-      {% endif %}
-    </div>
-
-    <div>
-      {% if curve_rows and curve_rows|length %}
-        <div class="section-title">Mana Curve</div>
-        <div class="curve-grid">
-          {% for row in curve_rows %}
-            <div class="curve-col" title="{{ row.count }} cards at {{ row.label }} CMC">
-              <button type="button"
-                      class="curve-bar-btn"
-                      data-cmc-bucket="{{ row.label }}"
-                      data-cmc-label="{{ row.label }}"
-                      aria-pressed="false">
-                <div class="curve-bar">
-                  <div class="fill" style="height: {{ row.pct }}%;"></div>
-                  <div class="curve-count">{{ row.count }}</div>
-                </div>
-                <div class="curve-label">{{ row.label }}</div>
-              </button>
+          </div>
+          <div class="card-body">
+            <div class="d-flex gap-3 align-items-start">
+              <div class="folder-commander-thumb">
+                {% if commander_media and commander_media.image %}
+                  <img src="{{ commander_media.image }}"
+                       alt="{{ commander_media.name or folder.commander_name or 'Commander' }}"
+                       class="folder-commander-img"
+                       {% if commander_media.hover %}data-hover-src="{{ commander_media.hover }}"{% endif %}>
+                {% else %}
+                  <div class="bg-secondary-subtle rounded" style="width:96px;height:128px;opacity:.35;"></div>
+                {% endif %}
+              </div>
+              <div class="min-w-0">
+                <div class="fw-semibold">{{ folder.commander_name or 'Not set' }}</div>
+                {% if commander_media and commander_media.label %}
+                  <div class="small text-muted">{{ commander_media.label }}</div>
+                {% endif %}
+                {% if not folder.commander_name %}
+                  <div class="small text-muted mt-1">Set a commander to unlock deck insights.</div>
+                {% endif %}
+              </div>
             </div>
-          {% endfor %}
+          </div>
         </div>
-        <div id="cmcFilterHint" class="small text-muted text-center mt-2 d-none">
-          Filtering by CMC <strong data-cmc-label></strong>.
-          <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="cmcFilterClear">Clear</button>
-        </div>
-      {% endif %}
-    </div>
-  </div>
 
-  <!-- Stats -->
-  <div class="stats-grid mb-3">
-    <div class="stat-card"><div class="label">Unique Cards</div><div class="value" data-stat-unique>{{ total_rows }}</div></div>
-    <div class="stat-card"><div class="label">Total Quantity</div><div class="value" data-stat-total>{{ total_qty }}</div></div>
-    <div class="stat-card"><div class="label">Total Value</div><div class="value">${{ '{:,.2f}'.format(total_value_usd or 0) }}</div></div>
-  </div>
-
-  {% if folder.is_build %}
-    <div class="card mb-4">
-      <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <div>
-          <div class="fw-semibold">Build Recommendations</div>
-          <div class="small text-muted">
-            Commander synergy from EDHREC cache
-            {% if build_state and build_state.tags %}
-              &mdash; Tags: {{ build_state.tags|join(', ') }}
+        <div class="card mb-3">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <div class="fw-semibold">Deck Tag</div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#tagPickerModal">
+              Manage tags
+            </button>
+          </div>
+          <div class="card-body">
+            {% if folder.deck_tag %}
+              {% set formatted_deck_tag = folder_tag_category ~ ': ' ~ folder.deck_tag if folder_tag_category else folder.deck_tag %}
+              <span class="badge text-bg-secondary">{{ formatted_deck_tag }}</span>
+            {% else %}
+              <div class="text-muted small">No tag set yet.</div>
             {% endif %}
           </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
-          <span class="badge text-bg-warning">Build Queue</span>
-          <form method="post"
-                action="{{ url_for('views.finish_build', folder_id=folder.id) }}"
-                data-ux-submit>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-outline-success"
-                    type="submit"
-                    data-confirm="Finish this build and convert it into a normal deck?"
-                    data-progress-label="Finishing...">
-              Finish Build
-            </button>
-          </form>
-        </div>
-      </div>
-      <div class="card-body">
-        {% if build_state and build_state.ok %}
-          <div class="row g-3">
-            <div class="col-12 col-lg-4">
-              <div class="fw-semibold mb-2">Owned Synergy</div>
-              {% if build_state.recommendations and build_state.recommendations.owned %}
-                <div class="list-group list-group-flush">
-                  {% for rec in build_state.recommendations.owned %}
-                    <div class="list-group-item d-flex align-items-start justify-content-between gap-3">
-                      <div class="flex-grow-1">
-                        <div class="fw-semibold">{{ rec.name }}</div>
-                        <div class="small text-muted">
-                          Synergy: {{ '%.1f'|format(rec.synergy_score or 0) }}
-                          {% if rec.owned_qty %}&mdash; Owned: {{ rec.owned_qty }}{% endif %}
-                        </div>
-                        {% if rec.reasons %}
-                          <div class="small text-muted">{{ rec.reasons|join(' · ') }}</div>
-                        {% endif %}
-                      </div>
-                      <div class="text-end">
-                        {% if rec.in_deck %}
-                          <span class="badge text-bg-secondary">In Deck</span>
-                        {% else %}
-                          <form method="post"
-                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                                class="d-inline"
-                                data-ux-submit>
-                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
-                            <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
-                              Add
-                            </button>
-                          </form>
-                        {% endif %}
-                      </div>
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="text-muted small">No owned synergy cards found yet.</div>
-              {% endif %}
-            </div>
-            <div class="col-12 col-lg-4">
-              <div class="fw-semibold mb-2">EDHREC Suggestions</div>
-              {% if build_state.recommendations and build_state.recommendations.external %}
-                <div class="list-group list-group-flush">
-                  {% for rec in build_state.recommendations.external %}
-                    <div class="list-group-item d-flex align-items-start justify-content-between gap-3">
-                      <div class="flex-grow-1">
-                        <div class="d-flex align-items-center gap-2">
-                          <div class="fw-semibold">{{ rec.name }}</div>
-                          <span class="badge text-bg-secondary">External</span>
-                        </div>
-                        <div class="small text-muted">
-                          Synergy: {{ '%.1f'|format(rec.synergy_score or 0) }}
-                        </div>
-                        {% if rec.reasons %}
-                          <div class="small text-muted">{{ rec.reasons|join(' · ') }}</div>
-                        {% endif %}
-                      </div>
-                      <div class="text-end">
-                        {% if rec.in_deck %}
-                          <span class="badge text-bg-secondary">In Deck</span>
-                        {% else %}
-                          <form method="post"
-                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                                class="d-inline"
-                                data-ux-submit>
-                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
-                            <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
-                              Add
-                            </button>
-                          </form>
-                        {% endif %}
-                      </div>
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="text-muted small">No external suggestions available.</div>
-              {% endif %}
-            </div>
-            <div class="col-12 col-lg-4">
-              <div class="fw-semibold mb-2">App-Specific Suggestions</div>
-              {% if build_state.recommendations and build_state.recommendations.app %}
-                <div class="list-group list-group-flush">
-                  {% for rec in build_state.recommendations.app %}
-                    <div class="list-group-item d-flex align-items-start justify-content-between gap-3">
-                      <div class="flex-grow-1">
-                        <div class="fw-semibold">{{ rec.name }}</div>
-                        <div class="small text-muted">
-                          {% if rec.owned_qty %}Owned: {{ rec.owned_qty }}{% endif %}
-                        </div>
-                        {% if rec.reasons %}
-                          <div class="small text-muted">{{ rec.reasons|join(' · ') }}</div>
-                        {% endif %}
-                      </div>
-                      <div class="text-end">
-                        {% if rec.in_deck %}
-                          <span class="badge text-bg-secondary">In Deck</span>
-                        {% else %}
-                          <form method="post"
-                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                                class="d-inline"
-                                data-ux-submit>
-                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
-                            <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
-                              Add
-                            </button>
-                          </form>
-                        {% endif %}
-                      </div>
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="text-muted small">No app-specific suggestions right now.</div>
-              {% endif %}
-            </div>
-          </div>
-        {% else %}
-          <div class="text-muted small">
-            {{ build_state.error if build_state and build_state.error else 'Build recommendations are not available.' }}
-          </div>
-        {% endif %}
-      </div>
-    </div>
-  {% endif %}
+      {% endif %}
 
-  {# ===== Tokens section ===== #}
-  {% if deck_tokens and deck_tokens|length %}
-    <div class="card token-section mb-4">
-      <div class="card-header py-2 d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-          <button id="tokensToggle"
-                  class="btn btn-sm btn-plain tap-toggle d-inline-flex align-items-center gap-2 collapsed"
-                  type="button"
-                  data-bs-toggle="collapse"
-                  data-bs-target="#deckTokensCollapse"
-                  aria-expanded="false"
-                  aria-controls="deckTokensCollapse"
-                  title="Expand/Collapse">
-            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
-            <span class="fw-semibold">Tokens</span>
-          </button>
+      <div class="card mb-3">
+        <div class="card-header py-2">
+          <div class="fw-semibold">{{ 'Deck Stats' if folder.is_deck else 'Folder Stats' }}</div>
         </div>
-      </div>
-
-      <div class="collapse" id="deckTokensCollapse">
         <div class="card-body">
-          <div class="row g-3">
-            {% for t in deck_tokens %}
-              {% set tok_img = t.small or t.normal %}
-              {% set tok_normal = t.normal or (tok_img or '')|replace('/small/','/normal/') %}
-              {% set tok_large = (tok_normal or tok_img or '')|replace('/normal/','/large/') %}
-              {% set srcs = t.sources or [] %}
-              {% set nsrc = srcs|length %}
-              {% set more = nsrc-2 if nsrc>2 else 0 %}
-              {% set collapse_id = 'toksrc-' ~ loop.index0 %}
-              {% set tok_href = (url_for('views.scryfall_print_detail', sid=t.id) if t.id else url_for('views.scryfall_browser', q=t.name, unique='1')) %}
+          <div class="stats-grid mb-3">
+            <div class="stat-card"><div class="label">Unique Cards</div><div class="value" data-stat-unique>{{ total_rows }}</div></div>
+            <div class="stat-card"><div class="label">Total Quantity</div><div class="value" data-stat-total>{{ total_qty }}</div></div>
+            <div class="stat-card"><div class="label">Total Value</div><div class="value">${{ '{:,.2f}'.format(total_value_usd or 0) }}</div></div>
+          </div>
+          {% if folder.is_deck %}
+            {% if type_breakdown and type_breakdown|length %}
+              <div class="mb-3">
+                <div class="section-title text-start">Type Breakdown</div>
+                <div class="d-flex flex-wrap gap-2 type-pill-group">
+                  {% for t, n in type_breakdown %}
+                    <button type="button"
+                            class="pill type-pill"
+                            data-type="{{ t|lower }}"
+                            data-type-label="{{ t }}"
+                            aria-pressed="false">
+                      {{ t }} <span class="ms-1 badge text-bg-light">{{ n }}</span>
+                    </button>
+                  {% endfor %}
+                </div>
+                <div id="typeFilterHint" class="small text-muted mt-2 d-none">
+                  Filtering by <strong data-type-name></strong>.
+                  <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="typeFilterClear">Clear</button>
+                </div>
+              </div>
+            {% endif %}
 
-              <div class="col-12 col-md-6 col-lg-4">
-                <div class="token-item h-100">
-                  <div class="d-flex gap-2">
-                    <div class="token-thumb">
-                      <a class="token-tile-link d-inline-block"
-                         href="{{ tok_href }}"
-                         {% if tok_large or tok_normal or tok_img %}
-                           data-hover-src="{{ tok_large or tok_normal or tok_img }}"
-                         {% endif %}>
-                        {% if tok_img %}
-                          <img src="{{ tok_img }}"
-                               alt="{{ t.name or 'Token' }}"
-                               {% if tok_large or tok_normal or tok_img %}
-                                 data-hover-src="{{ tok_large or tok_normal or tok_img }}"
-                               {% endif %}>
-                        {% else %}
-                          <div class="bg-secondary-subtle rounded" style="width:96px;height:96px;opacity:.25;"></div>
-                        {% endif %}
-                      </a>
+            {% if mana_pip_dist and mana_pip_dist|length %}
+              <div class="mb-3">
+                <div class="section-title text-start">Color Distribution</div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  {% for c, pip, n in mana_pip_dist %}
+                    <span class="pill d-inline-flex align-items-center">
+                      {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+                      <span class="fw-semibold">{{ n }}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            {% if land_mana_sources and land_mana_sources|length %}
+              <div class="mb-3">
+                <div class="section-title text-start">Mana Sources</div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  {% for c, pip, n in land_mana_sources %}
+                    <span class="pill d-inline-flex align-items-center">
+                      {% if pip %}
+                        <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
+                      {% elif c in ['C', 'Colorless'] %}
+                        <img src="{{ url_for('static', filename='symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+                      {% else %}
+                        <span class="me-1">{{ c }}</span>
+                      {% endif %}
+                      <span class="fw-semibold">{{ n }}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            {% if curve_rows and curve_rows|length %}
+              <div>
+                <div class="section-title text-start">Mana Curve</div>
+                <div class="curve-grid">
+                  {% for row in curve_rows %}
+                    <div class="curve-col" title="{{ row.count }} cards at {{ row.label }} CMC">
+                      <button type="button"
+                              class="curve-bar-btn"
+                              data-cmc-bucket="{{ row.label }}"
+                              data-cmc-label="{{ row.label }}"
+                              aria-pressed="false">
+                        <div class="curve-bar">
+                          <div class="fill" style="height: {{ row.pct }}%;"></div>
+                          <div class="curve-count">{{ row.count }}</div>
+                        </div>
+                        <div class="curve-label">{{ row.label }}</div>
+                      </button>
                     </div>
+                  {% endfor %}
+                </div>
+                <div id="cmcFilterHint" class="small text-muted mt-2 d-none">
+                  Filtering by CMC <strong data-cmc-label></strong>.
+                  <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="cmcFilterClear">Clear</button>
+                </div>
+              </div>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
 
-                    <div class="flex-fill min-w-0">
-                      <div class="d-flex align-items-center gap-2">
-                        <div class="fw-semibold text-truncate">
-                          <a class="token-name-link text-decoration-none"
+      {% if commander_bracket and not folder.is_collection %}
+        <div class="card mb-3">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <div class="fw-semibold">Commander Bracket</div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#bracketModal">
+              View details
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="small text-muted text-uppercase">Bracket {{ commander_bracket.level }}</div>
+            <div class="fw-semibold">{{ commander_bracket.label }}</div>
+            <div class="d-flex gap-4 mt-2">
+              <div>
+                <div class="small text-muted">Score</div>
+                <div class="fw-semibold">{{ '%.2f'|format(commander_bracket.score or 0) }}</div>
+              </div>
+              <div>
+                <div class="small text-muted">Rank</div>
+                <div class="fw-semibold">{{ commander_bracket.rank or '—' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      {# ===== Tokens section ===== #}
+      {% if deck_tokens and deck_tokens|length %}
+        <div class="card token-section mb-3">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+              <button id="tokensToggle"
+                      class="btn btn-sm btn-plain tap-toggle d-inline-flex align-items-center gap-2 collapsed"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#deckTokensCollapse"
+                      aria-expanded="false"
+                      aria-controls="deckTokensCollapse"
+                      title="Expand/Collapse">
+                <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
+                <span class="fw-semibold">Tokens</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="collapse" id="deckTokensCollapse">
+            <div class="card-body">
+              <div class="row g-3">
+                {% for t in deck_tokens %}
+                  {% set tok_img = t.small or t.normal %}
+                  {% set tok_normal = t.normal or (tok_img or '')|replace('/small/','/normal/') %}
+                  {% set tok_large = (tok_normal or tok_img or '')|replace('/normal/','/large/') %}
+                  {% set srcs = t.sources or [] %}
+                  {% set nsrc = srcs|length %}
+                  {% set more = nsrc-2 if nsrc>2 else 0 %}
+                  {% set collapse_id = 'toksrc-' ~ loop.index0 %}
+                  {% set tok_href = (url_for('views.scryfall_print_detail', sid=t.id) if t.id else url_for('views.scryfall_browser', q=t.name, unique='1')) %}
+
+                  <div class="col-12 col-md-6">
+                    <div class="token-item h-100">
+                      <div class="d-flex gap-2">
+                        <div class="token-thumb">
+                          <a class="token-tile-link d-inline-block"
                              href="{{ tok_href }}"
                              {% if tok_large or tok_normal or tok_img %}
                                data-hover-src="{{ tok_large or tok_normal or tok_img }}"
                              {% endif %}>
-                            {{ t.name or 'Token' }}
+                            {% if tok_img %}
+                              <img src="{{ tok_img }}"
+                                   alt="{{ t.name or 'Token' }}"
+                                   {% if tok_large or tok_normal or tok_img %}
+                                     data-hover-src="{{ tok_large or tok_normal or tok_img }}"
+                                   {% endif %}>
+                            {% else %}
+                              <div class="bg-secondary-subtle rounded" style="width:96px;height:96px;opacity:.25;"></div>
+                            {% endif %}
                           </a>
                         </div>
-                        <span class="badge text-bg-secondary ms-auto">&times;{{ nsrc }}</span>
-                      </div>
-                      <div class="small text-muted text-truncate">{{ t.type_line or '' }}</div>
-                      {% if srcs %}
-                        {% set creator_collapse_id = 'tokcreator-' ~ loop.index0 %}
-                        <div class="d-flex align-items-center gap-2 mt-2">
-                          <button class="btn btn-outline-secondary btn-sm px-2 py-1 tap-toggle"
-                                  type="button"
-                                  data-bs-toggle="collapse"
-                                  data-bs-target="#{{ creator_collapse_id }}"
-                                  aria-expanded="true"
-                                  aria-controls="{{ creator_collapse_id }}"
-                                  title="Show token creators">
-                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
-                          </button>
-                          <span class="small text-muted fw-semibold">Token Creator</span>
-                        </div>
-                        <div class="collapse show mt-1" id="{{ creator_collapse_id }}">
-                          <div class="token-source-list">
-                            {% for s in srcs %}
-                              {% set src_small = s.img or '' %}
-                              {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
-                              {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
-                              <a class="token-source text-decoration-none d-flex align-items-center gap-2"
-                                 href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
-                                 {% if src_large or src_normal or src_small %}
-                                   data-hover-src="{{ src_large or src_normal or src_small }}"
-                                 {% endif %}>
-                                <span>{{ s.name }}</span>
-                              </a>
-                            {% endfor %}
-                          </div>
-                        </div>
-                      {% endif %}
 
-                      <div class="collapse mt-2" id="{{ collapse_id }}">
-                        <div class="small mb-1 text-muted d-flex align-items-center gap-2">
-                          <span class="badge bg-light text-dark border">
-                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
-                          </span>
-                          <span>Token Creator</span>
-                        </div>
-                        <div class="token-source-list">
-                          {% for s in srcs %}
-                            {% set src_small = s.img or '' %}
-                            {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
-                            {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
-                            <a class="token-source text-decoration-none d-flex align-items-center gap-2"
-                               href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
-                               {% if src_large or src_normal or src_small %}
-                                 data-hover-src="{{ src_large or src_normal or src_small }}"
-                               {% endif %}>
-                              <span>{{ s.name }}</span>
-                            </a>
-                          {% endfor %}
-                          {% if not srcs %}
-                            <div class="text-muted small">No sources listed.</div>
+                        <div class="flex-fill min-w-0">
+                          <div class="d-flex align-items-center gap-2">
+                            <div class="fw-semibold text-truncate">
+                              <a class="token-name-link text-decoration-none"
+                                 href="{{ tok_href }}"
+                                 {% if tok_large or tok_normal or tok_img %}
+                                   data-hover-src="{{ tok_large or tok_normal or tok_img }}"
+                                 {% endif %}>
+                                {{ t.name or 'Token' }}
+                              </a>
+                            </div>
+                            <span class="badge text-bg-secondary ms-auto">&times;{{ nsrc }}</span>
+                          </div>
+                          <div class="small text-muted text-truncate">{{ t.type_line or '' }}</div>
+                          {% if srcs %}
+                            {% set creator_collapse_id = 'tokcreator-' ~ loop.index0 %}
+                            <div class="d-flex align-items-center gap-2 mt-2">
+                              <button class="btn btn-outline-secondary btn-sm px-2 py-1 tap-toggle"
+                                      type="button"
+                                      data-bs-toggle="collapse"
+                                      data-bs-target="#{{ creator_collapse_id }}"
+                                      aria-expanded="true"
+                                      aria-controls="{{ creator_collapse_id }}"
+                                      title="Show token creators">
+                                <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
+                              </button>
+                              <span class="small text-muted fw-semibold">Token Creator</span>
+                            </div>
+                            <div class="collapse show mt-1" id="{{ creator_collapse_id }}">
+                              <div class="token-source-list">
+                                {% for s in srcs %}
+                                  {% set src_small = s.img or '' %}
+                                  {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
+                                  {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
+                                  <a class="token-source text-decoration-none d-flex align-items-center gap-2"
+                                     href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
+                                     {% if src_large or src_normal or src_small %}
+                                       data-hover-src="{{ src_large or src_normal or src_small }}"
+                                     {% endif %}>
+                                    <span>{{ s.name }}</span>
+                                  </a>
+                                {% endfor %}
+                              </div>
+                            </div>
                           {% endif %}
+
+                          <div class="collapse mt-2" id="{{ collapse_id }}">
+                            <div class="small mb-1 text-muted d-flex align-items-center gap-2">
+                              <span class="badge bg-light text-dark border">
+                                <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
+                              </span>
+                              <span>Token Creator</span>
+                            </div>
+                            <div class="token-source-list">
+                              {% for s in srcs %}
+                                {% set src_small = s.img or '' %}
+                                {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
+                                {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
+                                <a class="token-source text-decoration-none d-flex align-items-center gap-2"
+                                   href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
+                                   {% if src_large or src_normal or src_small %}
+                                     data-hover-src="{{ src_large or src_normal or src_small }}"
+                                   {% endif %}>
+                                  <span>{{ s.name }}</span>
+                                </a>
+                              {% endfor %}
+                              {% if not srcs %}
+                                <div class="text-muted small">No sources listed.</div>
+                              {% endif %}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                {% endfor %}
               </div>
-            {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="col-12 col-lg-8">
+      {% set current_sort = sort or (request.args.get('sort') or 'name') %}
+      {% set current_dir = direction or (request.args.get('dir') or 'asc') %}
+      {% set sort_label_map = {
+        'name':'Name',
+        'ctype':'Type',
+        'colors':'Colors',
+        'cmc':'CMC',
+        'rar':'Rarity',
+        'set':'Set',
+        'cn':'#',
+        'foil':'Foil',
+        'qty':'Quantity'
+      } %}
+      {% set sort_label = sort_label_map.get(current_sort, 'Name') %}
+      {% set dir_label = 'Ascending' if current_dir == 'asc' else 'Descending' %}
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="row g-2 align-items-center">
+            <div class="col-12 col-lg-5">
+              <label for="cardNameFilter" class="form-label visually-hidden">Search cards by name</label>
+              <input type="search"
+                     class="form-control form-control-sm"
+                     id="cardNameFilter"
+                     placeholder="Search cards by name">
+            </div>
+            <div class="col-12 col-lg-7 text-lg-end">
+              <div class="d-inline-flex flex-wrap gap-2 justify-content-lg-end">
+                <button id="copyDeckListBtn" class="btn btn-outline-secondary btn-sm" type="button">Copy to clipboard</button>
+                <div class="btn-group">
+                  <button class="btn btn-primary btn-sm export-format" type="button" data-export-format="csv">
+                    Export all (CSV)
+                  </button>
+                  <button class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false"
+                          aria-label="Choose export format">
+                    <span class="visually-hidden">Choose export format</span>
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end dv-select-menu">
+                    <li>
+                      <button class="dropdown-item export-format" type="button" data-export-format="manavault">
+                        Export for ManaVault
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item export-format" type="button" data-export-format="dragonshield">
+                        Export for Dragon Shield
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+                  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.folder_sharing', folder_id=folder.id) }}">
+                    Sharing
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-2">
+                  <input class="form-check-input" type="checkbox" id="folderSelectAll">
+                  <label for="folderSelectAll" class="small text-muted">Select all</label>
+                </div>
+                <form class="d-flex flex-wrap align-items-center gap-2" method="get">
+                  <div class="dropdown dv-select" data-dv-select="folder-sort" data-allow-reselect="true">
+                    <input type="hidden" name="sort" id="folderSortInput" data-dv-select-input value="{{ current_sort }}">
+                    <button class="btn dv-select-toggle btn-sm justify-content-between" type="button" id="folderSortToggle" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="folderSortToggle">
+                      <span data-dv-select-label>Sort: {{ sort_label }}</span>
+                      <i class="bi bi-chevron-down"></i>
+                    </button>
+                    <ul class="dropdown-menu dv-select-menu" aria-labelledby="folderSortToggle">
+                      {% for key, label in sort_label_map.items() %}
+                        <li>
+                          <button class="dropdown-item{% if current_sort == key %} active{% endif %}" type="button" data-dv-select-option data-value="{{ key }}" data-label="Sort: {{ label }}">
+                            {{ label }}
+                          </button>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                  <div class="dropdown dv-select" data-dv-select="folder-sort-dir" data-allow-reselect="true">
+                    <input type="hidden" name="dir" id="folderSortDirInput" data-dv-select-input value="{{ current_dir }}">
+                    <button class="btn dv-select-toggle btn-sm justify-content-between" type="button" id="folderSortDirToggle" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="folderSortDirToggle">
+                      <span data-dv-select-label>{{ dir_label }}</span>
+                      <i class="bi bi-chevron-down"></i>
+                    </button>
+                    <ul class="dropdown-menu dv-select-menu" aria-labelledby="folderSortDirToggle">
+                      <li>
+                        <button class="dropdown-item{% if current_dir == 'asc' %} active{% endif %}" type="button" data-dv-select-option data-value="asc" data-label="Ascending">
+                          Ascending
+                        </button>
+                      </li>
+                      <li>
+                        <button class="dropdown-item{% if current_dir == 'desc' %} active{% endif %}" type="button" data-dv-select-option data-value="desc" data-label="Descending">
+                          Descending
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                  <button class="btn btn-outline-secondary btn-sm" type="submit">Apply</button>
+                </form>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  {% endif %}
 
-  {# ===== Controls above list ===== #}
-  <div class="row g-2 align-items-center mb-3">
-    <div class="col-12 col-md-6 col-lg-5">
-      <label for="cardNameFilter" class="form-label visually-hidden">Search cards by name</label>
-      <input type="search"
-             class="form-control form-control-sm"
-             id="cardNameFilter"
-             placeholder="Search cards by name">
-    </div>
-    <div class="col-12 col-md-6 col-lg-7 text-md-end">
-      <div class="d-inline-flex flex-wrap gap-2 justify-content-md-end">
-        <button id="copyDeckListBtn" class="btn btn-outline-secondary btn-sm" type="button">Copy to clipboard</button>
-        <div class="btn-group">
-          <button class="btn btn-primary btn-sm export-format" type="button" data-export-format="csv">
-            Export all (CSV)
-          </button>
-          <button class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                  aria-label="Choose export format">
-            <span class="visually-hidden">Choose export format</span>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end dv-select-menu">
-            <li>
-              <button class="dropdown-item export-format" type="button" data-export-format="manavault">
-                Export for ManaVault
-              </button>
-            </li>
-            <li>
-              <button class="dropdown-item export-format" type="button" data-export-format="dragonshield">
-                Export for Dragon Shield
-              </button>
-            </li>
-          </ul>
-        </div>
-        {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
-          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.folder_sharing', folder_id=folder.id) }}">
-            Sharing
-          </a>
-        {% endif %}
+      <div id="folderCardList" class="card-list">
+        {% for group in card_groups %}
+          <div class="card-group mb-3" data-group="{{ group.label|lower }}">
+            <div class="card-group-header d-flex align-items-center justify-content-between">
+              <div class="fw-semibold">{{ group.label }}</div>
+              <span class="badge text-bg-dark" data-group-count>{{ group.count }}</span>
+            </div>
+            <div class="card-group-body">
+              {% if group.cards and group.cards|length %}
+                {% for c in group.cards %}
+                  {% set hover_art = c.hover_image %}
+                  <div class="deck-row"
+                       data-card-id="{{ c.id }}"
+                       data-name="{{ c.display_name | e }}"
+                       data-type="{{ c.type_line | e }}"
+                       data-tags="{{ c.data_tags }}"
+                       data-rarity="{{ (c.rarity_label or '') | e }}"
+                       data-set="{{ c.set_code_upper }}"
+                       data-cn="{{ c.collector_number or '' }}"
+                       data-foil="{{ '1' if c.is_foil else '0' }}"
+                       data-qty="{{ c.quantity or 1 }}"
+                       data-cmc-bucket="{{ c.cmc_bucket }}"
+                       data-roles="{{ c.data_roles }}"
+                       data-img-small="{{ c.image_small or '' }}"
+                       data-img-normal="{{ c.image_normal or '' }}"
+                       data-img-large="{{ c.image_large or '' }}"
+                       data-ignore-hover="true"
+                       role="button"
+                       aria-label="View {{ c.display_name }} details">
+                    <div class="row g-2 align-items-center">
+                      <div class="col-auto">
+                        <input class="form-check-input card-select" type="checkbox" value="{{ c.id }}">
+                      </div>
+                      <div class="col-auto">
+                        {% if c.image_small %}
+                          <img src="{{ c.image_small }}"
+                               class="art-thumb"
+                               alt="art"
+                               data-hover-src="{{ hover_art }}">
+                        {% else %}
+                          <div class="bg-secondary-subtle rounded" style="width:48px;height:64px;opacity:.25;"></div>
+                        {% endif %}
+                      </div>
+                      <div class="col">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                          <a href="{{ url_for('views.card_detail', card_id=c.id) }}"
+                             class="deck-name-link fw-semibold"
+                             data-hover-src="{{ hover_art }}">
+                            {{ c.display_name }}
+                          </a>
+                          {% if c.color_icons and c.color_icons|length %}
+                            <span class="pip-row">
+                              {% for src in c.color_icons %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
+                            </span>
+                          {% else %}
+                            <span class="pip-row"><img class="pip" src="/static/symbols/C.svg" alt="{C}"></span>
+                          {% endif %}
+                        </div>
+                        <div class="card-meta-line text-muted">
+                          {% if c.type_badges and c.type_badges|length %}
+                            {% for t in c.type_badges %}<span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>{% endfor %}
+                          {% else %}
+                            {{ c.type_line }}
+                          {% endif %}
+                        </div>
+                        <div class="card-meta-line text-muted d-flex flex-wrap gap-2">
+                          <span>{{ c.set_code_upper }}{% if c.collector_number %} #{{ c.collector_number }}{% endif %}</span>
+                          {% if c.rarity_label %}
+                            <span class="badge badge-folder badge-folder-{{ c.rarity_badge_class or '' }}">{{ c.rarity_label }}</span>
+                          {% endif %}
+                          <span>{% if c.is_foil %}Foil{% else %}Nonfoil{% endif %}</span>
+                        </div>
+                      </div>
+                      <div class="col-4 col-md-2 text-end">
+                        <div class="small text-muted">CMC</div>
+                        <div class="cmc-chip" data-cmc="{{ ('%.4f' % c.cmc_value) if c.cmc_value is not none else '' }}">
+                          {% if c.cmc_value is not none %}
+                            {{ c.cmc_display }}
+                          {% else %}
+                            &mdash;
+                          {% endif %}
+                        </div>
+                      </div>
+                      <div class="col-4 col-md-2 text-end">
+                        <div class="small text-muted">Qty</div>
+                        <div class="fw-semibold">{{ c.quantity or 1 }}</div>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              {% endif %}
+              <div class="card-group-empty text-muted small{% if group.cards and group.cards|length %} d-none{% endif %}">
+                No {{ group.label }} in this folder.
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      <div id="cardFilterEmptyState" class="text-muted text-center py-4 d-none">No cards match that search.</div>
+      <div class="mt-3 d-flex justify-content-end">
+        <button type="button" class="btn btn-outline-danger btn-sm" id="folderBottomDelete" disabled>
+          {{ 'Remove from Build' if folder.is_build else 'Delete' }}
+        </button>
       </div>
     </div>
-  </div>
-
-  {# ===== Cards table ===== #}
-  {% set sort = (request.args.get('sort') or '') %}
-  {% set direction = (request.args.get('dir') or 'asc') %}
-  {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
-  {% set ctyp_dir = 'asc' if sort!='ctype' or direction=='desc' else 'desc' %}
-  {% set col_dir  = 'asc' if sort!='colors' or direction=='desc' else 'desc' %}
-  {% set cmc_dir  = 'asc' if sort!='cmc'   or direction=='desc' else 'desc' %}
-{% set rar_dir  = 'asc' if sort!='rar'  or direction=='desc' else 'desc' %}
-{% set set_dir  = 'asc' if sort!='set'  or direction=='desc' else 'desc' %}
-{% set cn_dir   = 'asc' if sort!='cn'   or direction=='desc' else 'desc' %}
-{% set foil_dir = 'asc' if sort!='foil' or direction=='desc' else 'desc' %}
-{% set qty_dir  = 'asc' if sort!='qty'  or direction=='desc' else 'desc' %}
-
-  <div class="table-responsive">
-    <table class="table table-sm align-middle cards-table" id="folderCardsTable">
-      <thead>
-        <tr>
-          <th class="text-center" style="width:40px;">
-            <input class="form-check-input" type="checkbox" id="folderSelectAll">
-          </th>
-          <th class="col-art">Art</th>
-          <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='name',  dir=name_dir) }}">Name</a></th>
-          <th><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='ctype', dir=ctyp_dir) }}">Type</a></th>
-          <th>Colors</th>
-          <th class="text-center nowrap col-cmc"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='cmc',   dir=cmc_dir) }}">CMC</a></th>
-          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='rar',   dir=rar_dir) }}">Rarity</a></th>
-          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='set',   dir=set_dir) }}">Set</a></th>
-          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='cn',    dir=cn_dir) }}">#</a></th>
-          <th class="nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='foil',  dir=foil_dir) }}">Foil</a></th>
-          <th class="text-end nowrap"><a href="{{ url_for('views.folder_detail', folder_id=folder.id, sort='qty',   dir=qty_dir) }}">Qty</a></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if deck_cards and deck_cards|length %}
-          {% for c in deck_cards %}
-            {% set hover_art = c.hover_image %}
-            <tr class="deck-row"
-                data-card-id="{{ c.id }}"
-                data-name="{{ c.display_name | e }}"
-                data-type="{{ c.type_line | e }}"
-                data-tags="{{ c.data_tags }}"
-                data-rarity="{{ (c.rarity_label or '') | e }}"
-                data-set="{{ c.set_code_upper }}"
-                data-cn="{{ c.collector_number or '' }}"
-                data-foil="{{ '1' if c.is_foil else '0' }}"
-                data-qty="{{ c.quantity or 1 }}"
-                data-cmc-bucket="{{ c.cmc_bucket }}"
-                data-roles="{{ c.data_roles }}"
-                data-img-small="{{ c.image_small or '' }}"
-                data-img-normal="{{ c.image_normal or '' }}"
-                data-img-large="{{ c.image_large or '' }}"
-              data-ignore-hover="true"
-              role="button"
-                aria-label="View {{ c.display_name }} details"
-            >
-              <td class="text-center">
-                <input class="form-check-input card-select" type="checkbox" value="{{ c.id }}">
-              </td>
-              <td class="col-art">
-                {% if c.image_small %}
-                  <img src="{{ c.image_small }}"
-                       class="art-thumb"
-                       alt="art"
-                       data-hover-src="{{ hover_art }}">
-                {% else %}
-                  <div class="bg-secondary-subtle rounded" style="width:48px;height:64px;opacity:.25;"></div>
-                {% endif %}
-              </td>
-              <td>
-                <a href="{{ url_for('views.card_detail', card_id=c.id) }}"
-                   class="deck-name-link"
-                   data-hover-src="{{ hover_art }}">
-                  {{ c.display_name }}
-                </a>
-              </td>
-              <td>
-                {% if c.type_badges and c.type_badges|length %}
-                  {% for t in c.type_badges %}<span class="badge badge-type badge-type-{{ t|lower }}">{{ t }}</span>{% endfor %}
-                {% else %}<span class="text-muted">â€”</span>{% endif %}
-              </td>
-              <td class="col-colors">
-                {% if c.color_icons and c.color_icons|length %}
-                  <span class="pip-row">
-                    {% for src in c.color_icons %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
-                  </span>
-                {% else %}
-                  <span class="pip-row"><img class="pip" src="/static/symbols/C.svg" alt="{C}"></span>
-                {% endif %}
-              </td>
-              <td class="text-center nowrap col-cmc" data-cmc="{{ ('%.4f' % c.cmc_value) if c.cmc_value is not none else '' }}">
-                {% if c.cmc_value is not none %}
-                  <span class="cmc-chip">{{ c.cmc_display }}</span>
-                {% else %}
-                  <span class="cmc-chip text-muted">&mdash;</span>
-                {% endif %}
-              </td>
-              <td class="nowrap">
-                {% if c.rarity_label %}
-                  <span class="badge badge-folder badge-folder-{{ c.rarity_badge_class or '' }}">{{ c.rarity_label }}</span>
-                {% else %}&mdash;{% endif %}
-              </td>
-              <td class="nowrap">{{ c.set_code_upper }}</td>
-              <td class="nowrap">{{ c.collector_number or '' }}</td>
-              <td class="nowrap">
-                {% if c.is_foil %}
-                  <span class="text-success">&#10003;</span>
-                {% else %}
-                  <span class="text-muted">&mdash;</span>
-                {% endif %}
-              </td>
-              <td class="text-end nowrap">{{ c.quantity or 1 }}</td>
-            </tr>
-          {% endfor %}
-          <tr id="cardFilterEmptyRow" class="d-none">
-            <td colspan="11" class="py-4 text-center text-muted">No cards match that search.</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="11" class="text-muted">No cards in this folder.</td></tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
-  <div class="mt-3 d-flex justify-content-end">
-    <button type="button" class="btn btn-outline-danger btn-sm" id="folderBottomDelete" disabled>
-      {{ 'Remove from Build' if folder.is_build else 'Delete' }}
-    </button>
   </div>
 </div>
 
@@ -1994,8 +2071,8 @@
   }
 
   // Disable drawer open-on-row-click for deck/collection cards; only name link navigates.
-  document.querySelectorAll('tr.deck-row').forEach(tr => {
-    tr.setAttribute('tabindex', '0');
+  document.querySelectorAll('.deck-row').forEach(row => {
+    row.setAttribute('tabindex', '0');
   });
 
   // Tokens collapse handled by Bootstrap data API
@@ -2018,8 +2095,9 @@
   }
 
   // Card name filter
-  let rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row'));
-  const emptyRow = document.getElementById('cardFilterEmptyRow');
+  let rows = Array.from(document.querySelectorAll('#folderCardList .deck-row'));
+  const emptyState = document.getElementById('cardFilterEmptyState');
+  const cardGroups = Array.from(document.querySelectorAll('.card-group'));
   const nameFilterInput = document.getElementById('cardNameFilter');
   const typePills = Array.from(document.querySelectorAll('.type-pill'));
   const typeHint = document.getElementById('typeFilterHint');
@@ -2044,26 +2122,35 @@
   const bulkDeleteUrl = folderRoot?.dataset?.bulkDeleteUrl || "{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}";
   const statUniqueEl = document.querySelector('[data-stat-unique]');
   const statTotalEl = document.querySelector('[data-stat-total]');
-let rowCheckboxes = Array.from(document.querySelectorAll('#folderCardsTable .card-select'));
-const csrfToken = window.csrfToken || document.querySelector('meta[name=\"csrf-token\"]')?.content || '';
-const csrfHeader = window.csrfHeader || (csrfToken ? {"X-CSRFToken": csrfToken} : {});
-let bulkStatusTimer = null;
+  let rowCheckboxes = Array.from(document.querySelectorAll('#folderCardList .card-select'));
+  const csrfToken = window.csrfToken || document.querySelector('meta[name=\"csrf-token\"]')?.content || '';
+  const csrfHeader = window.csrfHeader || (csrfToken ? {"X-CSRFToken": csrfToken} : {});
+  let bulkStatusTimer = null;
 
   function selectedCheckboxes() {
     return Array.from(rowCheckboxes).filter(cb => cb.checked);
   }
 
   function refreshRows() {
-    rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row'));
+    rows = Array.from(document.querySelectorAll('#folderCardList .deck-row'));
   }
 
   function refreshCheckboxes() {
-    rowCheckboxes = Array.from(document.querySelectorAll('#folderCardsTable .card-select'));
+    rowCheckboxes = Array.from(document.querySelectorAll('#folderCardList .card-select'));
+  }
+
+  function updateGroupCounts() {
+    cardGroups.forEach(group => {
+      const countEl = group.querySelector('[data-group-count]');
+      if (!countEl) return;
+      const count = group.querySelectorAll('.deck-row').length;
+      countEl.textContent = count;
+    });
   }
 
   function updateStatsFromRows() {
     rows = rows.filter(r => r.isConnected);
-    const visibleRows = rows.filter(r => r.id !== 'cardFilterEmptyRow');
+    const visibleRows = rows.filter(r => !r.classList.contains('d-none'));
     const uniqueCount = visibleRows.length;
     const totalQty = visibleRows.reduce((sum, row) => {
       const parsed = parseInt(row.getAttribute('data-qty'), 10);
@@ -2072,16 +2159,13 @@ let bulkStatusTimer = null;
     }, 0);
     if (statUniqueEl) statUniqueEl.textContent = uniqueCount;
     if (statTotalEl) statTotalEl.textContent = totalQty;
-    if (emptyRow) {
-      emptyRow.classList.toggle('d-none', uniqueCount > 0);
-    }
   }
 
   function updateBulkBar() {
     if (!bulkBar) return;
     const sels = selectedCheckboxes();
     const count = sels.length;
-    const singleRow = count === 1 ? sels[0].closest('tr.deck-row') : null;
+    const singleRow = count === 1 ? sels[0].closest('.deck-row') : null;
     const ownedQty = singleRow ? parseInt(singleRow?.dataset?.qty || '1', 10) || 1 : null;
     bulkBar.classList.toggle('d-none', count === 0);
     document.getElementById('main')?.classList.toggle('page-section-with-bar', count > 0);
@@ -2163,6 +2247,7 @@ let bulkStatusTimer = null;
       });
       refreshRows();
       refreshCheckboxes();
+      updateGroupCounts();
       updateStatsFromRows();
       applyFilters();
       updateBulkBar();
@@ -2218,6 +2303,7 @@ let bulkStatusTimer = null;
         });
         refreshRows();
         refreshCheckboxes();
+        updateGroupCounts();
         updateStatsFromRows();
         applyFilters();
         updateBulkBar();
@@ -2232,7 +2318,7 @@ let bulkStatusTimer = null;
     bulkEditBtn?.addEventListener('click', () => {
       const checked = selectedCheckboxes();
       if (checked.length !== 1) return;
-      const row = checked[0].closest('tr.deck-row');
+      const row = checked[0].closest('.deck-row');
       openEditModalForRow(row);
     });
 
@@ -2278,7 +2364,6 @@ let bulkStatusTimer = null;
     const buildDeckList = () => {
       const lines = [];
       rows.forEach(row => {
-        if (row.id === 'cardFilterEmptyRow') return;
         const qty = row.getAttribute('data-qty') || '1';
         const name = row.getAttribute('data-name') || '';
         if (!name.trim()) return;
@@ -2361,9 +2446,11 @@ let bulkStatusTimer = null;
   }
 
   function applyFilters() {
-    rows = Array.from(document.querySelectorAll('#folderCardsTable tbody tr.deck-row')).filter(r => r.isConnected);
+    rows = Array.from(document.querySelectorAll('#folderCardList .deck-row')).filter(r => r.isConnected);
     const query = (nameFilterInput?.value || '').trim().toLowerCase();
     let visibleCount = 0;
+    const groupVisible = new Map();
+    const isFiltering = !!query || !!activeType || !!activeCmc;
 
     rows.forEach(row => {
       const name = (row.getAttribute('data-name') || '').toLowerCase();
@@ -2374,12 +2461,24 @@ let bulkStatusTimer = null;
       const typeMatch = !activeType || types.includes(activeType);
       const cmcMatch = !activeCmc || cmcBucket === activeCmc;
       const match = nameMatch && typeMatch && cmcMatch;
-      row.style.display = match ? '' : 'none';
-      if (match) visibleCount += 1;
+      row.classList.toggle('d-none', !match);
+      if (match) {
+        visibleCount += 1;
+        const group = row.closest('.card-group');
+        if (group) {
+          groupVisible.set(group, (groupVisible.get(group) || 0) + 1);
+        }
+      }
     });
 
-    if (emptyRow) {
-      emptyRow.classList.toggle('d-none', visibleCount > 0);
+    cardGroups.forEach(group => {
+      const emptyEl = group.querySelector('.card-group-empty');
+      if (!emptyEl) return;
+      emptyEl.classList.toggle('d-none', (groupVisible.get(group) || 0) > 0);
+    });
+
+    if (emptyState) {
+      emptyState.classList.toggle('d-none', visibleCount > 0 || !isFiltering);
     }
     updateStatsFromRows();
   }
@@ -2573,7 +2672,7 @@ let bulkStatusTimer = null;
     rowCheckboxes.forEach(chk => {
       chk.addEventListener('change', () => {
         if (chk.checked && selectedCheckboxes().length === 1) {
-          const row = chk.closest('tr.deck-row');
+          const row = chk.closest('.deck-row');
           openEditModalForRow(row);
         }
       });
@@ -2587,7 +2686,7 @@ let bulkStatusTimer = null;
     chk.dataset.dvPrintBound = '1';
     chk.addEventListener('change', () => {
       if (chk.checked && selectedCheckboxes().length === 1) {
-        const row = chk.closest('tr.deck-row');
+        const row = chk.closest('.deck-row');
         openEditModalForRow(row);
       }
     });
@@ -2639,6 +2738,7 @@ let bulkStatusTimer = null;
   updateCmcUI();
   applyFilters();
   updateStatsFromRows();
+  updateGroupCounts();
 
   // On first load, refresh counts from the server to ensure they reflect the latest state.
   (async () => {
