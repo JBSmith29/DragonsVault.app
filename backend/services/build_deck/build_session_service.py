@@ -19,6 +19,7 @@ from services.deck_service import get_deck_stats, recompute_deck_stats
 from services.deck_tags import is_valid_deck_tag
 from services.symbols_cache import colors_to_icons
 from . import build_constraints_service as constraints
+from . import build_breakdown_service, build_land_service
 from .build_recommendation_service import get_build_recommendations
 
 _LOG = logging.getLogger(__name__)
@@ -113,6 +114,35 @@ def _group_by_type(items: list[dict]) -> list[dict]:
     if other:
         groups.append({"label": "Other", "cards": other, "count": len(other)})
     return groups
+
+
+def _merge_collection_recs(owned: list[dict], app: list[dict]) -> list[dict]:
+    merged: dict[str, dict] = {}
+    for rec in owned + app:
+        oracle_id = (rec.get("oracle_id") or "").strip()
+        if not oracle_id:
+            continue
+        existing = merged.get(oracle_id)
+        if not existing:
+            merged[oracle_id] = dict(rec)
+            continue
+        reasons = set(existing.get("reasons") or [])
+        reasons.update(rec.get("reasons") or [])
+        existing["reasons"] = [r for r in reasons if r]
+        existing["owned_qty"] = max(
+            int(existing.get("owned_qty") or 0),
+            int(rec.get("owned_qty") or 0),
+        )
+        existing["owned"] = bool(existing["owned_qty"])
+        existing["score"] = max(
+            float(existing.get("score") or 0.0),
+            float(rec.get("score") or 0.0),
+        )
+        existing["can_add"] = bool(existing.get("can_add") or rec.get("can_add"))
+        if existing.get("disabled_reason") and rec.get("can_add"):
+            existing["disabled_reason"] = None
+        merged[oracle_id] = existing
+    return list(merged.values())
 
 
 def _commander_image(commander_oracle_id: str | None) -> str | None:
@@ -279,12 +309,13 @@ def start_build(commander_oracle_id: str, tags: list[str] | None = None) -> dict
     }
 
 
-def add_card_to_build(folder_id: int, card_oracle_id: str) -> None:
+def add_card_to_build(folder_id: int, card_oracle_id: str, quantity: int = 1) -> None:
     """
     Add a card to a build deck, enforcing constraints.
     """
     card_oracle_id = (card_oracle_id or "").strip()
     assert card_oracle_id, "card_oracle_id must exist"
+    quantity = max(int(quantity or 1), 1)
 
     folder = db.session.get(Folder, folder_id)
     if not folder or not folder.is_build:
@@ -300,17 +331,24 @@ def add_card_to_build(folder_id: int, card_oracle_id: str) -> None:
     if not ok:
         raise ValueError(message or "Card is not legal for this commander.")
 
+    commander_oracles = set(split_commander_oracle_ids(folder.commander_oracle_id))
+    if card_oracle_id in commander_oracles:
+        raise ValueError("Commander is already assigned for this deck.")
+
     deck_oracle_ids = {
         str(row[0]).strip()
         for row in db.session.query(Card.oracle_id).filter(Card.folder_id == folder_id).all()
         if row and row[0]
     }
+    allows_multiple, _ = constraints.card_allows_multiple(card_oracle_id)
+    if quantity > 1 and not allows_multiple:
+        raise ValueError("This card is limited to one copy.")
     ok, message = constraints.validate_singleton(card_oracle_id, deck_oracle_ids)
     if not ok:
         raise ValueError(message or "Singleton rule violation.")
 
     try:
-        _add_card_to_folder(folder, card_oracle_id, quantity=1)
+        _add_card_to_folder(folder, card_oracle_id, quantity=quantity)
         recompute_deck_stats(folder.id)
         db.session.commit()
     except SQLAlchemyError as exc:
@@ -361,12 +399,15 @@ def get_build_state(folder_id: int) -> dict:
             }
 
     deck_card_details: list[dict] = []
+    commander_oracles = set(split_commander_oracle_ids(folder.commander_oracle_id))
     for entry in deck_card_map.values():
         oracle_id = (entry.get("oracle_id") or "").strip()
         pr = _preferred_print(oracle_id) if oracle_id else None
         meta = sc.metadata_from_print(pr) if pr else {}
         type_line = meta.get("type_line") or ""
         image = sc.image_for_print(pr) if pr else {}
+        allows_multiple, _ = constraints.card_allows_multiple(oracle_id)
+        is_commander_card = oracle_id in commander_oracles if oracle_id else False
         deck_card_details.append(
             {
                 **entry,
@@ -375,17 +416,31 @@ def get_build_state(folder_id: int) -> dict:
                 "image_small": image.get("small"),
                 "image_normal": image.get("normal") or image.get("large") or image.get("small"),
                 "image_large": image.get("large") or image.get("normal") or image.get("small"),
+                "allows_multiple": allows_multiple,
+                "can_increment": allows_multiple and not is_commander_card,
+                "can_decrement": int(entry.get("quantity") or 0) > 1,
+                "is_commander": is_commander_card,
             }
         )
 
     total_qty = sum(int(entry.get("quantity") or 0) for entry in deck_card_details)
     total_unique = len(deck_card_details)
+    land_qty = sum(
+        int(entry.get("quantity") or 0)
+        for entry in deck_card_details
+        if "land" in (entry.get("type_line") or "").lower()
+    )
+    non_land_qty = max(total_qty - land_qty, 0)
 
+    land_target_min, land_target_max = build_land_service.land_target_range()
     recommendations = get_build_recommendations(
         commander_oracle_id=folder.commander_oracle_id or "",
         tags=tags,
         deck_oracle_ids=set(deck_card_map.keys()),
         owner_user_id=folder.owner_user_id,
+        land_count=land_qty,
+        land_target_min=land_target_min,
+        land_target_max=land_target_max,
     )
 
     edhrec_recs = list((recommendations.get("owned") or []) + (recommendations.get("external") or []))
@@ -398,9 +453,43 @@ def get_build_state(folder_id: int) -> dict:
     )
     edhrec_groups = _group_by_type(edhrec_recs)
     app_groups = _group_by_type(recommendations.get("app") or [])
+    collection_recs = _merge_collection_recs(
+        recommendations.get("owned") or [],
+        recommendations.get("app") or [],
+    )
+    collection_recs.sort(
+        key=lambda item: (
+            -(item.get("score") or 0.0),
+            -(item.get("owned_qty") or 0),
+            (item.get("name") or "").lower(),
+        )
+    )
+    collection_groups = _group_by_type(collection_recs)
     deck_groups = _group_by_type(deck_card_details)
     commander_colors = _commander_color_identity(folder.commander_oracle_id)
     commander_color_icons = colors_to_icons(commander_colors)
+    commander_slots = len(split_commander_oracle_ids(folder.commander_oracle_id))
+    commander_cards_in_deck = any(
+        oid in deck_card_map for oid in split_commander_oracle_ids(folder.commander_oracle_id)
+    )
+    total_with_commander = total_qty + (0 if commander_cards_in_deck else commander_slots)
+    progress_pct = int(round((total_with_commander / 100) * 100)) if total_with_commander else 0
+    if progress_pct > 100:
+        progress_pct = 100
+    quick_add = build_land_service.quick_add_buttons(
+        commander_oracle_id=folder.commander_oracle_id,
+        land_count=land_qty,
+    )
+    expected = build_breakdown_service.expected_breakdown(
+        commander_oracle_id=folder.commander_oracle_id or "",
+        tags=tags,
+    )
+    current = build_breakdown_service.current_breakdown(deck_card_details)
+    breakdown_rows = (
+        build_breakdown_service.breakdown_comparison(expected, current)
+        if any(expected.values())
+        else []
+    )
 
     return {
         "ok": True,
@@ -416,10 +505,23 @@ def get_build_state(folder_id: int) -> dict:
         "deck_groups": deck_groups,
         "deck_total_qty": total_qty,
         "deck_total_unique": total_unique,
+        "deck_total_with_commander": total_with_commander,
+        "deck_total_target": 100,
+        "deck_progress_pct": progress_pct,
+        "land_qty": land_qty,
+        "non_land_qty": non_land_qty,
+        "land_target_min": land_target_min,
+        "land_target_max": land_target_max,
+        "needs_lands": land_qty < land_target_min,
+        "over_limit": total_with_commander > 100,
+        "commander_missing": not bool(folder.commander_oracle_id),
+        "land_quick_add": quick_add,
+        "breakdown_rows": breakdown_rows,
         "deck_stats": get_deck_stats(folder.id),
         "recommendations": recommendations,
         "edhrec_groups": edhrec_groups,
         "app_groups": app_groups,
+        "collection_groups": collection_groups,
         "health_hints": _deck_health_hints(set(deck_card_map.keys())),
     }
 

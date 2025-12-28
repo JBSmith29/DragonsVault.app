@@ -14,6 +14,7 @@ from extensions import db
 from models import (
     EdhrecCommanderCard,
     EdhrecCommanderTag,
+    EdhrecCommanderTagCard,
     EdhrecTagCommander,
     EdhrecMetadata,
     Folder,
@@ -26,12 +27,13 @@ from services.edhrec_client import (
     edhrec_index,
     edhrec_service_enabled,
     ensure_commander_data,
+    slugify_theme,
 )
 from services.request_cache import request_cached
 
 _LOG = logging.getLogger(__name__)
 
-_MAX_SYNERGY_CARDS = 160
+_MAX_SYNERGY_CARDS = 200
 
 
 def _ensure_tables() -> None:
@@ -41,6 +43,7 @@ def _ensure_tables() -> None:
             tables=[
                 EdhrecCommanderCard.__table__,
                 EdhrecCommanderTag.__table__,
+                EdhrecCommanderTagCard.__table__,
                 EdhrecTagCommander.__table__,
                 EdhrecMetadata.__table__,
             ],
@@ -205,11 +208,11 @@ def _oracle_id_for_name(name: str, cache: dict[str, str | None]) -> str | None:
     return oid
 
 
-def _extract_commander_tags(payload: dict) -> list[str]:
+def _extract_commander_tag_entries(payload: dict) -> list[dict]:
     raw_options = payload.get("theme_options") or []
     if not isinstance(raw_options, list):
         return []
-    tags: list[str] = []
+    entries: dict[str, dict] = {}
     for entry in raw_options:
         if not isinstance(entry, dict):
             continue
@@ -219,8 +222,15 @@ def _extract_commander_tags(payload: dict) -> list[str]:
         if not candidate:
             candidate = resolve_deck_tag_from_slug(str(label))
         if candidate:
-            tags.append(candidate)
-    return _dedupe(tags)
+            tag = candidate
+            slug_value = str(slug or "").strip().lower() or slugify_theme(tag)
+            if tag not in entries:
+                entries[tag] = {"tag": tag, "slug": slug_value}
+    return list(entries.values())
+
+
+def _extract_commander_tags(payload: dict) -> list[str]:
+    return [entry["tag"] for entry in _extract_commander_tag_entries(payload)]
 
 
 def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> dict:
@@ -265,6 +275,7 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
     commander_ok = 0
     total_cards = 0
     total_tags = 0
+    total_tag_cards = 0
     oracle_cache: dict[str, str | None] = {}
 
     total_targets = len(commander_targets)
@@ -312,7 +323,8 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
             card_map.items(), key=lambda item: -(item[1] or 0.0)
         )[:_MAX_SYNERGY_CARDS]
 
-        commander_tags = _extract_commander_tags(payload)
+        tag_entries = _extract_commander_tag_entries(payload)
+        commander_tags = [entry["tag"] for entry in tag_entries]
 
         card_rows = []
         for rank, (oracle_id, score) in enumerate(top_cards, start=1):
@@ -328,6 +340,52 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
             {"commander_oracle_id": commander_oracle_id, "tag": tag}
             for tag in commander_tags
         ]
+        tag_card_rows: dict[str, list[dict]] = {}
+        for entry in tag_entries:
+            tag = entry.get("tag")
+            slug_value = entry.get("slug")
+            if not tag or not slug_value:
+                continue
+            tag_slug = str(slug_value).strip().lower()
+            if not tag_slug:
+                continue
+            _, tag_payload, tag_warning = ensure_commander_data(
+                commander_name,
+                theme_slug=tag_slug,
+                force_refresh=force_refresh,
+                slug_override=slug_override or None,
+            )
+            if tag_warning:
+                errors.append(tag_warning)
+            if not tag_payload:
+                continue
+            tag_views = commander_cardviews(tag_payload)
+            tag_card_map: dict[str, float] = {}
+            for view in tag_views:
+                oracle_id = _oracle_id_for_name(view.name, oracle_cache)
+                if not oracle_id:
+                    continue
+                score = float(view.synergy or 0.0)
+                existing = tag_card_map.get(oracle_id)
+                if existing is None or score > existing:
+                    tag_card_map[oracle_id] = score
+            top_tag_cards = sorted(
+                tag_card_map.items(), key=lambda item: -(item[1] or 0.0)
+            )[:_MAX_SYNERGY_CARDS]
+            rows = []
+            for rank, (oracle_id, score) in enumerate(top_tag_cards, start=1):
+                rows.append(
+                    {
+                        "commander_oracle_id": commander_oracle_id,
+                        "tag": tag,
+                        "card_oracle_id": oracle_id,
+                        "synergy_rank": rank,
+                        "synergy_score": score,
+                    }
+                )
+            if rows:
+                tag_card_rows[tag] = rows
+                total_tag_cards += len(rows)
         try:
             with db.session.no_autoflush:
                 EdhrecCommanderCard.query.filter_by(
@@ -349,6 +407,17 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
                     ["commander_oracle_id", "tag"],
                     [],
                 )
+                for tag, rows in tag_card_rows.items():
+                    EdhrecCommanderTagCard.query.filter_by(
+                        commander_oracle_id=commander_oracle_id,
+                        tag=tag,
+                    ).delete(synchronize_session=False)
+                    _bulk_upsert(
+                        EdhrecCommanderTagCard,
+                        rows,
+                        ["commander_oracle_id", "tag", "card_oracle_id"],
+                        ["synergy_rank", "synergy_score"],
+                    )
             db.session.commit()
         except SQLAlchemyError as exc:
             db.session.rollback()
@@ -405,6 +474,7 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
         "tags": {
             "count": int(tag_count),
             "links": total_tags,
+            "tag_cards": total_tag_cards,
         },
         "targets": targets,
     }
@@ -417,6 +487,7 @@ def edhrec_cache_snapshot() -> dict:
             func.count(func.distinct(EdhrecCommanderCard.commander_oracle_id))
         ).scalar()
         card_rows = db.session.query(func.count(EdhrecCommanderCard.card_oracle_id)).scalar()
+        tag_card_rows = db.session.query(func.count(EdhrecCommanderTagCard.card_oracle_id)).scalar()
         tag_count = db.session.query(
             func.count(func.distinct(EdhrecCommanderTag.tag))
         ).scalar()
@@ -430,7 +501,7 @@ def edhrec_cache_snapshot() -> dict:
     return {
         "status": "ok",
         "commanders": {"count": int(commander_count or 0), "cards": int(card_rows or 0)},
-        "tags": {"count": int(tag_count or 0)},
+        "tags": {"count": int(tag_count or 0), "tag_cards": int(tag_card_rows or 0)},
         "metadata": metadata,
     }
 
@@ -482,54 +553,126 @@ def _oracle_name_for_id(oracle_id: str, cache: dict[str, str | None]) -> str | N
     return name
 
 
-def _get_commander_synergy(commander_oracle_id: str, tags: Iterable[str] | None) -> list[dict]:
+def _get_commander_synergy(
+    commander_oracle_id: str,
+    tags: Iterable[str] | None,
+    *,
+    prefer_tag_specific: bool = False,
+) -> list[dict]:
     _ensure_tables()
     commander_oracle_id = primary_commander_oracle_id(commander_oracle_id) or ""
     if not commander_oracle_id:
         return []
 
-    try:
-        rows = (
-            EdhrecCommanderCard.query.filter_by(commander_oracle_id=commander_oracle_id)
-            .order_by(
-                func.coalesce(EdhrecCommanderCard.synergy_score, 0).desc(),
-                func.coalesce(EdhrecCommanderCard.synergy_rank, 999999).asc(),
-            )
-            .limit(_MAX_SYNERGY_CARDS)
-            .all()
-        )
-    except SQLAlchemyError as exc:
-        db.session.rollback()
-        _LOG.warning("EDHREC cache lookup failed: %s", exc)
-        return []
-
-    commander_tags = set(get_commander_tags(commander_oracle_id))
     requested_tags = _normalize_tags(tags)
+    commander_tags = set(get_commander_tags(commander_oracle_id))
     tag_matches = [tag for tag in requested_tags if tag in commander_tags]
 
     name_cache: dict[str, str | None] = {}
     results: list[dict] = []
+    rows = []
+    if prefer_tag_specific and tag_matches:
+        try:
+            tag_rows = (
+                EdhrecCommanderTagCard.query.filter_by(commander_oracle_id=commander_oracle_id)
+                .filter(EdhrecCommanderTagCard.tag.in_(tag_matches))
+                .all()
+            )
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            _LOG.warning("EDHREC tag cache lookup failed: %s", exc)
+            tag_rows = []
+        if tag_rows:
+            merged: dict[str, dict] = {}
+            for row in tag_rows:
+                oracle_id = (row.card_oracle_id or "").strip()
+                if not oracle_id:
+                    continue
+                score = float(row.synergy_score or 0.0)
+                rank = int(row.synergy_rank or 0) if row.synergy_rank is not None else None
+                current = merged.get(oracle_id)
+                if not current or score > current["synergy_score"]:
+                    merged[oracle_id] = {"oracle_id": oracle_id, "synergy_score": score, "synergy_rank": rank}
+                elif score == current["synergy_score"] and rank is not None:
+                    if current["synergy_rank"] is None or rank < current["synergy_rank"]:
+                        current["synergy_rank"] = rank
+            rows = list(merged.values())
+
+    if not rows:
+        try:
+            rows = (
+                EdhrecCommanderCard.query.filter_by(commander_oracle_id=commander_oracle_id)
+                .order_by(
+                    func.coalesce(EdhrecCommanderCard.synergy_score, 0).desc(),
+                    func.coalesce(EdhrecCommanderCard.synergy_rank, 999999).asc(),
+                )
+                .limit(_MAX_SYNERGY_CARDS)
+                .all()
+            )
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            _LOG.warning("EDHREC cache lookup failed: %s", exc)
+            return []
+
+    normalized_rows: list[dict] = []
     for row in rows:
-        oracle_id = (row.card_oracle_id or "").strip()
+        if isinstance(row, dict):
+            normalized_rows.append(row)
+        else:
+            normalized_rows.append(
+                {
+                    "card_oracle_id": row.card_oracle_id,
+                    "synergy_score": row.synergy_score,
+                    "synergy_rank": row.synergy_rank,
+                }
+            )
+
+    for row in normalized_rows:
+        oracle_id = (row.get("card_oracle_id") or row.get("oracle_id") or "").strip()
         if not oracle_id:
             continue
         name = _oracle_name_for_id(oracle_id, name_cache) or oracle_id
+        synergy_score = row.get("synergy_score")
+        synergy_rank = row.get("synergy_rank")
         results.append(
             {
                 "oracle_id": oracle_id,
                 "name": name,
-                "synergy_score": float(row.synergy_score or 0.0),
-                "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
+                "synergy_score": float(synergy_score or 0.0),
+                "synergy_rank": int(synergy_rank or 0) if synergy_rank is not None else None,
                 "source": "edhrec",
                 "tag_matches": list(tag_matches),
             }
         )
-    return results
+    results.sort(
+        key=lambda item: (
+            -(item.get("synergy_score") or 0.0),
+            item.get("synergy_rank") if item.get("synergy_rank") is not None else 999999,
+        )
+    )
+    return results[:_MAX_SYNERGY_CARDS]
 
 
-def get_commander_synergy(commander_oracle_id: str, tags: list[str] | None = None) -> list[dict]:
-    key = ("edhrec_local_synergy", commander_oracle_id, tuple(_normalize_tags(tags)))
-    return request_cached(key, lambda: _get_commander_synergy(commander_oracle_id, tags))
+def get_commander_synergy(
+    commander_oracle_id: str,
+    tags: list[str] | None = None,
+    *,
+    prefer_tag_specific: bool = False,
+) -> list[dict]:
+    key = (
+        "edhrec_local_synergy",
+        commander_oracle_id,
+        tuple(_normalize_tags(tags)),
+        bool(prefer_tag_specific),
+    )
+    return request_cached(
+        key,
+        lambda: _get_commander_synergy(
+            commander_oracle_id,
+            tags,
+            prefer_tag_specific=prefer_tag_specific,
+        ),
+    )
 
 
 def cache_ready() -> bool:

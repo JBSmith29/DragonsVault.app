@@ -63,6 +63,9 @@ from viewmodels.folder_vm import FolderCardVM, FolderOptionVM, FolderVM
 _BUILD_VIEW_SETTING_KEY = "build_view_mode"
 _DEFAULT_BUILD_VIEW = "gallery"
 _BUILD_VIEW_MODES = {"gallery", "list"}
+_BUILD_REC_SOURCE_KEY = "build_rec_source"
+_DEFAULT_BUILD_REC_SOURCE = "edhrec"
+_BUILD_REC_SOURCES = {"edhrec", "collection"}
 
 
 def _normalize_build_view_mode(value: str | None) -> str:
@@ -70,6 +73,13 @@ def _normalize_build_view_mode(value: str | None) -> str:
     if normalized in _BUILD_VIEW_MODES:
         return normalized
     return _DEFAULT_BUILD_VIEW
+
+
+def _normalize_build_rec_source(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in _BUILD_REC_SOURCES:
+        return normalized
+    return _DEFAULT_BUILD_REC_SOURCE
 
 
 def _is_missing_table_error(exc: Exception, table_name: str) -> bool:
@@ -117,6 +127,26 @@ def _load_build_view_mode() -> str:
     return _DEFAULT_BUILD_VIEW
 
 
+def _load_build_rec_source() -> str:
+    try:
+        setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
+    except Exception as exc:
+        db.session.rollback()
+        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
+            try:
+                setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Failed to load build rec source after ensuring table.")
+                return _DEFAULT_BUILD_REC_SOURCE
+        else:
+            current_app.logger.exception("Failed to load build rec source preference.")
+            return _DEFAULT_BUILD_REC_SOURCE
+    if setting and setting.value:
+        return _normalize_build_rec_source(setting.value)
+    return _DEFAULT_BUILD_REC_SOURCE
+
+
 def _persist_build_view_mode(mode: str) -> None:
     mode = _normalize_build_view_mode(mode)
     try:
@@ -142,6 +172,33 @@ def _persist_build_view_mode(mode: str) -> None:
                 current_app.logger.exception("Failed to update build view mode preference after ensuring table.")
                 return
         current_app.logger.exception("Failed to update build view mode preference.")
+
+
+def _persist_build_rec_source(source: str) -> None:
+    source = _normalize_build_rec_source(source)
+    try:
+        setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
+        if setting:
+            setting.value = source
+        else:
+            db.session.add(UserSetting(key=_BUILD_REC_SOURCE_KEY, value=source))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
+            try:
+                setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
+                if setting:
+                    setting.value = source
+                else:
+                    db.session.add(UserSetting(key=_BUILD_REC_SOURCE_KEY, value=source))
+                db.session.commit()
+                return
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Failed to update build rec source after ensuring table.")
+                return
+        current_app.logger.exception("Failed to update build rec source preference.")
 
 
 _CARD_TYPE_GROUPS = [
@@ -328,13 +385,21 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     ensure_folder_access(folder, write=False if not allow_shared else False, allow_shared=allow_shared, share_token=share_token)
     if request.method == "POST" and not allow_shared:
         view_mode = request.form.get("build_view_mode")
-        if view_mode:
+        rec_source = request.form.get("build_rec_source")
+        if view_mode or rec_source:
             if not current_user.is_authenticated:
                 return jsonify({"ok": False, "error": "Authentication required."}), 401
-            normalized = _normalize_build_view_mode(view_mode)
-            _persist_build_view_mode(normalized)
+            response_payload = {"ok": True}
+            if view_mode:
+                normalized_view = _normalize_build_view_mode(view_mode)
+                _persist_build_view_mode(normalized_view)
+                response_payload["mode"] = normalized_view
+            if rec_source:
+                normalized_source = _normalize_build_rec_source(rec_source)
+                _persist_build_rec_source(normalized_source)
+                response_payload["rec_source"] = normalized_source
             if request.is_json or "application/json" in (request.headers.get("Accept") or ""):
-                return jsonify({"ok": True, "mode": normalized})
+                return jsonify(response_payload)
             return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
     commander_candidates = _commander_candidates_for_folder(folder_id)
     owner_name_options = sorted(
@@ -977,6 +1042,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         commander_media_list=commander_media_list,
         build_state=build_state,
         build_view_mode=_load_build_view_mode(),
+        build_rec_source=_load_build_rec_source(),
     )
 
 
@@ -1340,6 +1406,18 @@ def build_add_card(folder_id: int):
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
     oracle_id = (request.form.get("oracle_id") or "").strip()
+    raw_quantity = request.form.get("quantity")
+    quantity = 1
+    if raw_quantity:
+        try:
+            quantity = parse_positive_int(raw_quantity, field="quantity")
+        except ValidationError as exc:
+            log_validation_error(exc, context="build_add_card")
+            message = "Invalid quantity supplied."
+            if request.is_json:
+                return jsonify({"ok": False, "error": message}), 400
+            flash(message, "warning")
+            return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
     if not oracle_id:
         message = "Card selection missing."
         if request.is_json:
@@ -1350,7 +1428,7 @@ def build_add_card(folder_id: int):
     try:
         from services import build_deck_service
 
-        build_deck_service.add_card_to_build(folder_id, oracle_id)
+        build_deck_service.add_card_to_build(folder_id, oracle_id, quantity=quantity)
     except ValueError as exc:
         message = str(exc) or "Unable to add card."
         if request.is_json:
@@ -1440,10 +1518,29 @@ def build_remove_cards(folder_id: int):
         flash(message, "warning")
         return redirect(redirect_target)
 
+    raw_delta = json_payload.get("delta") or request.form.get("delta")
+    delta = None
+    if raw_delta:
+        try:
+            delta = parse_positive_int(raw_delta, field="delta")
+        except ValidationError as exc:
+            log_validation_error(exc, context="build_remove_cards")
+            message = "Invalid quantity supplied."
+            if wants_json:
+                return jsonify({"ok": False, "error": message}), 400
+            flash(message, "warning")
+            return redirect(redirect_target)
+
     removed_qty = 0
     for card in cards:
-        removed_qty += card.quantity or 0
-        db.session.delete(card)
+        qty = int(card.quantity or 0) or 1
+        if delta and qty > delta:
+            card.quantity = qty - delta
+            removed_qty += delta
+            db.session.add(card)
+        else:
+            removed_qty += qty
+            db.session.delete(card)
 
     from services.deck_service import recompute_deck_stats
 

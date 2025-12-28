@@ -12,19 +12,22 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 
 import requests
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from models import (
     EdhrecCommanderCard,
     EdhrecCommanderTag,
+    EdhrecCommanderTagCard,
     EdhrecMetadata,
     EdhrecTagCommander,
+    Folder,
 )
 from services import scryfall_cache as sc
-from services.deck_tags import resolve_deck_tag_from_slug
-from services.edhrec_client import edhrec_index, edhrec_service_enabled, slugify_commander
+from services.commander_utils import primary_commander_name, primary_commander_oracle_id
+from services.deck_tags import is_valid_deck_tag, resolve_deck_tag_from_slug
+from services.edhrec_client import edhrec_index, edhrec_service_enabled, slugify_commander, slugify_theme
 
 _LOG = logging.getLogger(__name__)
 
@@ -34,6 +37,8 @@ _REQUEST_INTERVAL_SECONDS = max(1.0, float(os.getenv("EDHREC_INGEST_INTERVAL", "
 _MAX_SYNERGY_CARDS = int(os.getenv("EDHREC_INGEST_MAX_CARDS", "200"))
 _DEFAULT_SOURCE_VERSION = os.getenv("EDHREC_SOURCE_VERSION")
 _MISSING_TTL_DAYS = int(os.getenv("EDHREC_MISSING_TTL_DAYS", "30"))
+_TOP_COMMANDER_LIMIT = int(os.getenv("EDHREC_TOP_COMMANDER_LIMIT", "500"))
+_TOP_COMMANDER_TAG_LIMIT = int(os.getenv("EDHREC_TOP_COMMANDER_TAG_LIMIT", "5"))
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -45,6 +50,7 @@ def _bool_env(name: str, default: bool = False) -> bool:
 
 _USE_INDEX_SLUGS = _bool_env("EDHREC_USE_INDEX_SLUGS", True)
 _INDEX_ONLY = _bool_env("EDHREC_INDEX_ONLY", False)
+_INCLUDE_TOP_COMMANDERS = _bool_env("EDHREC_INCLUDE_TOP_COMMANDERS", True)
 
 
 _DFC_LAYOUTS = {"modal_dfc", "transform", "flip", "meld"}
@@ -68,6 +74,7 @@ def _ensure_schema() -> None:
         tables=[
             EdhrecCommanderCard.__table__,
             EdhrecCommanderTag.__table__,
+            EdhrecCommanderTagCard.__table__,
             EdhrecTagCommander.__table__,
             EdhrecMetadata.__table__,
         ],
@@ -130,6 +137,52 @@ def _slug_name_for_print(card: dict) -> str:
     return (card.get("name") or "").strip()
 
 
+def _normalize_deck_tag(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = resolve_deck_tag_from_slug(str(value))
+    if candidate:
+        return candidate
+    cleaned = (str(value) or "").strip()
+    if is_valid_deck_tag(cleaned):
+        return cleaned
+    return None
+
+
+def _commander_target_from_oracle(
+    oracle_id: str,
+    commander_name: str | None,
+    *,
+    index_slugs: dict[str, dict[str, str]] | None,
+    cache_ready: bool,
+) -> CommanderTarget | None:
+    name = (commander_name or "").strip()
+    slug_name = name
+    if cache_ready:
+        try:
+            prints = sc.prints_for_oracle(oracle_id) or []
+        except Exception:
+            prints = []
+        if prints:
+            sample = prints[0]
+            if not name:
+                name = (sample.get("name") or "").strip()
+            slug_name = _slug_name_for_print(sample) or name
+    if not name:
+        return None
+    slug_override = None
+    if index_slugs:
+        entry = index_slugs.get(oracle_id)
+        if entry:
+            slug_override = entry.get("slug")
+    return CommanderTarget(
+        oracle_id=oracle_id,
+        name=name,
+        slug_name=slug_name or name,
+        slug_override=slug_override,
+    )
+
+
 def _load_commander_targets() -> list[CommanderTarget]:
     if not sc.ensure_cache_loaded():
         return []
@@ -166,6 +219,63 @@ def _load_commander_targets() -> list[CommanderTarget]:
     return sorted(targets.values(), key=lambda item: item.name.lower())
 
 
+def _collect_folder_tags(folder: Folder) -> set[str]:
+    tags: set[str] = set()
+    normalized = _normalize_deck_tag(folder.deck_tag)
+    if normalized:
+        tags.add(normalized)
+    session = getattr(folder, "build_session", None)
+    tag_payload = getattr(session, "tags_json", None)
+    if isinstance(tag_payload, list):
+        for entry in tag_payload:
+            normalized = _normalize_deck_tag(entry)
+            if normalized:
+                tags.add(normalized)
+    return tags
+
+
+def _load_active_targets() -> tuple[list[CommanderTarget], dict[str, set[str]]]:
+    cache_ready = False
+    try:
+        cache_ready = sc.ensure_cache_loaded()
+    except Exception as exc:
+        _LOG.warning("Scryfall cache unavailable for EDHREC deck targets: %s", exc)
+
+    index_slugs = _load_edhrec_index_slugs() if _USE_INDEX_SLUGS else {}
+    folders = (
+        Folder.query.filter(Folder.category != Folder.CATEGORY_COLLECTION)
+        .order_by(func.lower(Folder.name))
+        .all()
+    )
+
+    targets: dict[str, CommanderTarget] = {}
+    tag_map: dict[str, set[str]] = {}
+
+    for folder in folders:
+        commander_oracle_id = primary_commander_oracle_id(folder.commander_oracle_id) or ""
+        commander_name = primary_commander_name(folder.commander_name)
+        if not commander_oracle_id and commander_name and cache_ready:
+            commander_oracle_id = sc.unique_oracle_by_name(commander_name) or ""
+        if not commander_oracle_id:
+            continue
+
+        tag_set = _collect_folder_tags(folder)
+        if tag_set:
+            tag_map.setdefault(commander_oracle_id, set()).update(tag_set)
+
+        if commander_oracle_id not in targets:
+            target = _commander_target_from_oracle(
+                commander_oracle_id,
+                commander_name,
+                index_slugs=index_slugs,
+                cache_ready=cache_ready,
+            )
+            if target:
+                targets[commander_oracle_id] = target
+
+    return sorted(targets.values(), key=lambda item: item.name.lower()), tag_map
+
+
 def _load_edhrec_index_slugs() -> dict[str, dict[str, str]]:
     if not edhrec_service_enabled():
         return {}
@@ -197,6 +307,49 @@ def _load_edhrec_index_slugs() -> dict[str, dict[str, str]]:
             continue
         mapping[oracle_id] = {"name": name, "slug": slug}
     return mapping
+
+
+def _load_top_index_targets(limit: int) -> list[CommanderTarget]:
+    if limit <= 0 or not edhrec_service_enabled():
+        return []
+    try:
+        cache_ready = sc.ensure_cache_loaded()
+    except Exception as exc:
+        _LOG.warning("Scryfall cache unavailable for EDHREC top targets: %s", exc)
+        return []
+    if not cache_ready:
+        return []
+    try:
+        index = edhrec_index(include_commanders=True, include_themes=False, limit=limit)
+    except Exception as exc:
+        _LOG.warning("EDHREC index lookup failed: %s", exc)
+        return []
+    entries = index.get("commanders") or []
+    targets: list[CommanderTarget] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = (entry.get("name") or "").strip()
+        slug_override = (entry.get("slug") or "").strip().lower()
+        if not name:
+            continue
+        oracle_id = sc.unique_oracle_by_name(name) or ""
+        if not oracle_id or oracle_id in seen:
+            continue
+        seen.add(oracle_id)
+        slug_map = {oracle_id: {"slug": slug_override}} if slug_override else None
+        target = _commander_target_from_oracle(
+            oracle_id,
+            name,
+            index_slugs=slug_map,
+            cache_ready=True,
+        )
+        if target:
+            targets.append(target)
+        if len(targets) >= limit:
+            break
+    return targets
 
 
 def _load_missing_slugs() -> dict[str, dict[str, str]]:
@@ -351,6 +504,21 @@ def _normalize_tag_candidates(raw: dict) -> list[str]:
     return deduped
 
 
+def _merge_tags(primary: Iterable[str], secondary: Iterable[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for tag in list(primary) + list(secondary):
+        label = (tag or "").strip()
+        if not label:
+            continue
+        key = label.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(label)
+    return merged
+
+
 def _map_synergy_cards(views: Iterable[dict]) -> list[dict]:
     card_map: dict[str, dict] = {}
     for view in views:
@@ -401,15 +569,36 @@ def _source_version_label() -> str:
     return f"edhrec-{now.year}-{now.month:02d}"
 
 
-def run_monthly_edhrec_ingestion(limit: int | None = None, *, full_refresh: bool = True) -> dict:
+def run_monthly_edhrec_ingestion(
+    limit: int | None = None,
+    *,
+    full_refresh: bool = True,
+    scope: str = "all",
+) -> dict:
     """
     Run the EDHREC commander ingestion job.
 
     full_refresh=True refreshes all commanders.
     full_refresh=False only ingests commanders missing cached data.
+    scope="delta" limits ingestion to commanders/tags used by decks/builds.
     """
     _ensure_schema()
-    targets = _load_commander_targets()
+    scope_key = (scope or "all").strip().lower()
+    tag_map: dict[str, set[str]] = {}
+    if scope_key in {"delta", "active", "deck", "current"}:
+        targets, tag_map = _load_active_targets()
+    else:
+        targets = _load_commander_targets()
+    top_limits: dict[str, int] = {}
+    if _INCLUDE_TOP_COMMANDERS and _TOP_COMMANDER_LIMIT > 0:
+        top_targets = _load_top_index_targets(_TOP_COMMANDER_LIMIT)
+        if _TOP_COMMANDER_TAG_LIMIT > 0:
+            top_limits = {target.oracle_id: _TOP_COMMANDER_TAG_LIMIT for target in top_targets}
+        if top_targets:
+            merged_targets = {target.oracle_id: target for target in targets}
+            for target in top_targets:
+                merged_targets.setdefault(target.oracle_id, target)
+            targets = list(merged_targets.values())
     if not targets:
         return {
             "commanders_processed": 0,
@@ -418,13 +607,54 @@ def run_monthly_edhrec_ingestion(limit: int | None = None, *, full_refresh: bool
             "errors": 1,
         }
 
+    existing_ids: set[str] = set()
+    existing_tag_pairs: set[tuple[str, str]] = set()
+    existing_top_counts: dict[str, int] = {}
     if not full_refresh:
         existing_ids = {
             row[0]
             for row in db.session.query(EdhrecCommanderCard.commander_oracle_id).distinct().all()
             if row and row[0]
         }
-        targets = [target for target in targets if target.oracle_id not in existing_ids]
+        if tag_map:
+            existing_tag_pairs = {
+                (row[0], row[1])
+                for row in db.session.query(
+                    EdhrecCommanderTagCard.commander_oracle_id,
+                    EdhrecCommanderTagCard.tag,
+                )
+                .distinct()
+                .all()
+                if row and row[0] and row[1]
+            }
+        if top_limits:
+            top_ids = list(top_limits.keys())
+            rows = (
+                db.session.query(
+                    EdhrecCommanderTagCard.commander_oracle_id,
+                    func.count(func.distinct(EdhrecCommanderTagCard.tag)),
+                )
+                .filter(EdhrecCommanderTagCard.commander_oracle_id.in_(top_ids))
+                .group_by(EdhrecCommanderTagCard.commander_oracle_id)
+                .all()
+            )
+            existing_top_counts = {
+                row[0]: int(row[1] or 0)
+                for row in rows
+                if row and row[0]
+            }
+        filtered: list[CommanderTarget] = []
+        for target in targets:
+            needs_commander = target.oracle_id not in existing_ids
+            tag_set = tag_map.get(target.oracle_id, set())
+            needs_tags = any(
+                (target.oracle_id, tag) not in existing_tag_pairs for tag in tag_set
+            )
+            top_limit = top_limits.get(target.oracle_id, 0)
+            needs_top_tags = bool(top_limit) and (existing_top_counts.get(target.oracle_id, 0) < top_limit)
+            if needs_commander or needs_tags or needs_top_tags:
+                filtered.append(target)
+        targets = filtered
 
     if limit is not None and limit > 0:
         targets = targets[:limit]
@@ -440,12 +670,12 @@ def run_monthly_edhrec_ingestion(limit: int | None = None, *, full_refresh: bool
     commanders_processed = 0
     cards_inserted = 0
     tags_inserted = 0
+    tag_cards_inserted = 0
     errors = 0
     last_request_at = 0.0
     missing_slugs = _prune_missing_slugs(_load_missing_slugs())
 
     for idx, target in enumerate(targets, start=1):
-        last_request_at = _rate_limit(last_request_at)
         slug_source = target.slug_name or target.name
         slug = (target.slug_override or "").strip() or slugify_commander(slug_source)
         if not slug:
@@ -455,52 +685,120 @@ def run_monthly_edhrec_ingestion(limit: int | None = None, *, full_refresh: bool
         missing_info = missing_slugs.get(slug)
         if missing_info:
             continue
-        url = f"https://edhrec.com/commanders/{slug}"
-        payload, raw_json, error = _fetch_commander_json(session, url)
-        if error:
-            if error == "Commander page not found.":
-                missing_slugs[slug] = {
-                    "name": target.name,
-                    "oracle_id": target.oracle_id,
-                    "last_seen": _now_iso(),
-                }
-            errors += 1
-            _LOG.warning("EDHREC fetch failed for %s: %s", target.name, error)
-            continue
-        if not payload or not raw_json:
-            errors += 1
-            _LOG.warning("EDHREC payload missing for %s", target.name)
-            continue
+        tags_for_commander = tag_map.get(target.oracle_id, set())
+        top_tag_limit = top_limits.get(target.oracle_id, 0)
+        needs_commander = full_refresh or target.oracle_id not in existing_ids
+        needs_top_tags = bool(top_tag_limit) and (
+            full_refresh or existing_top_counts.get(target.oracle_id, 0) < top_tag_limit
+        )
 
-        views = _extract_cardviews(payload)
-        synergy_rows = _map_synergy_cards(views)
-        tags = _normalize_tag_candidates(raw_json)
+        payload = raw_json = None
+        synergy_rows: list[dict] = []
+        tags: list[str] = []
+        if needs_commander or needs_top_tags:
+            last_request_at = _rate_limit(last_request_at)
+            url = f"https://edhrec.com/commanders/{slug}"
+            payload, raw_json, error = _fetch_commander_json(session, url)
+            if error:
+                if error == "Commander page not found.":
+                    missing_slugs[slug] = {
+                        "name": target.name,
+                        "oracle_id": target.oracle_id,
+                        "last_seen": _now_iso(),
+                    }
+                errors += 1
+                _LOG.warning("EDHREC fetch failed for %s: %s", target.name, error)
+                continue
+            if not payload or not raw_json:
+                errors += 1
+                _LOG.warning("EDHREC payload missing for %s", target.name)
+                continue
+
+            views = _extract_cardviews(payload)
+            synergy_rows = _map_synergy_cards(views)
+            tags = _normalize_tag_candidates(raw_json)
+
+        top_tags: list[str] = []
+        if needs_top_tags and tags:
+            top_tags = tags[:top_tag_limit]
+
+        tags_to_fetch = _merge_tags(tags_for_commander, top_tags)
+        if not full_refresh:
+            tags_to_fetch = [
+                tag
+                for tag in tags_to_fetch
+                if (target.oracle_id, tag) not in existing_tag_pairs
+            ]
+
+        tag_card_rows: dict[str, list[dict]] = {}
+        tag_cards_added = 0
+        for tag in tags_to_fetch:
+            tag_slug = slugify_theme(tag)
+            if not tag_slug:
+                continue
+            last_request_at = _rate_limit(last_request_at)
+            tag_url = f"https://edhrec.com/commanders/{slug}/{tag_slug}"
+            tag_payload, _, tag_error = _fetch_commander_json(session, tag_url)
+            if tag_error:
+                if tag_error == "Commander page not found.":
+                    _LOG.info("EDHREC tag page not found for %s (%s).", target.name, tag)
+                    continue
+                errors += 1
+                _LOG.warning("EDHREC tag fetch failed for %s (%s): %s", target.name, tag, tag_error)
+                continue
+            if not tag_payload:
+                errors += 1
+                _LOG.warning("EDHREC tag payload missing for %s (%s).", target.name, tag)
+                continue
+            tag_views = _extract_cardviews(tag_payload)
+            tag_rows = _map_synergy_cards(tag_views)
+            if tag_rows:
+                tag_card_rows[tag] = tag_rows
+                tag_cards_added += len(tag_rows)
 
         try:
-            EdhrecCommanderCard.query.filter_by(
-                commander_oracle_id=target.oracle_id
-            ).delete(synchronize_session=False)
-            if synergy_rows:
+            if needs_commander:
+                EdhrecCommanderCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id
+                ).delete(synchronize_session=False)
+                if synergy_rows:
+                    db.session.bulk_insert_mappings(
+                        EdhrecCommanderCard,
+                        [
+                            {
+                                "commander_oracle_id": target.oracle_id,
+                                **row,
+                            }
+                            for row in synergy_rows
+                        ],
+                    )
+
+                EdhrecCommanderTag.query.filter_by(
+                    commander_oracle_id=target.oracle_id
+                ).delete(synchronize_session=False)
+                if tags:
+                    db.session.bulk_insert_mappings(
+                        EdhrecCommanderTag,
+                        [
+                            {"commander_oracle_id": target.oracle_id, "tag": tag}
+                            for tag in tags
+                        ],
+                    )
+
+            for tag, rows in tag_card_rows.items():
+                EdhrecCommanderTagCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).delete(synchronize_session=False)
                 db.session.bulk_insert_mappings(
-                    EdhrecCommanderCard,
+                    EdhrecCommanderTagCard,
                     [
                         {
                             "commander_oracle_id": target.oracle_id,
+                            "tag": tag,
                             **row,
                         }
-                        for row in synergy_rows
-                    ],
-                )
-
-            EdhrecCommanderTag.query.filter_by(
-                commander_oracle_id=target.oracle_id
-            ).delete(synchronize_session=False)
-            if tags:
-                db.session.bulk_insert_mappings(
-                    EdhrecCommanderTag,
-                    [
-                        {"commander_oracle_id": target.oracle_id, "tag": tag}
-                        for tag in tags
+                        for row in rows
                     ],
                 )
             db.session.commit()
@@ -513,6 +811,7 @@ def run_monthly_edhrec_ingestion(limit: int | None = None, *, full_refresh: bool
         commanders_processed += 1
         cards_inserted += len(synergy_rows)
         tags_inserted += len(tags)
+        tag_cards_inserted += tag_cards_added
 
         if idx == len(targets) or idx % 50 == 0:
             _LOG.info("EDHREC ingestion progress: %s/%s commanders.", idx, len(targets))
@@ -538,6 +837,7 @@ def run_monthly_edhrec_ingestion(limit: int | None = None, *, full_refresh: bool
         "commanders_processed": commanders_processed,
         "cards_inserted": cards_inserted,
         "tags_inserted": tags_inserted,
+        "tag_cards_inserted": tag_cards_inserted,
         "errors": errors,
     }
 

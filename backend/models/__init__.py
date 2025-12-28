@@ -23,6 +23,7 @@ from .user_setting import UserSetting  # type: ignore F401
 from .edhrec_cache import (  # type: ignore F401
     EdhrecCommanderCard,
     EdhrecCommanderTag,
+    EdhrecCommanderTagCard,
     EdhrecTagCommander,
     EdhrecMetadata,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "UserSetting",
     "EdhrecCommanderCard",
     "EdhrecCommanderTag",
+    "EdhrecCommanderTagCard",
     "EdhrecTagCommander",
     "EdhrecMetadata",
     "Role",

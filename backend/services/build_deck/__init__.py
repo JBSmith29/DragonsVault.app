@@ -6,4 +6,6 @@ __all__ = [
     "build_recommendation_service",
     "build_scoring_service",
     "build_constraints_service",
+    "build_land_service",
+    "build_breakdown_service",
 ]

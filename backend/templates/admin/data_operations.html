@@ -137,7 +137,7 @@
               Refreshes EDHREC-derived tag and synergy data used for recommendations.
             </div>
             <div class="small text-muted mb-3">
-              Delta refresh fills missing commanders; full refresh re-pulls everything.
+              Delta refresh updates current decks/builds plus top 500 commanders (top 5 tags each); full refresh re-pulls everything.
             </div>
             {% if edhrec.enabled and not edhrec.error %}
               <div class="small text-muted mb-3">
@@ -156,7 +156,7 @@
                   <input type="hidden" name="refresh_scope" value="delta">
                   <input type="hidden" name="redirect_to" value="views.admin_data_operations">
                   <button class="btn btn-primary btn-sm" type="submit"
-                          data-confirm="Refresh EDHREC cache for commanders missing data?"
+                          data-confirm="Refresh EDHREC cache for current decks/builds and top commanders?"
                           data-progress-label="Refreshing...">
                     Delta Refresh
                   </button>

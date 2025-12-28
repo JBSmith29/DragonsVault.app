@@ -21,8 +21,8 @@ ROLE_TARGETS = {
     "removal": 6,
     "wipe": 2,
 }
-MAX_RECS = 40
-MAX_APP_RECS = 16
+MAX_RECS = 200
+MAX_APP_RECS = 40
 
 _TYPE_GROUPS = [
     ("Creatures", "Creature"),
@@ -165,45 +165,45 @@ def _app_suggestions(
     missing_roles: dict[str, int],
     commander_mask: int,
     commander_mask_ok: bool,
+    land_suggestions: list[dict] | None = None,
 ) -> list[dict]:
-    if not owner_user_id or not missing_roles:
+    if not owner_user_id and not land_suggestions:
         return []
-    collection_ids = _collection_folder_ids(owner_user_id)
-    if not collection_ids:
-        return []
+    if owner_user_id:
+        collection_ids = _collection_folder_ids(owner_user_id)
+    else:
+        collection_ids = []
 
     role_list = list(missing_roles.keys())
-    rows = (
-        db.session.query(
-            Card.oracle_id,
-            func.max(Card.name).label("name"),
-            func.coalesce(func.sum(Card.quantity), 0).label("qty"),
-            OracleCoreRoleTag.role,
-        )
-        .join(OracleCoreRoleTag, OracleCoreRoleTag.oracle_id == Card.oracle_id)
-        .filter(
-            Card.folder_id.in_(collection_ids),
-            Card.oracle_id.isnot(None),
-            OracleCoreRoleTag.role.in_(role_list),
-        )
-        .group_by(Card.oracle_id, OracleCoreRoleTag.role)
-        .all()
-    )
-
     candidates: dict[str, dict] = {}
-    for oracle_id, name, qty, role in rows:
-        oid = (oracle_id or "").strip()
-        if not oid or oid in deck_oracle_ids:
-            continue
-        entry = candidates.setdefault(
-            oid,
-            {"oracle_id": oid, "name": name or oid, "owned_qty": int(qty or 0), "roles": set()},
+    if collection_ids and role_list:
+        rows = (
+            db.session.query(
+                Card.oracle_id,
+                func.max(Card.name).label("name"),
+                func.coalesce(func.sum(Card.quantity), 0).label("qty"),
+                OracleCoreRoleTag.role,
+            )
+            .join(OracleCoreRoleTag, OracleCoreRoleTag.oracle_id == Card.oracle_id)
+            .filter(
+                Card.folder_id.in_(collection_ids),
+                Card.oracle_id.isnot(None),
+                OracleCoreRoleTag.role.in_(role_list),
+            )
+            .group_by(Card.oracle_id, OracleCoreRoleTag.role)
+            .all()
         )
-        if role:
-            entry["roles"].add(str(role).strip())
 
-    if not candidates:
-        return []
+        for oracle_id, name, qty, role in rows:
+            oid = (oracle_id or "").strip()
+            if not oid or oid in deck_oracle_ids:
+                continue
+            entry = candidates.setdefault(
+                oid,
+                {"oracle_id": oid, "name": name or oid, "owned_qty": int(qty or 0), "roles": set()},
+            )
+            if role:
+                entry["roles"].add(str(role).strip())
 
     tag_weights = _tag_role_weights(tags)
     results: list[dict] = []
@@ -244,6 +244,33 @@ def _app_suggestions(
             }
         )
 
+    if land_suggestions:
+        for land in land_suggestions:
+            if not isinstance(land, dict):
+                continue
+            oracle_id = (land.get("oracle_id") or "").strip()
+            if not oracle_id or oracle_id in {r.get("oracle_id") for r in results}:
+                continue
+            meta = _card_display_meta(oracle_id, meta_cache)
+            reasons = list(land.get("reasons") or [])
+            results.append(
+                {
+                    "oracle_id": oracle_id,
+                    "name": land.get("name") or oracle_id,
+                    "owned": bool(land.get("owned_qty")),
+                    "owned_qty": int(land.get("owned_qty") or 0),
+                    "in_deck": bool(land.get("in_deck")),
+                    "source": "land",
+                    "score": float(land.get("score") or 0.0),
+                    "reasons": reasons or ["Needs lands"],
+                    "legal": bool(land.get("legal", True)),
+                    "legal_reason": land.get("legal_reason"),
+                    "can_add": bool(land.get("can_add", True)),
+                    "disabled_reason": land.get("disabled_reason"),
+                    **meta,
+                }
+            )
+
     results.sort(
         key=lambda item: (
             -(item.get("score") or 0.0),
@@ -260,6 +287,9 @@ def get_build_recommendations(
     tags: list[str],
     deck_oracle_ids: set[str],
     owner_user_id: int | None,
+    land_count: int | None = None,
+    land_target_min: int | None = None,
+    land_target_max: int | None = None,
 ) -> dict:
     if not commander_oracle_id:
         return {"owned": [], "external": [], "app": []}
@@ -274,7 +304,7 @@ def get_build_recommendations(
     role_counts = _deck_role_counts_for_recs(deck_oracle_ids)
     missing_roles = _missing_roles(role_counts, tags)
 
-    recs = get_commander_synergy(commander_oracle_id, tags) or []
+    recs = get_commander_synergy(commander_oracle_id, tags, prefer_tag_specific=True) or []
     recs = recs[:MAX_RECS]
     rec_oracle_ids = [str(rec.get("oracle_id") or "").strip() for rec in recs if rec.get("oracle_id")]
     role_map = _role_map_for_oracles(rec_oracle_ids)
@@ -289,6 +319,7 @@ def get_build_recommendations(
         if not oracle_id:
             continue
         card_mask, card_ok = constraints.card_color_mask(oracle_id)
+        allows_multiple, _ = constraints.card_allows_multiple(oracle_id)
         legal = True
         legal_reason = None
         if commander_mask_ok and card_ok and commander_mask & card_mask != card_mask:
@@ -304,11 +335,11 @@ def get_build_recommendations(
             gap_roles=gap_roles,
         )
         meta = _card_display_meta(oracle_id, meta_cache)
-        can_add = legal and not in_deck
+        can_add = legal and (allows_multiple or not in_deck)
         disabled_reason = None
         if not legal:
             disabled_reason = legal_reason
-        elif in_deck:
+        elif in_deck and not allows_multiple:
             disabled_reason = "Already in deck."
         payload = {
             **rec,
@@ -351,9 +382,47 @@ def get_build_recommendations(
         missing_roles=missing_roles,
         commander_mask=commander_mask,
         commander_mask_ok=commander_mask_ok,
+        land_suggestions=_land_recommendations(
+            commander_oracle_id=commander_oracle_id,
+            owner_user_id=owner_user_id,
+            land_count=land_count,
+            land_target_min=land_target_min,
+            land_target_max=land_target_max,
+            deck_oracle_ids=deck_oracle_ids,
+        ),
     )
 
     return {"owned": owned_recs, "external": external_recs, "app": app_recs}
+
+
+def _land_recommendations(
+    *,
+    commander_oracle_id: str,
+    owner_user_id: int | None,
+    land_count: int | None,
+    land_target_min: int | None,
+    land_target_max: int | None,
+    deck_oracle_ids: set[str],
+) -> list[dict]:
+    try:
+        from . import build_land_service
+    except Exception:
+        return []
+    if land_count is None:
+        return []
+    target_min, target_max = build_land_service.land_target_range()
+    if land_target_min is not None:
+        target_min = land_target_min
+    if land_target_max is not None:
+        target_max = land_target_max
+    if land_count >= target_min:
+        return []
+    return build_land_service.basic_land_recommendations(
+        commander_oracle_id=commander_oracle_id,
+        owner_user_id=owner_user_id,
+        deck_oracle_ids=deck_oracle_ids,
+        needed=max(0, target_min - land_count),
+    )
 
 
 def _deck_role_counts_for_recs(deck_oracle_ids: set[str]) -> dict[str, int]:
