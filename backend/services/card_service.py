@@ -18,7 +18,7 @@ from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db
 from models import Card, Folder, FolderRole, FolderShare, User, UserSetting
-from models.role import Role, SubRole, CardRole, OracleCoreRoleTag, OracleEvergreenTag
+from models.role import Role, SubRole, CardRole, OracleCoreRoleTag, OracleEvergreenTag, OracleRole
 from services import scryfall_cache as sc
 from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
@@ -217,6 +217,49 @@ def _request_cached_evergreen_labels(oracle_id: str | None) -> list[str]:
             )
             if row and row[0]
         ]
+
+    return request_cached(key, _load)
+
+
+def _request_cached_core_role_labels(oracle_id: str | None) -> list[str]:
+    if not oracle_id:
+        return []
+    key = ("card_view", "core_roles", oracle_id)
+
+    def _load() -> list[str]:
+        rows = (
+            db.session.query(OracleCoreRoleTag.role)
+            .filter(OracleCoreRoleTag.oracle_id == oracle_id)
+            .order_by(OracleCoreRoleTag.role.asc())
+            .all()
+        )
+        labels: list[str] = []
+        for row in rows:
+            role = row[0] if row else None
+            if not role:
+                continue
+            label = format_role_label(role)
+            if label not in labels:
+                labels.append(label)
+        return labels
+
+    return request_cached(key, _load)
+
+
+def _request_cached_primary_oracle_role_label(oracle_id: str | None) -> str | None:
+    if not oracle_id:
+        return None
+    key = ("card_view", "primary_oracle_role", oracle_id)
+
+    def _load() -> str | None:
+        row = (
+            db.session.query(OracleRole.primary_role)
+            .filter(OracleRole.oracle_id == oracle_id)
+            .first()
+        )
+        if not row or not row[0]:
+            return None
+        return format_role_label(str(row[0]))
 
     return request_cached(key, _load)
 
@@ -5117,6 +5160,16 @@ def card_detail(card_id):
     subrole_labels = [(s.label or getattr(s, "name", None) or s.key) for s in (card.subroles or [])]
     primary_role_label = _request_cached_primary_role_label(card.id)
     evergreen_labels = _request_cached_evergreen_labels(oid)
+    core_role_labels = _request_cached_core_role_labels(oid)
+    if core_role_labels:
+        if not role_labels:
+            role_labels = core_role_labels
+        else:
+            for label in core_role_labels:
+                if label not in role_labels:
+                    role_labels.append(label)
+    if not primary_role_label:
+        primary_role_label = _request_cached_primary_oracle_role_label(oid)
 
     commander_legality = info.get("commander_legality")
     commander_label = None

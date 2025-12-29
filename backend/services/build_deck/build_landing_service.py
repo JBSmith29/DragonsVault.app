@@ -123,11 +123,22 @@ def _commander_image(commander_oracle_id: str) -> str | None:
         meta = sc.metadata_from_print(pr)
         faces = meta.get("faces_json") or []
         if faces:
-            image_uris = faces[0].get("image_uris") or {}
-            for key in ("normal", "large", "small"):
-                url = image_uris.get(key)
-                if url:
-                    return url
+            for face in faces:
+                image_uris = face.get("image_uris") or {}
+                for key in ("normal", "large", "small"):
+                    url = image_uris.get(key)
+                    if url:
+                        return url
+        image_uris = meta.get("image_uris") or {}
+        for key in ("normal", "large", "small"):
+            url = image_uris.get(key)
+            if url:
+                return url
+        image = sc.image_for_print(pr)
+        for key in ("normal", "large", "small"):
+            url = image.get(key)
+            if url:
+                return url
     return None
 
 

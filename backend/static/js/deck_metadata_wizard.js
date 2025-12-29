@@ -233,6 +233,10 @@
 
   function updateApplyState() {
     if (!els.applyBtn) return;
+    if (els.complete && !els.complete.classList.contains("d-none")) {
+      els.applyBtn.disabled = false;
+      return;
+    }
     const commanderReady = commanderAction !== ACTION_SET || selectedCommanders.length > 0;
     const tagReady = tagAction !== ACTION_SET || Boolean(selectedTag);
     const hasChange =
@@ -395,6 +399,7 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "dropdown-item wizard-tag-option";
+        btn.dataset.wizardTagOption = "true";
         btn.textContent = tag;
         btn.dataset.tag = tag;
         btn.setAttribute("data-dv-select-option", "");
@@ -424,7 +429,7 @@
   function getTagButtons() {
     if (tagButtons.length) return tagButtons;
     if (!els.tagMenu) return [];
-    return Array.from(els.tagMenu.querySelectorAll("[data-wizard-tag-option]"));
+    return Array.from(els.tagMenu.querySelectorAll(".wizard-tag-option"));
   }
 
   function applyTagFilter() {
@@ -523,6 +528,11 @@
     tagPickerVisible = true;
     showAlert("");
     setFooterStatus("");
+    if (els.applyBtn) {
+      els.applyBtn.textContent = "Apply & Next";
+      els.applyBtn.classList.remove("btn-success");
+      els.applyBtn.classList.add("btn-primary");
+    }
     updateDeckHeader();
     updateCommanderUI();
     updateTagUI();
@@ -532,7 +542,13 @@
   function showCompletion() {
     els.body.classList.add("d-none");
     els.complete.classList.remove("d-none");
-    if (els.applyBtn) els.applyBtn.disabled = true;
+    needsRefresh = true;
+    if (els.applyBtn) {
+      els.applyBtn.disabled = false;
+      els.applyBtn.textContent = "Finished";
+      els.applyBtn.classList.remove("btn-primary");
+      els.applyBtn.classList.add("btn-success");
+    }
     if (els.skipBtn) els.skipBtn.disabled = true;
   }
 
@@ -678,6 +694,15 @@
     advanceDeck();
   }
 
+  function handleApplyClick() {
+    if (els.complete && !els.complete.classList.contains("d-none")) {
+      needsRefresh = true;
+      modal.hide();
+      return;
+    }
+    applyChanges();
+  }
+
   if (els.commanderChangeBtn) {
     els.commanderChangeBtn.addEventListener("click", () => {
       commanderPickerVisible = true;
@@ -730,7 +755,7 @@
     els.skipBtn.addEventListener("click", skipDeck);
   }
   if (els.applyBtn) {
-    els.applyBtn.addEventListener("click", applyChanges);
+    els.applyBtn.addEventListener("click", handleApplyClick);
   }
 
   triggerBtn.addEventListener("click", showWizard);

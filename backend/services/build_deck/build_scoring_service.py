@@ -35,6 +35,16 @@ def _join_labels(values: Iterable[str]) -> str:
     labels = [v for v in values if v]
     return ", ".join(labels)
 
+
+def _compact_list(values: Iterable[str], limit: int = 2) -> str:
+    labels = [v for v in values if v]
+    if not labels:
+        return ""
+    if len(labels) <= limit:
+        return ", ".join(labels)
+    return f"{', '.join(labels[:limit])} +{len(labels) - limit}"
+
+
 _ROLE_SHORT_LABELS = {
     "mana_fixing": "Fixing",
     "card_selection": "Selection",
@@ -52,7 +62,11 @@ def _compact_role_label(role: str) -> str:
 
 
 def _compact_roles(values: Iterable[str]) -> str:
-    return _join_labels(_compact_role_label(v) for v in values)
+    return _compact_list((_compact_role_label(v) for v in values), limit=2)
+
+
+def _compact_mechanics(values: Iterable[str]) -> str:
+    return _compact_list(mechanic_labels(values), limit=2)
 
 
 def _score_card(
@@ -73,38 +87,38 @@ def _score_card(
     baseline = _normalize_edhrec_baseline(synergy_score, synergy_rank)
     if baseline:
         score += baseline * EDHREC_BASELINE_WEIGHT
-        reasons.append("EDHREC synergy")
+        reasons.append("EDHREC")
 
     role_set = {r for r in roles if r and r != "utility"}
     if role_set:
         score += ROLE_ALIGNMENT_WEIGHT * len(role_set)
-        reasons.append("Roles: " + _compact_roles(sorted(role_set)))
+        reasons.append("Roles " + _compact_roles(sorted(role_set)))
 
     gap_set = {r for r in gap_roles if r}
     if gap_set:
         score += DECK_GAP_BONUS * len(gap_set)
-        reasons.append("Needs: " + _compact_roles(sorted(gap_set)))
+        reasons.append("Needs " + _compact_roles(sorted(gap_set)))
 
     tag_matches = [r for r in role_set if tag_role_weights.get(r)]
     if tag_matches:
         tag_bonus = sum(float(tag_role_weights.get(r, 0.0) or 0.0) for r in tag_matches)
         if tag_bonus:
             score += tag_bonus * TAG_WEIGHT_MULTIPLIER
-            reasons.append("Tag fit: " + _compact_roles(tag_matches))
+            reasons.append("Tag " + _compact_roles(tag_matches))
 
     mechanic_set = {m for m in mechanics if m}
     commander_set = {m for m in commander_mechanics if m}
     mechanic_matches = mechanic_set & commander_set
     if mechanic_matches:
         score += MECHANIC_ALIGNMENT_WEIGHT * len(mechanic_matches)
-        reasons.append("Commander: " + _join_labels(mechanic_labels(mechanic_matches)))
+        reasons.append("Cmdr " + _compact_mechanics(mechanic_matches))
 
     if include_owned_bonus and owned_qty:
         score += OWNERSHIP_BONUS
         reasons.append("Owned")
 
     if not reasons:
-        reasons.append("Deck needs")
+        reasons.append("Needs")
 
     return score, reasons
 
