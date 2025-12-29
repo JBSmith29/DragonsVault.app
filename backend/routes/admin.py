@@ -19,7 +19,6 @@ from extensions import db, limiter
 from models import (
     AuditLog,
     CommanderBracketCache,
-    DeckBuildSession,
     DeckStats,
     Folder,
     FolderRole,
@@ -148,7 +147,7 @@ def _folder_categories_page(admin_mode: bool):
             notes_apply = request.form.get("bulk_notes_apply") == "1"
             notes_value = (request.form.get("bulk_notes_value") or "").strip()
 
-            allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION, Folder.CATEGORY_BUILD}
+            allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}
             proxy_flag = None
             if proxy_value_raw in {"proxy", "on", "1", "true"}:
                 proxy_flag = True
@@ -278,7 +277,7 @@ def _folder_categories_page(admin_mode: bool):
         updated_owner_links = 0
         updated_proxies = 0
         updated_notes = 0
-        allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION, Folder.CATEGORY_BUILD}
+        allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}
         for folder in folders:
             submitted = request.form.get(f"category-{folder.id}", Folder.CATEGORY_DECK)
             if submitted not in allowed_categories:
@@ -339,8 +338,7 @@ def _folder_categories_page(admin_mode: bool):
         )
         return redirect(url_for(target_endpoint))
 
-    build_count = sum(1 for folder in folders if getattr(folder, "is_build", False))
-    deck_count = sum(1 for folder in folders if not folder.is_collection and not getattr(folder, "is_build", False))
+    deck_count = sum(1 for folder in folders if not folder.is_collection)
     collection_count = sum(1 for folder in folders if folder.is_collection)
     proxy_count = sum(1 for folder in folders if getattr(folder, "is_proxy", False))
 
@@ -350,10 +348,8 @@ def _folder_categories_page(admin_mode: bool):
         users=users,
         deck_category=Folder.CATEGORY_DECK,
         collection_category=Folder.CATEGORY_COLLECTION,
-        build_category=Folder.CATEGORY_BUILD,
         default_collection=sorted(DEFAULT_COLLECTION_FOLDERS),
         deck_count=deck_count,
-        build_count=build_count,
         collection_count=collection_count,
         proxy_count=proxy_count,
         show_owner_controls=admin_mode,
@@ -620,11 +616,6 @@ def _purge_folder(folder: Folder) -> dict[str, int]:
         .filter(DeckStats.folder_id == folder_id)
         .delete(synchronize_session=False)
     )
-    deleted_build_sessions = (
-        db.session.query(DeckBuildSession)
-        .filter(DeckBuildSession.folder_id == folder_id)
-        .delete(synchronize_session=False)
-    )
     deleted_bracket_cache = (
         db.session.query(CommanderBracketCache)
         .filter(CommanderBracketCache.folder_id == folder_id)
@@ -636,7 +627,6 @@ def _purge_folder(folder: Folder) -> dict[str, int]:
         "roles": deleted_roles,
         "shares": deleted_shares,
         "stats": deleted_stats,
-        "build_sessions": deleted_build_sessions,
         "bracket_cache": deleted_bracket_cache,
     }
 

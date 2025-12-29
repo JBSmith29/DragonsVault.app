@@ -150,17 +150,6 @@
     background:rgba(13, 110, 253, .15);
     color:var(--bs-primary);
   }
-  .build-badge {
-    display:inline-flex;
-    align-items:center;
-    gap:.25rem;
-    padding:.15rem .45rem;
-    border-radius:.5rem;
-    font-size:.7rem;
-    font-weight:600;
-    background:rgba(255, 193, 7, .2);
-    color:#b58100;
-  }
   .modal.tag-picker-modal .modal-content {
     border-radius: 1rem;
     background: rgba(17, 24, 39, 0.82);
@@ -322,9 +311,6 @@
       <a class="btn btn-outline-light btn-sm" href="{{ url_for('views.deck_tokens_overview') }}">
         All Deck Tokens
       </a>
-      <a class="btn btn-outline-success btn-sm" href="{{ url_for('views.build_deck_landing') }}">
-        Build a Deck
-      </a>
       <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.deck_from_collection') }}">
         Create Deck from Collection
       </a>
@@ -444,9 +430,6 @@
                       <a href="{{ url_for('views.folder_detail', folder_id=d.id) }}">{{ d.name }}</a>
                       {% if d.is_proxy %}
                         <span class="proxy-badge">Proxy</span>
-                      {% endif %}
-                      {% if d.is_build %}
-                        <span class="build-badge">Build</span>
                       {% endif %}
                     </div>
                     <div class="small text-muted text-truncate d-flex align-items-center gap-3 flex-wrap">

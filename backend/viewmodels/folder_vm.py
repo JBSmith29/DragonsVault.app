@@ -19,7 +19,6 @@ class FolderVM:
     owner_user_id: Optional[int]
     is_collection: bool
     is_deck: bool
-    is_build: bool
     is_proxy: bool
     is_public: bool
     deck_tag: Optional[str]
@@ -57,7 +56,6 @@ class FolderExportVM:
     is_public: bool
     is_deck: bool
     is_collection: bool
-    is_build: bool
 
 
 @dataclass(slots=True)

@@ -33,7 +33,6 @@ class DeckVM:
     commander: Optional[DeckCommanderVM]
     bracket_level: Optional[str]
     bracket_label: Optional[str]
-    is_build: bool = False
 
 
 @dataclass(slots=True)

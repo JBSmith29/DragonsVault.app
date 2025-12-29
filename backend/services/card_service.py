@@ -23,7 +23,6 @@ from services import scryfall_cache as sc
 from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
-from services import build_deck_landing_service
 from services.deck_tags import (
     get_all_deck_tags,
     get_deck_tag_category,
@@ -108,7 +107,6 @@ from viewmodels.dashboard_vm import (
     DashboardStatTileVM,
     DashboardViewModel,
 )
-from viewmodels.build_deck_landing_vm import BuildLandingCommanderVM, BuildLandingViewModel
 from viewmodels.folder_vm import CollectionBucketVM, FolderOptionVM, FolderVM, SharedFolderEntryVM
 from viewmodels.opening_hand_vm import OpeningHandCardVM, OpeningHandTokenVM
 
@@ -914,53 +912,6 @@ def _parse_collection_lines(raw_text: str) -> tuple[list[dict], list[str]]:
     return entries, errors
 
 
-def _clone_deck_to_playground(source: Folder) -> Folder:
-    """Clone an existing deck into a Build-A-Deck playground (proxy) folder."""
-    if not source or not isinstance(source, Folder):
-        raise ValueError("Source deck is required.")
-
-    base_name = f"[Playground] {source.name}"
-    final_name = _generate_unique_folder_name(base_name)
-
-    playground = Folder(
-        name=final_name,
-        commander_oracle_id=source.commander_oracle_id,
-        commander_name=source.commander_name,
-        deck_tag=source.deck_tag,
-        owner=source.owner,
-        is_proxy=True,
-    )
-    playground.set_primary_role(Folder.CATEGORY_BUILD)
-    db.session.add(playground)
-    db.session.flush()
-
-    for card in source.cards:
-        db.session.add(
-            Card(
-                name=card.name,
-                set_code=card.set_code,
-                collector_number=card.collector_number,
-                date_bought=None,
-                folder_id=playground.id,
-                quantity=card.quantity,
-                oracle_id=card.oracle_id,
-                lang=card.lang,
-                is_foil=card.is_foil,
-                type_line=card.type_line,
-                rarity=card.rarity,
-                oracle_text=card.oracle_text,
-                mana_value=card.mana_value,
-                colors=card.colors,
-                color_identity=card.color_identity,
-                color_identity_mask=card.color_identity_mask,
-                layout=card.layout,
-                faces_json=card.faces_json,
-            )
-        )
-
-    return playground
-
-
 def _create_proxy_deck_from_lines(
     deck_name: str | None,
     owner: str | None,
@@ -1340,60 +1291,6 @@ def create_proxy_deck():
     return redirect(redirect_url)
 
 
-def start_build_deck():
-    commander_name = (request.form.get("commander_name") or "").strip()
-    commander_oracle_id = (request.form.get("commander_oracle_id") or "").strip()
-    tags = [tag.strip() for tag in request.form.getlist("tags") if tag and tag.strip()]
-
-    if not commander_oracle_id:
-        if not commander_name:
-            flash("Commander name is required to start a build.", "warning")
-            return redirect(request.referrer or url_for("views.decks_overview"))
-        try:
-            ensure_cache_loaded()
-        except Exception:
-            flash("Card cache unavailable; try again later.", "warning")
-            return redirect(request.referrer or url_for("views.decks_overview"))
-        oracle_ids: list[str] = []
-        errors: list[str] = []
-        for part in split_commander_names(commander_name):
-            try:
-                oid = unique_oracle_by_name(part)
-            except Exception as exc:
-                current_app.logger.warning("Commander lookup failed for %s: %s", part, exc)
-                oid = None
-            if not oid:
-                errors.append(f"Commander lookup failed for {part}.")
-            else:
-                oracle_ids.append(oid)
-        if errors:
-            for msg in errors:
-                flash(msg, "warning")
-            return redirect(request.referrer or url_for("views.decks_overview"))
-        commander_oracle_id = ",".join(oracle_ids)
-
-    if not commander_oracle_id:
-        flash("Commander selection failed; please try again.", "warning")
-        return redirect(request.referrer or url_for("views.decks_overview"))
-
-    try:
-        from services import build_deck_service
-
-        result = build_deck_service.start_build(commander_oracle_id, tags)
-    except Exception as exc:
-        current_app.logger.exception("Build deck creation failed.")
-        flash(f"Unable to start build: {exc}", "danger")
-        return redirect(request.referrer or url_for("views.decks_overview"))
-
-    folder_id = result.get("folder_id")
-    if not folder_id:
-        flash("Build deck could not be created.", "danger")
-        return redirect(request.referrer or url_for("views.decks_overview"))
-
-    flash("Build deck ready. Start adding synergy cards below.", "success")
-    return redirect(url_for("views.folder_detail", folder_id=folder_id))
-
-
 def create_proxy_deck_bulk():
     raw_urls = (request.form.get("deck_urls") or "").strip()
     if not raw_urls:
@@ -1692,13 +1589,8 @@ def dashboard_index():
     return redirect(url_for("views.dashboard"))
 
 _DASHBOARD_SETTING_KEY = "dashboard_mode"
-_DEFAULT_DASHBOARD_MODE = "builder"
+_DEFAULT_DASHBOARD_MODE = "collection"
 _DASHBOARD_MODES = {
-    "builder": {
-        "label": "Builder",
-        "description": "Build-a-deck focus and recommendations.",
-        "partial": "dashboard/_builder.html",
-    },
     "collection": {
         "label": "Collection",
         "description": "Collection insights and ownership.",
@@ -1710,7 +1602,7 @@ _DASHBOARD_MODES = {
         "partial": "dashboard/_decks.html",
     },
 }
-_DASHBOARD_MODE_SEQUENCE = ("builder", "collection", "decks")
+_DASHBOARD_MODE_SEQUENCE = ("collection", "decks")
 
 
 def _normalize_dashboard_mode(value: str | None) -> str:
@@ -1960,7 +1852,6 @@ def dashboard():
                     owner=getattr(f, "owner", None) if f else None,
                     owner_key=(getattr(f, "owner", None) or "").strip().lower() if f else "",
                     is_proxy=bool(getattr(f, "is_proxy", False)) if f else False,
-                    is_build=bool(getattr(f, "is_build", False)) if f else False,
                     tag=getattr(f, "deck_tag", None) if f else None,
                     tag_label=getattr(f, "deck_tag", None) if f else None,
                     ci_name=color_identity_name(letters),
@@ -1973,9 +1864,6 @@ def dashboard():
             )
 
     deck_count = len(deck_vms)
-    build_decks = [deck for deck in deck_vms if deck.is_build]
-    build_count = len(build_decks)
-
     def _format_stat(value: int | None) -> str:
         if value is None:
             return "—"
@@ -2035,87 +1923,6 @@ def dashboard():
         ),
     ]
 
-    builder_tiles = [
-        DashboardStatTileVM(
-            label="Active Builds",
-            value=_format_stat(build_count),
-            href=url_for("views.decks_overview"),
-            icon="bi bi-hammer",
-        ),
-        DashboardStatTileVM(
-            label="Total Decks",
-            value=_format_stat(deck_count),
-            href=url_for("views.decks_overview"),
-            icon="bi bi-collection",
-        ),
-        DashboardStatTileVM(
-            label="Total Cards",
-            value=_format_stat(total_qty),
-            href=url_for("views.list_cards"),
-            icon="bi bi-stack",
-        ),
-        DashboardStatTileVM(
-            label="Collection Cards",
-            value=_format_stat(collection_qty),
-            href=url_for("views.collection_overview"),
-            icon="bi bi-box-seam",
-        ),
-    ]
-
-    builder_actions = [
-        DashboardActionVM(
-            label="Build a Deck",
-            href=url_for("views.build_deck_landing"),
-            icon="bi bi-hammer",
-        ),
-        DashboardActionVM(
-            label="Scryfall Cards",
-            href=url_for("views.scryfall_browser"),
-            icon="bi bi-search",
-        ),
-        DashboardActionVM(
-            label="List Checker",
-            href=url_for("views.list_checker"),
-            icon="bi bi-list-check",
-        ),
-        DashboardActionVM(
-            label="Wishlist",
-            href=url_for("views.wishlist"),
-            icon="bi bi-heart",
-        ),
-        DashboardActionVM(
-            label="Commander Bracket",
-            href=url_for("views.commander_brackets_info"),
-            icon="bi bi-trophy",
-        ),
-        DashboardActionVM(
-            label="Spellbook Combos",
-            href=url_for("views.commander_spellbook_combos"),
-            icon="bi bi-lightning-charge",
-        ),
-        DashboardActionVM(
-            label="Import CSV",
-            href=url_for("views.import_csv"),
-            icon="bi bi-file-earmark-arrow-up",
-        ),
-        DashboardActionVM(
-            label="Dragon Shield",
-            href="https://mtg.dragonshield.com/splash",
-            icon="bi bi-shield-check",
-            external=True,
-        ),
-        DashboardActionVM(
-            label="MTGGoldfish",
-            href="https://www.mtggoldfish.com/",
-            icon="bi bi-globe",
-            external=True,
-        ),
-        DashboardActionVM(
-            label="Admin",
-            href=url_for("views.admin_console"),
-            icon="bi bi-sliders",
-        ),
-    ]
 
     collection_actions = [
         DashboardActionVM(
@@ -2151,11 +1958,6 @@ def dashboard():
     ]
 
     deck_actions = [
-        DashboardActionVM(
-            label="Build a Deck",
-            href=url_for("views.build_deck_landing"),
-            icon="bi bi-hammer",
-        ),
         DashboardActionVM(
             label="Opening Hand",
             href=url_for("views.opening_hand"),
@@ -2193,14 +1995,11 @@ def dashboard():
         mode_description=mode_meta["description"],
         content_partial=mode_meta["partial"],
         mode_options=mode_options,
-        builder_tiles=builder_tiles,
         collection_tiles=collection_tiles,
         deck_tiles=deck_tiles,
-        builder_actions=builder_actions,
         collection_actions=collection_actions,
         deck_actions=deck_actions,
         decks=deck_vms,
-        build_decks=build_decks,
     )
 
     return render_template("dashboard.html", dashboard=dashboard_vm)
@@ -2950,7 +2749,6 @@ def shared_folders():
     category_labels = {
         Folder.CATEGORY_DECK: "Deck",
         Folder.CATEGORY_COLLECTION: "Collection",
-        Folder.CATEGORY_BUILD: "Build Queue",
     }
     for share in shared_rows:
         folder = share.folder
@@ -2968,7 +2766,6 @@ def shared_folders():
             owner_user_id=folder.owner_user_id,
             is_collection=bool(folder.is_collection),
             is_deck=bool(folder.is_deck),
-            is_build=bool(folder.is_build),
             is_proxy=bool(getattr(folder, "is_proxy", False)),
             is_public=bool(getattr(folder, "is_public", False)),
             deck_tag=folder.deck_tag,
@@ -3008,7 +2805,6 @@ def shared_folders():
             owner_user_id=folder.owner_user_id,
             is_collection=bool(folder.is_collection),
             is_deck=bool(folder.is_deck),
-            is_build=bool(folder.is_build),
             is_proxy=bool(getattr(folder, "is_proxy", False)),
             is_public=bool(getattr(folder, "is_public", False)),
             deck_tag=folder.deck_tag,
@@ -3661,80 +3457,6 @@ def api_deck_insight(deck_id: int):
     return jsonify(payload)
 
 
-def build_deck_landing():
-    selected_tag_raw = (request.args.get("tag") or "").strip()
-    selected_tag = selected_tag_raw if is_valid_deck_tag(selected_tag_raw) else None
-    tag_notice = None
-    if selected_tag_raw and not selected_tag:
-        tag_notice = "That tag is not available. Please choose a tag from the list."
-
-    user_id = current_user.id if getattr(current_user, "is_authenticated", False) else None
-    landing_data = build_deck_landing_service.get_build_landing_data(user_id, selected_tag)
-
-    def _pluralize(count: int, word: str) -> str:
-        return word if count == 1 else f"{word}s"
-
-    def _build_vm(item: dict, *, tag_label: str | None = None) -> BuildLandingCommanderVM:
-        commander_name = item.get("commander_name") or "Unknown Commander"
-        commander_oracle_id = item.get("commander_oracle_id") or ""
-        owned_count = int(item.get("owned_count") or 0)
-        total_considered = int(item.get("total_considered") or 0)
-        coverage_pct = int(item.get("coverage_pct") or 0)
-        owned_label = f"You own {owned_count} high-synergy {_pluralize(owned_count, 'card')}"
-        coverage_label = (
-            f"You own {coverage_pct}% of key cards" if total_considered else "Coverage unavailable"
-        )
-        if tag_label:
-            reason = f"Suggested for {tag_label} because you own {coverage_pct}% of key cards."
-        else:
-            reason = f"Suggested because you own {owned_count} high-synergy {_pluralize(owned_count, 'card')}."
-
-        tag_hints = list(item.get("tag_hints") or [])
-        color_hint = None
-        covered_colors = int(item.get("color_covered") or 0)
-        total_colors = int(item.get("color_total") or 0)
-        if total_colors:
-            color_hint = f"Color coverage: {covered_colors}/{total_colors} commander colors represented."
-        return BuildLandingCommanderVM(
-            commander_name=commander_name,
-            commander_oracle_id=commander_oracle_id,
-            owned_count=owned_count,
-            total_considered=total_considered,
-            coverage_pct=coverage_pct,
-            owned_label=owned_label,
-            coverage_label=coverage_label,
-            reason=reason,
-            tag_label=tag_label,
-            tag_hints=tag_hints,
-            color_hint=color_hint,
-        )
-
-    collection_fits = [
-        _build_vm(item) for item in (landing_data.get("collection_fits") or [])
-    ]
-    tag_fits = [
-        _build_vm(item, tag_label=selected_tag)
-        for item in (landing_data.get("tag_fits") or [])
-    ]
-
-    landing_vm = BuildLandingViewModel(
-        collection_count=int(landing_data.get("collection_count") or 0),
-        edhrec_ready=bool(landing_data.get("edhrec_ready")),
-        selected_tag=selected_tag,
-        collection_fits=collection_fits,
-        tag_fits=tag_fits,
-        tag_candidates=int(landing_data.get("tag_candidates") or 0),
-    )
-
-    return render_template(
-        "decks/build_landing.html",
-        landing=landing_vm,
-        deck_tag_groups=get_deck_tag_groups(),
-        deck_tags=get_all_deck_tags(),
-        tag_notice=tag_notice,
-    )
-
-
 def decks_overview():
     """Render the deck gallery with commander thumbnails and color identity badges."""
     sort = (request.args.get("sort") or "").strip().lower()
@@ -3797,7 +3519,6 @@ def decks_overview():
         tag = f.deck_tag
         deck["tag"] = tag
         deck["tag_label"] = tag or None
-        deck["is_build"] = bool(getattr(f, "is_build", False))
 
     deck_bracket_map: dict[int, dict] = {}
     if deck_ids:
@@ -4108,7 +3829,6 @@ def decks_overview():
                 owner=deck.get("owner"),
                 owner_key=(deck.get("owner") or "").strip().lower(),
                 is_proxy=bool(deck.get("is_proxy")),
-                is_build=bool(deck.get("is_build")),
                 tag=deck.get("tag"),
                 tag_label=deck.get("tag_label"),
                 ci_name=deck_ci_name.get(fid) or "Colorless",

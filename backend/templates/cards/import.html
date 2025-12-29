@@ -422,13 +422,13 @@
       <div class="modal-header">
         <div>
           <h5 class="modal-title" id="postImportFolderLabel">Confirm folder types</h5>
-          <p class="small text-muted mb-0">Mark each folder as a deck, collection, or build queue to keep stats accurate.</p>
+          <p class="small text-muted mb-0">Mark each folder as a deck or collection to keep stats accurate.</p>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <div class="alert alert-info small">
-          Choose <strong>Deck</strong> for playable decks, <strong>Collection</strong> for inventory/bulk, or <strong>Build Queue</strong> for works in progress.
+          Choose <strong>Deck</strong> for playable decks or <strong>Collection</strong> for inventory/bulk.
         </div>
         <div class="table-responsive">
           <table class="table table-sm align-middle mb-0">
@@ -452,10 +452,6 @@
                     <div class="form-check">
                       <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-collection" value="{{ collection_category }}" {% if folder.is_collection %}checked{% endif %}>
                       <label class="form-check-label" for="cat-{{ folder.id }}-collection">Collection</label>
-                    </div>
-                    <div class="form-check">
-                      <input class="form-check-input" type="radio" name="cat-{{ folder.id }}" id="cat-{{ folder.id }}-build" value="{{ build_category }}" {% if folder.is_build %}checked{% endif %}>
-                      <label class="form-check-label" for="cat-{{ folder.id }}-build">Build Queue</label>
                     </div>
                   </div>
                 </td>

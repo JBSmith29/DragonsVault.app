@@ -16,7 +16,6 @@ from .dashboard_vm import (
     DashboardViewModel,
 )
 from .folder_vm import CollectionBucketVM, FolderCardVM, FolderOptionVM, FolderVM
-from .build_deck_landing_vm import BuildLandingCommanderVM, BuildLandingViewModel
 
 __all__ = [
     "CardInfoVM",
@@ -36,6 +35,4 @@ __all__ = [
     "FolderVM",
     "ImageSetVM",
     "TypeBreakdownVM",
-    "BuildLandingCommanderVM",
-    "BuildLandingViewModel",
 ]

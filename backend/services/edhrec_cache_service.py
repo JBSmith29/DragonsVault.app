@@ -14,8 +14,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models import (
     EdhrecCommanderCard,
+    EdhrecCommanderCategoryCard,
     EdhrecCommanderTag,
     EdhrecCommanderTagCard,
+    EdhrecCommanderTagCategoryCard,
     EdhrecTagCommander,
     EdhrecMetadata,
     Folder,
@@ -57,8 +59,10 @@ def _ensure_tables() -> None:
             db.engine,
             tables=[
                 EdhrecCommanderCard.__table__,
+                EdhrecCommanderCategoryCard.__table__,
                 EdhrecCommanderTag.__table__,
                 EdhrecCommanderTagCard.__table__,
+                EdhrecCommanderTagCategoryCard.__table__,
                 EdhrecTagCommander.__table__,
                 EdhrecMetadata.__table__,
             ],
@@ -557,6 +561,73 @@ def get_tag_commanders(tag: str) -> list[str]:
     return [row.commander_oracle_id for row in rows if row.commander_oracle_id]
 
 
+def get_commander_category_groups(
+    commander_oracle_id: str,
+    *,
+    tag: str | None = None,
+    limit: int | None = _MAX_SYNERGY_CARDS,
+) -> list[dict]:
+    _ensure_tables()
+    commander_oracle_id = primary_commander_oracle_id(commander_oracle_id) or ""
+    if not commander_oracle_id:
+        return []
+    tag_label = (tag or "").strip()
+    if tag_label:
+        query = EdhrecCommanderTagCategoryCard.query.filter_by(
+            commander_oracle_id=commander_oracle_id,
+            tag=tag_label,
+        )
+        rows = (
+            query.order_by(
+                func.coalesce(EdhrecCommanderTagCategoryCard.category_rank, 9999).asc(),
+                EdhrecCommanderTagCategoryCard.category.asc(),
+                func.coalesce(EdhrecCommanderTagCategoryCard.synergy_rank, 999999).asc(),
+                func.coalesce(EdhrecCommanderTagCategoryCard.synergy_score, 0).desc(),
+            )
+            .all()
+        )
+    else:
+        query = EdhrecCommanderCategoryCard.query.filter_by(
+            commander_oracle_id=commander_oracle_id
+        )
+        rows = (
+            query.order_by(
+                func.coalesce(EdhrecCommanderCategoryCard.category_rank, 9999).asc(),
+                EdhrecCommanderCategoryCard.category.asc(),
+                func.coalesce(EdhrecCommanderCategoryCard.synergy_rank, 999999).asc(),
+                func.coalesce(EdhrecCommanderCategoryCard.synergy_score, 0).desc(),
+            )
+            .all()
+        )
+
+    grouped: dict[str, list[dict]] = {}
+    ordered: list[str] = []
+    for row in rows:
+        category = (row.category or "").strip()
+        oracle_id = (row.card_oracle_id or "").strip()
+        if not category or not oracle_id:
+            continue
+        if category not in grouped:
+            grouped[category] = []
+            ordered.append(category)
+        cards = grouped[category]
+        if limit is not None and len(cards) >= limit:
+            continue
+        cards.append(
+            {
+                "oracle_id": oracle_id,
+                "synergy_score": float(row.synergy_score) if row.synergy_score is not None else None,
+                "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
+            }
+        )
+
+    groups: list[dict] = []
+    for category in ordered:
+        cards = grouped.get(category) or []
+        groups.append({"label": category, "cards": cards, "count": len(cards)})
+    return groups
+
+
 def get_commander_tag_synergy_groups(
     commander_oracle_id: str,
     tags: Iterable[str] | None = None,
@@ -757,6 +828,7 @@ __all__ = [
     "edhrec_cache_snapshot",
     "get_commander_synergy",
     "get_commander_tags",
+    "get_commander_category_groups",
     "get_commander_tag_synergy_groups",
     "get_tag_commanders",
     "cache_ready",

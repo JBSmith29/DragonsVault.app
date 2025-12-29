@@ -10,7 +10,7 @@ class Folder(db.Model):
     __table_args__ = (
         db.UniqueConstraint("owner_user_id", "name", name="uq_folder_owner_name"),
         db.CheckConstraint(
-            "category in ('deck','collection','build')",
+            "category in ('deck','collection')",
             name="ck_folder_category",
         ),
         db.UniqueConstraint("share_token_hash", name="uq_folder_share_token_hash"),
@@ -18,7 +18,6 @@ class Folder(db.Model):
 
     CATEGORY_DECK = "deck"
     CATEGORY_COLLECTION = "collection"
-    CATEGORY_BUILD = "build"
 
     id   = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False, index=True)
@@ -122,11 +121,7 @@ class Folder(db.Model):
 
     @property
     def is_deck(self) -> bool:
-        return self.has_any_role({FolderRole.ROLE_DECK, FolderRole.ROLE_BUILD})
-
-    @property
-    def is_build(self) -> bool:
-        return self.has_role(FolderRole.ROLE_BUILD)
+        return self.has_role(FolderRole.ROLE_DECK)
 
     @property
     def is_proxy_deck(self) -> bool:

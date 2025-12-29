@@ -12,11 +12,11 @@ from urllib.parse import quote_plus
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for, current_app, session
 from flask_login import current_user
-from sqlalchemy import case, func, text
+from sqlalchemy import case, func
 from sqlalchemy.orm import load_only
 
 from extensions import cache, db
-from models import Card, Folder, FolderShare, User, UserSetting
+from models import Card, Folder, FolderShare, User
 from services import scryfall_cache as sc
 from services.scryfall_cache import cache_epoch, cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
@@ -59,147 +59,6 @@ from routes.base import (
     _safe_commit,
 )
 from viewmodels.folder_vm import FolderCardVM, FolderOptionVM, FolderVM
-
-_BUILD_VIEW_SETTING_KEY = "build_view_mode"
-_DEFAULT_BUILD_VIEW = "gallery"
-_BUILD_VIEW_MODES = {"gallery", "list"}
-_BUILD_REC_SOURCE_KEY = "build_rec_source"
-_DEFAULT_BUILD_REC_SOURCE = "edhrec"
-_BUILD_REC_SOURCES = {"edhrec", "collection"}
-
-
-def _normalize_build_view_mode(value: str | None) -> str:
-    normalized = (value or "").strip().lower()
-    if normalized in _BUILD_VIEW_MODES:
-        return normalized
-    return _DEFAULT_BUILD_VIEW
-
-
-def _normalize_build_rec_source(value: str | None) -> str:
-    normalized = (value or "").strip().lower()
-    if normalized in _BUILD_REC_SOURCES:
-        return normalized
-    return _DEFAULT_BUILD_REC_SOURCE
-
-
-def _is_missing_table_error(exc: Exception, table_name: str) -> bool:
-    message = str(exc).lower()
-    return table_name.lower() in message and ("does not exist" in message or "undefinedtable" in message)
-
-
-def _ensure_user_settings_table() -> bool:
-    try:
-        db.session.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS user_settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                )
-                """
-            )
-        )
-        db.session.commit()
-        return True
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception("Failed to ensure user_settings table.")
-        return False
-
-
-def _load_build_view_mode() -> str:
-    try:
-        setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
-    except Exception as exc:
-        db.session.rollback()
-        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
-            try:
-                setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
-            except Exception:
-                db.session.rollback()
-                current_app.logger.exception("Failed to load build view mode preference after ensuring table.")
-                return _DEFAULT_BUILD_VIEW
-        else:
-            current_app.logger.exception("Failed to load build view mode preference.")
-            return _DEFAULT_BUILD_VIEW
-    if setting and setting.value:
-        return _normalize_build_view_mode(setting.value)
-    return _DEFAULT_BUILD_VIEW
-
-
-def _load_build_rec_source() -> str:
-    try:
-        setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
-    except Exception as exc:
-        db.session.rollback()
-        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
-            try:
-                setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
-            except Exception:
-                db.session.rollback()
-                current_app.logger.exception("Failed to load build rec source after ensuring table.")
-                return _DEFAULT_BUILD_REC_SOURCE
-        else:
-            current_app.logger.exception("Failed to load build rec source preference.")
-            return _DEFAULT_BUILD_REC_SOURCE
-    if setting and setting.value:
-        return _normalize_build_rec_source(setting.value)
-    return _DEFAULT_BUILD_REC_SOURCE
-
-
-def _persist_build_view_mode(mode: str) -> None:
-    mode = _normalize_build_view_mode(mode)
-    try:
-        setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
-        if setting:
-            setting.value = mode
-        else:
-            db.session.add(UserSetting(key=_BUILD_VIEW_SETTING_KEY, value=mode))
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
-            try:
-                setting = db.session.get(UserSetting, _BUILD_VIEW_SETTING_KEY)
-                if setting:
-                    setting.value = mode
-                else:
-                    db.session.add(UserSetting(key=_BUILD_VIEW_SETTING_KEY, value=mode))
-                db.session.commit()
-                return
-            except Exception:
-                db.session.rollback()
-                current_app.logger.exception("Failed to update build view mode preference after ensuring table.")
-                return
-        current_app.logger.exception("Failed to update build view mode preference.")
-
-
-def _persist_build_rec_source(source: str) -> None:
-    source = _normalize_build_rec_source(source)
-    try:
-        setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
-        if setting:
-            setting.value = source
-        else:
-            db.session.add(UserSetting(key=_BUILD_REC_SOURCE_KEY, value=source))
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        if _is_missing_table_error(exc, "user_settings") and _ensure_user_settings_table():
-            try:
-                setting = db.session.get(UserSetting, _BUILD_REC_SOURCE_KEY)
-                if setting:
-                    setting.value = source
-                else:
-                    db.session.add(UserSetting(key=_BUILD_REC_SOURCE_KEY, value=source))
-                db.session.commit()
-                return
-            except Exception:
-                db.session.rollback()
-                current_app.logger.exception("Failed to update build rec source after ensuring table.")
-                return
-        current_app.logger.exception("Failed to update build rec source preference.")
-
 
 _CARD_TYPE_GROUPS = [
     ("Creatures", "Creature"),
@@ -383,24 +242,6 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     """
     folder = get_or_404(Folder, folder_id)
     ensure_folder_access(folder, write=False if not allow_shared else False, allow_shared=allow_shared, share_token=share_token)
-    if request.method == "POST" and not allow_shared:
-        view_mode = request.form.get("build_view_mode")
-        rec_source = request.form.get("build_rec_source")
-        if view_mode or rec_source:
-            if not current_user.is_authenticated:
-                return jsonify({"ok": False, "error": "Authentication required."}), 401
-            response_payload = {"ok": True}
-            if view_mode:
-                normalized_view = _normalize_build_view_mode(view_mode)
-                _persist_build_view_mode(normalized_view)
-                response_payload["mode"] = normalized_view
-            if rec_source:
-                normalized_source = _normalize_build_rec_source(rec_source)
-                _persist_build_rec_source(normalized_source)
-                response_payload["rec_source"] = normalized_source
-            if request.is_json or "application/json" in (request.headers.get("Accept") or ""):
-                return jsonify(response_payload)
-            return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
     commander_candidates = _commander_candidates_for_folder(folder_id)
     owner_name_options = sorted(
         {
@@ -949,12 +790,10 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     category_labels = {
         Folder.CATEGORY_DECK: "Deck",
         Folder.CATEGORY_COLLECTION: "Collection",
-        Folder.CATEGORY_BUILD: "Build Queue",
     }
     role_label_map = {
         "deck": "Deck",
         "collection": "Binder",
-        "build": "Build Queue",
         "wishlist": "Wishlist",
         "binder": "Binder",
     }
@@ -976,7 +815,6 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         owner_user_id=folder.owner_user_id,
         is_collection=bool(folder.is_collection),
         is_deck=bool(folder.is_deck),
-        is_build=bool(folder.is_build),
         is_proxy=bool(getattr(folder, "is_proxy", False)),
         is_public=bool(getattr(folder, "is_public", False)),
         deck_tag=folder.deck_tag,
@@ -987,16 +825,6 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         notes=folder.notes,
         role_labels=role_labels,
     )
-
-    build_state = None
-    if folder.is_build:
-        try:
-            from services import build_deck_service
-
-            build_state = build_deck_service.get_build_state(folder.id)
-        except Exception as exc:
-            current_app.logger.warning("Build state load failed for folder %s: %s", folder.id, exc)
-            build_state = {"ok": False, "error": "Build recommendations unavailable."}
 
     move_targets = [
         FolderOptionVM(id=row.id, name=row.name)
@@ -1010,9 +838,8 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         )
     ]
 
-    template_name = "decks/build.html" if folder.is_build else "decks/folder_detail.html"
     return render_template(
-        template_name,
+        "decks/folder_detail.html",
         folder=folder_vm,
         commander_candidates=commander_candidates,
         total_rows=total_rows,
@@ -1040,9 +867,6 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         move_targets=move_targets,
         is_deck_folder=is_deck_folder,
         commander_media_list=commander_media_list,
-        build_state=build_state,
-        build_view_mode=_load_build_view_mode(),
-        build_rec_source=_load_build_rec_source(),
     )
 
 
@@ -1395,204 +1219,6 @@ def clear_folder_tag(folder_id: int):
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
 
-def build_add_card(folder_id: int):
-    folder = get_or_404(Folder, folder_id)
-    ensure_folder_access(folder, write=True)
-    if not folder.is_build:
-        message = "Cards can only be added through build decks."
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-    oracle_id = (request.form.get("oracle_id") or "").strip()
-    raw_quantity = request.form.get("quantity")
-    quantity = 1
-    if raw_quantity:
-        try:
-            quantity = parse_positive_int(raw_quantity, field="quantity")
-        except ValidationError as exc:
-            log_validation_error(exc, context="build_add_card")
-            message = "Invalid quantity supplied."
-            if request.is_json:
-                return jsonify({"ok": False, "error": message}), 400
-            flash(message, "warning")
-            return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-    if not oracle_id:
-        message = "Card selection missing."
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-    try:
-        from services import build_deck_service
-
-        build_deck_service.add_card_to_build(folder_id, oracle_id, quantity=quantity)
-    except ValueError as exc:
-        message = str(exc) or "Unable to add card."
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-    except Exception as exc:
-        current_app.logger.exception("Build add card failed.")
-        message = f"Unable to add card: {exc}"
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 500
-        flash(message, "danger")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-    if request.is_json:
-        return jsonify({"ok": True})
-
-    flash("Card added to build deck.", "success")
-    return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-
-def build_remove_cards(folder_id: int):
-    folder = get_or_404(Folder, folder_id)
-    ensure_folder_access(folder, write=True)
-    if not folder.is_build:
-        message = "Cards can only be removed from build decks."
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-    json_payload = request.get_json(silent=True) or {}
-    wants_json = request.is_json or bool(json_payload) or "application/json" in (request.headers.get("Accept") or "")
-    redirect_target = (
-        request.form.get("redirect_to")
-        or request.referrer
-        or url_for("views.folder_detail", folder_id=folder_id)
-    )
-
-    def _gather_raw_ids() -> list[str]:
-        raw: list[str] = []
-
-        def _extend(value):
-            if value is None:
-                return
-            if isinstance(value, (list, tuple, set)):
-                for item in value:
-                    _extend(item)
-            else:
-                raw.append(str(value))
-
-        _extend(json_payload.get("card_ids") or json_payload.get("cardIds"))
-        if not raw:
-            _extend(request.form.getlist("card_ids"))
-            _extend(request.form.getlist("card_ids[]"))
-        if not raw:
-            single = request.form.get("card_id")
-            if single:
-                raw.append(single)
-        return raw
-
-    try:
-        card_ids = parse_positive_int_list(_gather_raw_ids(), field="card id(s)")
-    except ValidationError as exc:
-        log_validation_error(exc, context="build_remove_cards")
-        message = "Invalid card id(s) supplied."
-        if wants_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(redirect_target)
-    if not card_ids:
-        message = "Select at least one card to remove."
-        if wants_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(redirect_target)
-
-    cards = (
-        Card.query.filter(Card.id.in_(card_ids), Card.folder_id == folder.id)
-        .order_by(Card.id.asc())
-        .all()
-    )
-    if not cards:
-        message = "No matching cards were found in this build."
-        if wants_json:
-            return jsonify({"ok": False, "error": message}), 404
-        flash(message, "warning")
-        return redirect(redirect_target)
-
-    raw_delta = json_payload.get("delta") or request.form.get("delta")
-    delta = None
-    if raw_delta:
-        try:
-            delta = parse_positive_int(raw_delta, field="delta")
-        except ValidationError as exc:
-            log_validation_error(exc, context="build_remove_cards")
-            message = "Invalid quantity supplied."
-            if wants_json:
-                return jsonify({"ok": False, "error": message}), 400
-            flash(message, "warning")
-            return redirect(redirect_target)
-
-    removed_qty = 0
-    for card in cards:
-        qty = int(card.quantity or 0) or 1
-        if delta and qty > delta:
-            card.quantity = qty - delta
-            removed_qty += delta
-            db.session.add(card)
-        else:
-            removed_qty += qty
-            db.session.delete(card)
-
-    from services.deck_service import recompute_deck_stats
-
-    recompute_deck_stats(folder.id)
-    _safe_commit()
-
-    message = (
-        f"Removed {len(cards)} card{'s' if len(cards) != 1 else ''} "
-        f"from this build ({removed_qty} cop{'ies' if removed_qty != 1 else 'y'})."
-    )
-    if wants_json:
-        return jsonify({"ok": True, "message": message, "removed": len(cards), "removed_qty": removed_qty})
-
-    flash(message, "success")
-    return redirect(redirect_target)
-
-
-def finish_build(folder_id: int):
-    folder = get_or_404(Folder, folder_id)
-    ensure_folder_access(folder, write=True)
-    if not folder.is_build:
-        message = "Only build decks can be finished."
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-    try:
-        from services import build_deck_service
-
-        build_deck_service.finish_build(folder_id)
-    except ValueError as exc:
-        message = str(exc) or "Unable to finish build."
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 400
-        flash(message, "warning")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-    except Exception as exc:
-        current_app.logger.exception("Finish build failed.")
-        message = f"Unable to finish build: {exc}"
-        if request.is_json:
-            return jsonify({"ok": False, "error": message}), 500
-        flash(message, "danger")
-        return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-    if request.is_json:
-        return jsonify({"ok": True})
-
-    flash("Build finished. Deck is now standard.", "success")
-    return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
-
-
 def set_folder_owner(folder_id: int):
     folder = get_or_404(Folder, folder_id)
     ensure_folder_access(folder, write=True)
@@ -1928,7 +1554,6 @@ def folder_sharing(folder_id: int):
     category_labels = {
         Folder.CATEGORY_DECK: "Deck",
         Folder.CATEGORY_COLLECTION: "Collection",
-        Folder.CATEGORY_BUILD: "Build Queue",
     }
     folder_vm = FolderVM(
         id=folder.id,
@@ -1940,7 +1565,6 @@ def folder_sharing(folder_id: int):
         owner_user_id=folder.owner_user_id,
         is_collection=bool(folder.is_collection),
         is_deck=bool(folder.is_deck),
-        is_build=bool(folder.is_build),
         is_proxy=bool(getattr(folder, "is_proxy", False)),
         is_public=bool(getattr(folder, "is_public", False)),
         deck_tag=folder.deck_tag,
@@ -1997,9 +1621,6 @@ __all__ = [
     "folder_detail",
     "folder_sharing",
     "clear_folder_tag",
-    "build_add_card",
-    "build_remove_cards",
-    "finish_build",
     "set_folder_owner",
     "set_folder_proxy",
     "rename_proxy_deck",

@@ -205,7 +205,6 @@ def _export_context(session_obj) -> dict:
     folder_category_labels = {
         Folder.CATEGORY_DECK: "Deck",
         Folder.CATEGORY_COLLECTION: "Collection",
-        Folder.CATEGORY_BUILD: "In-progress build",
     }
     if user_id is None:
         user_folders = []
@@ -225,7 +224,6 @@ def _export_context(session_obj) -> dict:
             is_public=bool(folder.is_public),
             is_deck=bool(folder.is_deck),
             is_collection=bool(folder.is_collection),
-            is_build=bool(folder.is_build),
         )
         for folder in user_folders
     ]
@@ -268,7 +266,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
                 "notification": notification,
                 "deck_category": Folder.CATEGORY_DECK,
                 "collection_category": Folder.CATEGORY_COLLECTION,
-                "build_category": Folder.CATEGORY_BUILD,
                 "disable_hx": True,
                 **_export_context(session_obj),
             },
@@ -922,7 +919,7 @@ def api_update_folder_categories() -> Response:
     if not isinstance(entries, list):
         return jsonify({"ok": False, "error": "Invalid payload"}), 400
 
-    allowed = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION, Folder.CATEGORY_BUILD}
+    allowed = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}
     updated = 0
     for entry in entries:
         if not isinstance(entry, dict):

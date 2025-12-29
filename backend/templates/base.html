@@ -776,10 +776,6 @@
               <i class="bi bi-speedometer2" aria-hidden="true"></i>
               <span>Dashboard</span>
             </a>
-            <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.build_deck_landing') }}">
-              <i class="bi bi-hammer" aria-hidden="true"></i>
-              <span>Build a Deck</span>
-            </a>
             <a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('views.import_csv') }}">
               <i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i>
               <span>Import Cards</span>
@@ -903,16 +899,6 @@
                data-endpoints="views.decks_overview">
               <i class="bi bi-layers" aria-hidden="true"></i>
               <span class="sidebar-label">Decks</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'views.build_deck_landing' %}active{% endif %}"
-               href="{{ url_for('views.build_deck_landing') }}"
-               title="Build a Deck"
-               aria-label="Build a Deck"
-               data-endpoints="views.build_deck_landing">
-              <i class="bi bi-hammer" aria-hidden="true"></i>
-              <span class="sidebar-label">Build a Deck</span>
             </a>
           </li>
           <li class="nav-item">

@@ -21,8 +21,8 @@
     margin: 0;
   }
   .opening-hand-board {
-    flex: 0 0 clamp(200px, 28vh, 320px);
-    min-height: 200px;
+    flex: 0 0 clamp(260px, 38vh, 440px);
+    min-height: 240px;
   }
   .opening-hand-board .card-body {
     height: 100%;
@@ -358,7 +358,8 @@
   .opening-hand-actions {
     position: fixed;
     top: calc(var(--app-header-h, 96px) + 1rem);
-    right: 2rem;
+    left: calc(var(--sidebar-w, 0px) + 1.5rem);
+    right: auto;
     z-index: 1040;
     display: flex;
     flex-direction: column;
@@ -385,7 +386,8 @@
   }
   @media (max-width: 992px) {
     .opening-hand-actions {
-      right: 1rem;
+      left: 1rem;
+      right: auto;
       top: calc(var(--app-header-h, 96px) + 0.75rem);
     }
   }

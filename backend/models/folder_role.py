@@ -11,9 +11,8 @@ class FolderRole(db.Model):
 
     ROLE_COLLECTION = "collection"
     ROLE_DECK = "deck"
-    ROLE_BUILD = "build"
-    PRIMARY_ROLES = {ROLE_COLLECTION, ROLE_DECK, ROLE_BUILD}
-    DECK_ROLES = {ROLE_DECK, ROLE_BUILD}
+    PRIMARY_ROLES = {ROLE_COLLECTION, ROLE_DECK}
+    DECK_ROLES = {ROLE_DECK}
 
     folder_id = db.Column(
         db.Integer,

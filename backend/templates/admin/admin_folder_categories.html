@@ -24,16 +24,14 @@
   {% endwith %}
 
   <p class="text-muted small">
-    Mark folders that should count toward your collection. Decks can also be staged in the build queue while you iterate.
-    Defaults consider {{ default_display|join(', ') }} as collection buckets, but you can change them at any time.
+    Mark folders that should count toward your collection. Defaults consider {{ default_display|join(', ') }} as collection buckets, but you can change them at any time.
   </p>
 
   <div class="mb-3">
     <span class="badge text-bg-primary me-2">Decks: {{ deck_count }}</span>
-    <span class="badge text-bg-warning me-2">Build Queue: {{ build_count }}</span>
     <span class="badge text-bg-success me-2">Collection: {{ collection_count }}</span>
     <span class="badge text-bg-info me-2">Proxy: {{ proxy_count }}</span>
-    <span class="badge text-bg-secondary">Total: {{ deck_count + build_count + collection_count }}</span>
+    <span class="badge text-bg-secondary">Total: {{ deck_count + collection_count }}</span>
   </div>
 
   <form method="post" data-ux-submit>
@@ -62,7 +60,6 @@
           {% if folders and folders|length %}
             {% for folder in folders %}
               {% set is_collection = folder.is_collection %}
-              {% set is_build = folder.is_build %}
               {% set lower_name = (folder.name or '')|lower %}
               <tr>
                 {% if allow_delete %}
@@ -87,20 +84,9 @@
                       name="category-{{ folder.id }}"
                       id="cat-{{ folder.id }}-deck"
                       value="{{ deck_category }}"
-                      {% if not is_collection and not is_build %}checked{% endif %}
+                      {% if not is_collection %}checked{% endif %}
                     >
                     <label class="form-check-label" for="cat-{{ folder.id }}-deck">Deck</label>
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input
-                      class="form-check-input"
-                      type="radio"
-                      name="category-{{ folder.id }}"
-                      id="cat-{{ folder.id }}-build"
-                      value="{{ build_category }}"
-                      {% if is_build %}checked{% endif %}
-                    >
-                    <label class="form-check-label" for="cat-{{ folder.id }}-build">Build Queue</label>
                   </div>
                   <div class="form-check form-check-inline">
                     <input
@@ -296,9 +282,6 @@
                   </li>
                   <li>
                     <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck_category }}" data-label="Deck">Deck</button>
-                  </li>
-                  <li>
-                    <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ build_category }}" data-label="Build Queue">Build Queue</button>
                   </li>
                   <li>
                     <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ collection_category }}" data-label="Collection">Collection</button>

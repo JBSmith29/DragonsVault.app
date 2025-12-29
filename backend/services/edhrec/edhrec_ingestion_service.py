@@ -18,8 +18,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models import (
     EdhrecCommanderCard,
+    EdhrecCommanderCategoryCard,
     EdhrecCommanderTag,
     EdhrecCommanderTagCard,
+    EdhrecCommanderTagCategoryCard,
     EdhrecMetadata,
     EdhrecTagCommander,
     Folder,
@@ -87,8 +89,10 @@ def _ensure_schema() -> None:
         db.engine,
         tables=[
             EdhrecCommanderCard.__table__,
+            EdhrecCommanderCategoryCard.__table__,
             EdhrecCommanderTag.__table__,
             EdhrecCommanderTagCard.__table__,
+            EdhrecCommanderTagCategoryCard.__table__,
             EdhrecTagCommander.__table__,
             EdhrecMetadata.__table__,
         ],
@@ -238,13 +242,6 @@ def _collect_folder_tags(folder: Folder) -> set[str]:
     normalized = _normalize_deck_tag(folder.deck_tag)
     if normalized:
         tags.add(normalized)
-    session = getattr(folder, "build_session", None)
-    tag_payload = getattr(session, "tags_json", None)
-    if isinstance(tag_payload, list):
-        for entry in tag_payload:
-            normalized = _normalize_deck_tag(entry)
-            if normalized:
-                tags.add(normalized)
     return tags
 
 
@@ -489,6 +486,18 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _normalize_header(header: Any) -> str | None:
+    if isinstance(header, str):
+        cleaned = header.strip()
+        return cleaned or None
+    if isinstance(header, dict):
+        for key in ("title", "label", "text"):
+            value = header.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
 def _extract_cardviews(payload: dict) -> list[dict]:
     cardlists = payload.get("cardlists") or []
     if not isinstance(cardlists, list):
@@ -515,6 +524,45 @@ def _extract_cardviews(payload: dict) -> list[dict]:
                 }
             )
     return views
+
+
+def _extract_cardlists(payload: dict) -> list[dict]:
+    cardlists = payload.get("cardlists") or []
+    if not isinstance(cardlists, list):
+        return []
+    lists: list[dict] = []
+    for idx, entry in enumerate(cardlists, start=1):
+        if not isinstance(entry, dict):
+            continue
+        header = _normalize_header(entry.get("header"))
+        if not header:
+            continue
+        raw_views = entry.get("cardviews") or []
+        if not isinstance(raw_views, list):
+            continue
+        views: list[dict] = []
+        for raw in raw_views:
+            if not isinstance(raw, dict):
+                continue
+            name = raw.get("name")
+            if not name:
+                continue
+            views.append(
+                {
+                    "name": name,
+                    "rank": raw.get("rank"),
+                    "synergy": _safe_float(raw.get("synergy")),
+                }
+            )
+        if views:
+            lists.append(
+                {
+                    "category": header,
+                    "category_rank": idx,
+                    "views": views,
+                }
+            )
+    return lists
 
 
 def _normalize_tag_candidates(raw: dict) -> list[str]:
@@ -615,6 +663,57 @@ def _map_synergy_cards(views: Iterable[dict]) -> list[dict]:
     return ranked
 
 
+def _map_category_cards(cardlists: Iterable[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for entry in cardlists:
+        category = entry.get("category")
+        if not category:
+            continue
+        category_rank = int(entry.get("category_rank") or 0) or None
+        views = entry.get("views") or []
+        card_map: dict[str, dict] = {}
+        for view in views:
+            name = view.get("name")
+            if not isinstance(name, str):
+                continue
+            oracle_id = sc.unique_oracle_by_name(name)
+            if not oracle_id:
+                continue
+            score = view.get("synergy")
+            rank = view.get("rank")
+            existing = card_map.get(oracle_id)
+            if existing is None or (score or 0) > (existing.get("synergy_score") or 0):
+                card_map[oracle_id] = {
+                    "card_oracle_id": oracle_id,
+                    "synergy_score": score,
+                    "rank_hint": rank,
+                }
+            elif score == existing.get("synergy_score") and rank is not None:
+                if existing.get("rank_hint") is None or rank < existing["rank_hint"]:
+                    existing["rank_hint"] = rank
+
+        items = list(card_map.values())
+        if any(item.get("synergy_score") is not None for item in items):
+            items.sort(
+                key=lambda item: (-(item.get("synergy_score") or 0.0), item.get("rank_hint") or 0)
+            )
+        else:
+            items.sort(key=lambda item: (item.get("rank_hint") or 0, item.get("card_oracle_id") or ""))
+
+        limited = items if _MAX_SYNERGY_CARDS is None else items[:_MAX_SYNERGY_CARDS]
+        for idx, item in enumerate(limited, start=1):
+            rows.append(
+                {
+                    "category": category,
+                    "category_rank": category_rank,
+                    "card_oracle_id": item["card_oracle_id"],
+                    "synergy_rank": idx,
+                    "synergy_score": item.get("synergy_score"),
+                }
+            )
+    return rows
+
+
 def _set_metadata(key: str, value: str) -> None:
     if not key:
         return
@@ -639,7 +738,7 @@ def run_monthly_edhrec_ingestion(
 
     full_refresh=True refreshes all commanders.
     full_refresh=False only ingests commanders missing cached data.
-    scope="delta" limits ingestion to commanders/tags used by decks/builds.
+    scope="delta" limits ingestion to commanders/tags used by current decks.
     """
     _ensure_schema()
     scope_key = (scope or "all").strip().lower()
@@ -675,11 +774,18 @@ def run_monthly_edhrec_ingestion(
 
     existing_ids: set[str] = set()
     existing_tag_pairs: set[tuple[str, str]] = set()
+    existing_category_ids: set[str] = set()
+    existing_tag_category_pairs: set[tuple[str, str]] = set()
     existing_top_counts: dict[str, int] = {}
     if not full_refresh:
         existing_ids = {
             row[0]
             for row in db.session.query(EdhrecCommanderCard.commander_oracle_id).distinct().all()
+            if row and row[0]
+        }
+        existing_category_ids = {
+            row[0]
+            for row in db.session.query(EdhrecCommanderCategoryCard.commander_oracle_id).distinct().all()
             if row and row[0]
         }
         if tag_map:
@@ -688,6 +794,16 @@ def run_monthly_edhrec_ingestion(
                 for row in db.session.query(
                     EdhrecCommanderTagCard.commander_oracle_id,
                     EdhrecCommanderTagCard.tag,
+                )
+                .distinct()
+                .all()
+                if row and row[0] and row[1]
+            }
+            existing_tag_category_pairs = {
+                (row[0], row[1])
+                for row in db.session.query(
+                    EdhrecCommanderTagCategoryCard.commander_oracle_id,
+                    EdhrecCommanderTagCategoryCard.tag,
                 )
                 .distinct()
                 .all()
@@ -711,10 +827,15 @@ def run_monthly_edhrec_ingestion(
             }
         filtered: list[CommanderTarget] = []
         for target in targets:
-            needs_commander = target.oracle_id not in existing_ids
+            needs_commander = (
+                target.oracle_id not in existing_ids
+                or target.oracle_id not in existing_category_ids
+            )
             tag_set = tag_map.get(target.oracle_id, set())
             needs_tags = any(
-                (target.oracle_id, tag) not in existing_tag_pairs for tag in tag_set
+                (target.oracle_id, tag) not in existing_tag_pairs
+                or (target.oracle_id, tag) not in existing_tag_category_pairs
+                for tag in tag_set
             )
             top_limit = top_limits.get(target.oracle_id, 0)
             needs_top_tags = bool(top_limit) and (existing_top_counts.get(target.oracle_id, 0) < top_limit)
@@ -773,6 +894,7 @@ def run_monthly_edhrec_ingestion(
 
         payload = raw_json = None
         synergy_rows: list[dict] = []
+        category_rows: list[dict] = []
         tags: list[str] = []
         slug_used = ""
         if needs_commander or needs_top_tags:
@@ -804,6 +926,8 @@ def run_monthly_edhrec_ingestion(
             _clear_missing_for_oracle(missing_slugs, target.oracle_id)
             views = _extract_cardviews(payload)
             synergy_rows = _map_synergy_cards(views)
+            cardlists = _extract_cardlists(payload)
+            category_rows = _map_category_cards(cardlists)
             tags = _normalize_tag_candidates(raw_json)
 
         top_tags: list[str] = []
@@ -819,6 +943,7 @@ def run_monthly_edhrec_ingestion(
             ]
 
         tag_card_rows: dict[str, list[dict]] = {}
+        tag_category_rows: dict[str, list[dict]] = {}
         tag_cards_added = 0
         for tag in tags_to_fetch:
             tag_slug = slugify_theme(tag)
@@ -841,9 +966,13 @@ def run_monthly_edhrec_ingestion(
                 continue
             tag_views = _extract_cardviews(tag_payload)
             tag_rows = _map_synergy_cards(tag_views)
+            tag_cardlists = _extract_cardlists(tag_payload)
+            tag_category = _map_category_cards(tag_cardlists)
             if tag_rows:
                 tag_card_rows[tag] = tag_rows
                 tag_cards_added += len(tag_rows)
+            if tag_category:
+                tag_category_rows[tag] = tag_category
 
         try:
             if needs_commander:
@@ -874,6 +1003,21 @@ def run_monthly_edhrec_ingestion(
                         ],
                     )
 
+            if category_rows:
+                EdhrecCommanderCategoryCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderCategoryCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            **row,
+                        }
+                        for row in category_rows
+                    ],
+                )
+
             for tag, rows in tag_card_rows.items():
                 EdhrecCommanderTagCard.query.filter_by(
                     commander_oracle_id=target.oracle_id,
@@ -881,6 +1025,22 @@ def run_monthly_edhrec_ingestion(
                 ).delete(synchronize_session=False)
                 db.session.bulk_insert_mappings(
                     EdhrecCommanderTagCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            "tag": tag,
+                            **row,
+                        }
+                        for row in rows
+                    ],
+                )
+            for tag, rows in tag_category_rows.items():
+                EdhrecCommanderTagCategoryCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTagCategoryCard,
                     [
                         {
                             "commander_oracle_id": target.oracle_id,

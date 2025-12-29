@@ -37,11 +37,8 @@ class DashboardViewModel:
     mode_description: str
     content_partial: str
     mode_options: list[DashboardModeOptionVM] = field(default_factory=list)
-    builder_tiles: list[DashboardStatTileVM] = field(default_factory=list)
     collection_tiles: list[DashboardStatTileVM] = field(default_factory=list)
     deck_tiles: list[DashboardStatTileVM] = field(default_factory=list)
-    builder_actions: list[DashboardActionVM] = field(default_factory=list)
     collection_actions: list[DashboardActionVM] = field(default_factory=list)
     deck_actions: list[DashboardActionVM] = field(default_factory=list)
     decks: list[DeckVM] = field(default_factory=list)
-    build_decks: list[DeckVM] = field(default_factory=list)
