@@ -17,6 +17,7 @@ from services import scryfall_cache as sc
 from services.commander_utils import split_commander_oracle_ids
 from services.deck_service import get_deck_stats, recompute_deck_stats
 from services.deck_tags import is_valid_deck_tag
+from services.edhrec_cache_service import get_commander_tag_synergy_groups
 from services.symbols_cache import colors_to_icons
 from . import build_constraints_service as constraints
 from . import build_breakdown_service, build_land_service
@@ -143,6 +144,53 @@ def _merge_collection_recs(owned: list[dict], app: list[dict]) -> list[dict]:
             existing["disabled_reason"] = None
         merged[oracle_id] = existing
     return list(merged.values())
+
+
+def _decorate_tag_synergy_cards(
+    cards: list[dict],
+    *,
+    commander_oracle_id: str,
+    deck_oracle_ids: set[str],
+) -> list[dict]:
+    commander_mask, commander_mask_ok = constraints.commander_color_mask(commander_oracle_id)
+    decorated: list[dict] = []
+    for card in cards:
+        oracle_id = (card.get("oracle_id") or "").strip()
+        if not oracle_id:
+            continue
+        pr = _preferred_print(oracle_id)
+        meta = sc.metadata_from_print(pr) if pr else {}
+        type_line = meta.get("type_line") or ""
+        image = sc.image_for_print(pr) if pr else {}
+        card_mask, card_ok = constraints.card_color_mask(oracle_id)
+        allows_multiple, _ = constraints.card_allows_multiple(oracle_id)
+        in_deck = oracle_id in deck_oracle_ids
+        legal = True
+        legal_reason = None
+        if commander_mask_ok and card_ok and commander_mask & card_mask != card_mask:
+            legal = False
+            legal_reason = "Outside commander color identity."
+        can_add = legal and (allows_multiple or not in_deck)
+        disabled_reason = None
+        if not legal:
+            disabled_reason = legal_reason
+        elif in_deck and not allows_multiple:
+            disabled_reason = "Already in deck."
+        decorated.append(
+            {
+                **card,
+                "name": meta.get("name") or meta.get("printed_name") or card.get("oracle_id"),
+                "type_line": type_line,
+                "type_group": _type_group_label(type_line),
+                "image_small": image.get("small"),
+                "image_normal": image.get("normal") or image.get("large") or image.get("small"),
+                "image_large": image.get("large") or image.get("normal") or image.get("small"),
+                "in_deck": in_deck,
+                "can_add": can_add,
+                "disabled_reason": disabled_reason,
+            }
+        )
+    return decorated
 
 
 def _commander_image(commander_oracle_id: str | None) -> str | None:
@@ -360,9 +408,13 @@ def add_card_to_build(folder_id: int, card_oracle_id: str, quantity: int = 1) ->
 def _load_build_tags(folder_id: int) -> list[str]:
     session = db.session.get(DeckBuildSession, folder_id)
     tags = session.tags_json if session else []
+    combined: list[str] = []
     if isinstance(tags, list):
-        return [str(t) for t in tags if str(t).strip()]
-    return []
+        combined.extend([str(t) for t in tags if str(t).strip()])
+    folder = db.session.get(Folder, folder_id)
+    if folder and (folder.deck_tag or "").strip():
+        combined.append(folder.deck_tag.strip())
+    return _normalize_tags(combined)
 
 
 def get_build_state(folder_id: int) -> dict:
@@ -433,10 +485,11 @@ def get_build_state(folder_id: int) -> dict:
     non_land_qty = max(total_qty - land_qty, 0)
 
     land_target_min, land_target_max = build_land_service.land_target_range()
+    deck_oracle_ids = set(deck_card_map.keys())
     recommendations = get_build_recommendations(
         commander_oracle_id=folder.commander_oracle_id or "",
         tags=tags,
-        deck_oracle_ids=set(deck_card_map.keys()),
+        deck_oracle_ids=deck_oracle_ids,
         owner_user_id=folder.owner_user_id,
         land_count=land_qty,
         land_target_min=land_target_min,
@@ -452,6 +505,25 @@ def get_build_state(folder_id: int) -> dict:
         )
     )
     edhrec_groups = _group_by_type(edhrec_recs)
+    tag_groups_raw = get_commander_tag_synergy_groups(
+        folder.commander_oracle_id or "",
+        tags=tags,
+        limit=None,
+    )
+    edhrec_tag_groups: list[dict] = []
+    for group in tag_groups_raw:
+        cards = _decorate_tag_synergy_cards(
+            group.get("cards") or [],
+            commander_oracle_id=folder.commander_oracle_id or "",
+            deck_oracle_ids=deck_oracle_ids,
+        )
+        edhrec_tag_groups.append(
+            {
+                "label": group.get("label"),
+                "cards": cards,
+                "count": len(cards),
+            }
+        )
     app_groups = _group_by_type(recommendations.get("app") or [])
     collection_recs = _merge_collection_recs(
         recommendations.get("owned") or [],
@@ -523,7 +595,8 @@ def get_build_state(folder_id: int) -> dict:
         "edhrec_groups": edhrec_groups,
         "app_groups": app_groups,
         "collection_groups": collection_groups,
-        "health_hints": _deck_health_hints(set(deck_card_map.keys())),
+        "health_hints": _deck_health_hints(deck_oracle_ids),
+        "edhrec_tag_groups": edhrec_tag_groups,
     }
 
 

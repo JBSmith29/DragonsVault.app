@@ -34,7 +34,21 @@ _LOG = logging.getLogger(__name__)
 _NEXT_DATA_RE = re.compile(r'__NEXT_DATA__" type="application/json">(.*?)</script>', re.DOTALL)
 
 _REQUEST_INTERVAL_SECONDS = max(1.0, float(os.getenv("EDHREC_INGEST_INTERVAL", "1.0")))
-_MAX_SYNERGY_CARDS = int(os.getenv("EDHREC_INGEST_MAX_CARDS", "200"))
+def _parse_max_cards_env(name: str, default: int | None) -> int | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = str(raw).strip().lower()
+    if value in {"0", "none", "null", "all", "unlimited"}:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else None
+
+
+_MAX_SYNERGY_CARDS = _parse_max_cards_env("EDHREC_INGEST_MAX_CARDS", None)
 _DEFAULT_SOURCE_VERSION = os.getenv("EDHREC_SOURCE_VERSION")
 _MISSING_TTL_DAYS = int(os.getenv("EDHREC_MISSING_TTL_DAYS", "30"))
 _TOP_COMMANDER_LIMIT = int(os.getenv("EDHREC_TOP_COMMANDER_LIMIT", "500"))
@@ -589,7 +603,8 @@ def _map_synergy_cards(views: Iterable[dict]) -> list[dict]:
         items.sort(key=lambda item: (item.get("rank_hint") or 0, item.get("card_oracle_id") or ""))
 
     ranked: list[dict] = []
-    for idx, item in enumerate(items[:_MAX_SYNERGY_CARDS], start=1):
+    limited = items if _MAX_SYNERGY_CARDS is None else items[:_MAX_SYNERGY_CARDS]
+    for idx, item in enumerate(limited, start=1):
         ranked.append(
             {
                 "card_oracle_id": item["card_oracle_id"],

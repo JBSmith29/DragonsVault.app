@@ -17,6 +17,7 @@
     .build-header-meta { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
     .build-header-meta .badge { border-radius:999px; padding:.4em .75em; }
     .build-context { position: sticky; top: 1rem; display:flex; flex-direction:column; gap:1rem; }
+    .build-deck-column { position: sticky; top: 1rem; display:flex; flex-direction:column; gap:1rem; }
     .build-panel {
       background: linear-gradient(160deg, rgba(15, 23, 42, .85), rgba(15, 23, 42, .7));
       border:1px solid var(--build-panel-border);
@@ -70,8 +71,28 @@
     .build-toolbar { backdrop-filter: blur(8px); }
     .build-view-toggle .btn.active { background: var(--bs-primary); color:#fff; border-color: var(--bs-primary); }
     .build-rec-toggle .btn.active { background: var(--bs-primary); color:#fff; border-color: var(--bs-primary); }
+    .build-deck-toggle .btn.active { background: var(--bs-primary); color:#fff; border-color: var(--bs-primary); }
     .build-rec-edhrec [data-rec-section="collection"] { display: none; }
     .build-rec-collection [data-rec-section="edhrec"] { display: none; }
+    .rec-type-group { margin-bottom: 1.1rem; }
+    .rec-group-toggle {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .6rem;
+      padding: .2rem 0 .6rem;
+      font-weight: 600;
+    }
+    .rec-group-toggle .bi {
+      font-size: .85rem;
+      opacity: .8;
+      transition: transform .18s ease;
+    }
+    .rec-group-toggle[aria-expanded="true"] .bi { transform: rotate(180deg); }
     .rec-group-header {
       position: sticky;
       top: 0;
@@ -81,7 +102,7 @@
       border-bottom: 1px solid var(--bs-border-color);
       margin-bottom: .5rem;
     }
-    .rec-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap:.85rem; }
+    .rec-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:.95rem; }
     .rec-card {
       background: rgba(15, 23, 42, 0.55);
       border:1px solid var(--build-panel-border);
@@ -90,34 +111,35 @@
       display:flex;
       flex-direction:column;
       box-shadow: 0 10px 24px rgba(0,0,0,.2);
+      transition: transform .18s ease, border-color .18s ease;
     }
-    .rec-card img {
+    .rec-card__image {
+      position: relative;
       width: 100%;
-      height: auto;
       aspect-ratio: 0.715;
-      object-fit: contain;
       background: rgba(2, 6, 23, .6);
     }
-    .rec-card-body { padding:.7rem .7rem .8rem; display:flex; flex-direction:column; gap:.35rem; }
-    .rec-card-title { font-weight:600; font-size:.95rem; }
-    .rec-card-meta { font-size:.8rem; color: var(--bs-secondary-color); }
-    .rec-list { display:flex; flex-direction:column; gap:.65rem; }
-    .rec-row {
-      display:grid;
-      grid-template-columns: auto 1fr auto;
-      gap:.75rem;
-      align-items:center;
-      padding:.7rem;
-      border:1px solid var(--build-panel-border);
-      border-radius:.75rem;
-      background: rgba(15, 23, 42, 0.45);
+    .rec-card__image img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transition: transform .18s ease;
     }
-    .rec-row img { width:54px; height:auto; object-fit:contain; border-radius:.4rem; background: rgba(2, 6, 23, .6); }
-    .rec-row-title { font-weight:600; }
+    .rec-card__placeholder {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: .65rem;
+      margin: .5rem;
+      background: rgba(2, 6, 23, .6);
+    }
+    .rec-card:hover { border-color: rgba(99, 102, 241, 0.4); transform: translateY(-2px); }
+    .rec-card:hover img { transform: scale(1.04); }
+    .rec-card-body { padding:.7rem .7rem .8rem; display:flex; flex-direction:column; gap:.35rem; }
+    .rec-card-title { font-weight:600; font-size:.9rem; }
+    .rec-card-meta { font-size:.8rem; color: var(--bs-secondary-color); }
     .rec-reasons { display:flex; flex-wrap:wrap; gap:.35rem; }
     .rec-reasons .badge { font-weight:600; font-size:.7rem; line-height:1.1; white-space:normal; }
-    .build-view-list .rec-grid { display:none; }
-    .build-view-gallery .rec-list { display:none; }
     .edhrec-card-grid {
       display: grid;
       gap: 1.1rem;
@@ -213,42 +235,19 @@
     }
     .deck-card-row {
       display:grid;
-      grid-template-columns: 1fr auto;
-      gap:.6rem 1rem;
+      grid-template-columns: auto 1fr auto;
+      gap:.6rem 0.75rem;
       align-items:center;
-      padding:.7rem .85rem;
+      padding:.6rem .7rem;
       border-radius:.85rem;
       border:1px solid var(--build-panel-border);
       background: rgba(15, 23, 42, 0.45);
     }
     .deck-card-row + .deck-card-row { margin-top:.5rem; }
     .deck-card-row img { width:48px; height:auto; object-fit:contain; border-radius:.4rem; background: rgba(2, 6, 23, .6); }
-    .build-deck-view-list .deck-view-list { display: block; }
-    .build-deck-view-gallery .deck-view-gallery { display: block; }
-    .build-deck-view-breakdown .deck-view-breakdown { display: block; }
-    .deck-view-list,
-    .deck-view-gallery,
-    .deck-view-breakdown { display: none; }
-    .deck-view-toggle .btn.active { background: var(--bs-primary); color:#fff; border-color: var(--bs-primary); }
-    .deck-gallery-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap:.85rem; }
-    .deck-card-tile {
-      background: rgba(15, 23, 42, 0.55);
-      border:1px solid var(--build-panel-border);
-      border-radius:.85rem;
-      overflow:hidden;
-      display:flex;
-      flex-direction:column;
-      box-shadow: 0 10px 24px rgba(0,0,0,.2);
-    }
-    .deck-card-tile img {
-      width: 100%;
-      height: auto;
-      aspect-ratio: 0.715;
-      object-fit: contain;
-      background: rgba(2, 6, 23, .6);
-    }
-    .deck-card-tile-body { padding:.7rem; display:flex; flex-direction:column; gap:.4rem; }
-    .deck-table-thumb { width:56px; height:auto; object-fit:contain; border-radius:.4rem; background: rgba(2, 6, 23, .6); }
+    .deck-card-meta { min-width: 0; }
+    .deck-card-name { font-weight: 600; }
+    .deck-card-type { font-size: .75rem; color: var(--bs-secondary-color); }
     .deck-breakdown-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:.6rem; }
     .deck-breakdown-pill {
       display:flex;
@@ -281,6 +280,67 @@
     .breakdown-pill .badge { font-weight:700; }
     .deck-card-actions { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; justify-content:flex-end; }
     .deck-card-qty { font-weight:600; min-width:2rem; text-align:center; }
+    .build-deck-table { width: 100%; }
+    .build-deck-table th,
+    .build-deck-table td { vertical-align: middle; }
+    .build-deck-table .group-row td {
+      background: rgba(15, 23, 42, 0.55);
+      border-top: 1px solid var(--build-panel-border);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      color: var(--bs-secondary-color);
+    }
+    .build-deck-table .card-cell { display:flex; align-items:center; gap:.6rem; }
+    .build-deck-table .card-cell img { width: 48px; height: auto; border-radius: .35rem; }
+    .build-deck-table .card-name { font-weight: 600; }
+    .build-deck-table .card-sub { font-size: .8rem; color: var(--bs-secondary-color); }
+    .deck-view { display: none; }
+    .build-deck-view-gallery .deck-view-gallery { display: block; }
+    .build-deck-view-list .deck-view-list { display: block; }
+    .build-deck-view-breakdown .deck-view-type { display: block; }
+    .deck-gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .deck-gallery-card {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--build-panel-border);
+      border-radius: .9rem;
+      padding: .75rem;
+      display: flex;
+      flex-direction: column;
+      gap: .6rem;
+      height: 100%;
+    }
+    .deck-gallery-card img {
+      width: 100%;
+      border-radius: .7rem;
+      box-shadow: 0 .9rem 1.8rem rgba(0,0,0,.3);
+    }
+    .deck-gallery-title { font-weight: 600; }
+    .deck-gallery-sub { font-size: .8rem; color: var(--bs-secondary-color); }
+    .deck-type-columns {
+      column-width: 320px;
+      column-gap: 1rem;
+    }
+    .deck-type-section {
+      break-inside: avoid;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--build-panel-border);
+      border-radius: .85rem;
+      padding: .75rem;
+      margin-bottom: 1rem;
+    }
+    .deck-type-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      margin-bottom: .5rem;
+    }
+    .deck-type-table td { vertical-align: middle; }
     .build-breakdown-btn { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1030; }
     @media (max-width: 991px) {
       .build-context { position: static; }
@@ -310,9 +370,9 @@
     </div>
   </div>
 
-  <div class="row g-3 mb-3">
-    <div class="col-12 col-lg-4">
-      <div class="card build-panel">
+  <div class="row g-3 build-top-row mb-3">
+    <div class="col-12 col-xl-4">
+      <div class="card build-panel h-100">
         <div class="card-body">
           <div class="build-section-label">Commander</div>
           <div class="d-flex gap-3 align-items-start mt-2">
@@ -350,9 +410,8 @@
         </div>
       </div>
     </div>
-
-    <div class="col-12 col-lg-4">
-      <div class="card build-panel">
+    <div class="col-12 col-xl-4">
+      <div class="card build-panel h-100">
         <div class="card-body">
           <div class="build-section-label">Deck Summary</div>
           {% set total_cards = build_state.deck_total_with_commander or 0 %}
@@ -364,12 +423,12 @@
               <div class="value">{{ total_cards }} / {{ target_cards }}</div>
             </div>
             <div class="build-stat">
-              <div class="label">Unique</div>
-              <div class="value">{{ build_state.deck_total_unique or 0 }}</div>
-            </div>
-            <div class="build-stat">
               <div class="label">Lands</div>
               <div class="value">{{ build_state.land_qty or 0 }}</div>
+            </div>
+            <div class="build-stat">
+              <div class="label">Non-Lands</div>
+              <div class="value">{{ build_state.non_land_qty or 0 }}</div>
             </div>
             <div class="build-stat">
               <div class="label">Remaining</div>
@@ -400,9 +459,8 @@
         </div>
       </div>
     </div>
-
-    <div class="col-12 col-lg-4">
-      <div class="card build-panel">
+    <div class="col-12 col-xl-4">
+      <div class="card build-panel h-100">
         <div class="card-body">
           <div class="build-section-label">Deck Tags</div>
           <div class="build-tags mt-2">
@@ -422,51 +480,7 @@
     </div>
   </div>
 
-  <div class="row g-3 mb-3">
-    <div class="col-12 col-lg-6">
-      <div class="card build-panel">
-        <div class="card-body">
-          <div class="build-section-label">Quick Add Lands</div>
-          {% if build_state.land_quick_add %}
-            <div class="d-flex flex-wrap gap-2 mt-2">
-              {% for add in build_state.land_quick_add %}
-                <form method="post"
-                      action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                      data-ux-submit
-                      class="mb-0">
-                  <input type="hidden" name="oracle_id" value="{{ add.oracle_id }}">
-                  <input type="hidden" name="quantity" value="{{ add.quantity }}">
-                  <button class="btn btn-sm btn-outline-primary" type="submit" data-progress-label="Adding...">
-                    {{ add.label }}
-                  </button>
-                </form>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="small text-muted mt-2">No land suggestions yet.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    <div class="col-12 col-lg-6">
-      <div class="card build-panel">
-        <div class="card-body">
-          <div class="build-section-label">Deck Health</div>
-          {% if build_state.health_hints and build_state.health_hints|length %}
-            <ul class="small text-muted mb-0 ps-3 mt-2">
-              {% for hint in build_state.health_hints %}
-                <li>{{ hint }}</li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <div class="small text-muted mt-2">Looks balanced so far.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3">
+  <div class="row g-3 build-columns">
     <div class="col-12">
       <div class="card build-panel build-toolbar mb-3">
         <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -474,348 +488,473 @@
             <div class="build-section-title">Recommendations</div>
             <div class="build-section-sub">Switch between EDHREC data and your collection.</div>
           </div>
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex flex-wrap align-items-center gap-2">
             <div class="btn-group btn-group-sm build-rec-toggle" role="group" aria-label="Recommendation source toggle">
               <button type="button" class="btn btn-outline-secondary" data-build-rec-toggle="edhrec">EDHREC</button>
               <button type="button" class="btn btn-outline-secondary" data-build-rec-toggle="collection">Your Collection</button>
             </div>
-            <div class="btn-group btn-group-sm build-view-toggle" role="group" aria-label="Recommendation view toggle">
-              <button type="button" class="btn btn-outline-secondary" data-build-view-toggle="gallery">Gallery</button>
-              <button type="button" class="btn btn-outline-secondary" data-build-view-toggle="list">List</button>
-            </div>
+            {% if current_user.is_authenticated and (current_user.is_admin in [true, True, 1, '1', 'true', 'True']) %}
+              <form method="post"
+                    action="{{ url_for('views.admin_console') }}"
+                    data-ux-submit
+                    data-hx-boost="false"
+                    class="mb-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="refresh_edhrec">
+                <input type="hidden" name="refresh_scope" value="delta">
+                <button class="btn btn-sm btn-outline-primary"
+                        type="submit"
+                        data-progress-label="Refreshing..."
+                        formtarget="_blank">
+                  Pull EDHREC Data
+                </button>
+              </form>
+            {% endif %}
           </div>
         </div>
       </div>
 
+      {% set edhrec_groups = build_state.edhrec_groups if build_state else [] %}
+      {% set card_placeholder = url_for('static', filename='img/card-placeholder.svg') %}
       <div class="card build-panel mb-3" data-rec-section="edhrec">
         <div class="card-header">
-          {% set edhrec_cards = build_state.edhrec_cards if build_state and build_state.edhrec_cards else [] %}
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div>
-              <div class="build-section-title">EDHREC Card Explorer</div>
-              <div class="build-section-sub">Full EDHREC card list for this commander.</div>
+              <div class="build-section-title">Popular cards for this commander (EDHREC)</div>
+              <div class="build-section-sub">Ordered by EDHREC synergy.</div>
             </div>
-            <span class="badge text-bg-secondary">{{ edhrec_cards|length }}</span>
+            <span class="badge text-bg-secondary">{{ build_state.edhrec_cards|length if build_state and build_state.edhrec_cards else 0 }}</span>
           </div>
         </div>
         <div class="card-body">
-          {% if edhrec_cards %}
-            <div class="edhrec-card-grid">
-              {% for rec in edhrec_cards %}
-                <div class="edhrec-card">
-                  <div class="edhrec-card__image">
-                    {% set edhrec_image = rec.image_large or rec.image_normal or rec.image_small %}
-                    {% if edhrec_image %}
-                      <img src="{{ edhrec_image }}" alt="{{ rec.name }}" loading="lazy">
-                    {% else %}
-                      <div class="edhrec-card__placeholder"></div>
-                    {% endif %}
-                  </div>
-                  <div class="edhrec-card__body">
-                    <div class="fw-semibold text-truncate" title="{{ rec.name }}">{{ rec.name }}</div>
-                    <div class="edhrec-card__badges">
-                      {% if rec.get('synergy_score') is not none %}
-                        <span class="badge text-bg-primary">Synergy {{ "%.1f"|format(rec.get('synergy_score')) }}</span>
-                      {% else %}
-                        <span class="badge text-bg-primary">Rank {{ rec.get('synergy_rank') or '—' }}</span>
-                      {% endif %}
-                      {% if rec.in_deck %}
-                        <span class="badge text-bg-success">In Deck</span>
-                      {% endif %}
-                      {% if rec.owned and not rec.in_deck %}
-                        <span class="badge text-bg-info text-dark">In Collection</span>
-                      {% endif %}
-                    </div>
-                    {% if rec.type_line %}
-                      <div class="text-muted small">{{ rec.type_line }}</div>
-                    {% endif %}
-                    <div class="edhrec-card__actions">
-                      <form method="post"
-                            action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                            data-ux-submit>
-                        <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
-                        <button class="btn btn-sm btn-outline-primary"
-                                type="submit"
-                                data-progress-label="Adding..."
-                                {% if not rec.can_add %}disabled title="{{ rec.disabled_reason }}"{% endif %}>
-                          Add to deck
-                        </button>
-                      </form>
+          {% if edhrec_groups %}
+            {% for group in edhrec_groups %}
+              {% if group.count %}
+                {% set group_id = "edhrec-group-" ~ loop.index %}
+                {% set is_open = group.label in ['Creatures', 'Lands'] %}
+                <div class="rec-type-group">
+                  <button class="rec-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#{{ group_id }}" aria-expanded="{{ 'true' if is_open else 'false' }}" aria-controls="{{ group_id }}">
+                    <span>{{ group.label }}</span>
+                    <span class="badge text-bg-secondary">{{ group.count }}</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <div id="{{ group_id }}" class="collapse {% if is_open %}show{% endif %}">
+                    <div class="rec-grid">
+                      {% for rec in group.cards %}
+                        {% set rec_image = rec.image_large or rec.image_normal or rec.image_small %}
+                        <div class="rec-card">
+                          <div class="rec-card__image">
+                            {% if rec_image %}
+                              <img src="{{ rec_image }}" alt="{{ rec.name }}" loading="lazy" data-hover-src="{{ rec_image }}">
+                            {% else %}
+                              <img src="{{ card_placeholder }}" alt="" loading="lazy">
+                            {% endif %}
+                          </div>
+                          <div class="rec-card-body">
+                            <div class="rec-card-title" {% if rec_image %}data-hover-src="{{ rec_image }}"{% endif %}>{{ rec.name }}</div>
+                            <div class="rec-reasons">
+                              {% if rec.get('synergy_score') is not none %}
+                                <span class="badge text-bg-primary">Synergy {{ "%.1f"|format(rec.get('synergy_score')) }}</span>
+                              {% else %}
+                                <span class="badge text-bg-primary">Rank {{ rec.get('synergy_rank') or '—' }}</span>
+                              {% endif %}
+                              {% if rec.in_deck %}
+                                <span class="badge text-bg-success">In Deck</span>
+                              {% endif %}
+                              {% if rec.owned and not rec.in_deck %}
+                                <span class="badge text-bg-info text-dark">In Collection</span>
+                              {% endif %}
+                            </div>
+                            <form method="post"
+                                  action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                  data-ux-submit>
+                              <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
+                              <button class="btn btn-sm btn-outline-primary w-100"
+                                      type="submit"
+                                      data-progress-label="Adding..."
+                                      {% if not rec.can_add %}disabled title="{{ rec.disabled_reason }}"{% endif %}>
+                                Add to deck
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      {% endfor %}
                     </div>
                   </div>
                 </div>
-              {% endfor %}
-            </div>
+              {% endif %}
+            {% endfor %}
           {% else %}
             <div class="text-muted small">EDHREC recommendations are unavailable right now.</div>
           {% endif %}
         </div>
       </div>
 
+      {% set edhrec_tag_groups = build_state.edhrec_tag_groups if build_state else [] %}
+      {% if edhrec_tag_groups %}
+        <div class="card build-panel mb-3" data-rec-section="edhrec">
+          <div class="card-header">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div>
+                <div class="build-section-title">EDHREC Tag Explorer</div>
+                <div class="build-section-sub">Synergy cards grouped by selected deck tags.</div>
+              </div>
+              <span class="badge text-bg-secondary">{{ edhrec_tag_groups|length }}</span>
+            </div>
+          </div>
+          <div class="card-body">
+            {% for group in edhrec_tag_groups %}
+              {% if group.count %}
+                {% set group_id = "edhrec-tag-group-" ~ loop.index %}
+                <div class="rec-type-group">
+                  <button class="rec-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#{{ group_id }}" aria-expanded="false" aria-controls="{{ group_id }}">
+                    <span>{{ group.label }}</span>
+                    <span class="badge text-bg-secondary">{{ group.count }}</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <div id="{{ group_id }}" class="collapse">
+                    <div class="rec-grid">
+                      {% for rec in group.cards %}
+                        {% set rec_image = rec.image_large or rec.image_normal or rec.image_small %}
+                        <div class="rec-card">
+                          <div class="rec-card__image">
+                            {% if rec_image %}
+                              <img src="{{ rec_image }}" alt="{{ rec.name }}" loading="lazy" data-hover-src="{{ rec_image }}">
+                            {% else %}
+                              <img src="{{ card_placeholder }}" alt="" loading="lazy">
+                            {% endif %}
+                          </div>
+                          <div class="rec-card-body">
+                            <div class="rec-card-title" {% if rec_image %}data-hover-src="{{ rec_image }}"{% endif %}>{{ rec.name }}</div>
+                            <div class="rec-reasons">
+                              {% if rec.get('synergy_score') is not none %}
+                                <span class="badge text-bg-primary">Synergy {{ "%.1f"|format(rec.get('synergy_score')) }}</span>
+                              {% else %}
+                                <span class="badge text-bg-primary">Rank {{ rec.get('synergy_rank') or '—' }}</span>
+                              {% endif %}
+                              {% if rec.in_deck %}
+                                <span class="badge text-bg-success">In Deck</span>
+                              {% endif %}
+                            </div>
+                            <form method="post"
+                                  action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                  data-ux-submit>
+                              <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
+                              <button class="btn btn-sm btn-outline-primary w-100"
+                                      type="submit"
+                                      data-progress-label="Adding..."
+                                      {% if not rec.can_add %}disabled title="{{ rec.disabled_reason }}"{% endif %}>
+                                Add to deck
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% set collection_groups = build_state.collection_groups if build_state else [] %}
       <div class="card build-panel" data-rec-section="collection">
         <div class="card-header">
           <div class="build-section-title">Recommended from your collection</div>
           <div class="build-section-sub">Owned cards plus land gaps.</div>
         </div>
         <div class="card-body">
-          {% if build_state and build_state.collection_groups %}
-            {% for group in build_state.collection_groups %}
-              <div class="deck-group">
-                <div class="rec-group-header d-flex align-items-center justify-content-between">
-                  <div class="fw-semibold">{{ group.label }}</div>
-                  <span class="badge text-bg-secondary">{{ group.count }}</span>
+          {% if collection_groups %}
+            {% for group in collection_groups %}
+              {% if group.count %}
+                {% set group_id = "collection-group-" ~ loop.index %}
+                {% set is_open = group.label in ['Creatures', 'Lands'] %}
+                <div class="rec-type-group">
+                  <button class="rec-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#{{ group_id }}" aria-expanded="{{ 'true' if is_open else 'false' }}" aria-controls="{{ group_id }}">
+                    <span>{{ group.label }}</span>
+                    <span class="badge text-bg-secondary">{{ group.count }}</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <div id="{{ group_id }}" class="collapse {% if is_open %}show{% endif %}">
+                    <div class="rec-grid">
+                      {% for rec in group.cards %}
+                        {% set rec_image = rec.image_large or rec.image_normal or rec.image_small %}
+                        <div class="rec-card">
+                          <div class="rec-card__image">
+                            {% if rec_image %}
+                              <img src="{{ rec_image }}" alt="{{ rec.name }}" loading="lazy" data-hover-src="{{ rec_image }}">
+                            {% else %}
+                              <img src="{{ card_placeholder }}" alt="" loading="lazy">
+                            {% endif %}
+                          </div>
+                          <div class="rec-card-body">
+                            <div class="rec-card-title" {% if rec_image %}data-hover-src="{{ rec_image }}"{% endif %}>{{ rec.name }}</div>
+                            <div class="rec-reasons">
+                              {% if rec.owned_qty %}
+                                <span class="badge text-bg-success">You own this</span>
+                              {% endif %}
+                              {% for reason in rec.reasons or [] %}
+                                <span class="badge text-bg-info">{{ reason }}</span>
+                              {% endfor %}
+                            </div>
+                            <form method="post"
+                                  action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                  data-ux-submit>
+                              <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
+                              <button class="btn btn-sm btn-outline-primary w-100"
+                                      type="submit"
+                                      data-progress-label="Adding..."
+                                      {% if not rec.can_add %}disabled title="{{ rec.disabled_reason }}"{% endif %}>
+                                Add to deck
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
                 </div>
-                {% if group.count %}
-                  <div class="rec-grid">
-                    {% for rec in group.cards %}
-                      <div class="rec-card">
-                        {% if rec.image_normal %}
-                          <img src="{{ rec.image_normal }}" alt="{{ rec.name }}" loading="lazy">
-                        {% endif %}
-                        <div class="rec-card-body">
-                          <div class="rec-card-title">{{ rec.name }}</div>
-                          {% if rec.get('synergy_score') is not none %}
-                            <div class="rec-card-meta">Synergy {{ "%.1f"|format(rec.get('synergy_score')) }}</div>
-                          {% endif %}
-                          <div class="rec-reasons">
-                            {% if rec.owned_qty %}
-                              <span class="badge text-bg-success">You own this</span>
-                            {% endif %}
-                            {% for reason in rec.reasons or [] %}
-                              <span class="badge text-bg-info">{{ reason }}</span>
-                            {% endfor %}
-                          </div>
-                          <form method="post"
-                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                                data-ux-submit>
-                            <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
-                            <button class="btn btn-sm btn-outline-primary w-100"
-                                    type="submit"
-                                    data-progress-label="Adding..."
-                                    {% if not rec.can_add %}disabled title="{{ rec.disabled_reason }}"{% endif %}>
-                              Add to deck
-                            </button>
-                          </form>
-                        </div>
-                      </div>
-                    {% endfor %}
-                  </div>
-                  <div class="rec-list">
-                    {% for rec in group.cards %}
-                      <div class="rec-row">
-                        {% if rec.image_small %}
-                          <img src="{{ rec.image_small }}" alt="{{ rec.name }}" loading="lazy">
-                        {% endif %}
-                        <div class="flex-grow-1">
-                          <div class="rec-row-title">{{ rec.name }}</div>
-                          {% if rec.get('synergy_score') is not none %}
-                            <div class="small text-muted">Synergy {{ "%.1f"|format(rec.get('synergy_score')) }}</div>
-                          {% endif %}
-                          <div class="rec-reasons mt-1">
-                            {% if rec.owned_qty %}
-                              <span class="badge text-bg-success">You own this</span>
-                            {% endif %}
-                            {% for reason in rec.reasons or [] %}
-                              <span class="badge text-bg-info">{{ reason }}</span>
-                            {% endfor %}
-                          </div>
-                        </div>
-                        <form method="post"
-                              action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                              data-ux-submit>
-                          <input type="hidden" name="oracle_id" value="{{ rec.oracle_id }}">
-                          <button class="btn btn-sm btn-outline-primary"
-                                  type="submit"
-                                  data-progress-label="Adding..."
-                                  {% if not rec.can_add %}disabled title="{{ rec.disabled_reason }}"{% endif %}>
-                            Add
-                          </button>
-                        </form>
-                      </div>
-                    {% endfor %}
-                  </div>
-                {% else %}
-                  <div class="text-muted small">No {{ group.label|lower }} suggestions yet.</div>
-                {% endif %}
-              </div>
+              {% endif %}
             {% endfor %}
           {% else %}
             <div class="text-muted small">Collection recommendations are not available right now.</div>
           {% endif %}
         </div>
       </div>
+    </div>
 
-      <div class="card build-panel mt-3">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card build-panel">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
           <div>
             <div class="build-section-title">Current Deck</div>
             <div class="build-section-sub">Cards added to this build.</div>
           </div>
-          <div class="btn-group btn-group-sm deck-view-toggle" role="group" aria-label="Current deck view toggle">
-            <button type="button" class="btn btn-outline-secondary" data-build-deck-toggle="list">List</button>
+          <div class="btn-group btn-group-sm build-deck-toggle" role="group" aria-label="Deck display mode">
             <button type="button" class="btn btn-outline-secondary" data-build-deck-toggle="gallery">Gallery</button>
-            <button type="button" class="btn btn-outline-secondary" data-build-deck-toggle="breakdown">Breakdown</button>
+            <button type="button" class="btn btn-outline-secondary" data-build-deck-toggle="list">List</button>
+            <button type="button" class="btn btn-outline-secondary" data-build-deck-toggle="breakdown">Type</button>
           </div>
         </div>
         <div class="card-body">
-          {% if build_state and build_state.deck_cards %}
-            {% set deck_cards_sorted = build_state.deck_cards|sort(attribute='name') %}
-            <div class="deck-view-list">
+          {% if build_state and build_state.deck_groups %}
+            <div class="deck-view deck-view-gallery">
+              <div class="deck-gallery-grid">
+                {% for group in build_state.deck_groups %}
+                  {% for card in group.cards %}
+                    {% set deck_hover = card.image_large or card.image_normal or card.image_small %}
+                    <div class="deck-gallery-card">
+                      {% if card.image_normal %}
+                        <img src="{{ card.image_normal }}" alt="{{ card.name }}" loading="lazy" {% if deck_hover %}data-hover-src="{{ deck_hover }}"{% endif %}>
+                      {% endif %}
+                      <div>
+                        <div class="deck-gallery-title" {% if deck_hover %}data-hover-src="{{ deck_hover }}"{% endif %}>{{ card.name }}</div>
+                        <div class="deck-gallery-sub">{{ card.type_line }}</div>
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                          {% if card.is_commander %}
+                            <span class="badge text-bg-warning">Commander</span>
+                          {% endif %}
+                          {% if card.allows_multiple %}
+                            <span class="badge text-bg-secondary">Multiple</span>
+                          {% endif %}
+                        </div>
+                      </div>
+                      <div class="d-flex flex-wrap gap-2">
+                        <form method="post"
+                              action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
+                              data-ux-submit
+                              class="mb-0">
+                          <input type="hidden" name="card_id" value="{{ card.card_id }}">
+                          <input type="hidden" name="delta" value="1">
+                          <button class="btn btn-sm btn-outline-secondary"
+                                  type="submit"
+                                  {% if not card.can_decrement %}disabled title="Minimum reached"{% endif %}>
+                            -
+                          </button>
+                        </form>
+                        <div class="fw-semibold">{{ card.quantity }}</div>
+                        <form method="post"
+                              action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                              data-ux-submit
+                              class="mb-0">
+                          <input type="hidden" name="oracle_id" value="{{ card.oracle_id }}">
+                          <button class="btn btn-sm btn-outline-secondary"
+                                  type="submit"
+                                  {% if not card.can_increment %}disabled title="{{ 'Commander already assigned' if card.is_commander else 'Singleton rule' }}"{% endif %}>
+                            +
+                          </button>
+                        </form>
+                        <form method="post"
+                              action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
+                              data-ux-submit
+                              class="mb-0">
+                          <input type="hidden" name="card_id" value="{{ card.card_id }}">
+                          <button class="btn btn-sm btn-outline-danger"
+                                  type="submit"
+                                  data-progress-label="Removing...">
+                            Remove
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  {% endfor %}
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="deck-view deck-view-list">
               <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead class="small text-muted">
+                <table class="table table-sm table-striped align-middle build-deck-table mb-0">
+                  <thead>
                     <tr>
-                      <th scope="col">Card</th>
-                      <th scope="col">Type</th>
-                      <th scope="col" class="text-end">Qty</th>
-                      <th scope="col" class="text-end">Actions</th>
+                      <th style="width:55%;">Card</th>
+                      <th style="width:20%;">Type</th>
+                      <th style="width:10%;">Qty</th>
+                      <th style="width:15%;" class="text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {% for card in deck_cards_sorted %}
-                      <tr>
-                        <td>
-                          <div class="d-flex align-items-center gap-2">
-                            {% if card.image_small %}
-                              <img class="deck-table-thumb" src="{{ card.image_small }}" alt="{{ card.name }}" loading="lazy">
-                            {% endif %}
-                            <div class="min-w-0">
-                              <div class="fw-semibold text-truncate">{{ card.name }}</div>
-                              <div class="d-flex flex-wrap gap-2 mt-1">
-                                {% if card.is_commander %}
-                                  <span class="badge text-bg-warning">Commander</span>
-                                {% endif %}
-                                {% if card.allows_multiple %}
-                                  <span class="badge text-bg-secondary">Multiple</span>
-                                {% endif %}
+                    {% for group in build_state.deck_groups %}
+                      {% for card in group.cards %}
+                        {% set deck_hover = card.image_large or card.image_normal or card.image_small %}
+                        <tr>
+                          <td>
+                            <div class="card-cell">
+                              {% if card.image_small %}
+                                <img src="{{ card.image_small }}" alt="{{ card.name }}" loading="lazy" {% if deck_hover %}data-hover-src="{{ deck_hover }}"{% endif %}>
+                              {% endif %}
+                              <div>
+                                <div class="card-name text-truncate" {% if deck_hover %}data-hover-src="{{ deck_hover }}"{% endif %}>{{ card.name }}</div>
+                                <div class="card-sub text-truncate">{{ card.type_line }}</div>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                  {% if card.is_commander %}
+                                    <span class="badge text-bg-warning">Commander</span>
+                                  {% endif %}
+                                  {% if card.allows_multiple %}
+                                    <span class="badge text-bg-secondary">Multiple</span>
+                                  {% endif %}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td class="small text-muted">{{ card.type_line }}</td>
-                        <td class="text-end fw-semibold">{{ card.quantity }}</td>
-                        <td class="text-end">
-                          <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap">
-                            <form method="post"
-                                  action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
-                                  data-ux-submit
-                                  class="mb-0">
-                              <input type="hidden" name="card_id" value="{{ card.card_id }}">
-                              <input type="hidden" name="delta" value="1">
-                              <button class="btn btn-sm btn-outline-secondary"
-                                      type="submit"
-                                      {% if not card.can_decrement %}disabled title="Minimum reached"{% endif %}>
-                                -
-                              </button>
-                            </form>
-                            <form method="post"
-                                  action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                                  data-ux-submit
-                                  class="mb-0">
-                              <input type="hidden" name="oracle_id" value="{{ card.oracle_id }}">
-                              <button class="btn btn-sm btn-outline-secondary"
-                                      type="submit"
-                                      {% if not card.can_increment %}disabled title="{{ 'Commander already assigned' if card.is_commander else 'Singleton rule' }}"{% endif %}>
-                                +
-                              </button>
-                            </form>
-                            <form method="post"
-                                  action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
-                                  data-ux-submit
-                                  class="mb-0">
-                              <input type="hidden" name="card_id" value="{{ card.card_id }}">
-                              <button class="btn btn-sm btn-outline-danger"
-                                      type="submit"
-                                      data-progress-label="Removing...">
-                                Remove from deck
-                              </button>
-                            </form>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                          <td class="text-muted">{{ card.type_line }}</td>
+                          <td class="fw-semibold">{{ card.quantity }}</td>
+                          <td class="text-end">
+                            <div class="d-inline-flex align-items-center gap-2">
+                              <form method="post"
+                                    action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
+                                    data-ux-submit
+                                    class="mb-0">
+                                <input type="hidden" name="card_id" value="{{ card.card_id }}">
+                                <input type="hidden" name="delta" value="1">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="submit"
+                                        {% if not card.can_decrement %}disabled title="Minimum reached"{% endif %}>
+                                  -
+                                </button>
+                              </form>
+                              <form method="post"
+                                    action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                    data-ux-submit
+                                    class="mb-0">
+                                <input type="hidden" name="oracle_id" value="{{ card.oracle_id }}">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="submit"
+                                        {% if not card.can_increment %}disabled title="{{ 'Commander already assigned' if card.is_commander else 'Singleton rule' }}"{% endif %}>
+                                  +
+                                </button>
+                              </form>
+                              <form method="post"
+                                    action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
+                                    data-ux-submit
+                                    class="mb-0">
+                                <input type="hidden" name="card_id" value="{{ card.card_id }}">
+                                <button class="btn btn-sm btn-outline-danger"
+                                        type="submit"
+                                        data-progress-label="Removing...">
+                                  Remove
+                                </button>
+                              </form>
+                            </div>
+                          </td>
+                        </tr>
+                      {% endfor %}
                     {% endfor %}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            <div class="deck-view-gallery">
-              <div class="deck-gallery-grid">
-                {% for card in deck_cards_sorted %}
-                  <div class="deck-card-tile">
-                    {% if card.image_normal %}
-                      <img src="{{ card.image_normal }}" alt="{{ card.name }}" loading="lazy">
-                    {% endif %}
-                    <div class="deck-card-tile-body">
-                      <div class="fw-semibold">{{ card.name }}</div>
-                      <div class="small text-muted">{{ card.type_line }}</div>
-                      <div class="d-flex flex-wrap gap-2 mt-1">
-                        {% if card.is_commander %}
-                          <span class="badge text-bg-warning">Commander</span>
-                        {% endif %}
-                        {% if card.allows_multiple %}
-                          <span class="badge text-bg-secondary">Multiple</span>
-                        {% endif %}
+            <div class="deck-view deck-view-type">
+              <div class="deck-type-columns">
+                {% for group in build_state.deck_groups %}
+                  {% if group.count %}
+                    <section class="deck-type-section">
+                      <div class="deck-type-header">
+                        <span>{{ group.label }}</span>
+                        <span class="badge text-bg-secondary">{{ group.count }}</span>
                       </div>
-                      <div class="d-flex align-items-center justify-content-between mt-2">
-                        <div class="deck-card-qty">Qty {{ card.quantity }}</div>
-                        <div class="d-flex align-items-center gap-2">
-                          <form method="post"
-                                action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
-                                data-ux-submit
-                                class="mb-0">
-                            <input type="hidden" name="card_id" value="{{ card.card_id }}">
-                            <input type="hidden" name="delta" value="1">
-                            <button class="btn btn-sm btn-outline-secondary"
-                                    type="submit"
-                                    {% if not card.can_decrement %}disabled title="Minimum reached"{% endif %}>
-                              -
-                            </button>
-                          </form>
-                          <form method="post"
-                                action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
-                                data-ux-submit
-                                class="mb-0">
-                            <input type="hidden" name="oracle_id" value="{{ card.oracle_id }}">
-                            <button class="btn btn-sm btn-outline-secondary"
-                                    type="submit"
-                                    {% if not card.can_increment %}disabled title="{{ 'Commander already assigned' if card.is_commander else 'Singleton rule' }}"{% endif %}>
-                              +
-                            </button>
-                          </form>
-                        </div>
-                      </div>
-                      <form method="post"
-                            action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
-                            data-ux-submit
-                            class="mt-2">
-                        <input type="hidden" name="card_id" value="{{ card.card_id }}">
-                        <button class="btn btn-sm btn-outline-danger w-100"
-                                type="submit"
-                                data-progress-label="Removing...">
-                          Remove from deck
-                        </button>
-                      </form>
-                    </div>
-                  </div>
+                      <table class="table table-sm deck-type-table mb-0">
+                        <tbody>
+                          {% for card in group.cards %}
+                            {% set deck_hover = card.image_large or card.image_normal or card.image_small %}
+                            <tr>
+                              <td class="fw-semibold">{{ card.quantity }}</td>
+                              <td>
+                                <span {% if deck_hover %}data-hover-src="{{ deck_hover }}"{% endif %}>{{ card.name }}</span>
+                                <div class="text-muted small">{{ card.type_line }}</div>
+                              </td>
+                              <td class="text-end">
+                                <div class="d-inline-flex align-items-center gap-2">
+                                  <form method="post"
+                                        action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
+                                        data-ux-submit
+                                        class="mb-0">
+                                    <input type="hidden" name="card_id" value="{{ card.card_id }}">
+                                    <input type="hidden" name="delta" value="1">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            type="submit"
+                                            {% if not card.can_decrement %}disabled title="Minimum reached"{% endif %}>
+                                      -
+                                    </button>
+                                  </form>
+                                  <form method="post"
+                                        action="{{ url_for('views.build_add_card', folder_id=folder.id) }}"
+                                        data-ux-submit
+                                        class="mb-0">
+                                    <input type="hidden" name="oracle_id" value="{{ card.oracle_id }}">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            type="submit"
+                                            {% if not card.can_increment %}disabled title="{{ 'Commander already assigned' if card.is_commander else 'Singleton rule' }}"{% endif %}>
+                                      +
+                                    </button>
+                                  </form>
+                                  <form method="post"
+                                        action="{{ url_for('views.build_remove_cards', folder_id=folder.id) }}"
+                                        data-ux-submit
+                                        class="mb-0">
+                                    <input type="hidden" name="card_id" value="{{ card.card_id }}">
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            type="submit"
+                                            data-progress-label="Removing...">
+                                      Remove
+                                    </button>
+                                  </form>
+                                </div>
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </section>
+                  {% endif %}
                 {% endfor %}
               </div>
-            </div>
-
-            <div class="deck-view-breakdown">
-              {% if build_state.deck_groups %}
-                <div class="deck-breakdown-grid">
-                  {% for group in build_state.deck_groups %}
-                    <div class="deck-breakdown-pill">
-                      <span>{{ group.label }}</span>
-                      <span class="badge text-bg-secondary">{{ group.count }}</span>
-                    </div>
-                  {% endfor %}
-                </div>
-                <div class="small text-muted mt-2">Open Deck Breakdown for expected ratios.</div>
-              {% else %}
-                <div class="text-muted small">Breakdown data is not available yet.</div>
-              {% endif %}
             </div>
           {% else %}
             <div class="text-muted small">No cards in this build yet.</div>
@@ -1044,6 +1183,14 @@
   const recButtons = Array.from(document.querySelectorAll('[data-build-rec-toggle]'));
   const deckButtons = Array.from(document.querySelectorAll('[data-build-deck-toggle]'));
   const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const collapseKey = `build-collapse:${window.location.pathname}`;
+  const deckViewKey = `build-deck-view:${window.location.pathname}`;
+  let collapseState = {};
+  try {
+    collapseState = JSON.parse(sessionStorage.getItem(collapseKey) || '{}') || {};
+  } catch (err) {
+    collapseState = {};
+  }
 
   function applyMode(mode) {
     const normalized = mode === 'list' ? 'list' : 'gallery';
@@ -1102,6 +1249,46 @@
     }).catch(() => {});
   }
 
+  function persistCollapseState(id, isOpen) {
+    if (!id) return;
+    collapseState[id] = isOpen;
+    try {
+      sessionStorage.setItem(collapseKey, JSON.stringify(collapseState));
+    } catch (err) {
+      // ignore storage failures
+    }
+  }
+
+  function applyCollapseState() {
+    const collapses = Array.from(document.querySelectorAll('#buildWorkspace .rec-type-group .collapse'));
+    collapses.forEach((section) => {
+      const id = section.id;
+      if (!id || typeof collapseState[id] !== 'boolean') return;
+      const isOpen = collapseState[id];
+      const toggler = document.querySelector(`[data-bs-target="#${id}"]`);
+      if (window.bootstrap && window.bootstrap.Collapse) {
+        const instance = window.bootstrap.Collapse.getOrCreateInstance(section, { toggle: false });
+        if (isOpen) {
+          instance.show();
+        } else {
+          instance.hide();
+        }
+      } else {
+        section.classList.toggle('show', isOpen);
+      }
+      if (toggler) {
+        toggler.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      }
+    });
+
+    collapses.forEach((section) => {
+      const id = section.id;
+      if (!id) return;
+      section.addEventListener('shown.bs.collapse', () => persistCollapseState(id, true));
+      section.addEventListener('hidden.bs.collapse', () => persistCollapseState(id, false));
+    });
+  }
+
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.buildViewToggle || 'gallery';
@@ -1122,12 +1309,24 @@
     btn.addEventListener('click', () => {
       const mode = btn.dataset.buildDeckToggle || 'list';
       applyDeckView(mode);
+      try {
+        sessionStorage.setItem(deckViewKey, mode);
+      } catch (err) {
+        // ignore storage failures
+      }
     });
   });
 
   applyMode(root.dataset.viewMode || 'gallery');
   applyRecSource(root.dataset.recSource || 'edhrec');
-  applyDeckView(root.dataset.deckView || 'list');
+  let storedDeckView = null;
+  try {
+    storedDeckView = sessionStorage.getItem(deckViewKey);
+  } catch (err) {
+    storedDeckView = null;
+  }
+  applyDeckView(storedDeckView || root.dataset.deckView || 'list');
+  applyCollapseState();
 })();
 </script>
 

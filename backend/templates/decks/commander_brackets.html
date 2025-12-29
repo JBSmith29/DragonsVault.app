@@ -220,7 +220,7 @@
                           {% endif %}
                         </div>
                         <div class="calc-card-meta">
-                          <div class="calc-card-name small text-truncate">{{ card.name }}</div>
+                          <div class="calc-card-name small text-truncate" {% if hover_img %}data-hover-src="{{ hover_img }}"{% endif %}>{{ card.name }}</div>
                           <div class="text-muted small text-truncate">
                             {% set parts = [] %}
                             {% if card.set_name %}{% set parts = parts + [card.set_name] %}{% endif %}
@@ -288,7 +288,7 @@
                           {% endif %}
                         </div>
                         <div class="calc-card-meta">
-                          <div class="calc-card-name small text-truncate">{{ card.name }}</div>
+                          <div class="calc-card-name small text-truncate" {% if hover_img %}data-hover-src="{{ hover_img }}"{% endif %}>{{ card.name }}</div>
                           <div class="text-muted small text-truncate">
                             {% set parts = [] %}
                             {% if card.set_name %}{% set parts = parts + [card.set_name] %}{% endif %}
@@ -379,7 +379,7 @@
                           {% endif %}
                         </div>
                         <div class="calc-card-meta">
-                          <div class="calc-card-name small text-truncate">{{ card.name }}</div>
+                          <div class="calc-card-name small text-truncate" {% if hover_img %}data-hover-src="{{ hover_img }}"{% endif %}>{{ card.name }}</div>
                           <div class="text-muted small text-truncate">
                             {% set parts = [] %}
                             {% if card.set_name %}{% set parts = parts + [card.set_name] %}{% endif %}
@@ -560,7 +560,6 @@
 </script>
 
 {% endblock %}
-
 
 
 

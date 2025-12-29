@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Iterable
 
 from sqlalchemy import func, inspect, text
@@ -33,7 +34,21 @@ from services.request_cache import request_cached
 
 _LOG = logging.getLogger(__name__)
 
-_MAX_SYNERGY_CARDS = 200
+def _parse_max_cards_env(name: str, default: int | None) -> int | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = str(raw).strip().lower()
+    if value in {"0", "none", "null", "all", "unlimited"}:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else None
+
+
+_MAX_SYNERGY_CARDS = _parse_max_cards_env("EDHREC_CACHE_MAX_CARDS", None)
 
 
 def _ensure_tables() -> None:
@@ -321,7 +336,9 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
 
         top_cards = sorted(
             card_map.items(), key=lambda item: -(item[1] or 0.0)
-        )[:_MAX_SYNERGY_CARDS]
+        )
+        if _MAX_SYNERGY_CARDS is not None:
+            top_cards = top_cards[:_MAX_SYNERGY_CARDS]
 
         tag_entries = _extract_commander_tag_entries(payload)
         commander_tags = [entry["tag"] for entry in tag_entries]
@@ -371,7 +388,9 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
                     tag_card_map[oracle_id] = score
             top_tag_cards = sorted(
                 tag_card_map.items(), key=lambda item: -(item[1] or 0.0)
-            )[:_MAX_SYNERGY_CARDS]
+            )
+            if _MAX_SYNERGY_CARDS is not None:
+                top_tag_cards = top_tag_cards[:_MAX_SYNERGY_CARDS]
             rows = []
             for rank, (oracle_id, score) in enumerate(top_tag_cards, start=1):
                 rows.append(
@@ -538,6 +557,51 @@ def get_tag_commanders(tag: str) -> list[str]:
     return [row.commander_oracle_id for row in rows if row.commander_oracle_id]
 
 
+def get_commander_tag_synergy_groups(
+    commander_oracle_id: str,
+    tags: Iterable[str] | None = None,
+    *,
+    limit: int | None = _MAX_SYNERGY_CARDS,
+) -> list[dict]:
+    _ensure_tables()
+    commander_oracle_id = primary_commander_oracle_id(commander_oracle_id) or ""
+    if not commander_oracle_id:
+        return []
+    requested_tags = _normalize_tags(tags)
+    query = EdhrecCommanderTagCard.query.filter_by(commander_oracle_id=commander_oracle_id)
+    if requested_tags:
+        query = query.filter(EdhrecCommanderTagCard.tag.in_(requested_tags))
+    rows = (
+        query.order_by(
+            EdhrecCommanderTagCard.tag.asc(),
+            func.coalesce(EdhrecCommanderTagCard.synergy_score, 0).desc(),
+            func.coalesce(EdhrecCommanderTagCard.synergy_rank, 999999).asc(),
+        )
+        .all()
+    )
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        tag = (row.tag or "").strip()
+        oracle_id = (row.card_oracle_id or "").strip()
+        if not tag or not oracle_id:
+            continue
+        grouped.setdefault(tag, []).append(
+            {
+                "oracle_id": oracle_id,
+                "synergy_score": float(row.synergy_score or 0.0),
+                "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
+            }
+        )
+    ordered_tags = requested_tags or sorted(grouped.keys())
+    groups: list[dict] = []
+    for tag in ordered_tags:
+        cards = grouped.get(tag, [])
+        if limit is not None:
+            cards = cards[:limit]
+        groups.append({"label": tag, "cards": cards, "count": len(cards)})
+    return groups
+
+
 def _oracle_name_for_id(oracle_id: str, cache: dict[str, str | None]) -> str | None:
     if not oracle_id:
         return None
@@ -558,6 +622,7 @@ def _get_commander_synergy(
     tags: Iterable[str] | None,
     *,
     prefer_tag_specific: bool = False,
+    limit: int | None = _MAX_SYNERGY_CARDS,
 ) -> list[dict]:
     _ensure_tables()
     commander_oracle_id = primary_commander_oracle_id(commander_oracle_id) or ""
@@ -600,15 +665,14 @@ def _get_commander_synergy(
 
     if not rows:
         try:
-            rows = (
+            base_query = (
                 EdhrecCommanderCard.query.filter_by(commander_oracle_id=commander_oracle_id)
                 .order_by(
                     func.coalesce(EdhrecCommanderCard.synergy_score, 0).desc(),
                     func.coalesce(EdhrecCommanderCard.synergy_rank, 999999).asc(),
                 )
-                .limit(_MAX_SYNERGY_CARDS)
-                .all()
             )
+            rows = base_query.limit(limit).all() if limit is not None else base_query.all()
         except SQLAlchemyError as exc:
             db.session.rollback()
             _LOG.warning("EDHREC cache lookup failed: %s", exc)
@@ -650,7 +714,9 @@ def _get_commander_synergy(
             item.get("synergy_rank") if item.get("synergy_rank") is not None else 999999,
         )
     )
-    return results[:_MAX_SYNERGY_CARDS]
+    if limit is not None:
+        return results[:limit]
+    return results
 
 
 def get_commander_synergy(
@@ -658,12 +724,14 @@ def get_commander_synergy(
     tags: list[str] | None = None,
     *,
     prefer_tag_specific: bool = False,
+    limit: int | None = _MAX_SYNERGY_CARDS,
 ) -> list[dict]:
     key = (
         "edhrec_local_synergy",
         commander_oracle_id,
         tuple(_normalize_tags(tags)),
         bool(prefer_tag_specific),
+        limit,
     )
     return request_cached(
         key,
@@ -671,6 +739,7 @@ def get_commander_synergy(
             commander_oracle_id,
             tags,
             prefer_tag_specific=prefer_tag_specific,
+            limit=limit,
         ),
     )
 
@@ -688,6 +757,7 @@ __all__ = [
     "edhrec_cache_snapshot",
     "get_commander_synergy",
     "get_commander_tags",
+    "get_commander_tag_synergy_groups",
     "get_tag_commanders",
     "cache_ready",
 ]

@@ -23,7 +23,6 @@ ROLE_TARGETS = {
     "removal": 6,
     "board_wipe": 2,
 }
-MAX_RECS = 200
 MAX_APP_RECS = 40
 
 _TYPE_GROUPS = [
@@ -303,8 +302,7 @@ def get_build_recommendations(
     role_counts = _deck_role_counts_for_recs(deck_oracle_ids)
     missing_roles = _missing_roles(role_counts, tags)
 
-    recs = get_commander_synergy(commander_oracle_id, tags, prefer_tag_specific=True) or []
-    recs = recs[:MAX_RECS]
+    recs = get_commander_synergy(commander_oracle_id, tags, prefer_tag_specific=True, limit=None) or []
     rec_oracle_ids = [str(rec.get("oracle_id") or "").strip() for rec in recs if rec.get("oracle_id")]
     role_map = build_role_service.get_roles_for_oracles(rec_oracle_ids, persist=False)
     mechanic_map = build_mechanic_service.get_mechanics_for_oracles(rec_oracle_ids, persist=False)

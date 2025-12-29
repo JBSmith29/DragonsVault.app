@@ -126,6 +126,23 @@
     return null;
   }
 
+  const NAME_SELECTOR = [
+    '[data-card-name]',
+    'a.card-link',
+    'a.checker-card-link',
+    'a.wl-card-link',
+    '.combo-card-name',
+    '.calc-card-name',
+    '.deck-name-link',
+    '.deck-hover-target',
+    '.rec-card-title',
+    '.rec-row-title',
+    '.edhrec-card__title',
+    '.card-chip-link',
+  ].join(',');
+  const ACTIVATION_SELECTOR = `img, ${NAME_SELECTOR}`;
+  const DATA_SELECTOR = '[data-card-id],[data-scry-id],[data-scryfall-id],[data-hover-src],[data-img],a[href*="/cards/"],img';
+
   function isTarget(el) {
     if (!el || el === document.body) return false;
     if (el.dataset && el.dataset.ignoreHover === 'true') return false;
@@ -145,14 +162,15 @@
 
   async function handleEnter(evt) {
     const rawTarget = evt.target;
-    if (rawTarget && (rawTarget.dataset?.ignoreHover === 'true' || rawTarget.closest?.('[data-ignore-hover="true"]'))) {
+    const activation = rawTarget && rawTarget.closest ? rawTarget.closest(ACTIVATION_SELECTOR) : rawTarget;
+    if (!activation) return;
+    if (activation && (activation.dataset?.ignoreHover === 'true' || activation.closest?.('[data-ignore-hover="true"]'))) {
       return;
     }
-    const target = evt.target.closest ? evt.target.closest('*') : evt.target;
-    const hoverTarget = target && target.closest ? target.closest('[data-card-id],[data-scry-id],[data-scryfall-id],[data-hover-src],[data-img],a[href*="/cards/"],img') : target;
+    const hoverTarget = activation.closest ? activation.closest(DATA_SELECTOR) : activation;
     if (!hoverTarget || !isTarget(hoverTarget)) return;
     const src = await resolveImage(hoverTarget);
-    await show(hoverTarget, src, evt);
+    await show(activation, src, evt);
   }
 
   function handleLeave(evt) {

@@ -375,7 +375,7 @@
                           <div class="combo-card">
                             <a href="{{ card.search_url }}" class="combo-card-link" target="_blank" rel="noopener">
                               <img src="{{ card.thumb }}" data-hover-src="{{ card.hover }}" data-img="{{ card.hover }}" alt="{{ card.name }}" loading="lazy" class="combo-card-thumb">
-                              <div class="combo-card-name">{{ card.name }}{% if card.quantity > 1 %} &times;{{ card.quantity }}{% endif %}</div>
+                              <div class="combo-card-name" data-hover-src="{{ card.hover }}">{{ card.name }}{% if card.quantity > 1 %} &times;{{ card.quantity }}{% endif %}</div>
                             </a>
                           </div>
                           {% if not loop.last %}
