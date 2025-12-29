@@ -53,6 +53,12 @@ def _parse_max_cards_env(name: str, default: int | None) -> int | None:
 _MAX_SYNERGY_CARDS = _parse_max_cards_env("EDHREC_CACHE_MAX_CARDS", None)
 
 
+def _synergy_percent(score: float | None) -> float | None:
+    if score is None:
+        return None
+    return round(score * 100.0, 1)
+
+
 def _ensure_tables() -> None:
     try:
         db.metadata.create_all(
@@ -617,6 +623,7 @@ def get_commander_category_groups(
             {
                 "oracle_id": oracle_id,
                 "synergy_score": float(row.synergy_score) if row.synergy_score is not None else None,
+                "synergy_percent": _synergy_percent(float(row.synergy_score)) if row.synergy_score is not None else None,
                 "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
             }
         )
@@ -660,6 +667,7 @@ def get_commander_tag_synergy_groups(
             {
                 "oracle_id": oracle_id,
                 "synergy_score": float(row.synergy_score or 0.0),
+                "synergy_percent": _synergy_percent(float(row.synergy_score or 0.0)),
                 "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
             }
         )
@@ -769,11 +777,13 @@ def _get_commander_synergy(
         name = _oracle_name_for_id(oracle_id, name_cache) or oracle_id
         synergy_score = row.get("synergy_score")
         synergy_rank = row.get("synergy_rank")
+        score_value = float(synergy_score or 0.0)
         results.append(
             {
                 "oracle_id": oracle_id,
                 "name": name,
-                "synergy_score": float(synergy_score or 0.0),
+                "synergy_score": score_value,
+                "synergy_percent": _synergy_percent(score_value),
                 "synergy_rank": int(synergy_rank or 0) if synergy_rank is not None else None,
                 "source": "edhrec",
                 "tag_matches": list(tag_matches),
