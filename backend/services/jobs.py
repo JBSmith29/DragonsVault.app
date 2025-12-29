@@ -41,6 +41,7 @@ from services.spellbook_sync import (
     write_dataset_to_file,
 )
 from services.commander_brackets import reload_spellbook_combos
+from services.background.role_mechanic_precompute import precompute_oracle_roles_mechanics
 from sqlalchemy import func
 
 
@@ -533,6 +534,79 @@ def run_spellbook_refresh_inline(force_download: bool = False) -> dict:
     except Exception as exc:
         log.error("Spellbook refresh failed (inline): job_id=%s error=%s", job_id, exc, exc_info=True)
         emit_job_event("spellbook", "failed", job_id=job_id, dataset="spellbook", error=str(exc))
+        raise
+
+
+def enqueue_role_mechanic_precompute(limit: int | None = None) -> str:
+    if not _jobs_available:
+        raise RuntimeError("RQ is not installed; unable to queue role/mechanic precompute.")
+    job_id = uuid.uuid4().hex
+    queue = get_queue()
+    try:
+        queue.enqueue(
+            run_role_mechanic_precompute_job,
+            limit,
+            job_id,
+            job_id=f"oracle-role-mechanic-{job_id}",
+            description="oracle-role-mechanic-precompute",
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Unable to queue role/mechanic precompute: {exc}") from exc
+    emit_job_event("oracle_roles", "queued", job_id=job_id, limit=limit)
+    return job_id
+
+
+def run_role_mechanic_precompute_job(limit: int | None, job_id: str) -> dict:
+    app = _create_app()
+    with app.app_context():
+        job = get_current_job()
+        log = _get_logger()
+        log.info("Role/mechanic precompute started (job): job_id=%s limit=%s", job_id, limit)
+        emit_job_event("oracle_roles", "started", job_id=job_id, rq_id=getattr(job, "id", None))
+        try:
+            summary = precompute_oracle_roles_mechanics(limit=limit)
+            emit_job_event(
+                "oracle_roles",
+                "completed",
+                job_id=job_id,
+                **summary,
+            )
+            log.info(
+                "Role/mechanic precompute completed (job): job_id=%s oracles=%s roles=%s mechanics=%s errors=%s",
+                job_id,
+                summary.get("oracles_scanned"),
+                summary.get("roles_added"),
+                summary.get("mechanics_added"),
+                summary.get("errors"),
+            )
+            return summary
+        except Exception as exc:
+            log.error("Role/mechanic precompute failed (job): job_id=%s error=%s", job_id, exc, exc_info=True)
+            emit_job_event("oracle_roles", "failed", job_id=job_id, error=str(exc))
+            raise
+
+
+def run_role_mechanic_precompute_inline(limit: int | None = None) -> dict:
+    job_id = f"inline-{uuid.uuid4().hex[:8]}"
+    log = _get_logger()
+    log.info("Role/mechanic precompute started (inline): job_id=%s limit=%s", job_id, limit)
+    emit_job_event("oracle_roles", "queued", job_id=job_id, limit=limit)
+    emit_job_event("oracle_roles", "started", job_id=job_id, rq_id=None)
+    try:
+        summary = precompute_oracle_roles_mechanics(limit=limit)
+        emit_job_event("oracle_roles", "completed", job_id=job_id, **summary)
+        log.info(
+            "Role/mechanic precompute completed (inline): job_id=%s oracles=%s roles=%s mechanics=%s errors=%s",
+            job_id,
+            summary.get("oracles_scanned"),
+            summary.get("roles_added"),
+            summary.get("mechanics_added"),
+            summary.get("errors"),
+        )
+        return summary
+    except Exception as exc:
+        log.error("Role/mechanic precompute failed (inline): job_id=%s error=%s", job_id, exc, exc_info=True)
+        emit_job_event("oracle_roles", "failed", job_id=job_id, error=str(exc))
         raise
 
 

@@ -7,10 +7,12 @@ import logging
 from sqlalchemy import func
 
 from extensions import db
-from models import Card, DeckTagCoreRoleSynergy, Folder, FolderRole, OracleCoreRoleTag
+from models import Card, DeckTagCoreRoleSynergy, Folder, FolderRole
 from services import scryfall_cache as sc
 from services.edhrec_recommendation_service import get_commander_synergy
+from services.commander_utils import split_commander_oracle_ids
 from . import build_constraints_service as constraints
+from . import build_mechanic_service, build_role_service
 from .build_scoring_service import score_app_card, score_edhrec_card
 
 _LOG = logging.getLogger(__name__)
@@ -19,7 +21,7 @@ ROLE_TARGETS = {
     "ramp": 8,
     "draw": 8,
     "removal": 6,
-    "wipe": 2,
+    "board_wipe": 2,
 }
 MAX_RECS = 200
 MAX_APP_RECS = 40
@@ -116,9 +118,12 @@ def _tag_role_weights(tags: list[str]) -> dict[str, float]:
     for role, weight in rows:
         if not role:
             continue
+        canonical = build_role_service.canonicalize_role(str(role))
+        if not canonical:
+            continue
         if weight is None:
             weight = 0.0
-        weights[role] = max(weights.get(role, 0.0), float(weight))
+        weights[canonical] = max(weights.get(canonical, 0.0), float(weight))
     return weights
 
 
@@ -141,89 +146,74 @@ def _missing_roles(role_counts: dict[str, int], tags: list[str]) -> dict[str, in
     return missing
 
 
-def _role_map_for_oracles(oracle_ids: list[str]) -> dict[str, set[str]]:
-    if not oracle_ids:
-        return {}
-    rows = (
-        db.session.query(OracleCoreRoleTag.oracle_id, OracleCoreRoleTag.role)
-        .filter(OracleCoreRoleTag.oracle_id.in_(oracle_ids))
-        .all()
-    )
-    role_map: dict[str, set[str]] = {}
-    for oid, role in rows:
-        if not oid or not role:
-            continue
-        role_map.setdefault(str(oid).strip(), set()).add(str(role).strip())
-    return role_map
-
-
 def _app_suggestions(
     *,
     deck_oracle_ids: set[str],
     owner_user_id: int | None,
-    tags: list[str],
+    tag_role_weights: dict[str, float],
     missing_roles: dict[str, int],
     commander_mask: int,
     commander_mask_ok: bool,
+    commander_mechanics: set[str],
     land_suggestions: list[dict] | None = None,
 ) -> list[dict]:
     if not owner_user_id and not land_suggestions:
         return []
-    if owner_user_id:
-        collection_ids = _collection_folder_ids(owner_user_id)
-    else:
-        collection_ids = []
+    collection_ids = _collection_folder_ids(owner_user_id) if owner_user_id else []
+    if not collection_ids and not land_suggestions:
+        return []
 
-    role_list = list(missing_roles.keys())
     candidates: dict[str, dict] = {}
-    if collection_ids and role_list:
+    if collection_ids:
         rows = (
             db.session.query(
                 Card.oracle_id,
                 func.max(Card.name).label("name"),
                 func.coalesce(func.sum(Card.quantity), 0).label("qty"),
-                OracleCoreRoleTag.role,
             )
-            .join(OracleCoreRoleTag, OracleCoreRoleTag.oracle_id == Card.oracle_id)
             .filter(
                 Card.folder_id.in_(collection_ids),
                 Card.oracle_id.isnot(None),
-                OracleCoreRoleTag.role.in_(role_list),
             )
-            .group_by(Card.oracle_id, OracleCoreRoleTag.role)
+            .group_by(Card.oracle_id)
             .all()
         )
 
-        for oracle_id, name, qty, role in rows:
+        for oracle_id, name, qty in rows:
             oid = (oracle_id or "").strip()
             if not oid or oid in deck_oracle_ids:
                 continue
-            entry = candidates.setdefault(
-                oid,
-                {"oracle_id": oid, "name": name or oid, "owned_qty": int(qty or 0), "roles": set()},
-            )
-            if role:
-                entry["roles"].add(str(role).strip())
+            candidates[oid] = {
+                "oracle_id": oid,
+                "name": name or oid,
+                "owned_qty": int(qty or 0),
+            }
 
-    tag_weights = _tag_role_weights(tags)
     results: list[dict] = []
     meta_cache: dict[str, dict] = {}
+    role_map = build_role_service.get_roles_for_oracles(list(candidates.keys()), persist=False)
+    mechanic_map = build_mechanic_service.get_mechanics_for_oracles(list(candidates.keys()), persist=False)
     for oid, entry in candidates.items():
         card_mask, card_ok = constraints.card_color_mask(oid)
         legal = True
         legal_reason = None
         if commander_mask_ok and card_ok and commander_mask & card_mask != card_mask:
-            legal = False
-            legal_reason = "Outside commander color identity."
-        roles = entry.get("roles") or set()
-        gap_roles = [r for r in roles if r in missing_roles]
-        if not gap_roles:
             continue
-        tag_bonus = sum(tag_weights.get(role, 0.0) for role in gap_roles)
+        roles = role_map.get(oid, set())
+        card_mechanics = mechanic_map.get(oid, set())
+        gap_roles = [r for r in roles if r in missing_roles]
+        mechanic_matches = card_mechanics & commander_mechanics
+        if not gap_roles and not mechanic_matches:
+            continue
         score, reasons = score_app_card(
-            owned_qty=int(entry.get("owned_qty") or 0),
+            synergy_score=None,
+            synergy_rank=None,
+            roles=roles,
+            mechanics=card_mechanics,
+            commander_mechanics=commander_mechanics,
+            tag_role_weights=tag_role_weights,
             gap_roles=gap_roles,
-            tag_bonus=tag_bonus,
+            owned_qty=int(entry.get("owned_qty") or 0),
         )
         meta = _card_display_meta(oid, meta_cache)
         results.append(
@@ -247,6 +237,8 @@ def _app_suggestions(
     if land_suggestions:
         for land in land_suggestions:
             if not isinstance(land, dict):
+                continue
+            if not land.get("legal", True):
                 continue
             oracle_id = (land.get("oracle_id") or "").strip()
             if not oracle_id or oracle_id in {r.get("oracle_id") for r in results}:
@@ -301,13 +293,21 @@ def get_build_recommendations(
 
     commander_mask, commander_mask_ok = constraints.commander_color_mask(commander_oracle_id)
 
+    tag_role_weights = _tag_role_weights(tags)
+    commander_ids = split_commander_oracle_ids(commander_oracle_id)
+    commander_mechanics_map = build_mechanic_service.get_mechanics_for_oracles(commander_ids, persist=False)
+    commander_mechanics: set[str] = set()
+    for mechanics in commander_mechanics_map.values():
+        commander_mechanics |= set(mechanics)
+
     role_counts = _deck_role_counts_for_recs(deck_oracle_ids)
     missing_roles = _missing_roles(role_counts, tags)
 
     recs = get_commander_synergy(commander_oracle_id, tags, prefer_tag_specific=True) or []
     recs = recs[:MAX_RECS]
     rec_oracle_ids = [str(rec.get("oracle_id") or "").strip() for rec in recs if rec.get("oracle_id")]
-    role_map = _role_map_for_oracles(rec_oracle_ids)
+    role_map = build_role_service.get_roles_for_oracles(rec_oracle_ids, persist=False)
+    mechanic_map = build_mechanic_service.get_mechanics_for_oracles(rec_oracle_ids, persist=False)
 
     owned_counts = _owned_counts(owner_user_id, rec_oracle_ids)
     owned_recs: list[dict] = []
@@ -327,11 +327,16 @@ def get_build_recommendations(
             legal_reason = "Outside commander color identity."
         owned_qty = owned_counts.get(oracle_id, 0)
         in_deck = oracle_id in deck_oracle_ids
-        gap_roles = [r for r in role_map.get(oracle_id, set()) if r in missing_roles]
+        roles = role_map.get(oracle_id, set())
+        card_mechanics = mechanic_map.get(oracle_id, set())
+        gap_roles = [r for r in roles if r in missing_roles]
         score, reasons = score_edhrec_card(
-            synergy_score=float(rec.get("synergy_score") or 0.0),
-            owned_qty=owned_qty,
-            tag_matches=rec.get("tag_matches") or [],
+            synergy_score=rec.get("synergy_score"),
+            synergy_rank=rec.get("synergy_rank"),
+            roles=roles,
+            mechanics=card_mechanics,
+            commander_mechanics=commander_mechanics,
+            tag_role_weights=tag_role_weights,
             gap_roles=gap_roles,
         )
         meta = _card_display_meta(oracle_id, meta_cache)
@@ -360,28 +365,14 @@ def get_build_recommendations(
         else:
             external_recs.append(payload)
 
-    owned_recs.sort(
-        key=lambda item: (
-            -(item.get("score") or 0.0),
-            -(item.get("synergy_score") or 0.0),
-            (item.get("name") or "").lower(),
-        )
-    )
-    external_recs.sort(
-        key=lambda item: (
-            -(item.get("score") or 0.0),
-            -(item.get("synergy_score") or 0.0),
-            (item.get("name") or "").lower(),
-        )
-    )
-
     app_recs = _app_suggestions(
         deck_oracle_ids=deck_oracle_ids,
         owner_user_id=owner_user_id,
-        tags=tags,
+        tag_role_weights=tag_role_weights,
         missing_roles=missing_roles,
         commander_mask=commander_mask,
         commander_mask_ok=commander_mask_ok,
+        commander_mechanics=commander_mechanics,
         land_suggestions=_land_recommendations(
             commander_oracle_id=commander_oracle_id,
             owner_user_id=owner_user_id,
@@ -428,16 +419,7 @@ def _land_recommendations(
 def _deck_role_counts_for_recs(deck_oracle_ids: set[str]) -> dict[str, int]:
     if not deck_oracle_ids:
         return {}
-    rows = (
-        db.session.query(
-            OracleCoreRoleTag.role,
-            func.count(OracleCoreRoleTag.oracle_id),
-        )
-        .filter(OracleCoreRoleTag.oracle_id.in_(list(deck_oracle_ids)))
-        .group_by(OracleCoreRoleTag.role)
-        .all()
-    )
-    return {str(role).strip(): int(total or 0) for role, total in rows if role}
+    return build_role_service.role_counts(deck_oracle_ids, persist=False)
 
 
 __all__ = ["get_build_recommendations"]

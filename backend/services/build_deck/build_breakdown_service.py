@@ -9,9 +9,10 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
-from models import OracleCoreRoleTag, DeckTagCoreRoleSynergy
+from models import DeckTagCoreRoleSynergy
 from services import scryfall_cache as sc
 from services.edhrec_cache_service import get_commander_synergy
+from . import build_role_service
 
 _LOG = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ _CATEGORIES = [
     ("Ramp", "ramp"),
     ("Draw", "draw"),
     ("Removal", "removal"),
-    ("Wipes", "wipe"),
+    ("Wipes", "board_wipe"),
     ("Creatures", "creature"),
     ("Other", "other"),
 ]
 
-_ROLE_PRIORITY = ["ramp", "draw", "removal", "wipe"]
+_ROLE_PRIORITY = ["ramp", "draw", "removal", "board_wipe"]
 
 
 def _preferred_print(oracle_id: str) -> dict | None:
@@ -52,31 +53,40 @@ def _role_map(oracle_ids: list[str]) -> dict[str, set[str]]:
     if not oracle_ids:
         return {}
     try:
-        rows = (
-            db.session.query(OracleCoreRoleTag.oracle_id, OracleCoreRoleTag.role)
-            .filter(OracleCoreRoleTag.oracle_id.in_(oracle_ids))
-            .all()
-        )
+        return build_role_service.get_roles_for_oracles(oracle_ids, persist=False)
     except SQLAlchemyError as exc:
         db.session.rollback()
         _LOG.warning("Deck breakdown role lookup failed: %s", exc)
         return {}
-    out: dict[str, set[str]] = {}
-    for oid, role in rows:
-        if not oid or not role:
-            continue
-        out.setdefault(str(oid).strip(), set()).add(str(role).strip())
-    return out
+    except Exception as exc:
+        _LOG.warning("Deck breakdown role lookup failed: %s", exc)
+        return {}
 
 
 def _categorize_card(type_line: str, roles: set[str]) -> str:
     lower = (type_line or "").lower()
-    if "land" in lower:
+    if "land" in lower or "land" in roles:
         return "Lands"
     for role in _ROLE_PRIORITY:
         if role in roles:
-            return role.title() if role != "wipe" else "Wipes"
+            if role == "board_wipe":
+                return "Wipes"
+            return build_role_service.role_label(role)
     if "creature" in lower:
+        return "Creatures"
+    return "Other"
+
+
+def _role_category(role: str) -> str:
+    if role == "board_wipe":
+        return "Wipes"
+    if role == "mana_fixing":
+        return "Ramp"
+    if role == "land":
+        return "Lands"
+    if role in {"ramp", "draw", "removal"}:
+        return build_role_service.role_label(role)
+    if role == "token_producer":
         return "Creatures"
     return "Other"
 
@@ -118,10 +128,13 @@ def _tag_role_bonuses(tags: list[str]) -> dict[str, int]:
     for role, weight in rows:
         if not role or weight is None:
             continue
+        canonical = build_role_service.canonicalize_role(str(role))
+        if not canonical:
+            continue
         bonus = int(round(float(weight)))
         if bonus <= 0:
             continue
-        bonuses[role] = min(bonus, 2)
+        bonuses[canonical] = max(bonuses.get(canonical, 0), min(bonus, 2))
     return bonuses
 
 
@@ -155,7 +168,7 @@ def expected_breakdown(
     bonuses = _tag_role_bonuses(tags or [])
     if bonuses:
         for role, bonus in bonuses.items():
-            label = role.title() if role != "wipe" else "Wipes"
+            label = _role_category(role)
             expected[label] = expected.get(label, 0) + bonus
         overflow = sum(expected.values()) - target_total
         if overflow > 0:

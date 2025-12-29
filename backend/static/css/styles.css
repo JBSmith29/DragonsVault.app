@@ -24,6 +24,7 @@
 
 body {
   font-family: 'Beleren', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  cursor: default;
 }
 
 html {
@@ -115,6 +116,17 @@ body {
   background-image: radial-gradient(circle at 20% 20%, rgba(86, 141, 255, 0.08), transparent 45%),
                     radial-gradient(circle at 80% 0%, rgba(255, 121, 198, 0.05), transparent 50%);
   backdrop-filter: saturate(130%);
+}
+
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="url"],
+input[type="tel"],
+input[type="password"],
+textarea,
+[contenteditable="true"] {
+  cursor: text;
 }
 
 .pagination {

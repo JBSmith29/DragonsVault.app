@@ -67,6 +67,7 @@
   let commanderPickerVisible = true;
   let tagPickerVisible = true;
   let busy = false;
+  let needsRefresh = false;
 
   function clearFilters() {
     if (els.commanderFilter) {
@@ -384,6 +385,7 @@
       const categoryRow = document.createElement("li");
       categoryRow.className = "dropdown-header text-uppercase small text-muted fw-semibold";
       categoryRow.dataset.wizardTagCategory = "true";
+      categoryRow.dataset.category = category;
       categoryRow.setAttribute("data-dv-select-category", "");
       categoryRow.textContent = category;
       fragment.appendChild(categoryRow);
@@ -398,6 +400,7 @@
         btn.setAttribute("data-dv-select-option", "");
         btn.dataset.value = tag;
         btn.dataset.label = tag;
+        btn.dataset.category = category;
         btn.addEventListener("click", () => {
           selectedTag = tag;
           tagAction = ACTION_SET;
@@ -411,6 +414,45 @@
       });
     });
     els.tagMenu.appendChild(fragment);
+    applyTagFilter();
+    if (els.tagSelect && els.tagSelect.dataset.dvSelectReady !== "true") {
+      const refreshEvent = new Event("htmx:afterSwap", { bubbles: true });
+      document.dispatchEvent(refreshEvent);
+    }
+  }
+
+  function getTagButtons() {
+    if (tagButtons.length) return tagButtons;
+    if (!els.tagMenu) return [];
+    return Array.from(els.tagMenu.querySelectorAll("[data-wizard-tag-option]"));
+  }
+
+  function applyTagFilter() {
+    if (!els.tagSearch) return;
+    const query = els.tagSearch.value.trim().toLowerCase();
+    const optionButtons = getTagButtons();
+    const categoryNodes = Array.from(els.tagMenu?.querySelectorAll("[data-dv-select-category]") || []);
+    const counts = new Map();
+    let visibleCount = 0;
+    optionButtons.forEach(btn => {
+      const label = (btn.dataset.label || btn.textContent || "").toLowerCase();
+      const match = !query || label.includes(query);
+      const li = btn.closest("li") || btn;
+      li.style.display = match ? "" : "none";
+      const category = btn.dataset.category || "";
+      if (match) {
+        visibleCount += 1;
+        counts.set(category, (counts.get(category) || 0) + 1);
+      }
+    });
+    categoryNodes.forEach(node => {
+      const category = node.dataset.category || "";
+      const show = !query || (counts.get(category) || 0) > 0;
+      node.style.display = show ? "" : "none";
+    });
+    if (els.tagEmpty) {
+      els.tagEmpty.classList.toggle("d-none", visibleCount > 0);
+    }
   }
 
   function renderTagSelection() {
@@ -418,7 +460,7 @@
     if (!tagButtons.length) {
       buildTagOptions();
     }
-    tagButtons.forEach(btn => {
+    getTagButtons().forEach(btn => {
       const isActive = selectedTag && selectedTag === btn.dataset.tag;
       btn.classList.toggle("active", Boolean(isActive));
     });
@@ -439,7 +481,7 @@
 
   function updateTagEmptyState() {
     if (!els.tagEmpty) return;
-    const visible = tagButtons.some(btn => {
+    const visible = getTagButtons().some(btn => {
       const node = btn.closest("li") || btn;
       return node && node.style.display !== "none";
     });
@@ -619,6 +661,7 @@
           ? selectedTag
           : currentDeck.deck_tag;
       updateDeckRow(commanderLabel, tagLabel);
+      needsRefresh = true;
       clearFilters();
       advanceDeck();
     } catch (error) {
@@ -671,13 +714,16 @@
     els.commanderFilter.addEventListener("input", renderCommanderCandidates);
   }
   if (els.tagSearch) {
-    els.tagSearch.addEventListener("input", () => {
-      window.setTimeout(updateTagEmptyState, 0);
-    });
+    els.tagSearch.addEventListener("input", applyTagFilter);
+    els.tagSearch.addEventListener("keyup", applyTagFilter);
+    els.tagSearch.addEventListener("search", applyTagFilter);
   }
   if (els.tagSelect) {
     els.tagSelect.addEventListener("shown.bs.dropdown", () => {
-      window.setTimeout(updateTagEmptyState, 0);
+      if (els.tagSearch) {
+        els.tagSearch.value = "";
+      }
+      applyTagFilter();
     });
   }
   if (els.skipBtn) {
@@ -692,4 +738,10 @@
   if (!decks.length) {
     triggerBtn.title = "All decks already have a commander and tag.";
   }
+
+  modalEl.addEventListener("hidden.bs.modal", () => {
+    if (needsRefresh) {
+      window.location.reload();
+    }
+  });
 })();

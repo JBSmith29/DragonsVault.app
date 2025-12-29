@@ -814,9 +814,16 @@ def admin_console():
             job_id=job_id,
             dataset="synergy",
             force=int(force_refresh),
-            scope=scope,
+            refresh_scope=scope,
         )
-        emit_job_event("edhrec", "started", job_id=job_id, dataset="synergy", rq_id=None, scope=scope)
+        emit_job_event(
+            "edhrec",
+            "started",
+            job_id=job_id,
+            dataset="synergy",
+            rq_id=None,
+            refresh_scope=scope,
+        )
         result = refresh_edhrec_synergy_cache(force_refresh=force_refresh, scope=scope)
         status = result.get("status") or "error"
         message = result.get("message") or "EDHREC refresh failed."

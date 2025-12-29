@@ -4,10 +4,46 @@
 {% block content %}
 
 <style>
+  #main {
+    overflow: hidden;
+    padding-bottom: 0;
+    margin-top: 0;
+  }
+  .opening-hand-stage {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .opening-hand-header {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+  .opening-hand-board {
+    flex: 0 0 clamp(220px, 32vh, 360px);
+    min-height: 220px;
+  }
+  .opening-hand-board .card-body {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .opening-hand-board .board-grid-layout {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding-right: 0.25rem;
+  }
+  .opening-hand-board .board-note {
+    font-size: 0.78rem;
+  }
   .opening-hand-layout {
+    flex: 1 1 auto;
+    min-height: 0;
     display: grid;
-    gap: 1.5rem;
-    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+    gap: 1rem;
+    grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
   }
   .opening-hand-layout.full-mode {
     grid-template-columns: 1fr;
@@ -17,43 +53,99 @@
       grid-template-columns: 1fr;
     }
   }
+  .opening-hand-layout > section {
+    min-height: 0;
+  }
+  #deckSourceCard,
+  .opening-hand-hand {
+    height: 100%;
+  }
+  #deckSourceCard .card-body {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .opening-hand-hand .card-body {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
   .hand-card-grid {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-    justify-items: center;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0;
+    padding: 0.75rem 1.25rem 1rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+  }
+  .hand-card-grid > .text-muted {
+    margin: auto;
   }
   .hand-card {
     background: rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(148, 163, 184, 0.18);
+    border: 1px solid rgba(148, 163, 184, 0.12);
     border-radius: 1rem;
-    padding: 0.75rem;
+    padding: 0.9rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     position: relative;
     cursor: pointer;
+    box-shadow: 0 0.6rem 1.4rem rgba(15, 23, 42, 0.28);
+    --hand-rotate: 0deg;
+    --hand-offset: 0px;
     transition:
-      border-color 0.18s var(--dv-ease-soft, ease),
-      transform 0.18s var(--dv-ease-soft, ease),
-      box-shadow 0.18s var(--dv-ease-soft, ease);
+      border-color 0.16s ease-out,
+      transform 0.16s ease-out,
+      box-shadow 0.16s ease-out;
     width: 100%;
-    max-width: 220px;
-    transform-origin: center center;
+    max-width: 260px;
+    transform: translateY(var(--hand-offset)) rotate(var(--hand-rotate));
+    transform-origin: bottom center;
   }
+  .hand-card-grid .hand-card {
+    width: clamp(200px, 24vw, 280px);
+    max-width: none;
+    flex: 0 0 auto;
+    margin-left: -32px;
+    scroll-snap-align: center;
+  }
+  .hand-card-grid .hand-card:first-child {
+    margin-left: 0;
+  }
+  .hand-card-grid .hand-card:nth-child(1) { --hand-rotate: -4deg; --hand-offset: 12px; }
+  .hand-card-grid .hand-card:nth-child(2) { --hand-rotate: -2.5deg; --hand-offset: 6px; }
+  .hand-card-grid .hand-card:nth-child(3) { --hand-rotate: -1deg; --hand-offset: 2px; }
+  .hand-card-grid .hand-card:nth-child(4) { --hand-rotate: 0deg; --hand-offset: 0px; }
+  .hand-card-grid .hand-card:nth-child(5) { --hand-rotate: 1deg; --hand-offset: 2px; }
+  .hand-card-grid .hand-card:nth-child(6) { --hand-rotate: 2.5deg; --hand-offset: 6px; }
+  .hand-card-grid .hand-card:nth-child(7) { --hand-rotate: 4deg; --hand-offset: 12px; }
   .hand-card:not(.card-tapped):hover {
     border-color: rgba(148, 180, 255, 0.45);
-    transform: translateY(-2px);
+    transform: translateY(calc(var(--hand-offset) - 6px)) rotate(var(--hand-rotate)) scale(1.06);
+    box-shadow: 0 1rem 2.2rem rgba(15, 23, 42, 0.35);
+    z-index: 2;
+  }
+  .hand-card:not(.card-tapped):active {
+    transform: translateY(calc(var(--hand-offset) - 2px)) rotate(var(--hand-rotate)) scale(0.98);
+    box-shadow: 0 0.4rem 1rem rgba(15, 23, 42, 0.28);
   }
   .hand-card img {
     width: 100%;
     aspect-ratio: 0.718;
     border-radius: 0.85rem;
-    box-shadow: 0 1.5rem 2.5rem rgba(15, 23, 42, 0.2);
+    box-shadow: 0 1.1rem 2rem rgba(15, 23, 42, 0.22);
     object-fit: contain;
     background: radial-gradient(circle at 30% 20%, rgba(148, 180, 255, 0.18), transparent),
       rgba(15, 23, 42, 0.85);
-    transition: transform 0.18s var(--dv-ease-soft, ease);
+    transition: transform 0.2s ease-out;
   }
   .hand-card .name {
     display: none;
@@ -183,7 +275,7 @@
       calc(var(--stack-index, 0) * 10px)
     );
     z-index: calc(100 + var(--stack-index, 0));
-    max-width: 200px;
+    max-width: 220px;
   }
   .board-zone-stack .hand-card:focus-visible {
     outline: 2px solid rgba(148, 180, 255, 0.75);
@@ -191,9 +283,9 @@
   }
   .card-stack {
     position: relative;
-    min-height: 220px;
-    width: min(220px, 100%);
-    max-width: 240px;
+    min-height: 240px;
+    width: min(240px, 100%);
+    max-width: 260px;
   }
   .card-stack .hand-card {
     position: absolute;
@@ -258,18 +350,60 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
   }
   .hand-status .badge {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
   }
   .opening-hand-actions {
+    position: fixed;
+    top: calc(var(--app-header-h, 96px) + 1rem);
+    right: 2rem;
+    z-index: 1040;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px);
+    max-width: min(420px, 90vw);
   }
   .opening-hand-actions .btn {
-    min-width: 160px;
+    min-width: 120px;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .opening-hand-actions > .d-flex {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem;
+  }
+  @media (max-width: 992px) {
+    .opening-hand-actions {
+      right: 1rem;
+      top: calc(var(--app-header-h, 96px) + 0.75rem);
+    }
+  }
+  @media (max-width: 576px) {
+    .hand-card-grid {
+      justify-content: flex-start;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    .hand-card {
+      scroll-snap-align: center;
+    }
+    .hand-card-grid .hand-card {
+      margin-left: -18px;
+    }
+    .hand-card-grid .hand-card:first-child {
+      margin-left: 0;
+    }
   }
   .card-context-menu {
     position: fixed;
@@ -354,14 +488,15 @@
   }
 </style>
 
-<div class="mb-3">
+<div class="opening-hand-stage">
+<div class="opening-hand-header">
   <h1 class="mb-1">Opening Hand Simulator</h1>
   <div class="text-muted small">
     Pick an existing deck or paste a list to shuffle up and draw a virtual opening hand. The commander is automatically excluded.
   </div>
 </div>
 
-<div class="card shadow-sm border-0 mb-4">
+<div class="card shadow-sm border-0 opening-hand-board">
   <div class="card-body">
     <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
       <div>
@@ -429,7 +564,7 @@
   </section>
 
   <section>
-    <div class="card shadow-sm border-0 mb-3">
+    <div class="card shadow-sm border-0 opening-hand-hand">
       <div class="card-body">
         <div class="opening-hand-actions d-none mb-3" id="handActionBar">
           <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
@@ -463,6 +598,7 @@
     </div>
 
   </section>
+</div>
 </div>
 
 

@@ -114,6 +114,20 @@ class OracleCoreRoleTag(db.Model):
     )
 
 
+class OracleCardRole(db.Model):
+    __tablename__ = "oracle_card_roles"
+
+    oracle_id = db.Column(db.String(64), primary_key=True)
+    role = db.Column(db.String(64), primary_key=True)
+
+
+class CardMechanic(db.Model):
+    __tablename__ = "card_mechanics"
+
+    oracle_id = db.Column(db.String(64), primary_key=True)
+    mechanic = db.Column(db.String(64), primary_key=True)
+
+
 class OracleTypalTag(db.Model):
     __tablename__ = "oracle_typal_tags"
 

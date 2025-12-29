@@ -519,6 +519,7 @@ def get_build_state(folder_id: int) -> dict:
         "breakdown_rows": breakdown_rows,
         "deck_stats": get_deck_stats(folder.id),
         "recommendations": recommendations,
+        "edhrec_cards": edhrec_recs,
         "edhrec_groups": edhrec_groups,
         "app_groups": app_groups,
         "collection_groups": collection_groups,

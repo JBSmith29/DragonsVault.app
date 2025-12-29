@@ -303,8 +303,14 @@ def _load_edhrec_index_slugs() -> dict[str, dict[str, str]]:
         sample_name = (_slug_name_for_print(sample) or sample.get("name") or "").strip()
         if not sample_name:
             continue
-        if slugify_commander(name) != slugify_commander(sample_name):
-            continue
+        sample_slug = slugify_commander(sample_name)
+        name_slug = slugify_commander(name)
+        if name_slug != sample_slug:
+            front_name = ""
+            if "//" in name:
+                front_name = (name.split("//", 1)[0] or "").strip()
+            if not front_name or slugify_commander(front_name) != sample_slug:
+                continue
         mapping[oracle_id] = {"name": name, "slug": slug}
     return mapping
 
@@ -363,6 +369,44 @@ def _load_missing_slugs() -> dict[str, dict[str, str]]:
     if isinstance(data, dict):
         return data
     return {}
+
+
+def _missing_oracle_ids(missing: dict[str, dict[str, str]]) -> set[str]:
+    oracle_ids: set[str] = set()
+    for info in missing.values():
+        if not isinstance(info, dict):
+            continue
+        oracle_id = (info.get("oracle_id") or "").strip()
+        if oracle_id:
+            oracle_ids.add(oracle_id)
+    return oracle_ids
+
+
+def _clear_missing_for_oracle(missing: dict[str, dict[str, str]], oracle_id: str) -> None:
+    if not oracle_id:
+        return
+    to_remove = [slug for slug, info in missing.items() if isinstance(info, dict) and info.get("oracle_id") == oracle_id]
+    for slug in to_remove:
+        missing.pop(slug, None)
+
+
+def _slug_candidates_for_target(target: CommanderTarget) -> list[str]:
+    slugs: list[str] = []
+
+    def _add(raw: str | None, *, is_slug: bool = False) -> None:
+        if not raw:
+            return
+        slug = raw if is_slug else slugify_commander(raw)
+        if slug and slug not in slugs:
+            slugs.append(slug)
+
+    _add((target.slug_override or "").strip(), is_slug=True)
+    _add(target.slug_name)
+    _add(target.name)
+    if target.name and "//" in target.name:
+        front = (target.name.split("//", 1)[0] or "").strip()
+        _add(front)
+    return slugs
 
 
 def _prune_missing_slugs(missing: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
@@ -585,12 +629,16 @@ def run_monthly_edhrec_ingestion(
     _ensure_schema()
     scope_key = (scope or "all").strip().lower()
     tag_map: dict[str, set[str]] = {}
+    retry_missing = False
     if scope_key in {"delta", "active", "deck", "current"}:
         targets, tag_map = _load_active_targets()
+    elif scope_key in {"missing", "failed"}:
+        retry_missing = True
+        targets = _load_commander_targets()
     else:
         targets = _load_commander_targets()
     top_limits: dict[str, int] = {}
-    if _INCLUDE_TOP_COMMANDERS and _TOP_COMMANDER_LIMIT > 0:
+    if scope_key not in {"missing", "failed"} and _INCLUDE_TOP_COMMANDERS and _TOP_COMMANDER_LIMIT > 0:
         top_targets = _load_top_index_targets(_TOP_COMMANDER_LIMIT)
         if _TOP_COMMANDER_TAG_LIMIT > 0:
             top_limits = {target.oracle_id: _TOP_COMMANDER_TAG_LIMIT for target in top_targets}
@@ -599,6 +647,9 @@ def run_monthly_edhrec_ingestion(
             for target in top_targets:
                 merged_targets.setdefault(target.oracle_id, target)
             targets = list(merged_targets.values())
+    if _TOP_COMMANDER_TAG_LIMIT > 0:
+        for target in targets:
+            top_limits.setdefault(target.oracle_id, _TOP_COMMANDER_TAG_LIMIT)
     if not targets:
         return {
             "commanders_processed": 0,
@@ -674,17 +725,30 @@ def run_monthly_edhrec_ingestion(
     errors = 0
     last_request_at = 0.0
     missing_slugs = _prune_missing_slugs(_load_missing_slugs())
+    if scope_key in {"missing", "failed"}:
+        missing_oracle_ids = _missing_oracle_ids(missing_slugs)
+        if not missing_oracle_ids:
+            return {
+                "commanders_processed": 0,
+                "cards_inserted": 0,
+                "tags_inserted": 0,
+                "tag_cards_inserted": 0,
+                "errors": 0,
+            }
+        targets = [target for target in targets if target.oracle_id in missing_oracle_ids]
 
     for idx, target in enumerate(targets, start=1):
-        slug_source = target.slug_name or target.name
-        slug = (target.slug_override or "").strip() or slugify_commander(slug_source)
-        if not slug:
+        slug_candidates = _slug_candidates_for_target(target)
+        if not slug_candidates:
             errors += 1
             _LOG.warning("EDHREC slug missing for %s", target.name)
             continue
-        missing_info = missing_slugs.get(slug)
-        if missing_info:
-            continue
+        if not retry_missing:
+            candidates_to_try = [slug for slug in slug_candidates if slug not in missing_slugs]
+            if not candidates_to_try:
+                continue
+        else:
+            candidates_to_try = slug_candidates
         tags_for_commander = tag_map.get(target.oracle_id, set())
         top_tag_limit = top_limits.get(target.oracle_id, 0)
         needs_commander = full_refresh or target.oracle_id not in existing_ids
@@ -695,25 +759,34 @@ def run_monthly_edhrec_ingestion(
         payload = raw_json = None
         synergy_rows: list[dict] = []
         tags: list[str] = []
+        slug_used = ""
         if needs_commander or needs_top_tags:
-            last_request_at = _rate_limit(last_request_at)
-            url = f"https://edhrec.com/commanders/{slug}"
-            payload, raw_json, error = _fetch_commander_json(session, url)
-            if error:
-                if error == "Commander page not found.":
+            fetch_error = None
+            for slug in candidates_to_try:
+                last_request_at = _rate_limit(last_request_at)
+                url = f"https://edhrec.com/commanders/{slug}"
+                payload, raw_json, fetch_error = _fetch_commander_json(session, url)
+                if fetch_error == "Commander page not found.":
                     missing_slugs[slug] = {
                         "name": target.name,
                         "oracle_id": target.oracle_id,
                         "last_seen": _now_iso(),
                     }
+                    continue
+                if fetch_error:
+                    break
+                slug_used = slug
+                break
+            if fetch_error and not slug_used:
                 errors += 1
-                _LOG.warning("EDHREC fetch failed for %s: %s", target.name, error)
+                _LOG.warning("EDHREC fetch failed for %s: %s", target.name, fetch_error)
                 continue
             if not payload or not raw_json:
                 errors += 1
                 _LOG.warning("EDHREC payload missing for %s", target.name)
                 continue
 
+            _clear_missing_for_oracle(missing_slugs, target.oracle_id)
             views = _extract_cardviews(payload)
             synergy_rows = _map_synergy_cards(views)
             tags = _normalize_tag_candidates(raw_json)
@@ -737,7 +810,8 @@ def run_monthly_edhrec_ingestion(
             if not tag_slug:
                 continue
             last_request_at = _rate_limit(last_request_at)
-            tag_url = f"https://edhrec.com/commanders/{slug}/{tag_slug}"
+            tag_base = slug_used or candidates_to_try[0]
+            tag_url = f"https://edhrec.com/commanders/{tag_base}/{tag_slug}"
             tag_payload, _, tag_error = _fetch_commander_json(session, tag_url)
             if tag_error:
                 if tag_error == "Commander page not found.":
