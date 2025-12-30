@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Build-A-Deck{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h2 mb-1">Build-A-Deck</h1>
+      <p class="text-muted mb-0">Start from your idea or explore commanders and themes that fit your collection.</p>
+    </div>
+  </div>
+
+  {% if not edhrec_ready %}
+    <div class="alert alert-warning">
+      Build recommendations are unavailable until EDHREC data has been cached.
+    </div>
+  {% endif %}
+
+  <div class="row g-4 mb-4 build-landing-top">
+    <div class="col-12 col-xl-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Start from what you want</h5>
+          <p class="text-muted small mb-3">Pick a commander and optional tag to begin a build session.</p>
+
+          <form method="post" action="{{ url_for('views.build_start') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mb-3">
+              <label class="form-label small text-muted">Commander</label>
+              <input type="text" class="form-control" name="commander_name" placeholder="Enter commander name" autocomplete="off">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small text-muted">Optional deck tag</label>
+              <div class="dropdown dv-select w-100 build-landing-select" data-dv-select="build-tag" data-dv-select-portal="body" data-bs-auto-close="outside">
+                <input type="hidden" name="deck_tag" data-dv-select-input value="">
+                <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span data-dv-select-label>Select a tag...</span>
+                </button>
+                <ul class="dropdown-menu dv-select-menu w-100">
+                  <li class="px-2 pb-2">
+                    <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                  </li>
+                  <li>
+                    <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a tag...">Select a tag...</button>
+                  </li>
+                  {% for category, tags in tag_groups.items() %}
+                    <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
+                    {% for tag in tags %}
+                      <li>
+                        <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
+                      </li>
+                    {% endfor %}
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+
+            <button class="btn btn-primary w-100" type="submit">start build</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Find a commander by deck tag</h5>
+          <p class="text-muted small mb-3">Select a tag to see commanders that fit cards you already own.</p>
+
+          <form method="get" action="{{ url_for('views.build_landing') }}" class="mb-3">
+            <div class="dropdown dv-select w-100 build-landing-select" data-dv-select="build-tag-filter" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
+              <input type="hidden" name="tag" data-dv-select-input value="{{ selected_tag }}">
+              <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <span data-dv-select-label>{{ selected_tag or "Select a tag..." }}</span>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100">
+                <li class="px-2 pb-2">
+                  <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                </li>
+                <li>
+                  <button class="dropdown-item{% if not selected_tag %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a tag...">Select a tag...</button>
+                </li>
+                {% for category, tags in tag_groups.items() %}
+                  <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
+                  {% for tag in tags %}
+                    <li>
+                      <button class="dropdown-item{% if selected_tag == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
+                    </li>
+                  {% endfor %}
+                {% endfor %}
+              </ul>
+            </div>
+          </form>
+
+          {% if recommended_tags %}
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              {% for tag in recommended_tags %}
+                <a class="badge rounded-pill bg-info-subtle text-info-emphasis text-decoration-none" href="{{ url_for('views.build_landing', tag=tag.tag) }}">
+                  {{ tag.tag }} · {{ tag.owned_count }}
+                </a>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if selected_tag %}
+            <h6 class="text-muted mb-3">commanders with {{ selected_tag }} support in your collection</h6>
+            {% if tag_commanders %}
+              <div class="row g-3">
+                {% for rec in tag_commanders %}
+                  <div class="col-12 col-md-6">
+                    <div class="card h-100 bg-body-tertiary border-0">
+                      {% if rec.image %}
+                        <img src="{{ rec.image }}" class="card-img-top build-landing-commander-img" alt="{{ rec.name }}">
+                      {% endif %}
+                      <div class="card-body">
+                        <h6 class="card-title mb-1">{{ rec.name }}</h6>
+                        <p class="text-muted small mb-2">you own {{ rec.owned_count }} synergy cards</p>
+                        <form method="post" action="{{ url_for('views.build_start') }}">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="commander_oracle_id" value="{{ rec.oracle_id }}">
+                          <input type="hidden" name="deck_tag" value="{{ selected_tag }}">
+                          <button class="btn btn-sm btn-outline-primary w-100" type="submit">build this commander</button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="text-muted mb-0">no commanders found for this tag in your collection.</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm build-landing-good-fits">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+          <h5 class="card-title mb-1">good fits based on your collection</h5>
+          <p class="text-muted small mb-0">commanders you can build well with cards you already have.</p>
+        </div>
+      </div>
+
+      {% if recommended_commanders %}
+        <div class="row g-3">
+          {% for rec in recommended_commanders %}
+            <div class="col-12 col-md-6 col-xxl-4">
+              <div class="card h-100 bg-body-tertiary border-0">
+                {% if rec.image %}
+                  <img src="{{ rec.image }}" class="card-img-top build-landing-commander-img build-landing-fit-img" alt="{{ rec.name }}">
+                {% endif %}
+                <div class="card-body">
+                  <h6 class="card-title mb-1">{{ rec.name }}</h6>
+                  <p class="text-muted small mb-2">you own {{ rec.owned_count }} high-synergy cards</p>
+                  {% if rec.tags %}
+                    <div class="d-flex flex-wrap gap-1 mb-3">
+                      {% for tag in rec.tags %}
+                        <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tag }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('views.build_start') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="commander_oracle_id" value="{{ rec.oracle_id }}">
+                    <button class="btn btn-sm btn-outline-primary w-100" type="submit">build this commander</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">no collection-based recommendations yet. import cards to see suggestions here.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

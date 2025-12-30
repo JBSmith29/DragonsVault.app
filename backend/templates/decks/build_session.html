@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Build Session{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h2 mb-1">build session</h1>
+      <p class="text-muted mb-0">proxy-only workspace for {{ commander.name }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('views.build_landing') }}">back to build-a-deck</a>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-12 col-lg-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-3">commander</h5>
+          {% if commander.image %}
+            <img src="{{ commander.image }}" class="img-fluid rounded mb-3" alt="{{ commander.name }}">
+          {% endif %}
+          <h6 class="mb-2">{{ commander.name }}</h6>
+          {% if tags %}
+            <div class="d-flex flex-wrap gap-1">
+              {% for tag in tags %}
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tag }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted small mb-0">no tags selected</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-3">edhrec synergy recommendations</h5>
+          {% if recommendations %}
+            <div class="row g-3">
+              {% for rec in recommendations %}
+                <div class="col-6 col-md-4 col-xxl-3">
+                  <div class="card h-100 bg-body-tertiary border-0">
+                    {% if rec.image %}
+                      <img src="{{ rec.image }}" class="card-img-top" alt="{{ rec.name }}">
+                    {% endif %}
+                    <div class="card-body">
+                      <h6 class="card-title mb-1">{{ rec.name }}</h6>
+                      {% if rec.synergy_percent is not none %}
+                        <div class="text-muted small mb-2">synergy {{ rec.synergy_percent }}%</div>
+                      {% endif %}
+                      <form method="post" action="{{ url_for('views.build_session_add', session_id=session.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                        <button class="btn btn-sm btn-outline-primary w-100" type="submit">add to build</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">no recommendations available yet.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <h5 class="card-title mb-3">current build</h5>
+      {% if session_cards %}
+        <div class="table-responsive">
+          <table class="table cards-table align-middle">
+            <thead>
+              <tr>
+                <th>card</th>
+                <th class="text-center">qty</th>
+                <th class="text-end">actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for card in session_cards %}
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center gap-3">
+                      {% if card.image %}
+                        <img src="{{ card.image }}" alt="{{ card.name }}" style="width: 48px;" class="rounded">
+                      {% endif %}
+                      <span>{{ card.name }}</span>
+                    </div>
+                  </td>
+                  <td class="text-center">{{ card.quantity }}</td>
+                  <td class="text-end">
+                    <form method="post" action="{{ url_for('views.build_session_remove', session_id=session.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">remove</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">no cards added yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

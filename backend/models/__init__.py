@@ -12,6 +12,7 @@ from extensions import db  # shared SQLAlchemy() instance
 # Import models only after db exists to avoid circular imports
 from .card import Card  # type: ignore F401
 from .commander_cache import CommanderBracketCache  # type: ignore F401
+from .build_session import BuildSession, BuildSessionCard  # type: ignore F401
 from .folder import Folder, FolderShare  # type: ignore F401
 from .folder_role import FolderRole  # type: ignore F401
 from .deck_stats import DeckStats  # type: ignore F401
@@ -51,6 +52,8 @@ __all__ = [
     "db",
     "Card",
     "CommanderBracketCache",
+    "BuildSession",
+    "BuildSessionCard",
     "Folder",
     "FolderShare",
     "FolderRole",

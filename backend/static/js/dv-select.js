@@ -50,6 +50,74 @@
     }
   }
 
+  const portalState = new WeakMap();
+
+  function setupPortal(wrapper) {
+    if (wrapper.dataset.dvSelectPortalReady === "true") {
+      return;
+    }
+    const menu = wrapper.querySelector(".dropdown-menu");
+    const toggle = wrapper.querySelector('[data-bs-toggle="dropdown"]');
+    if (!menu || !toggle) {
+      return;
+    }
+
+    const snapshot = {
+      menu,
+      originalParent: menu.parentNode,
+      nextSibling: menu.nextSibling,
+      styles: {},
+    };
+    portalState.set(wrapper, snapshot);
+
+    wrapper.addEventListener("shown.bs.dropdown", () => {
+      const data = portalState.get(wrapper);
+      if (!data) {
+        return;
+      }
+      const rect = toggle.getBoundingClientRect();
+      data.styles = {
+        position: menu.style.position,
+        left: menu.style.left,
+        top: menu.style.top,
+        width: menu.style.width,
+        transform: menu.style.transform,
+        zIndex: menu.style.zIndex,
+      };
+      document.body.appendChild(menu);
+      menu.style.position = "fixed";
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 6}px`;
+      menu.style.width = `${rect.width}px`;
+      menu.style.transform = "none";
+      menu.style.zIndex = "2147483000";
+    });
+
+    wrapper.addEventListener("hidden.bs.dropdown", () => {
+      const data = portalState.get(wrapper);
+      if (!data) {
+        return;
+      }
+      const parent = data.originalParent;
+      if (parent) {
+        if (data.nextSibling && data.nextSibling.parentNode === parent) {
+          parent.insertBefore(menu, data.nextSibling);
+        } else {
+          parent.appendChild(menu);
+        }
+      }
+      const styles = data.styles || {};
+      menu.style.position = styles.position || "";
+      menu.style.left = styles.left || "";
+      menu.style.top = styles.top || "";
+      menu.style.width = styles.width || "";
+      menu.style.transform = styles.transform || "";
+      menu.style.zIndex = styles.zIndex || "";
+    });
+
+    wrapper.dataset.dvSelectPortalReady = "true";
+  }
+
   function initialise(wrapper) {
     if (wrapper.dataset.dvSelectReady === "true") {
       return;
@@ -113,6 +181,10 @@
         searchInput.dispatchEvent(new Event("input"));
         setTimeout(() => searchInput.focus(), 10);
       });
+    }
+
+    if (wrapper.dataset.dvSelectPortal === "body") {
+      setupPortal(wrapper);
     }
 
     wrapper.dataset.dvSelectReady = "true";

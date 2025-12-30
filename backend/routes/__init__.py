@@ -9,6 +9,7 @@ from .api import api_bp
 from . import (
     admin,          # noqa: F401
     auth,           # noqa: F401
+    build,          # noqa: F401
     card_detail,    # noqa: F401
     cards,          # noqa: F401
     dashboard,      # noqa: F401

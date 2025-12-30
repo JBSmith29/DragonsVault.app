@@ -194,6 +194,56 @@ select.form-select-sm option {
   color: var(--bs-body-color);
 }
 
+.build-landing-commander-img {
+  height: auto;
+  display: block;
+  margin: 0.75rem auto 0;
+}
+
+.build-landing-fit-img {
+  width: 50% !important;
+  max-width: 50% !important;
+  height: auto;
+  display: block;
+  margin: 0.75rem auto 0;
+}
+
+.build-landing-top {
+  position: relative;
+  z-index: 5000;
+  isolation: isolate;
+}
+
+.build-landing-top .card,
+.build-landing-top .card-body {
+  overflow: visible;
+}
+
+.build-landing-top .card {
+  position: relative;
+  z-index: 5000;
+}
+
+.build-landing-good-fits {
+  position: relative;
+  z-index: 1;
+}
+
+.build-landing-select {
+  position: relative;
+  z-index: 1300;
+}
+
+.build-landing-select .dropdown-menu {
+  position: absolute !important;
+  z-index: 9999 !important;
+}
+
+.build-landing-select .dv-select-menu {
+  position: absolute !important;
+  z-index: 10000 !important;
+}
+
 html[data-bs-theme="light"] .dv-select-toggle {
   background: rgba(255, 255, 255, 0.68);
   border-color: rgba(15, 23, 42, 0.15);

@@ -902,6 +902,16 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.build_landing', 'views.build_session'] %}active{% endif %}"
+               href="{{ url_for('views.build_landing') }}"
+               title="Build-A-Deck"
+               aria-label="Build-A-Deck"
+               data-endpoints="views.build_landing,views.build_session">
+              <i class="bi bi-hammer" aria-hidden="true"></i>
+              <span class="sidebar-label">Build-A-Deck</span>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'views.opening_hand' %}active{% endif %}"
                href="{{ url_for('views.opening_hand') }}"
                title="Opening Hand"
