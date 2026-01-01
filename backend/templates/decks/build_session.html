@@ -18,94 +18,96 @@
     .build-session .summary-row{ --gap: 1rem; display:grid; gap:var(--gap); grid-template-columns: 1fr; }
     @media (min-width:992px){ .build-session .summary-row{ grid-template-columns: repeat(3, 1fr); } }
     .build-session .summary-row > div{ min-width:0; }
+    /* Align build summary row with folder_detail commander-meta-secondary layout. */
+    .build-session .commander-meta-secondary{ flex:1 1 auto; display:flex; flex-wrap:wrap; gap:1.25rem; align-items:flex-start; }
+    .build-session .commander-meta-block{ flex:0 0 auto; min-width:0; display:flex; flex-direction:column; justify-content:space-between; }
+    .build-session .commander-meta-divider{ flex:0 0 auto; width:1px; background:var(--bs-border-color); align-self:stretch; }
+    .build-session .identity-body{ flex:1 1 auto; display:flex; flex-direction:column; gap:.75rem; align-items:center; text-align:center; }
+    .build-session .identity-body.counts-body{ gap:.35rem; }
+    .build-session .card-count-block{ flex:0 0 auto; text-align:center; align-items:center; min-width:0; }
+    .build-session .card-count-block .counts-body{ gap:0; }
+    .build-session .card-count-block .card-count-total{ font-size:clamp(1.8rem, 3vw, 2rem); line-height:1; }
   </style>
 
   <div class="row g-4">
     <div class="col-12">
-      <div class="row g-3 build-summary-row">
-        <div class="col-12 col-lg-4">
-          <div class="card border-0 shadow-sm build-panel h-100">
-            <div class="card-body">
-              <div class="d-flex align-items-center justify-content-between mb-3">
-                <h5 class="card-title mb-0">Commander</h5>
-                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">Proxy</span>
-              </div>
-              <div class="build-commander d-flex align-items-start gap-3 mb-4">
-                {% if commander.image %}
-                  <img src="{{ commander.image }}" class="build-commander-img" alt="{{ commander.name }}">
-                {% endif %}
-                <div>
-                  <div class="fw-semibold">{{ commander.name }}</div>
-                  {% if commander.colors is defined %}
-                    {% set colors = commander.colors %}
-                    {% include "includes/_color_identity.html" %}
-                  {% endif %}
-                </div>
-              </div>
-
-              <label class="form-label small text-muted">Build Name</label>
-              <form method="post" action="{{ url_for('views.build_session_name', session_id=build_session.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="text" class="form-control form-control-sm" name="build_name" value="{{ build_session.build_name or '' }}" placeholder="Name this build">
-                <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">Update Name</button>
-              </form>
-
-              <label class="form-label small text-muted">Deck Tag</label>
-              <form method="post" action="{{ url_for('views.build_session_tags', session_id=build_session.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="dropdown dv-select w-100" data-dv-select="build-session-tag" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
-                  <input type="hidden" name="deck_tag" data-dv-select-input value="{{ tags[0] if tags else '' }}">
-                  <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <span data-dv-select-label>{{ tags[0] if tags else "Select a Tag..." }}</span>
-                  </button>
-                  <ul class="dropdown-menu dv-select-menu">
-                    <li class="px-2 pb-2">
-                      <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
-                    </li>
-                    <li>
-                      <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a Tag...">Select a Tag...</button>
-                    </li>
-                    {% for category, tag_list in tag_groups.items() %}
-                      <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
-                      {% for tag in tag_list %}
-                        <li>
-                          <button class="dropdown-item{% if tags and tags[0] == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
-                        </li>
-                      {% endfor %}
-                    {% endfor %}
-                  </ul>
-                </div>
-              </form>
-              {% if tags %}
-                <div class="d-flex flex-wrap gap-1 mt-2">
-                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tags[0] }}</span>
-                </div>
-              {% else %}
-                <p class="text-muted small mt-2 mb-0">No tag selected yet.</p>
+      <!-- Match folder_detail commander-meta-secondary layout for summary alignment. -->
+      <div class="build-summary-row commander-meta-secondary">
+        <div class="commander-meta-block">
+          <div class="text-uppercase text-muted small fw-semibold">Commander</div>
+          <div class="build-commander d-flex align-items-start gap-3 mt-2">
+            {% if commander.image %}
+              <img src="{{ commander.image }}" class="build-commander-img" alt="{{ commander.name }}">
+            {% endif %}
+            <div>
+              <div class="fw-semibold">{{ commander.name }}</div>
+              {% if commander.colors is defined %}
+                {% set colors = commander.colors %}
+                {% include "includes/_color_identity.html" %}
               {% endif %}
             </div>
           </div>
+          <span class="badge rounded-pill bg-info-subtle text-info-emphasis mt-2">Proxy</span>
         </div>
 
-        <div class="col-12 col-lg-6">
-          <div class="card border-0 shadow-sm build-panel h-100">
-            <div class="card-body">
-              <div class="d-flex align-items-center justify-content-between mb-3">
-                <h5 class="card-title mb-0">Deck Counts</h5>
-              </div>
-              <div class="build-metric-row">
-                <span>Total Cards</span>
-                <span class="fw-semibold">{{ deck_metrics.total_cards }}</span>
-              </div>
-              <div class="build-metric-row">
-                <span>Lands</span>
-                <span class="fw-semibold">{{ deck_metrics.land_count }}</span>
-              </div>
-              <div class="build-metric-row">
-                <span>Non-lands</span>
-                <span class="fw-semibold">{{ deck_metrics.non_land_count }}</span>
-              </div>
+        <div class="commander-meta-divider d-none d-lg-block"></div>
+
+        <div class="commander-meta-block">
+          <!-- Use folder_detail label hierarchy for consistent emphasis. -->
+          <div class="text-uppercase text-muted small fw-semibold">Build Name</div>
+          <form method="post" action="{{ url_for('views.build_session_name', session_id=build_session.id) }}" class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" class="form-control form-control-sm" name="build_name" value="{{ build_session.build_name or '' }}" placeholder="Name this build">
+            <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">Update Name</button>
+          </form>
+        </div>
+
+        <div class="commander-meta-divider d-none d-lg-block"></div>
+
+        <div class="commander-meta-block">
+          <div class="text-uppercase text-muted small fw-semibold">Deck Tag</div>
+          <form method="post" action="{{ url_for('views.build_session_tags', session_id=build_session.id) }}" class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="dropdown dv-select w-100" data-dv-select="build-session-tag" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
+              <input type="hidden" name="deck_tag" data-dv-select-input value="{{ tags[0] if tags else '' }}">
+              <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <span data-dv-select-label>{{ tags[0] if tags else "Select a Tag..." }}</span>
+              </button>
+              <ul class="dropdown-menu dv-select-menu">
+                <li class="px-2 pb-2">
+                  <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                </li>
+                <li>
+                  <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a Tag...">Select a Tag...</button>
+                </li>
+                {% for category, tag_list in tag_groups.items() %}
+                  <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
+                  {% for tag in tag_list %}
+                    <li>
+                      <button class="dropdown-item{% if tags and tags[0] == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
+                    </li>
+                  {% endfor %}
+                {% endfor %}
+              </ul>
             </div>
+          </form>
+          {% if tags %}
+            <div class="d-flex flex-wrap gap-1 mt-2">
+              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tags[0] }}</span>
+            </div>
+          {% else %}
+            <p class="text-muted small mt-2 mb-0">No tag selected yet.</p>
+          {% endif %}
+        </div>
+
+        <div class="commander-meta-divider d-none d-lg-block"></div>
+
+        <div class="commander-meta-block card-count-block align-items-center">
+          <div class="identity-body counts-body">
+            <div class="text-uppercase text-muted small fw-semibold">Card Counts</div>
+            <div class="fw-semibold card-count-total">{{ deck_metrics.total_cards }}</div>
+            <div class="small text-muted">Lands {{ deck_metrics.land_count }}</div>
+            <div class="small text-muted">Non-lands {{ deck_metrics.non_land_count }}</div>
           </div>
         </div>
       </div>
@@ -158,7 +160,7 @@
                   {% if section_key in ['high synergy cards', 'top cards'] %}
                     <form method="post"
                           action="{{ url_for('views.build_session_add_bulk', session_id=build_session.id) }}"
-                          class="d-flex justify-content-end mb-3">
+                          class="d-flex justify-content-start mb-3">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       {% for rec in section.cards %}
                         <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">

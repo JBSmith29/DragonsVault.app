@@ -260,10 +260,10 @@ select.form-select-sm option {
 }
 
 .build-commander-img {
-  width: 48px !important;
-  height: 64px !important;
+  width: 100%;
+  max-width: 180px;
+  height: auto;
   border-radius: 0.65rem;
-  object-fit: cover;
   image-rendering: auto;
 }
 
