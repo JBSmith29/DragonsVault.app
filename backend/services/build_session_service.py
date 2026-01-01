@@ -16,7 +16,7 @@ from models import BuildSession, BuildSessionCard, OracleCoreRoleTag
 from services import scryfall_cache as sc
 from services.build_recommendation_service import build_recommendation_sections
 from services.deck_tags import get_deck_tag_groups
-from services.edhrec_cache_service import get_commander_synergy
+from services.edhrec_cache_service import get_commander_category_groups, get_commander_synergy
 from services.edhrec.edhrec_ingestion_service import ingest_commander_tag_data
 from services.symbols_cache import colors_to_icons
 
@@ -686,12 +686,32 @@ def _edhrec_type_breakdown(
 ) -> list[tuple[str, int]]:
     if not commander_oracle_id:
         return []
-    recs = get_commander_synergy(
+    tag_label = None
+    if tags:
+        tag_label = (tags[0] or "").strip() or None
+    groups = get_commander_category_groups(
         commander_oracle_id,
-        tags,
-        prefer_tag_specific=True,
+        tag=tag_label,
         limit=None,
     )
+    if tag_label and not groups:
+        groups = get_commander_category_groups(commander_oracle_id, tag=None, limit=None)
+    recs = []
+    seen_cards: set[str] = set()
+    for group in groups or []:
+        for card in group.get("cards") or []:
+            oracle_id = (card.get("oracle_id") or "").strip()
+            if not oracle_id or oracle_id in seen_cards:
+                continue
+            seen_cards.add(oracle_id)
+            recs.append({"oracle_id": oracle_id})
+    if not recs:
+        recs = get_commander_synergy(
+            commander_oracle_id,
+            tags,
+            prefer_tag_specific=True,
+            limit=None,
+        )
     if not recs:
         return []
     commander_identity = _color_identity_set(commander_oracle_id)

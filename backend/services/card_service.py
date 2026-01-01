@@ -28,6 +28,7 @@ from services.deck_tags import (
     get_deck_tag_category,
     get_deck_tag_groups,
     is_valid_deck_tag,
+    sync_folder_deck_tag_map,
 )
 from services.deck_metadata_wizard_service import build_deck_metadata_wizard_payload
 from services.deck_service import deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
@@ -988,6 +989,7 @@ def _create_proxy_deck_from_lines(
         folder.name = final_name
         db.session.add(folder)
         db.session.flush()
+        sync_folder_deck_tag_map(folder)
         info_messages.append(f'Deck name in use. Created as "{final_name}".')
 
     aggregated: dict[tuple[str | None, str, str, str], dict] = {}

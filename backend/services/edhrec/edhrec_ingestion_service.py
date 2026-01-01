@@ -28,7 +28,7 @@ from models import (
 )
 from services import scryfall_cache as sc
 from services.commander_utils import primary_commander_name, primary_commander_oracle_id
-from services.deck_tags import is_valid_deck_tag, resolve_deck_tag_from_slug
+from services.deck_tags import ensure_deck_tag, normalize_tag_label, resolve_deck_tag_from_slug
 from services.edhrec_client import edhrec_index, edhrec_service_enabled, slugify_commander, slugify_theme
 
 _LOG = logging.getLogger(__name__)
@@ -161,10 +161,8 @@ def _normalize_deck_tag(value: str | None) -> str | None:
     candidate = resolve_deck_tag_from_slug(str(value))
     if candidate:
         return candidate
-    cleaned = (str(value) or "").strip()
-    if is_valid_deck_tag(cleaned):
-        return cleaned
-    return None
+    cleaned = normalize_tag_label(str(value))
+    return cleaned or None
 
 
 def _normalize_requested_tags(tags: Iterable[str] | None) -> list[str]:
@@ -178,7 +176,8 @@ def _normalize_requested_tags(tags: Iterable[str] | None) -> list[str]:
         if key in seen:
             continue
         seen.add(key)
-        normalized.append(candidate)
+        tag_row = ensure_deck_tag(candidate, source="user")
+        normalized.append(tag_row.name if tag_row else candidate)
     return normalized
 
 
@@ -609,9 +608,13 @@ def _normalize_tag_candidates(raw: dict) -> list[str]:
         label = entry.get("label") or entry.get("name")
         if not isinstance(slug, str) and not isinstance(label, str):
             continue
-        candidate = resolve_deck_tag_from_slug(str(slug or ""))
-        if not candidate and label:
-            candidate = resolve_deck_tag_from_slug(str(label))
+        candidate = None
+        if isinstance(slug, str) and slug.strip():
+            candidate = resolve_deck_tag_from_slug(slug)
+        if not candidate and isinstance(label, str) and label.strip():
+            candidate = resolve_deck_tag_from_slug(label)
+        if not candidate:
+            candidate = normalize_tag_label(label or slug or "")
         if candidate:
             tags.append(candidate)
     deduped: list[str] = []
@@ -623,6 +626,58 @@ def _normalize_tag_candidates(raw: dict) -> list[str]:
         seen.add(key)
         deduped.append(tag)
     return deduped
+
+
+def _upsert_edhrec_tags(tags: Iterable[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in tags or []:
+        cleaned = normalize_tag_label(tag)
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tag_row = ensure_deck_tag(cleaned, source="edhrec")
+        normalized.append(tag_row.name if tag_row else cleaned)
+    return normalized
+
+
+def _upsert_index_theme_tags() -> int:
+    if not edhrec_service_enabled():
+        return 0
+    try:
+        index = edhrec_index(include_commanders=False, include_themes=True)
+    except Exception as exc:
+        _LOG.warning("EDHREC index theme lookup failed: %s", exc)
+        return 0
+    themes = index.get("themes") or []
+    seen: set[str] = set()
+    inserted = 0
+    for entry in themes:
+        if isinstance(entry, dict):
+            name = entry.get("name") or entry.get("label")
+        else:
+            name = entry
+        cleaned = normalize_tag_label(name or "")
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tag_row = ensure_deck_tag(cleaned, source="edhrec")
+        if tag_row and tag_row.id is None:
+            inserted += 1
+    if inserted:
+        try:
+            db.session.commit()
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            _LOG.warning("EDHREC index theme upsert failed: %s", exc)
+            return 0
+    return inserted
 
 
 def _merge_tags(primary: Iterable[str], secondary: Iterable[str]) -> list[str]:
@@ -757,6 +812,16 @@ def run_monthly_edhrec_ingestion(
     """
     _ensure_schema()
     scope_key = (scope or "all").strip().lower()
+    index_tags_inserted = _upsert_index_theme_tags()
+    if scope_key in {"themes", "tags", "index"}:
+        return {
+            "commanders_processed": 0,
+            "cards_inserted": 0,
+            "tags_inserted": 0,
+            "tag_cards_inserted": 0,
+            "index_tags_inserted": index_tags_inserted,
+            "errors": 0,
+        }
     tag_map: dict[str, set[str]] = {}
     retry_missing = False
     if scope_key in {"delta", "active", "deck", "current"}:
@@ -785,6 +850,7 @@ def run_monthly_edhrec_ingestion(
             "cards_inserted": 0,
             "tags_inserted": 0,
             "errors": 1,
+            "index_tags_inserted": index_tags_inserted,
         }
 
     existing_ids: set[str] = set()
@@ -943,7 +1009,7 @@ def run_monthly_edhrec_ingestion(
             synergy_rows = _map_synergy_cards(views)
             cardlists = _extract_cardlists(payload)
             category_rows = _map_category_cards(cardlists)
-            tags = _normalize_tag_candidates(raw_json)
+            tags = _upsert_edhrec_tags(_normalize_tag_candidates(raw_json))
 
         top_tags: list[str] = []
         if needs_top_tags and tags:
@@ -1102,6 +1168,7 @@ def run_monthly_edhrec_ingestion(
         "cards_inserted": cards_inserted,
         "tags_inserted": tags_inserted,
         "tag_cards_inserted": tag_cards_inserted,
+        "index_tags_inserted": index_tags_inserted,
         "errors": errors,
     }
 
@@ -1195,7 +1262,7 @@ def ingest_commander_tag_data(
     synergy_rows = _map_synergy_cards(views)
     cardlists = _extract_cardlists(payload)
     category_rows = _map_category_cards(cardlists)
-    edhrec_tags = _normalize_tag_candidates(raw_json)
+    edhrec_tags = _upsert_edhrec_tags(_normalize_tag_candidates(raw_json))
 
     tag_card_rows: dict[str, list[dict]] = {}
     tag_category_rows: dict[str, list[dict]] = {}

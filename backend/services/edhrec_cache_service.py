@@ -24,7 +24,7 @@ from models import (
 )
 from services import scryfall_cache as sc
 from services.commander_utils import primary_commander_name, primary_commander_oracle_id
-from services.deck_tags import resolve_deck_tag_from_slug
+from services.deck_tags import ensure_deck_tag, normalize_tag_label, resolve_deck_tag_from_slug
 from services.edhrec_client import (
     commander_cardviews,
     edhrec_index,
@@ -258,6 +258,30 @@ def _extract_commander_tags(payload: dict) -> list[str]:
     return [entry["tag"] for entry in _extract_commander_tag_entries(payload)]
 
 
+def _upsert_index_tags(tag_names: Iterable[str]) -> int:
+    inserted = 0
+    seen: set[str] = set()
+    for tag in tag_names or []:
+        cleaned = normalize_tag_label(tag)
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tag_row = ensure_deck_tag(cleaned, source="edhrec")
+        if tag_row and tag_row.id is None:
+            inserted += 1
+    if inserted:
+        try:
+            db.session.commit()
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            _LOG.warning("Failed to store EDHREC index tags: %s", exc)
+            return 0
+    return inserted
+
+
 def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> dict:
     _ensure_tables()
     if not edhrec_service_enabled():
@@ -280,6 +304,7 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
             _LOG.error("EDHREC refresh failed due to database error.", exc_info=True)
             return {"status": "error", "message": "Database error while collecting EDHREC targets."}
 
+    tag_inserted = _upsert_index_tags(targets.get("tags") or []) if scope_key == "all" else 0
     commander_targets = targets.get("commanders") or []
     if not commander_targets:
         message = (
@@ -288,7 +313,12 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
             else "No commander data found from EDHREC index."
         )
         _LOG.warning(message)
-        return {"status": "info", "message": message, "targets": targets}
+        return {
+            "status": "info",
+            "message": message,
+            "targets": targets,
+            "tags_inserted": tag_inserted,
+        }
 
     try:
         sc.ensure_cache_loaded()

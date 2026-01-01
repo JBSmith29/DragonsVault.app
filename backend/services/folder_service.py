@@ -31,7 +31,12 @@ from services.commander_utils import (
     split_commander_oracle_ids,
 )
 from services.symbols_cache import colors_to_icons, render_mana_html
-from services.deck_tags import get_deck_tag_category, get_deck_tag_groups, is_valid_deck_tag
+from services.deck_tags import (
+    clear_folder_deck_tags,
+    get_deck_tag_category,
+    get_deck_tag_groups,
+    set_folder_deck_tag,
+)
 from services.commander_brackets import (
     GAME_CHANGERS,
     BRACKET_REFERENCE,
@@ -1181,18 +1186,17 @@ def set_folder_tag(folder_id: int):
         flash(message, "danger")
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
-    if not is_valid_deck_tag(tag):
-        message = "Invalid tag selection."
+    tag_entry = set_folder_deck_tag(folder, tag, source="user", locked=True)
+    if not tag_entry:
+        message = "Unable to apply tag."
         if request.is_json:
             return jsonify({"ok": False, "error": message}), 400
         flash(message, "danger")
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
-    folder.deck_tag = tag
-
     _safe_commit()
 
-    category = get_deck_tag_category(tag)
+    category = get_deck_tag_category(tag_entry.name if tag_entry else tag)
     if request.is_json:
         return jsonify({"ok": True, "tag": tag, "category": category})
 
@@ -1210,7 +1214,7 @@ def clear_folder_tag(folder_id: int):
         flash(message, "warning")
         return redirect(url_for("views.folder_detail", folder_id=folder_id))
 
-    folder.deck_tag = None
+    clear_folder_deck_tags(folder)
     _safe_commit()
 
     if request.is_json:

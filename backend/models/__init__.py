@@ -20,6 +20,7 @@ from .wishlist import WishlistItem  # type: ignore F401
 from .user import User, AuditLog  # type: ignore F401
 from .site_request import SiteRequest  # type: ignore F401
 from .user_setting import UserSetting  # type: ignore F401
+from .deck_tag import DeckTag, DeckTagMap  # type: ignore F401
 from .edhrec_cache import (  # type: ignore F401
     EdhrecCommanderCard,
     EdhrecCommanderCategoryCard,
@@ -63,6 +64,8 @@ __all__ = [
     "AuditLog",
     "SiteRequest",
     "UserSetting",
+    "DeckTag",
+    "DeckTagMap",
     "EdhrecCommanderCard",
     "EdhrecCommanderCategoryCard",
     "EdhrecCommanderTag",

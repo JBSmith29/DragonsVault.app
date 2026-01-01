@@ -164,6 +164,17 @@
                 <form method="post" action="{{ url_for('views.admin_console') }}"
                       data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
                   <input type="hidden" name="action" value="refresh_edhrec">
+                  <input type="hidden" name="refresh_scope" value="themes">
+                  <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+                  <button class="btn btn-outline-secondary btn-sm" type="submit"
+                          data-confirm="Refresh the EDHREC theme list used for deck tags?"
+                          data-progress-label="Refreshing themes...">
+                    Refresh Themes
+                  </button>
+                </form>
+                <form method="post" action="{{ url_for('views.admin_console') }}"
+                      data-job-trigger data-job-scope="edhrec" data-job-dataset="synergy">
+                  <input type="hidden" name="action" value="refresh_edhrec">
                   <input type="hidden" name="refresh_scope" value="missing">
                   <input type="hidden" name="redirect_to" value="views.admin_data_operations">
                   <button class="btn btn-outline-secondary btn-sm" type="submit"

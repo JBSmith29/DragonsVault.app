@@ -1,16 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}build session{% endblock %}
+{% block title %}Build Session{% endblock %}
 
 {% block content %}
-<div class="container-fluid build-session">
+<div class="page-section build-session container-fluid">
+  <!-- Align header structure and spacing with folder_detail for consistent hierarchy. -->
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>
-      <h1 class="h2 mb-1">build session</h1>
-      <p class="text-muted mb-0">proxy-only workspace for {{ build_session.build_name or commander.name }}</p>
+      <h1 class="h3 mb-0">Build Session</h1>
+      <p class="text-muted mb-0">Proxy-only workspace for {{ build_session.build_name or commander.name }}</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ url_for('views.build_landing') }}">back to build-a-deck</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('views.build_landing') }}">Back to Build-A-Deck</a>
   </div>
+
+  <!-- Mirror folder_detail summary-row grid so stats always sit in three columns. -->
+  <style>
+    .build-session .summary-row{ --gap: 1rem; display:grid; gap:var(--gap); grid-template-columns: 1fr; }
+    @media (min-width:992px){ .build-session .summary-row{ grid-template-columns: repeat(3, 1fr); } }
+    .build-session .summary-row > div{ min-width:0; }
+  </style>
 
   <div class="row g-4">
     <div class="col-12">
@@ -19,8 +27,8 @@
           <div class="card border-0 shadow-sm build-panel h-100">
             <div class="card-body">
               <div class="d-flex align-items-center justify-content-between mb-3">
-                <h5 class="card-title mb-0">commander</h5>
-                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">proxy</span>
+                <h5 class="card-title mb-0">Commander</h5>
+                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">Proxy</span>
               </div>
               <div class="build-commander d-flex align-items-start gap-3 mb-4">
                 {% if commander.image %}
@@ -35,27 +43,27 @@
                 </div>
               </div>
 
-              <label class="form-label small text-muted">build name</label>
+              <label class="form-label small text-muted">Build Name</label>
               <form method="post" action="{{ url_for('views.build_session_name', session_id=build_session.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="text" class="form-control form-control-sm" name="build_name" value="{{ build_session.build_name or '' }}" placeholder="Name this build">
-                <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">update name</button>
+                <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">Update Name</button>
               </form>
 
-              <label class="form-label small text-muted">deck tag</label>
+              <label class="form-label small text-muted">Deck Tag</label>
               <form method="post" action="{{ url_for('views.build_session_tags', session_id=build_session.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="dropdown dv-select w-100" data-dv-select="build-session-tag" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
                   <input type="hidden" name="deck_tag" data-dv-select-input value="{{ tags[0] if tags else '' }}">
                   <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <span data-dv-select-label>{{ tags[0] if tags else "Select a tag..." }}</span>
+                    <span data-dv-select-label>{{ tags[0] if tags else "Select a Tag..." }}</span>
                   </button>
                   <ul class="dropdown-menu dv-select-menu">
                     <li class="px-2 pb-2">
                       <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
                     </li>
                     <li>
-                      <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a tag...">Select a tag...</button>
+                      <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a Tag...">Select a Tag...</button>
                     </li>
                     {% for category, tag_list in tag_groups.items() %}
                       <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
@@ -73,7 +81,7 @@
                   <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tags[0] }}</span>
                 </div>
               {% else %}
-                <p class="text-muted small mt-2 mb-0">no tag selected yet.</p>
+                <p class="text-muted small mt-2 mb-0">No tag selected yet.</p>
               {% endif %}
             </div>
           </div>
@@ -83,18 +91,18 @@
           <div class="card border-0 shadow-sm build-panel h-100">
             <div class="card-body">
               <div class="d-flex align-items-center justify-content-between mb-3">
-                <h5 class="card-title mb-0">deck counts</h5>
+                <h5 class="card-title mb-0">Deck Counts</h5>
               </div>
               <div class="build-metric-row">
-                <span>total cards</span>
+                <span>Total Cards</span>
                 <span class="fw-semibold">{{ deck_metrics.total_cards }}</span>
               </div>
               <div class="build-metric-row">
-                <span>lands</span>
+                <span>Lands</span>
                 <span class="fw-semibold">{{ deck_metrics.land_count }}</span>
               </div>
               <div class="build-metric-row">
-                <span>non-lands</span>
+                <span>Non-lands</span>
                 <span class="fw-semibold">{{ deck_metrics.non_land_count }}</span>
               </div>
             </div>
@@ -108,8 +116,8 @@
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div>
-              <h5 class="card-title mb-1">recommendations</h5>
-              <p class="text-muted small mb-0">cards are proxies until you commit the build.</p>
+              <h5 class="card-title mb-1">Recommendations</h5>
+              <p class="text-muted small mb-0">Cards are proxies until you commit the build.</p>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
               <form method="post" action="{{ url_for('views.build_session_edhrec', session_id=build_session.id) }}">
@@ -117,20 +125,20 @@
                 {% if tags %}
                   <input type="hidden" name="deck_tag" value="{{ tags[0] }}">
                 {% endif %}
-                <button class="btn btn-sm btn-outline-primary" type="submit">load edhrec data</button>
+                <button class="btn btn-sm btn-outline-primary" type="submit">Load EDHREC Data</button>
               </form>
               <form method="get" action="{{ url_for('views.build_session', session_id=build_session.id) }}">
                 <div class="dropdown dv-select" data-dv-select="build-sort" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
                   <input type="hidden" name="sort" data-dv-select-input value="{{ sort_mode }}">
                   <button class="btn dv-select-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                     <span data-dv-select-label>
-                      {% if sort_mode == 'role' %}Role fit{% elif sort_mode == 'need' %}Deck needs{% else %}Synergy{% endif %}
+                      {% if sort_mode == 'role' %}Role Fit{% elif sort_mode == 'need' %}Deck Needs{% else %}Synergy{% endif %}
                     </span>
                   </button>
                   <ul class="dropdown-menu dv-select-menu">
                     <li><button class="dropdown-item{% if sort_mode == 'synergy' %} active{% endif %}" type="button" data-dv-select-option data-value="synergy" data-label="Synergy">Synergy</button></li>
-                    <li><button class="dropdown-item{% if sort_mode == 'role' %} active{% endif %}" type="button" data-dv-select-option data-value="role" data-label="Role fit">Role fit</button></li>
-                    <li><button class="dropdown-item{% if sort_mode == 'need' %} active{% endif %}" type="button" data-dv-select-option data-value="need" data-label="Deck needs">Deck needs</button></li>
+                    <li><button class="dropdown-item{% if sort_mode == 'role' %} active{% endif %}" type="button" data-dv-select-option data-value="role" data-label="Role Fit">Role Fit</button></li>
+                    <li><button class="dropdown-item{% if sort_mode == 'need' %} active{% endif %}" type="button" data-dv-select-option data-value="need" data-label="Deck Needs">Deck Needs</button></li>
                   </ul>
                 </div>
               </form>
@@ -155,7 +163,7 @@
                       {% for rec in section.cards %}
                         <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
                       {% endfor %}
-                      <button class="btn btn-sm btn-outline-primary" type="submit">add all</button>
+                      <button class="btn btn-sm btn-outline-primary" type="submit">Add All</button>
                     </form>
                   {% endif %}
                   <div class="row g-3">
@@ -169,7 +177,7 @@
                           <div class="card-body">
                             <div class="build-rec-title">{{ rec.name }}</div>
                             {% if rec.synergy_percent is not none %}
-                              <div class="text-muted small">synergy {{ rec.synergy_percent }}%</div>
+                              <div class="text-muted small">Synergy {{ rec.synergy_percent }}%</div>
                             {% endif %}
                             {% if rec.reasons %}
                               <div class="d-flex flex-wrap gap-1 mt-2">
@@ -181,7 +189,7 @@
                             <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}" class="mt-3">
                               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                               <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
-                              <button class="btn btn-sm btn-outline-primary w-100" type="submit">add to build</button>
+                              <button class="btn btn-sm btn-outline-primary w-100" type="submit">Add to Build</button>
                             </form>
                           </div>
                         </div>
@@ -192,13 +200,14 @@
               {% endfor %}
             </div>
           {% else %}
-            <p class="text-muted mb-0">no recommendations available yet.</p>
+            <p class="text-muted mb-0">No recommendations available yet.</p>
           {% endif %}
         </div>
       </div>
     </div>
 
     <div class="col-12">
+      <!-- Mirror folder_detail stats row structure for consistent scan patterns. -->
       <div class="summary-row mb-3">
         <div>
           {% if deck_type_breakdown and deck_type_breakdown|length %}
@@ -284,17 +293,17 @@
       <div class="card border-0 shadow-sm build-panel">
         <div class="card-body">
           <div class="d-flex align-items-center justify-content-between mb-3">
-            <h5 class="card-title mb-0">current build</h5>
-            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">proxy</span>
+            <h5 class="card-title mb-0">Current Build</h5>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">Proxy</span>
           </div>
           {% if session_cards %}
             <div class="table-responsive">
               <table class="table cards-table align-middle">
                 <thead>
                   <tr>
-                    <th>card</th>
-                    <th class="text-center">qty</th>
-                    <th class="text-end">actions</th>
+                    <th>Card</th>
+                    <th class="text-center">Qty</th>
+                    <th class="text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="buildSessionTable">
@@ -322,14 +331,14 @@
                                  min="1"
                                  step="1"
                                  style="width: 80px;">
-                          <button class="btn btn-sm btn-outline-secondary" type="submit">update</button>
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
                         </form>
                       </td>
                       <td class="text-end">
                         <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                           <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                          <button class="btn btn-sm btn-outline-danger" type="submit">remove</button>
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                         </form>
                       </td>
                     </tr>
@@ -338,7 +347,7 @@
               </table>
             </div>
           {% else %}
-            <p class="text-muted mb-0">no cards added yet.</p>
+            <p class="text-muted mb-0">No cards added yet.</p>
           {% endif %}
         </div>
       </div>
@@ -350,14 +359,14 @@
         type="button"
         data-bs-toggle="modal"
         data-bs-target="#buildTypeBreakdownModal">
-  type breakdown
+  Type Breakdown
 </button>
 
 <div class="modal fade" id="buildTypeBreakdownModal" tabindex="-1" aria-labelledby="buildTypeBreakdownLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="buildTypeBreakdownLabel">deck type breakdown</h5>
+        <h5 class="modal-title" id="buildTypeBreakdownLabel">Deck Type Breakdown</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="close"></button>
       </div>
       <div class="modal-body">
@@ -373,7 +382,7 @@
         } %}
         <div class="row g-4">
           <div class="col-12 col-lg-6">
-            <h6 class="text-uppercase text-muted fw-semibold small mb-2">build distribution</h6>
+            <h6 class="text-uppercase text-muted fw-semibold small mb-2">Build Distribution</h6>
             <div class="card bg-body-secondary border-0">
               <div class="card-body">
                 {% set total = deck_type_breakdown | sum(attribute=1) %}
@@ -392,13 +401,13 @@
                   {% endfor %}
                 </div>
                 {% if not total %}
-                  <div class="text-muted small mt-2">no cards in the build yet.</div>
+                  <div class="text-muted small mt-2">No cards in the build yet.</div>
                 {% endif %}
               </div>
             </div>
           </div>
           <div class="col-12 col-lg-6">
-            <h6 class="text-uppercase text-muted fw-semibold small mb-2">edhrec distribution</h6>
+            <h6 class="text-uppercase text-muted fw-semibold small mb-2">EDHREC Distribution</h6>
             <div class="card bg-body-secondary border-0">
               <div class="card-body">
                 {% set total = edhrec_type_breakdown | sum(attribute=1) %}
@@ -417,9 +426,9 @@
                   {% endfor %}
                 </div>
                 {% if not total %}
-                  <div class="text-muted small mt-2">edhrec data not loaded yet.</div>
+                  <div class="text-muted small mt-2">EDHREC data not loaded yet.</div>
                 {% elif tags %}
-                  <div class="text-muted small mt-2">edhrec snapshot for {{ tags[0] }}.</div>
+                  <div class="text-muted small mt-2">EDHREC snapshot for {{ tags[0] }}.</div>
                 {% endif %}
               </div>
             </div>

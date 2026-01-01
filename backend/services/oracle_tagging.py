@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 from typing import Iterable, Pattern, Sequence, Set
 
-from services.deck_tags import ALL_DECK_TAGS, VALID_DECK_TAGS, TAG_CATEGORY_MAP, DECK_TAG_GROUPS
+from services.deck_tags import get_deck_tag_category, get_deck_tag_groups, get_deck_tag_name_set
 
 
 _EVERGREEN_TAGS_PATH = Path(__file__).resolve().parents[1] / "evergreen" / "evergreen_tags_v1.json"
@@ -222,8 +222,9 @@ def _singularize(word: str) -> str:
     return lowered
 
 
+@lru_cache(maxsize=1)
 def _build_tribal_lookup() -> dict[str, str]:
-    tribe_tags = DECK_TAG_GROUPS.get("Tribal Themes", [])
+    tribe_tags = get_deck_tag_groups().get("Tribal Themes", [])
     lookup: dict[str, str] = {}
     for tag in tribe_tags:
         key = tag.lower()
@@ -233,9 +234,6 @@ def _build_tribal_lookup() -> dict[str, str]:
             singular = " ".join(parts[:-1] + [_singularize(parts[-1])])
             lookup.setdefault(singular, tag)
     return lookup
-
-
-TRIBAL_LOOKUP = _build_tribal_lookup()
 
 
 @dataclass(frozen=True)
@@ -414,8 +412,10 @@ def derive_deck_tags(
 
     tags: Set[str] = set()
 
+    canonical_tags = get_deck_tag_name_set()
+
     # Direct keyword matches (e.g., "Landfall", "Prowess").
-    for tag in ALL_DECK_TAGS:
+    for tag in canonical_tags:
         if tag.lower() in kw_set:
             tags.add(tag)
 
@@ -423,7 +423,7 @@ def derive_deck_tags(
     for typal in typals or []:
         if not isinstance(typal, str):
             continue
-        match = TRIBAL_LOOKUP.get(typal.strip().lower())
+        match = _build_tribal_lookup().get(typal.strip().lower())
         if match:
             tags.add(match)
 
@@ -448,19 +448,19 @@ def derive_deck_tags(
             tags.add(mapped)
 
     # Ensure only canonical tags survive.
-    tags = {tag for tag in tags if tag in VALID_DECK_TAGS}
+    tags = {tag for tag in tags if tag in canonical_tags}
     return tags
 
 
 def deck_tag_category(tag: str) -> str | None:
     """Return the category for a deck tag when known."""
-    return TAG_CATEGORY_MAP.get(tag)
+    return get_deck_tag_category(tag)
 
 
 def ensure_fallback_tag(deck_tags: Set[str], evergreen: Set[str], *, fallback_tag: str = "Good Stuff") -> Set[str]:
     """Ensure at least one deck tag or evergreen keyword is present."""
     if deck_tags or evergreen:
         return set(deck_tags)
-    if fallback_tag in VALID_DECK_TAGS:
+    if fallback_tag in get_deck_tag_name_set():
         return {fallback_tag}
     return set(deck_tags)

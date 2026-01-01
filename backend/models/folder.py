@@ -88,6 +88,12 @@ class Folder(db.Model):
         passive_deletes=True,
         uselist=False,
     )
+    deck_tag_entries = db.relationship(
+        "DeckTagMap",
+        back_populates="folder",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     @property
     def role_names(self) -> set[str]:
