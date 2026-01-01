@@ -67,15 +67,23 @@
       originalParent: menu.parentNode,
       nextSibling: menu.nextSibling,
       styles: {},
+      onScroll: null,
+      onResize: null,
     };
     portalState.set(wrapper, snapshot);
 
-    wrapper.addEventListener("shown.bs.dropdown", () => {
+    const positionMenu = () => {
+      const rect = toggle.getBoundingClientRect();
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 6}px`;
+      menu.style.width = `${rect.width}px`;
+    };
+
+    const showMenu = () => {
       const data = portalState.get(wrapper);
       if (!data) {
         return;
       }
-      const rect = toggle.getBoundingClientRect();
       data.styles = {
         position: menu.style.position,
         left: menu.style.left,
@@ -86,17 +94,27 @@
       };
       document.body.appendChild(menu);
       menu.style.position = "fixed";
-      menu.style.left = `${rect.left}px`;
-      menu.style.top = `${rect.bottom + 6}px`;
-      menu.style.width = `${rect.width}px`;
       menu.style.transform = "none";
       menu.style.zIndex = "2147483000";
-    });
+      positionMenu();
+      data.onScroll = () => positionMenu();
+      data.onResize = () => positionMenu();
+      window.addEventListener("scroll", data.onScroll, true);
+      window.addEventListener("resize", data.onResize);
+    };
 
-    wrapper.addEventListener("hidden.bs.dropdown", () => {
+    const hideMenu = () => {
       const data = portalState.get(wrapper);
       if (!data) {
         return;
+      }
+      if (data.onScroll) {
+        window.removeEventListener("scroll", data.onScroll, true);
+        data.onScroll = null;
+      }
+      if (data.onResize) {
+        window.removeEventListener("resize", data.onResize);
+        data.onResize = null;
       }
       const parent = data.originalParent;
       if (parent) {
@@ -113,7 +131,26 @@
       menu.style.width = styles.width || "";
       menu.style.transform = styles.transform || "";
       menu.style.zIndex = styles.zIndex || "";
-    });
+    };
+
+    const handleShown = (event) => {
+      if (!wrapper.contains(event.target)) {
+        return;
+      }
+      showMenu();
+    };
+
+    const handleHidden = (event) => {
+      if (!wrapper.contains(event.target)) {
+        return;
+      }
+      hideMenu();
+    };
+
+    wrapper.addEventListener("shown.bs.dropdown", handleShown);
+    wrapper.addEventListener("hidden.bs.dropdown", handleHidden);
+    toggle.addEventListener("shown.bs.dropdown", handleShown);
+    toggle.addEventListener("hidden.bs.dropdown", handleHidden);
 
     wrapper.dataset.dvSelectPortalReady = "true";
   }

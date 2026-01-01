@@ -1,64 +1,194 @@
 {% extends "base.html" %}
 
-{% block title %}Build Session{% endblock %}
+{% block title %}build session{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+<div class="container-fluid build-session">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>
       <h1 class="h2 mb-1">build session</h1>
-      <p class="text-muted mb-0">proxy-only workspace for {{ commander.name }}</p>
+      <p class="text-muted mb-0">proxy-only workspace for {{ build_session.build_name or commander.name }}</p>
     </div>
     <a class="btn btn-outline-secondary" href="{{ url_for('views.build_landing') }}">back to build-a-deck</a>
   </div>
 
-  <div class="row g-4 mb-4">
-    <div class="col-12 col-lg-4">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title mb-3">commander</h5>
-          {% if commander.image %}
-            <img src="{{ commander.image }}" class="img-fluid rounded mb-3" alt="{{ commander.name }}">
-          {% endif %}
-          <h6 class="mb-2">{{ commander.name }}</h6>
-          {% if tags %}
-            <div class="d-flex flex-wrap gap-1">
-              {% for tag in tags %}
-                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tag }}</span>
-              {% endfor %}
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="row g-3 build-summary-row">
+        <div class="col-12 col-lg-4">
+          <div class="card border-0 shadow-sm build-panel h-100">
+            <div class="card-body">
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <h5 class="card-title mb-0">commander</h5>
+                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">proxy</span>
+              </div>
+              <div class="build-commander d-flex align-items-start gap-3 mb-4">
+                {% if commander.image %}
+                  <img src="{{ commander.image }}" class="build-commander-img" alt="{{ commander.name }}">
+                {% endif %}
+                <div>
+                  <div class="fw-semibold">{{ commander.name }}</div>
+                  {% if commander.colors is defined %}
+                    {% set colors = commander.colors %}
+                    {% include "includes/_color_identity.html" %}
+                  {% endif %}
+                </div>
+              </div>
+
+              <label class="form-label small text-muted">build name</label>
+              <form method="post" action="{{ url_for('views.build_session_name', session_id=build_session.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" class="form-control form-control-sm" name="build_name" value="{{ build_session.build_name or '' }}" placeholder="Name this build">
+                <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">update name</button>
+              </form>
+
+              <label class="form-label small text-muted">deck tag</label>
+              <form method="post" action="{{ url_for('views.build_session_tags', session_id=build_session.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="dropdown dv-select w-100" data-dv-select="build-session-tag" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
+                  <input type="hidden" name="deck_tag" data-dv-select-input value="{{ tags[0] if tags else '' }}">
+                  <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-dv-select-label>{{ tags[0] if tags else "Select a tag..." }}</span>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu">
+                    <li class="px-2 pb-2">
+                      <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                    </li>
+                    <li>
+                      <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a tag...">Select a tag...</button>
+                    </li>
+                    {% for category, tag_list in tag_groups.items() %}
+                      <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
+                      {% for tag in tag_list %}
+                        <li>
+                          <button class="dropdown-item{% if tags and tags[0] == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
+                        </li>
+                      {% endfor %}
+                    {% endfor %}
+                  </ul>
+                </div>
+              </form>
+              {% if tags %}
+                <div class="d-flex flex-wrap gap-1 mt-2">
+                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tags[0] }}</span>
+                </div>
+              {% else %}
+                <p class="text-muted small mt-2 mb-0">no tag selected yet.</p>
+              {% endif %}
             </div>
-          {% else %}
-            <p class="text-muted small mb-0">no tags selected</p>
-          {% endif %}
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+          <div class="card border-0 shadow-sm build-panel h-100">
+            <div class="card-body">
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <h5 class="card-title mb-0">deck counts</h5>
+              </div>
+              <div class="build-metric-row">
+                <span>total cards</span>
+                <span class="fw-semibold">{{ deck_metrics.total_cards }}</span>
+              </div>
+              <div class="build-metric-row">
+                <span>lands</span>
+                <span class="fw-semibold">{{ deck_metrics.land_count }}</span>
+              </div>
+              <div class="build-metric-row">
+                <span>non-lands</span>
+                <span class="fw-semibold">{{ deck_metrics.non_land_count }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="col-12 col-lg-8">
-      <div class="card border-0 shadow-sm h-100">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm build-panel">
         <div class="card-body">
-          <h5 class="card-title mb-3">edhrec synergy recommendations</h5>
-          {% if recommendations %}
-            <div class="row g-3">
-              {% for rec in recommendations %}
-                <div class="col-6 col-md-4 col-xxl-3">
-                  <div class="card h-100 bg-body-tertiary border-0">
-                    {% if rec.image %}
-                      <img src="{{ rec.image }}" class="card-img-top" alt="{{ rec.name }}">
-                    {% endif %}
-                    <div class="card-body">
-                      <h6 class="card-title mb-1">{{ rec.name }}</h6>
-                      {% if rec.synergy_percent is not none %}
-                        <div class="text-muted small mb-2">synergy {{ rec.synergy_percent }}%</div>
-                      {% endif %}
-                      <form method="post" action="{{ url_for('views.build_session_add', session_id=session.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
-                        <button class="btn btn-sm btn-outline-primary w-100" type="submit">add to build</button>
-                      </form>
-                    </div>
-                  </div>
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+              <h5 class="card-title mb-1">recommendations</h5>
+              <p class="text-muted small mb-0">cards are proxies until you commit the build.</p>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <form method="post" action="{{ url_for('views.build_session_edhrec', session_id=build_session.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if tags %}
+                  <input type="hidden" name="deck_tag" value="{{ tags[0] }}">
+                {% endif %}
+                <button class="btn btn-sm btn-outline-primary" type="submit">load edhrec data</button>
+              </form>
+              <form method="get" action="{{ url_for('views.build_session', session_id=build_session.id) }}">
+                <div class="dropdown dv-select" data-dv-select="build-sort" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
+                  <input type="hidden" name="sort" data-dv-select-input value="{{ sort_mode }}">
+                  <button class="btn dv-select-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-dv-select-label>
+                      {% if sort_mode == 'role' %}Role fit{% elif sort_mode == 'need' %}Deck needs{% else %}Synergy{% endif %}
+                    </span>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu">
+                    <li><button class="dropdown-item{% if sort_mode == 'synergy' %} active{% endif %}" type="button" data-dv-select-option data-value="synergy" data-label="Synergy">Synergy</button></li>
+                    <li><button class="dropdown-item{% if sort_mode == 'role' %} active{% endif %}" type="button" data-dv-select-option data-value="role" data-label="Role fit">Role fit</button></li>
+                    <li><button class="dropdown-item{% if sort_mode == 'need' %} active{% endif %}" type="button" data-dv-select-option data-value="need" data-label="Deck needs">Deck needs</button></li>
+                  </ul>
                 </div>
+              </form>
+            </div>
+          </div>
+
+          {% if recommendations %}
+            <div class="build-rec-list">
+              {% for section in recommendations %}
+                <details class="build-rec-section"{% if section.default_open %} open{% endif %}>
+                  <summary class="build-rec-summary">
+                    <span class="fw-semibold">{{ section.label }}</span>
+                    <span class="text-muted small">{{ section.count }} cards</span>
+                  </summary>
+                  <p class="text-muted small mb-3">{{ section.description }}</p>
+                  {% set section_key = (section.label or '')|lower %}
+                  {% if section_key in ['high synergy cards', 'top cards'] %}
+                    <form method="post"
+                          action="{{ url_for('views.build_session_add_bulk', session_id=build_session.id) }}"
+                          class="d-flex justify-content-end mb-3">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      {% for rec in section.cards %}
+                        <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                      {% endfor %}
+                      <button class="btn btn-sm btn-outline-primary" type="submit">add all</button>
+                    </form>
+                  {% endif %}
+                  <div class="row g-3">
+                    {% for rec in section.cards %}
+                      <div class="col-6 col-md-4 col-xxl-3">
+                        <div class="card h-100 build-rec-card">
+                          <span class="build-proxy-badge">proxy</span>
+                          {% if rec.image %}
+                            <img src="{{ rec.image }}" class="card-img-top build-card-img" alt="{{ rec.name }}">
+                          {% endif %}
+                          <div class="card-body">
+                            <div class="build-rec-title">{{ rec.name }}</div>
+                            {% if rec.synergy_percent is not none %}
+                              <div class="text-muted small">synergy {{ rec.synergy_percent }}%</div>
+                            {% endif %}
+                            {% if rec.reasons %}
+                              <div class="d-flex flex-wrap gap-1 mt-2">
+                                {% for reason in rec.reasons %}
+                                  <span class="badge rounded-pill bg-info-subtle text-info-emphasis">{{ reason }}</span>
+                                {% endfor %}
+                              </div>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}" class="mt-3">
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                              <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                              <button class="btn btn-sm btn-outline-primary w-100" type="submit">add to build</button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </details>
               {% endfor %}
             </div>
           {% else %}
@@ -67,49 +197,338 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="card border-0 shadow-sm">
-    <div class="card-body">
-      <h5 class="card-title mb-3">current build</h5>
-      {% if session_cards %}
-        <div class="table-responsive">
-          <table class="table cards-table align-middle">
-            <thead>
-              <tr>
-                <th>card</th>
-                <th class="text-center">qty</th>
-                <th class="text-end">actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for card in session_cards %}
-                <tr>
-                  <td>
-                    <div class="d-flex align-items-center gap-3">
-                      {% if card.image %}
-                        <img src="{{ card.image }}" alt="{{ card.name }}" style="width: 48px;" class="rounded">
-                      {% endif %}
-                      <span>{{ card.name }}</span>
-                    </div>
-                  </td>
-                  <td class="text-center">{{ card.quantity }}</td>
-                  <td class="text-end">
-                    <form method="post" action="{{ url_for('views.build_session_remove', session_id=session.id) }}">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                      <button class="btn btn-sm btn-outline-danger" type="submit">remove</button>
-                    </form>
-                  </td>
-                </tr>
+    <div class="col-12">
+      <div class="summary-row mb-3">
+        <div>
+          {% if deck_type_breakdown and deck_type_breakdown|length %}
+            <div class="section-title">Type Breakdown</div>
+            <div class="d-flex flex-wrap justify-content-center gap-2 type-pill-group">
+              {% for t, n in deck_type_breakdown %}
+                <button type="button"
+                        class="pill type-pill"
+                        data-type="{{ t|lower }}"
+                        data-type-label="{{ t }}"
+                        aria-pressed="false">
+                  {{ t }} <span class="ms-1 badge text-bg-light">{{ n }}</span>
+                </button>
               {% endfor %}
-            </tbody>
-          </table>
+            </div>
+            <div id="typeFilterHint" class="small text-muted text-center mt-2 d-none">
+              Filtering by <strong data-type-name></strong>.
+              <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="typeFilterClear">Clear</button>
+            </div>
+          {% endif %}
         </div>
-      {% else %}
-        <p class="text-muted mb-0">no cards added yet.</p>
-      {% endif %}
+
+        <div class="summary-center">
+          {% if mana_pip_dist and mana_pip_dist|length %}
+            <div class="section-title">Color Distribution (from mana costs)</div>
+            <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
+              {% for c, pip, n in mana_pip_dist %}
+                <span class="pill d-inline-flex align-items-center">
+                  {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+                  <span class="fw-semibold">{{ n }}</span>
+                </span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if land_mana_sources and land_mana_sources|length %}
+            <div class="section-title">Mana Sources</div>
+            <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
+              {% for c, pip, n in land_mana_sources %}
+                <span class="pill d-inline-flex align-items-center">
+                  {% if pip %}
+                    <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
+                  {% elif c in ['C', 'Colorless'] %}
+                    <img src="{{ url_for('static', filename='symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+                  {% else %}
+                    <span class="me-1">{{ c }}</span>
+                  {% endif %}
+                  <span class="fw-semibold">{{ n }}</span>
+                </span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+
+        <div>
+          {% if deck_metrics.curve_rows and deck_metrics.curve_rows|length %}
+            <div class="section-title">Mana Curve</div>
+            <div class="curve-grid">
+              {% for row in deck_metrics.curve_rows %}
+                <div class="curve-col" title="{{ row.count }} cards at {{ row.label }} CMC">
+                  <button type="button"
+                          class="curve-bar-btn"
+                          data-cmc-bucket="{{ row.label }}"
+                          data-cmc-label="{{ row.label }}"
+                          aria-pressed="false">
+                    <div class="curve-bar">
+                      <div class="fill" style="height: {{ row.pct }}%;"></div>
+                      <div class="curve-count">{{ row.count }}</div>
+                    </div>
+                    <div class="curve-label">{{ row.label }}</div>
+                  </button>
+                </div>
+              {% endfor %}
+            </div>
+            <div id="cmcFilterHint" class="small text-muted text-center mt-2 d-none">
+              Filtering by CMC <strong data-cmc-label></strong>.
+              <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="cmcFilterClear">Clear</button>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm build-panel">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h5 class="card-title mb-0">current build</h5>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">proxy</span>
+          </div>
+          {% if session_cards %}
+            <div class="table-responsive">
+              <table class="table cards-table align-middle">
+                <thead>
+                  <tr>
+                    <th>card</th>
+                    <th class="text-center">qty</th>
+                    <th class="text-end">actions</th>
+                  </tr>
+                </thead>
+                <tbody id="buildSessionTable">
+                  {% for card in session_cards %}
+                    <tr class="build-row"
+                        data-name="{{ card.name | e }}"
+                        data-type="{{ card.type_line | lower }}"
+                        data-cmc-bucket="{{ card.cmc_bucket }}">
+                      <td>
+                        <div class="d-flex align-items-center gap-2">
+                          {% if card.image %}
+                            <img src="{{ card.image }}" alt="{{ card.name }}" class="rounded" style="width: 44px;">
+                          {% endif %}
+                          <span>{{ card.name }}</span>
+                        </div>
+                      </td>
+                      <td class="text-center">
+                        <form method="post" action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}" class="d-inline-flex align-items-center gap-2">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                          <input type="number"
+                                 name="quantity"
+                                 class="form-control form-control-sm text-center"
+                                 value="{{ card.quantity }}"
+                                 min="1"
+                                 step="1"
+                                 style="width: 80px;">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">update</button>
+                        </form>
+                      </td>
+                      <td class="text-end">
+                        <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">remove</button>
+                        </form>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">no cards added yet.</p>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
 </div>
+
+<button class="btn btn-primary build-breakdown-fab"
+        type="button"
+        data-bs-toggle="modal"
+        data-bs-target="#buildTypeBreakdownModal">
+  type breakdown
+</button>
+
+<div class="modal fade" id="buildTypeBreakdownModal" tabindex="-1" aria-labelledby="buildTypeBreakdownLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="buildTypeBreakdownLabel">deck type breakdown</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="close"></button>
+      </div>
+      <div class="modal-body">
+        {% set TYPE_COLOR_FALLBACKS = {
+          'Artifact': '#94A3B8',
+          'Battle': '#F97316',
+          'Creature': '#198754',
+          'Enchantment': '#8B5CF6',
+          'Instant': '#0EA5E9',
+          'Land': '#8B5E3C',
+          'Planeswalker': '#EAB308',
+          'Sorcery': '#EF4444'
+        } %}
+        <div class="row g-4">
+          <div class="col-12 col-lg-6">
+            <h6 class="text-uppercase text-muted fw-semibold small mb-2">build distribution</h6>
+            <div class="card bg-body-secondary border-0">
+              <div class="card-body">
+                {% set total = deck_type_breakdown | sum(attribute=1) %}
+                <div class="d-flex flex-column gap-2">
+                  {% for t, n in deck_type_breakdown %}
+                    {% set pct = ((n * 100) / total) | round(0, 'floor') if total else 0 %}
+                    <div>
+                      <div class="d-flex justify-content-between small">
+                        <span>{{ t }}</span>
+                        <span>{{ n }} ({{ pct }}%)</span>
+                      </div>
+                      <div class="progress" style="height:6px;">
+                        <div class="progress-bar" style="width: {{ pct }}%; background-color: {{ TYPE_COLOR_FALLBACKS.get(t, '#0d6efd') }};"></div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if not total %}
+                  <div class="text-muted small mt-2">no cards in the build yet.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-6">
+            <h6 class="text-uppercase text-muted fw-semibold small mb-2">edhrec distribution</h6>
+            <div class="card bg-body-secondary border-0">
+              <div class="card-body">
+                {% set total = edhrec_type_breakdown | sum(attribute=1) %}
+                <div class="d-flex flex-column gap-2">
+                  {% for t, n in edhrec_type_breakdown %}
+                    {% set pct = ((n * 100) / total) | round(0, 'floor') if total else 0 %}
+                    <div>
+                      <div class="d-flex justify-content-between small">
+                        <span>{{ t }}</span>
+                        <span>{{ n }} ({{ pct }}%)</span>
+                      </div>
+                      <div class="progress" style="height:6px;">
+                        <div class="progress-bar" style="width: {{ pct }}%; background-color: {{ TYPE_COLOR_FALLBACKS.get(t, '#0d6efd') }};"></div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if not total %}
+                  <div class="text-muted small mt-2">edhrec data not loaded yet.</div>
+                {% elif tags %}
+                  <div class="text-muted small mt-2">edhrec snapshot for {{ tags[0] }}.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+<script>
+(() => {
+  const tableBody = document.getElementById('buildSessionTable');
+  if (!tableBody) return;
+  let rows = Array.from(tableBody.querySelectorAll('.build-row'));
+  const typePills = Array.from(document.querySelectorAll('.type-pill'));
+  const cmcButtons = Array.from(document.querySelectorAll('.curve-bar-btn'));
+  const typeHint = document.getElementById('typeFilterHint');
+  const typeHintLabel = typeHint ? typeHint.querySelector('[data-type-name]') : null;
+  const typeClearBtn = document.getElementById('typeFilterClear');
+  const cmcHint = document.getElementById('cmcFilterHint');
+  const cmcHintLabel = cmcHint ? cmcHint.querySelector('[data-cmc-label]') : null;
+  const cmcClearBtn = document.getElementById('cmcFilterClear');
+  let activeType = '';
+  let activeCmc = '';
+
+  function updateTypeUI() {
+    typePills.forEach(btn => {
+      const value = (btn.dataset.type || '').toLowerCase();
+      const isActive = activeType && activeType === value;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    if (typeHint) {
+      const show = !!activeType;
+      typeHint.classList.toggle('d-none', !show);
+      if (show && typeHintLabel) {
+        const pill = typePills.find(btn => (btn.dataset.type || '').toLowerCase() === activeType);
+        typeHintLabel.textContent = pill ? (pill.dataset.typeLabel || pill.textContent || activeType) : activeType;
+      }
+    }
+    applyFilters();
+  }
+
+  function updateCmcUI() {
+    cmcButtons.forEach(btn => {
+      const value = btn.dataset.cmcBucket || '';
+      const isActive = activeCmc && activeCmc === value;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    if (cmcHint) {
+      const show = !!activeCmc;
+      cmcHint.classList.toggle('d-none', !show);
+      if (show && cmcHintLabel) {
+        const btn = cmcButtons.find(el => (el.dataset.cmcBucket || '') === activeCmc);
+        cmcHintLabel.textContent = btn ? (btn.dataset.cmcLabel || btn.dataset.cmcBucket || activeCmc) : activeCmc;
+      }
+    }
+    applyFilters();
+  }
+
+  function applyFilters() {
+    rows = Array.from(tableBody.querySelectorAll('.build-row')).filter(r => r.isConnected);
+    rows.forEach(row => {
+      const types = (row.getAttribute('data-type') || '').toLowerCase();
+      const cmcBucket = row.getAttribute('data-cmc-bucket') || '';
+      const typeMatch = !activeType || types.includes(activeType);
+      const cmcMatch = !activeCmc || cmcBucket === activeCmc;
+      row.classList.toggle('d-none', !(typeMatch && cmcMatch));
+    });
+  }
+
+  if (typePills.length) {
+    typePills.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const value = (btn.dataset.type || '').toLowerCase();
+        activeType = activeType === value ? '' : value;
+        updateTypeUI();
+      });
+    });
+  }
+  if (typeClearBtn) {
+    typeClearBtn.addEventListener('click', () => {
+      activeType = '';
+      updateTypeUI();
+    });
+  }
+
+  if (cmcButtons.length) {
+    cmcButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const value = btn.dataset.cmcBucket || '';
+        activeCmc = activeCmc === value ? '' : value;
+        updateCmcUI();
+      });
+    });
+  }
+  if (cmcClearBtn) {
+    cmcClearBtn.addEventListener('click', () => {
+      activeCmc = '';
+      updateCmcUI();
+    });
+  }
+
+  applyFilters();
+})();
+</script>
 {% endblock %}

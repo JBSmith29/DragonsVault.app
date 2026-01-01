@@ -167,6 +167,21 @@ def _normalize_deck_tag(value: str | None) -> str | None:
     return None
 
 
+def _normalize_requested_tags(tags: Iterable[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in tags or []:
+        candidate = _normalize_deck_tag(tag)
+        if not candidate:
+            continue
+        key = candidate.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(candidate)
+    return normalized
+
+
 def _commander_target_from_oracle(
     oracle_id: str,
     commander_name: str | None,
@@ -1091,4 +1106,231 @@ def run_monthly_edhrec_ingestion(
     }
 
 
-__all__ = ["run_monthly_edhrec_ingestion"]
+def ingest_commander_tag_data(
+    commander_oracle_id: str,
+    commander_name: str | None,
+    tags: Iterable[str] | None,
+    *,
+    force_refresh: bool = True,
+) -> dict:
+    _ensure_schema()
+    oracle_id = (commander_oracle_id or "").strip()
+    if not oracle_id:
+        return {"status": "error", "message": "Commander is missing."}
+
+    cache_ready = False
+    try:
+        cache_ready = sc.ensure_cache_loaded()
+    except Exception as exc:
+        _LOG.warning("Scryfall cache unavailable for EDHREC fetch: %s", exc)
+
+    index_slugs = _load_edhrec_index_slugs() if _USE_INDEX_SLUGS else {}
+    target = _commander_target_from_oracle(
+        oracle_id,
+        commander_name,
+        index_slugs=index_slugs,
+        cache_ready=cache_ready,
+    )
+    if not target:
+        return {"status": "error", "message": "Commander not found in cache."}
+
+    requested_tags = _normalize_requested_tags(tags)
+    if not force_refresh:
+        commander_ready = (
+            EdhrecCommanderCategoryCard.query.filter_by(
+                commander_oracle_id=target.oracle_id
+            ).first()
+            is not None
+        )
+        tags_ready = True
+        for tag in requested_tags:
+            exists = (
+                EdhrecCommanderTagCategoryCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).first()
+                is not None
+            )
+            if not exists:
+                tags_ready = False
+                break
+        if commander_ready and tags_ready:
+            return {"status": "ok", "message": "EDHREC data already cached."}
+
+    slug_candidates = _slug_candidates_for_target(target)
+    if not slug_candidates:
+        return {"status": "error", "message": "Unable to derive EDHREC slug."}
+
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": "DragonsVault/6 (+https://dragonsvault.app)",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+    )
+
+    last_request_at = 0.0
+    payload = raw_json = None
+    slug_used = ""
+    fetch_error = None
+    for slug in slug_candidates:
+        last_request_at = _rate_limit(last_request_at)
+        url = f"https://edhrec.com/commanders/{slug}"
+        payload, raw_json, fetch_error = _fetch_commander_json(session, url)
+        if fetch_error == "Commander page not found.":
+            continue
+        if fetch_error:
+            break
+        slug_used = slug
+        break
+
+    if fetch_error and not slug_used:
+        _LOG.warning("EDHREC fetch failed for %s: %s", target.name, fetch_error)
+        return {"status": "error", "message": fetch_error}
+    if not payload or not raw_json:
+        _LOG.warning("EDHREC payload missing for %s", target.name)
+        return {"status": "error", "message": "EDHREC payload missing."}
+
+    views = _extract_cardviews(payload)
+    synergy_rows = _map_synergy_cards(views)
+    cardlists = _extract_cardlists(payload)
+    category_rows = _map_category_cards(cardlists)
+    edhrec_tags = _normalize_tag_candidates(raw_json)
+
+    tag_card_rows: dict[str, list[dict]] = {}
+    tag_category_rows: dict[str, list[dict]] = {}
+    tag_cards_added = 0
+    for tag in requested_tags:
+        tag_slug = slugify_theme(tag)
+        if not tag_slug:
+            continue
+        last_request_at = _rate_limit(last_request_at)
+        tag_base = slug_used or slug_candidates[0]
+        tag_url = f"https://edhrec.com/commanders/{tag_base}/{tag_slug}"
+        tag_payload, _, tag_error = _fetch_commander_json(session, tag_url)
+        if tag_error:
+            if tag_error == "Commander page not found.":
+                _LOG.info("EDHREC tag page not found for %s (%s).", target.name, tag)
+            else:
+                _LOG.warning("EDHREC tag fetch failed for %s (%s): %s", target.name, tag, tag_error)
+            continue
+        if not tag_payload:
+            _LOG.warning("EDHREC tag payload missing for %s (%s).", target.name, tag)
+            continue
+        tag_views = _extract_cardviews(tag_payload)
+        tag_rows = _map_synergy_cards(tag_views)
+        tag_cardlists = _extract_cardlists(tag_payload)
+        tag_category = _map_category_cards(tag_cardlists)
+        if tag_rows:
+            tag_card_rows[tag] = tag_rows
+            tag_cards_added += len(tag_rows)
+        if tag_category:
+            tag_category_rows[tag] = tag_category
+
+    try:
+        with db.session.no_autoflush:
+            EdhrecCommanderCard.query.filter_by(
+                commander_oracle_id=target.oracle_id
+            ).delete(synchronize_session=False)
+            if synergy_rows:
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            **row,
+                        }
+                        for row in synergy_rows
+                    ],
+                )
+
+            EdhrecCommanderCategoryCard.query.filter_by(
+                commander_oracle_id=target.oracle_id
+            ).delete(synchronize_session=False)
+            if category_rows:
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderCategoryCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            **row,
+                        }
+                        for row in category_rows
+                    ],
+                )
+
+            EdhrecCommanderTag.query.filter_by(
+                commander_oracle_id=target.oracle_id
+            ).delete(synchronize_session=False)
+            if edhrec_tags:
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTag,
+                    [
+                        {"commander_oracle_id": target.oracle_id, "tag": tag}
+                        for tag in edhrec_tags
+                    ],
+                )
+
+            for tag, rows in tag_card_rows.items():
+                EdhrecCommanderTagCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTagCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            "tag": tag,
+                            **row,
+                        }
+                        for row in rows
+                    ],
+                )
+            for tag, rows in tag_category_rows.items():
+                EdhrecCommanderTagCategoryCard.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTagCategoryCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            "tag": tag,
+                            **row,
+                        }
+                        for row in rows
+                    ],
+                )
+
+            EdhrecTagCommander.query.filter_by(
+                commander_oracle_id=target.oracle_id
+            ).delete(synchronize_session=False)
+            if edhrec_tags:
+                db.session.bulk_insert_mappings(
+                    EdhrecTagCommander,
+                    [
+                        {"tag": tag, "commander_oracle_id": target.oracle_id}
+                        for tag in edhrec_tags
+                    ],
+                )
+
+            _set_metadata("last_updated", _now_iso())
+            _set_metadata("source_version", _source_version_label())
+            db.session.commit()
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        _LOG.warning("EDHREC cache write failed for %s: %s", target.name, exc)
+        return {"status": "error", "message": "Database error while saving EDHREC data."}
+
+    return {
+        "status": "ok",
+        "message": f"EDHREC data refreshed for {target.name}.",
+        "cards_inserted": len(synergy_rows),
+        "tags_inserted": len(edhrec_tags),
+        "tag_cards_inserted": tag_cards_added,
+    }
+
+
+__all__ = ["run_monthly_edhrec_ingestion", "ingest_commander_tag_data"]

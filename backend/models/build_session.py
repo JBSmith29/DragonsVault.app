@@ -13,6 +13,7 @@ class BuildSession(db.Model):
     owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     commander_oracle_id = db.Column(db.String(64), nullable=True, index=True)
     commander_name = db.Column(db.String(200), nullable=True)
+    build_name = db.Column(db.String(200), nullable=True)
     tags_json = db.Column(db.JSON, nullable=True)
     status = db.Column(db.String(32), nullable=False, default="active", server_default="active")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)

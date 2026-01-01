@@ -50,6 +50,12 @@ def rename_proxy_deck(folder_id: int):
     return folder_service.rename_proxy_deck(folder_id)
 
 
+@views.post("/folders/<int:folder_id>/send-to-build")
+@login_required
+def send_to_build(folder_id: int):
+    return folder_service.send_to_build(folder_id)
+
+
 @views.get("/folders/<int:folder_id>/cards.json")
 @login_required
 def folder_cards_json(folder_id):
@@ -128,6 +134,7 @@ __all__ = [
     "folder_detail",
     "folder_sharing",
     "rename_proxy_deck",
+    "send_to_build",
     "set_commander",
     "set_folder_commander",
     "set_folder_owner",

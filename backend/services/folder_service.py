@@ -16,7 +16,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import load_only
 
 from extensions import cache, db
-from models import Card, Folder, FolderShare, User
+from models import BuildSession, BuildSessionCard, Card, Folder, FolderShare, User
 from services import scryfall_cache as sc
 from services.scryfall_cache import cache_epoch, cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
@@ -46,6 +46,7 @@ from services.commander_brackets import (
 from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from services.authz import ensure_folder_access
 from services.deck_service import deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
+from services.build_session_service import ensure_build_session_tables
 from utils.db import get_or_404
 from utils.validation import ValidationError, log_validation_error, parse_positive_int, parse_positive_int_list
 
@@ -1300,6 +1301,78 @@ def rename_proxy_deck(folder_id: int):
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
 
+def send_to_build(folder_id: int):
+    folder = get_or_404(Folder, folder_id)
+    ensure_folder_access(folder, write=True)
+    if folder.is_collection:
+        flash("Collection folders cannot be sent to Build-A-Deck.", "warning")
+        return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+    commander_oracle_id = primary_commander_oracle_id(folder.commander_oracle_id)
+    commander_name = primary_commander_name(folder.commander_name) or folder.commander_name
+    if not commander_oracle_id and commander_name:
+        try:
+            sc.ensure_cache_loaded()
+            commander_oracle_id = sc.unique_oracle_by_name(commander_name) or None
+        except Exception:
+            commander_oracle_id = None
+    if commander_oracle_id and not commander_name:
+        try:
+            prints = sc.prints_for_oracle(commander_oracle_id) or []
+        except Exception:
+            prints = []
+        if prints:
+            commander_name = (prints[0].get("name") or "").strip() or commander_name
+    if not commander_oracle_id and not commander_name:
+        flash("Set a commander before sending this deck to Build-A-Deck.", "warning")
+        return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+    ensure_build_session_tables()
+    tags = [folder.deck_tag] if folder.deck_tag else []
+    session = BuildSession(
+        owner_user_id=current_user.id,
+        commander_oracle_id=commander_oracle_id,
+        commander_name=commander_name,
+        build_name=folder.name,
+        tags_json=tags or None,
+    )
+    db.session.add(session)
+    db.session.flush()
+
+    rows = (
+        db.session.query(Card.oracle_id, func.coalesce(func.sum(Card.quantity), 0))
+        .filter(Card.folder_id == folder.id, Card.oracle_id.isnot(None))
+        .group_by(Card.oracle_id)
+        .all()
+    )
+    added = 0
+    for oracle_id, qty in rows:
+        if not oracle_id:
+            continue
+        qty = int(qty or 0)
+        if qty <= 0:
+            continue
+        db.session.add(
+            BuildSessionCard(
+                session_id=session.id,
+                card_oracle_id=str(oracle_id),
+                quantity=qty,
+            )
+        )
+        added += qty
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error("Failed to send deck to build session.", exc_info=True)
+        flash("Unable to send this deck to Build-A-Deck.", "danger")
+        return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+    flash(f"Build session created with {added} cards.", "success")
+    return redirect(url_for("views.build_session", session_id=session.id))
+
+
 def folder_cards_json(folder_id):
     folder = get_or_404(Folder, folder_id)
     ensure_folder_access(folder, write=False)
@@ -1624,6 +1697,7 @@ __all__ = [
     "set_folder_owner",
     "set_folder_proxy",
     "rename_proxy_deck",
+    "send_to_build",
     "set_commander",
     "set_folder_tag",
     "set_folder_commander",

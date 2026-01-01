@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Iterable
-
 from flask import render_template, request
 from flask_login import current_user
 from sqlalchemy import func
 
 from extensions import db
-from models import (
-    Card,
-    EdhrecCommanderCard,
-    EdhrecCommanderTag,
-    EdhrecCommanderTagCard,
-    Folder,
-    FolderRole,
-)
+from models import BuildSession, BuildSessionCard, Card, EdhrecCommanderTagCard, Folder, FolderRole
 from services import scryfall_cache as sc
 from services.deck_tags import get_deck_tag_groups
 from services.edhrec_cache_service import cache_ready
@@ -33,22 +24,24 @@ def build_landing_context(user_id: int | None, selected_tag: str | None) -> dict
     tag_groups = get_deck_tag_groups()
     edhrec_ready = cache_ready()
     collection_oracles = _collection_oracle_subquery(user_id) if user_id else None
-    recommended_commanders: list[dict] = []
     recommended_tags: list[dict] = []
     tag_commanders: list[dict] = []
+    current_builds: list[dict] = []
 
     if edhrec_ready and collection_oracles is not None:
-        recommended_commanders = _collection_commander_fits(collection_oracles)
         recommended_tags = _collection_tag_fits(collection_oracles)
         if selected_tag:
             tag_commanders = _collection_tag_commanders(collection_oracles, selected_tag)
 
+    if user_id:
+        current_builds = _current_builds(user_id)
+
     return {
         "edhrec_ready": edhrec_ready,
         "tag_groups": tag_groups,
-        "recommended_commanders": recommended_commanders,
         "recommended_tags": recommended_tags,
         "tag_commanders": tag_commanders,
+        "current_builds": current_builds,
         "selected_tag": selected_tag or "",
     }
 
@@ -66,34 +59,6 @@ def _collection_oracle_subquery(user_id: int):
         .distinct()
         .subquery()
     )
-
-
-def _collection_commander_fits(collection_oracles) -> list[dict]:
-    rows = (
-        db.session.query(
-            EdhrecCommanderCard.commander_oracle_id,
-            func.count(EdhrecCommanderCard.card_oracle_id).label("owned_count"),
-        )
-        .join(collection_oracles, EdhrecCommanderCard.card_oracle_id == collection_oracles.c.oracle_id)
-        .group_by(EdhrecCommanderCard.commander_oracle_id)
-        .order_by(func.count(EdhrecCommanderCard.card_oracle_id).desc())
-        .limit(12)
-        .all()
-    )
-    commander_ids = [row.commander_oracle_id for row in rows if row.commander_oracle_id]
-    tag_map = _commander_tag_map(commander_ids)
-
-    return [
-        {
-            "oracle_id": row.commander_oracle_id,
-            "name": _oracle_name(row.commander_oracle_id) or row.commander_oracle_id,
-            "image": _oracle_image(row.commander_oracle_id, size="small"),
-            "owned_count": int(row.owned_count or 0),
-            "tags": tag_map.get(row.commander_oracle_id, [])[:3],
-        }
-        for row in rows
-        if row.commander_oracle_id
-    ]
 
 
 def _collection_tag_fits(collection_oracles) -> list[dict]:
@@ -140,22 +105,6 @@ def _collection_tag_commanders(collection_oracles, tag: str) -> list[dict]:
     ]
 
 
-def _commander_tag_map(commander_ids: Iterable[str]) -> dict[str, list[str]]:
-    if not commander_ids:
-        return {}
-    rows = (
-        EdhrecCommanderTag.query.filter(EdhrecCommanderTag.commander_oracle_id.in_(commander_ids))
-        .order_by(EdhrecCommanderTag.tag.asc())
-        .all()
-    )
-    tag_map: dict[str, list[str]] = {}
-    for row in rows:
-        if not row.tag:
-            continue
-        tag_map.setdefault(row.commander_oracle_id, []).append(row.tag)
-    return tag_map
-
-
 def _oracle_name(oracle_id: str) -> str | None:
     if not oracle_id:
         return None
@@ -169,7 +118,7 @@ def _oracle_name(oracle_id: str) -> str | None:
     return (prints[0].get("name") or "").strip() or None
 
 
-def _oracle_image(oracle_id: str, *, size: str = "normal") -> str | None:
+def _oracle_image(oracle_id: str) -> str | None:
     if not oracle_id:
         return None
     try:
@@ -185,12 +134,82 @@ def _oracle_image(oracle_id: str, *, size: str = "normal") -> str | None:
         faces = pr.get("card_faces") or []
         if faces:
             image_uris = (faces[0] or {}).get("image_uris") or {}
-    preferred = (size or "normal").lower()
-    if preferred == "small":
-        return image_uris.get("small") or image_uris.get("normal") or image_uris.get("large")
-    if preferred == "large":
-        return image_uris.get("large") or image_uris.get("normal") or image_uris.get("small")
     return image_uris.get("normal") or image_uris.get("large") or image_uris.get("small")
+
+
+def _oracle_colors(oracle_id: str) -> list[str]:
+    if not oracle_id:
+        return []
+    try:
+        sc.ensure_cache_loaded()
+        prints = sc.prints_for_oracle(oracle_id) or []
+    except Exception:
+        return []
+    if not prints:
+        return []
+    pr = prints[0]
+    return pr.get("color_identity") or pr.get("colors") or []
+
+
+def _current_builds(user_id: int) -> list[dict]:
+    rows = (
+        db.session.query(
+            BuildSession.id,
+            BuildSession.commander_oracle_id,
+            BuildSession.commander_name,
+            BuildSession.build_name,
+            BuildSession.tags_json,
+            BuildSession.updated_at,
+            BuildSession.created_at,
+            func.coalesce(func.sum(BuildSessionCard.quantity), 0).label("card_count"),
+        )
+        .outerjoin(BuildSessionCard, BuildSessionCard.session_id == BuildSession.id)
+        .filter(BuildSession.owner_user_id == user_id, BuildSession.status == "active")
+        .group_by(BuildSession.id)
+        .order_by(BuildSession.updated_at.desc().nullslast(), BuildSession.created_at.desc())
+        .limit(12)
+        .all()
+    )
+    builds: list[dict] = []
+    for row in rows:
+        oracle_id = (row.commander_oracle_id or "").strip()
+        commander_name = (row.commander_name or "").strip() or _oracle_name(oracle_id) or "unknown commander"
+        updated = row.updated_at or row.created_at
+        updated_label = updated.strftime("%Y-%m-%d") if updated else ""
+        builds.append(
+            {
+                "id": row.id,
+                "build_name": (row.build_name or "").strip() or None,
+                "commander_name": commander_name,
+                "image": _oracle_image(oracle_id),
+                "colors": _oracle_colors(oracle_id),
+                "tags": _normalized_tags(row.tags_json),
+                "card_count": int(row.card_count or 0),
+                "updated_label": updated_label,
+            }
+        )
+    return builds
+
+
+def _normalized_tags(tags) -> list[str]:
+    if not tags:
+        return []
+    if isinstance(tags, str):
+        items = [tags]
+    else:
+        items = list(tags)
+    seen: set[str] = set()
+    output: list[str] = []
+    for tag in items:
+        label = (tag or "").strip()
+        if not label:
+            continue
+        key = label.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(label)
+    return output
 
 
 __all__ = ["build_landing_context", "build_landing_page"]

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Build-A-Deck{% endblock %}
+{% block title %}build-a-deck{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
-      <h1 class="h2 mb-1">Build-A-Deck</h1>
-      <p class="text-muted mb-0">Start from your idea or explore commanders and themes that fit your collection.</p>
+      <h1 class="h2 mb-1">build-a-deck</h1>
+      <p class="text-muted mb-0">choose a commander and optional theme to begin a proxy build session.</p>
     </div>
   </div>
 
@@ -17,12 +17,12 @@
     </div>
   {% endif %}
 
-  <div class="row g-4 mb-4 build-landing-top">
+  <div class="row g-4 build-landing-top">
     <div class="col-12 col-xl-6">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title mb-2">Start from what you want</h5>
-          <p class="text-muted small mb-3">Pick a commander and optional tag to begin a build session.</p>
+          <h5 class="card-title mb-2">start from what you want</h5>
+          <p class="text-muted small mb-3">themes adjust recommendations later. nothing is committed yet.</p>
 
           <form method="post" action="{{ url_for('views.build_start') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -33,24 +33,29 @@
             </div>
 
             <div class="mb-3">
+              <label class="form-label small text-muted">Build name (optional)</label>
+              <input type="text" class="form-control" name="build_name" placeholder="Enter build name" autocomplete="off">
+            </div>
+
+            <div class="mb-3">
               <label class="form-label small text-muted">Optional deck tag</label>
               <div class="dropdown dv-select w-100 build-landing-select" data-dv-select="build-tag" data-dv-select-portal="body" data-bs-auto-close="outside">
-                <input type="hidden" name="deck_tag" data-dv-select-input value="">
+                <input type="hidden" name="deck_tag" data-dv-select-input value="{{ selected_tag }}">
                 <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  <span data-dv-select-label>Select a tag...</span>
+                  <span data-dv-select-label>{{ selected_tag or "Select a tag..." }}</span>
                 </button>
-                <ul class="dropdown-menu dv-select-menu w-100">
+                <ul class="dropdown-menu dv-select-menu">
                   <li class="px-2 pb-2">
                     <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
                   </li>
                   <li>
-                    <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a tag...">Select a tag...</button>
+                    <button class="dropdown-item{% if not selected_tag %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a tag...">Select a tag...</button>
                   </li>
                   {% for category, tags in tag_groups.items() %}
                     <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
                     {% for tag in tags %}
                       <li>
-                        <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
+                        <button class="dropdown-item{% if selected_tag == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
                       </li>
                     {% endfor %}
                   {% endfor %}
@@ -58,7 +63,18 @@
               </div>
             </div>
 
-            <button class="btn btn-primary w-100" type="submit">start build</button>
+            {% if recommended_tags %}
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                {% for tag in recommended_tags %}
+                  <a class="badge rounded-pill bg-info-subtle text-info-emphasis text-decoration-none" href="{{ url_for('views.build_landing', tag=tag.tag) }}">
+                    {{ tag.tag }} · {{ tag.owned_count }}
+                  </a>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            <button class="btn btn-primary w-100" type="submit">begin exploration</button>
+            <p class="text-muted small mt-3 mb-0 build-proxy-note">this workspace uses proxy cards until you explicitly commit changes.</p>
           </form>
         </div>
       </div>
@@ -67,8 +83,8 @@
     <div class="col-12 col-xl-6">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title mb-2">Find a commander by deck tag</h5>
-          <p class="text-muted small mb-3">Select a tag to see commanders that fit cards you already own.</p>
+          <h5 class="card-title mb-2">find commanders by deck tag</h5>
+          <p class="text-muted small mb-3">filter a tag to see commanders that fit cards you already own.</p>
 
           <form method="get" action="{{ url_for('views.build_landing') }}" class="mb-3">
             <div class="dropdown dv-select w-100 build-landing-select" data-dv-select="build-tag-filter" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
@@ -76,7 +92,7 @@
               <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <span data-dv-select-label>{{ selected_tag or "Select a tag..." }}</span>
               </button>
-              <ul class="dropdown-menu dv-select-menu w-100">
+              <ul class="dropdown-menu dv-select-menu">
                 <li class="px-2 pb-2">
                   <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
                 </li>
@@ -95,18 +111,7 @@
             </div>
           </form>
 
-          {% if recommended_tags %}
-            <div class="d-flex flex-wrap gap-2 mb-3">
-              {% for tag in recommended_tags %}
-                <a class="badge rounded-pill bg-info-subtle text-info-emphasis text-decoration-none" href="{{ url_for('views.build_landing', tag=tag.tag) }}">
-                  {{ tag.tag }} · {{ tag.owned_count }}
-                </a>
-              {% endfor %}
-            </div>
-          {% endif %}
-
           {% if selected_tag %}
-            <h6 class="text-muted mb-3">commanders with {{ selected_tag }} support in your collection</h6>
             {% if tag_commanders %}
               <div class="row g-3">
                 {% for rec in tag_commanders %}
@@ -132,53 +137,246 @@
             {% else %}
               <p class="text-muted mb-0">no commanders found for this tag in your collection.</p>
             {% endif %}
+          {% else %}
+            <p class="text-muted mb-0">select a tag to see collection-based commander fits.</p>
           {% endif %}
         </div>
       </div>
     </div>
   </div>
 
-  <div class="card border-0 shadow-sm build-landing-good-fits">
+  <div class="card border-0 shadow-sm mt-4">
     <div class="card-body">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div>
-          <h5 class="card-title mb-1">good fits based on your collection</h5>
-          <p class="text-muted small mb-0">commanders you can build well with cards you already have.</p>
+          <h5 class="card-title mb-1">current builds</h5>
+          <p class="text-muted small mb-0">resume active proxy builds and continue refining.</p>
         </div>
       </div>
-
-      {% if recommended_commanders %}
-        <div class="row g-3">
-          {% for rec in recommended_commanders %}
-            <div class="col-12 col-md-6 col-xxl-4">
-              <div class="card h-100 bg-body-tertiary border-0">
-                {% if rec.image %}
-                  <img src="{{ rec.image }}" class="card-img-top build-landing-commander-img build-landing-fit-img" alt="{{ rec.name }}">
-                {% endif %}
-                <div class="card-body">
-                  <h6 class="card-title mb-1">{{ rec.name }}</h6>
-                  <p class="text-muted small mb-2">you own {{ rec.owned_count }} high-synergy cards</p>
-                  {% if rec.tags %}
-                    <div class="d-flex flex-wrap gap-1 mb-3">
-                      {% for tag in rec.tags %}
-                        <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tag }}</span>
-                      {% endfor %}
+      {% if current_builds %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle cards-table">
+            <thead>
+              <tr>
+                <th>deck</th>
+                <th>deck tag</th>
+                <th>owner</th>
+                <th>color identity</th>
+                <th class="col-ci-pips">pips</th>
+                <th class="text-start">bracket</th>
+                <th class="text-end">qty</th>
+                <th class="text-end">actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for build in current_builds %}
+                <tr class="deck-row build-row"
+                    data-build-id="{{ build.id }}"
+                    data-build-name="{{ (build.build_name or build.commander_name)|e }}"
+                    data-commander-name="{{ build.commander_name|e }}"
+                    data-build-tags="{{ build.tags|join(', ')|e }}"
+                    data-card-count="{{ build.card_count }}"
+                    data-updated="{{ build.updated_label|e }}"
+                    data-image="{{ build.image or '' }}"
+                    data-colors="{{ build.colors|join(',') }}">
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      {% if build.image %}
+                        <img src="{{ build.image }}" class="build-session-thumb" alt="{{ build.commander_name }}">
+                      {% else %}
+                        <div class="build-session-thumb build-session-thumb-placeholder">?</div>
+                      {% endif %}
+                      <div>
+                        <div class="fw-semibold">{{ build.build_name or build.commander_name }}</div>
+                        <div class="text-muted small">commander: {{ build.commander_name }}</div>
+                      </div>
                     </div>
-                  {% endif %}
-                  <form method="post" action="{{ url_for('views.build_start') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="commander_oracle_id" value="{{ rec.oracle_id }}">
-                    <button class="btn btn-sm btn-outline-primary w-100" type="submit">build this commander</button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          {% endfor %}
+                  </td>
+                  <td>
+                    {% if build.tags %}
+                      <div class="d-flex flex-wrap gap-1">
+                        {% for tag in build.tags %}
+                          <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tag }}</span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span class="text-muted small">none</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="text-muted small">{{ current_user.display_name or current_user.username or 'you' }}</span>
+                  </td>
+                  <td>
+                    {% if build.colors %}
+                      {% set colors = build.colors %}
+                      {% include "includes/_color_identity.html" %}
+                    {% else %}
+                      <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="col-ci-pips text-muted small">—</td>
+                  <td class="text-start text-muted small">—</td>
+                  <td class="text-end">{{ build.card_count }}</td>
+                  <td class="text-end">
+                    <div class="d-inline-flex gap-2">
+                      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('views.build_session', session_id=build.id) }}">resume</a>
+                      <form method="post" action="{{ url_for('views.build_session_delete', session_id=build.id) }}" onsubmit="return confirm('Delete this build session? This cannot be undone.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">delete</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       {% else %}
-        <p class="text-muted mb-0">no collection-based recommendations yet. import cards to see suggestions here.</p>
+        <p class="text-muted mb-0">no active builds yet.</p>
       {% endif %}
     </div>
   </div>
+
+  <div class="offcanvas offcanvas-end w-500"
+       tabindex="-1"
+       id="buildDrawer"
+       aria-labelledby="buildDrawerLabel"
+       data-bs-backdrop="false"
+       data-bs-scroll="true">
+    <div class="offcanvas-header">
+      <h5 class="offcanvas-title" id="buildDrawerLabel">build details</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" id="buildDrawerBody"></div>
+  </div>
 </div>
+
+<script>
+(function(){
+  const drawerEl = document.getElementById('buildDrawer');
+  const bodyEl = document.getElementById('buildDrawerBody');
+  if (!drawerEl || !bodyEl || typeof bootstrap === 'undefined') return;
+  const instance = new bootstrap.Offcanvas(drawerEl, { backdrop: false, scroll: true });
+
+  function renderBuild(row) {
+    const buildName = row.dataset.buildName || 'build';
+    const commander = row.dataset.commanderName || '';
+    const tags = (row.dataset.buildTags || '').split(',').map(t => t.trim()).filter(Boolean);
+    const cardCount = row.dataset.cardCount || '0';
+    const updated = row.dataset.updated || '';
+    const colors = (row.dataset.colors || '').split(',').map(c => c.trim()).filter(Boolean);
+    const image = row.dataset.image || '';
+    const buildId = row.dataset.buildId;
+
+    bodyEl.innerHTML = '';
+    const topSection = document.createElement('div');
+    topSection.className = 'deck-drawer-section';
+    const headerRow = document.createElement('div');
+    headerRow.className = 'd-flex align-items-center gap-3';
+
+    if (image) {
+      const img = document.createElement('img');
+      img.src = image;
+      img.alt = commander || 'Commander';
+      img.style.width = '72px';
+      img.style.height = 'auto';
+      img.className = 'rounded';
+      headerRow.appendChild(img);
+    }
+
+    const meta = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'fw-semibold fs-5';
+    title.textContent = buildName;
+    meta.appendChild(title);
+    if (commander) {
+      const sub = document.createElement('div');
+      sub.className = 'text-muted';
+      sub.textContent = 'commander: ' + commander;
+      meta.appendChild(sub);
+    }
+    if (colors.length) {
+      const colorRow = document.createElement('div');
+      colorRow.className = 'd-flex gap-1 mt-2';
+      colors.forEach(c => {
+        const img = document.createElement('img');
+        img.src = '/static/symbols/' + c.toUpperCase() + '.svg';
+        img.alt = '{' + c.toUpperCase() + '}';
+        img.className = 'mana mana-sm';
+        colorRow.appendChild(img);
+      });
+      meta.appendChild(colorRow);
+    }
+    headerRow.appendChild(meta);
+    topSection.appendChild(headerRow);
+    bodyEl.appendChild(topSection);
+
+    if (tags.length) {
+      const tagSection = document.createElement('div');
+      tagSection.className = 'deck-drawer-section';
+      const heading = document.createElement('h6');
+      heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+      heading.textContent = 'themes';
+      tagSection.appendChild(heading);
+      const tagWrap = document.createElement('div');
+      tagWrap.className = 'deck-drawer-tags';
+      tags.forEach(label => {
+        const span = document.createElement('span');
+        span.className = 'deck-drawer-tag';
+        span.textContent = label;
+        tagWrap.appendChild(span);
+      });
+      tagSection.appendChild(tagWrap);
+      bodyEl.appendChild(tagSection);
+    }
+
+    const statsSection = document.createElement('div');
+    statsSection.className = 'deck-drawer-section';
+    const statsHeading = document.createElement('h6');
+    statsHeading.className = 'text-uppercase text-muted fw-semibold mb-2';
+    statsHeading.textContent = 'summary';
+    statsSection.appendChild(statsHeading);
+    const grid = document.createElement('div');
+    grid.className = 'deck-drawer-grid';
+    const cardsPill = document.createElement('span');
+    cardsPill.className = 'deck-drawer-pill';
+    cardsPill.innerHTML = '<span>cards</span><span>' + cardCount + '</span>';
+    grid.appendChild(cardsPill);
+    if (updated) {
+      const updatedPill = document.createElement('span');
+      updatedPill.className = 'deck-drawer-pill';
+      updatedPill.innerHTML = '<span>updated</span><span>' + updated + '</span>';
+      grid.appendChild(updatedPill);
+    }
+    statsSection.appendChild(grid);
+    bodyEl.appendChild(statsSection);
+
+    if (buildId) {
+      const actionSection = document.createElement('div');
+      actionSection.className = 'deck-drawer-section';
+      const link = document.createElement('a');
+      link.className = 'btn btn-outline-primary w-100';
+      link.href = '/decks/build/' + buildId;
+      link.textContent = 'resume build';
+      actionSection.appendChild(link);
+      bodyEl.appendChild(actionSection);
+    }
+  }
+
+  document.querySelectorAll('.build-row').forEach(row => {
+    row.addEventListener('click', (event) => {
+      if (event.target.closest('a, button, form')) return;
+      renderBuild(row);
+      instance.show();
+    });
+    row.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.target.closest('a, button, form')) return;
+      event.preventDefault();
+      renderBuild(row);
+      instance.show();
+    });
+  });
+})();
+</script>
 {% endblock %}

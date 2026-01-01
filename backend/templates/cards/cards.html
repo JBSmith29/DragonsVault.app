@@ -32,6 +32,7 @@
     .pagination .page-link { display:inline-block; width:auto; }
 
     .offcanvas-end.w-500 { width:500px; }
+    #cardDrawer .offcanvas-body { overflow-y:auto; }
     .offcanvas .card-art {
       width:100%;
       max-width:360px;
@@ -741,7 +742,12 @@
 {% endif %}
 
 <!-- Drawer -->
-<div class="offcanvas offcanvas-end w-500" tabindex="-1" id="cardDrawer" aria-labelledby="cardDrawerLabel">
+<div class="offcanvas offcanvas-end w-500"
+     tabindex="-1"
+     id="cardDrawer"
+     aria-labelledby="cardDrawerLabel"
+     data-bs-backdrop="false"
+     data-bs-scroll="true">
   <div class="offcanvas-header">
     <h5 class="offcanvas-title" id="cardDrawerLabel">Card Details</h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -1090,7 +1096,7 @@
 
   function openDrawer() {
     if (typeof bootstrap !== 'undefined') {
-      offcanvas = offcanvas || new bootstrap.Offcanvas(drawerEl);
+      offcanvas = offcanvas || new bootstrap.Offcanvas(drawerEl, { backdrop: false, scroll: true });
       offcanvas.show();
     } else {
       drawerEl.classList.add('show');
