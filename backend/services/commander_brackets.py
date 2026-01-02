@@ -13,6 +13,8 @@ from collections import Counter, defaultdict
 
 from dataclasses import dataclass, field
 
+from functools import lru_cache
+
 from pathlib import Path
 
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -23,7 +25,7 @@ import unicodedata
 
 
 from services import scryfall_cache as sc
-
+from services.core_role_logic import derive_core_roles
 from services.scryfall_cache import ensure_cache_loaded, prints_for_oracle, unique_oracle_by_name
 
 
@@ -108,7 +110,19 @@ BRACKET_LABELS: Dict[int, str] = {
 
 
 
-BRACKET_RULESET_EPOCH = 4
+BRACKET_RULESET_EPOCH = 5
+
+BRACKET_RULESET_PATH = Path(__file__).resolve().parents[1] / "commander-brackets" / "commander_brackets_ruleset.json"
+
+
+@lru_cache(maxsize=1)
+def _load_bracket_ruleset() -> Dict[str, Any]:
+    try:
+        with BRACKET_RULESET_PATH.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+            return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
 def _spellbook_data_candidates() -> List[Path]:
@@ -1659,7 +1673,19 @@ def evaluate_commander_bracket(
 
     ensure_cache_loaded()
 
-
+    ruleset = _load_bracket_ruleset()
+    ruleset_metrics = ruleset.get("metrics") if isinstance(ruleset, dict) else {}
+    if not isinstance(ruleset_metrics, dict):
+        ruleset_metrics = {}
+    ruleset_modifiers = ruleset.get("modifiers") if isinstance(ruleset, dict) else {}
+    if not isinstance(ruleset_modifiers, dict):
+        ruleset_modifiers = {}
+    ruleset_reinforcement = ruleset.get("reinforcement") if isinstance(ruleset, dict) else {}
+    if not isinstance(ruleset_reinforcement, dict):
+        ruleset_reinforcement = {}
+    ruleset_bracket5 = ruleset.get("bracket5_confidence") if isinstance(ruleset, dict) else {}
+    if not isinstance(ruleset_bracket5, dict):
+        ruleset_bracket5 = {}
 
     sources: List[BracketCard] = []
 
@@ -1717,36 +1743,30 @@ def evaluate_commander_bracket(
 
 
 
+    advantage_roles = {"draw", "selection", "advantage", "engine", "recursion"}
+    interaction_roles = {"removal", "wipe", "counter", "bounce", "tax", "stax", "hate", "protection"}
+
     buckets: Dict[str, MetricBucket] = {
-
+        "card_advantage": MetricBucket("card_advantage"),
+        "efficient_interaction": MetricBucket("efficient_interaction"),
         "game_changers": MetricBucket("game_changers"),
-
         "extra_turns": MetricBucket("extra_turns"),
-
         "mass_land": MetricBucket("mass_land"),
-
         "nonland_tutors": MetricBucket("nonland_tutors"),
-
         "land_tutors": MetricBucket("land_tutors"),
-
         "cedh_signatures": MetricBucket("cedh_signatures"),
-
         "zero_cmc_mana": MetricBucket("zero_cmc_mana"),
-
         "instant_win": MetricBucket("instant_win"),
-
         "spellbook_combos": MetricBucket("spellbook_combos"),
-
     }
 
 
 
     total_cards = 0
-
     nonland_count = 0
-
     nonland_cmc_sum = 0.0
-
+    land_count = 0
+    basic_land_count = 0
     deck_counts: Dict[str, int] = defaultdict(int)
 
 
@@ -1768,6 +1788,21 @@ def evaluate_commander_bracket(
                 key = _normalize_card_key(face_name)
                 if key:
                     deck_counts[key] += qty
+
+        if "Land" in (card.type_line or ""):
+            land_count += qty
+            if "Basic" in (card.type_line or ""):
+                basic_land_count += qty
+
+        roles = derive_core_roles(
+            oracle_text=card.oracle_text,
+            type_line=card.type_line,
+            name=card.name,
+        )
+        if roles & advantage_roles:
+            buckets["card_advantage"].add(card.name, qty)
+        if roles & interaction_roles:
+            buckets["efficient_interaction"].add(card.name, qty)
 
 
 
@@ -1931,6 +1966,61 @@ def evaluate_commander_bracket(
 
     early_instant_combo_count = sum(1 for combo in spellbook_early if "instant_win" in combo.result_categories)
 
+    nonbasic_land_count = max(land_count - basic_land_count, 0)
+    nonbasic_ratio = (nonbasic_land_count / land_count) if land_count else 0.0
+    mana_base_cfg = ruleset_modifiers.get("mana_base_optimization", {}) if isinstance(ruleset_modifiers, dict) else {}
+    min_nonbasic = int(mana_base_cfg.get("min_nonbasic") or 0)
+    min_ratio = float(mana_base_cfg.get("min_ratio") or 0.0)
+    mana_base_optimized = False
+    if land_count:
+        if min_nonbasic and nonbasic_land_count >= min_nonbasic:
+            mana_base_optimized = True
+        if min_ratio and nonbasic_ratio >= min_ratio:
+            mana_base_optimized = True
+
+    ruleset_metric_counts: Dict[str, int] = {
+        "card_advantage": count.get("card_advantage", 0),
+        "efficient_interaction": count.get("efficient_interaction", 0),
+        "two_card_infinite_combos": early_combo_count,
+        "game_changers": count.get("game_changers", 0),
+        "mass_land_denial": count.get("mass_land", 0),
+        "extra_turn_loops": count.get("extra_turns", 0),
+    }
+    fast_mana_density = count.get("zero_cmc_mana", 0)
+    ruleset_floor: Optional[int] = None
+    ruleset_metric_brackets: Dict[str, int] = {}
+    ruleset_triggers: List[str] = []
+    if ruleset_metrics:
+        ruleset_floor = 1
+        for key, meta in ruleset_metrics.items():
+            if not isinstance(meta, dict):
+                continue
+            metric_count = ruleset_metric_counts.get(key, 0)
+            thresholds = meta.get("thresholds") or []
+            applied = [
+                t for t in thresholds
+                if isinstance(t, dict) and metric_count >= int(t.get("min") or 0)
+            ]
+            applied_for_floor = [
+                t for t in applied
+                if int(t.get("bracket") or 0) <= 4
+            ]
+            metric_bracket = (
+                max((int(t.get("bracket") or 0) for t in applied_for_floor), default=1)
+                if applied_for_floor
+                else 1
+            )
+            ruleset_metric_brackets[key] = metric_bracket
+            ruleset_floor = max(ruleset_floor, metric_bracket)
+            if applied:
+                top = max(applied, key=lambda t: (int(t.get("bracket") or 0), int(t.get("min") or 0)))
+                label = meta.get("label") or key.replace("_", " ").title()
+                threshold_val = int(top.get("min") or 0)
+                bracket_val = int(top.get("bracket") or 0)
+                ruleset_triggers.append(
+                    f"{label}: {metric_count} (threshold {threshold_val} -> bracket {bracket_val})"
+                )
+
 
 
     score = 0.0
@@ -1941,6 +2031,10 @@ def evaluate_commander_bracket(
         "signals": [],
         "adjustments": [],
     }
+    if ruleset_metrics:
+        score_methodology["guidance"].append(
+            "Bracket floor uses the ruleset thresholds; score provides additional context."
+        )
 
     def add_component(key: str, value: float, reason: str) -> None:
         nonlocal score
@@ -2123,43 +2217,88 @@ def evaluate_commander_bracket(
     score_methodology["total_points"] = round(score, 2)
 
     effective_game_changers = count["game_changers"]
+    bracket1_ok = False
+    bracket2_ok = False
+    bracket3_ok = False
+    ruleset_level: Optional[int] = None
+    ruleset_reinforced: Optional[int] = None
+    bracket5_score: float | None = None
+    bracket5_signals: int | None = None
 
-    bracket1_ok = (
-        effective_game_changers == 0
-        and count["extra_turns"] == 0
-        and count["mass_land"] == 0
-        and count["cedh_signatures"] == 0
-        and count["zero_cmc_mana"] == 0
-        and count["instant_win"] == 0
-        and total_spellbook_combos == 0
-        and (avg_cmc is None or avg_cmc >= 3.3)
-    )
+    if ruleset_metrics:
+        ruleset_floor_val = ruleset_floor or 1
+        min_signals_for_bump = int(ruleset_reinforcement.get("min_signals_for_bump") or 2)
+        min_floor_for_bump = int(ruleset_reinforcement.get("min_floor_for_bump") or 2)
+        max_bracket = int(ruleset_reinforcement.get("max_bracket") or 4)
+        signals_at_floor = sum(
+            1 for key, bracket in ruleset_metric_brackets.items()
+            if bracket == ruleset_floor_val and ruleset_metric_counts.get(key, 0) > 0
+        )
+        ruleset_reinforced = ruleset_floor_val
+        if ruleset_floor_val >= min_floor_for_bump and signals_at_floor >= min_signals_for_bump:
+            ruleset_reinforced = min(ruleset_floor_val + 1, max_bracket)
+        ruleset_level = ruleset_reinforced
 
-    bracket2_ok = (
-        effective_game_changers == 0
-        and count["mass_land"] == 0
-        and total_spellbook_combos == 0
-        and count["extra_turns"] <= 1
-    )
+        b5_weights = ruleset_bracket5.get("weights") if isinstance(ruleset_bracket5, dict) else {}
+        if not isinstance(b5_weights, dict):
+            b5_weights = {}
+        b5_thresholds = ruleset_bracket5.get("thresholds") if isinstance(ruleset_bracket5, dict) else {}
+        if not isinstance(b5_thresholds, dict):
+            b5_thresholds = {}
+        promote_to_5 = float(b5_thresholds.get("promote_to_5") or 0)
+        remain_at_4 = float(b5_thresholds.get("remain_at_4") or 0)
+        bracket5_score = 0.0
+        bracket5_signals = 0
+        for key, weight in b5_weights.items():
+            metric_value = fast_mana_density if key == "fast_mana_density" else ruleset_metric_counts.get(key, 0)
+            if metric_value:
+                bracket5_score += float(weight) * float(metric_value)
+                bracket5_signals += 1
+        if promote_to_5 and bracket5_score >= promote_to_5 and bracket5_signals >= 2:
+            ruleset_level = 5
+        elif remain_at_4 and bracket5_score >= remain_at_4 and bracket5_signals >= 2:
+            ruleset_level = max(ruleset_level or 0, 4)
 
-    bracket3_ok = (
-        effective_game_changers <= 3
-        and count["mass_land"] == 0
-        and early_combo_count == 0
-        and count["extra_turns"] <= 2
-    )
+        level = ruleset_level or ruleset_floor_val
+        bracket1_ok = ruleset_floor_val == 1
+        bracket2_ok = ruleset_floor_val <= 2
+        bracket3_ok = ruleset_floor_val <= 3
+    else:
+        bracket1_ok = (
+            effective_game_changers == 0
+            and count["extra_turns"] == 0
+            and count["mass_land"] == 0
+            and count["cedh_signatures"] == 0
+            and count["zero_cmc_mana"] == 0
+            and count["instant_win"] == 0
+            and total_spellbook_combos == 0
+            and (avg_cmc is None or avg_cmc >= 3.3)
+        )
 
-    hard_floor = 4
-    if bracket1_ok:
-        hard_floor = 1
-    elif bracket2_ok:
-        hard_floor = 2
-    elif bracket3_ok:
-        hard_floor = 3
+        bracket2_ok = (
+            effective_game_changers == 0
+            and count["mass_land"] == 0
+            and total_spellbook_combos == 0
+            and count["extra_turns"] <= 1
+        )
 
-    score_band = _score_to_band(score)
-    level = max(hard_floor, score_band)
+        bracket3_ok = (
+            effective_game_changers <= 3
+            and count["mass_land"] == 0
+            and early_combo_count == 0
+            and count["extra_turns"] <= 2
+        )
 
+        hard_floor = 4
+        if bracket1_ok:
+            hard_floor = 1
+        elif bracket2_ok:
+            hard_floor = 2
+        elif bracket3_ok:
+            hard_floor = 3
+
+        score_band = _score_to_band(score)
+        level = max(hard_floor, score_band)
 
     label = BRACKET_LABELS.get(level, "Unknown")
 
@@ -2191,6 +2330,9 @@ def evaluate_commander_bracket(
 
         summary_points.append(f"{bucket.count} {key.replace('_', ' ')}")
 
+    if mana_base_optimized:
+        summary_points.append("Mana base optimized")
+
 
 
     summary_cards: Dict[str, List[str]] = {
@@ -2198,6 +2340,9 @@ def evaluate_commander_bracket(
         key: bucket.names for key, bucket in buckets.items() if bucket.entries
 
     }
+
+    if buckets["nonland_tutors"].entries and "tutors" not in summary_cards:
+        summary_cards["tutors"] = buckets["nonland_tutors"].names
 
 
 
@@ -2220,6 +2365,25 @@ def evaluate_commander_bracket(
         else None
 
     )
+
+    metrics_payload = {key: bucket.count for key, bucket in buckets.items()}
+    metrics_payload["two_card_infinite_combos"] = early_combo_count
+    metrics_payload["mana_base_optimization"] = 1 if mana_base_optimized else 0
+    metrics_payload["tutors"] = count.get("nonland_tutors", 0)
+
+    if ruleset_metrics:
+        score_methodology["ruleset"] = {
+            "version": ruleset.get("version"),
+            "floor": ruleset_floor,
+            "reinforced": ruleset_reinforced,
+            "metric_brackets": ruleset_metric_brackets,
+            "triggers": ruleset_triggers,
+            "mana_base_optimized": mana_base_optimized,
+            "nonbasic_lands": nonbasic_land_count,
+            "nonbasic_ratio": round(nonbasic_ratio, 3) if land_count else None,
+            "bracket5_score": round(bracket5_score, 2) if bracket5_score is not None else None,
+            "bracket5_signals": bracket5_signals,
+        }
 
 
 
@@ -2249,7 +2413,7 @@ def evaluate_commander_bracket(
         "spellbook_combo_groups": combo_groups,
 
         "summary_tooltip": summary_tooltip,
-        "metrics": {key: bucket.count for key, bucket in buckets.items()},
+        "metrics": metrics_payload,
         "score_breakdown": score_breakdown,
         "score_methodology": score_methodology,
         "is_commander_cedh": commander_flag,

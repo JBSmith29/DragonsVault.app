@@ -745,12 +745,17 @@ select.form-select-sm option {
   font-weight: 600;
 }
 
+.offcanvas {
+  position: fixed;
+  z-index: 1100;
+}
+
 #buildDrawer {
-  z-index: 2000;
+  z-index: 1100;
 }
 
 #deckDrawer {
-  z-index: 2000;
+  z-index: 1100;
 }
 
 #buildDrawer .offcanvas-body {
@@ -758,7 +763,7 @@ select.form-select-sm option {
 }
 
 .offcanvas-backdrop.show {
-  z-index: 1990;
+  z-index: 1090;
 }
 
 .cards-table tbody tr.deck-row {
@@ -812,6 +817,45 @@ html[data-bs-theme="light"] .dv-select-menu .dropdown-item:focus-visible {
 html[data-bs-theme="light"] .dv-select-menu .dropdown-item.active,
 html[data-bs-theme="light"] .dv-select-menu .dropdown-item:active {
   background: rgba(37, 99, 235, 0.18);
+}
+
+/* === Drawer Layer Fix === */
+.offcanvas,
+.drawer,
+#drawer {
+  position: fixed;
+  top: var(--dv-offcanvas-offset, 0);
+  height: calc(100vh - var(--dv-offcanvas-offset, 0));
+  z-index: 1100;
+  pointer-events: auto;
+}
+
+.offcanvas *,
+.drawer * {
+  pointer-events: auto;
+}
+
+.offcanvas-backdrop,
+.drawer-backdrop {
+  position: fixed;
+  inset-inline: 0;
+  top: var(--dv-offcanvas-offset, 0);
+  height: calc(100vh - var(--dv-offcanvas-offset, 0));
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1090;
+  pointer-events: auto;
+}
+
+.drawer-backdrop.show {
+  display: block;
+}
+
+.drawer-backdrop {
+  display: none;
+}
+
+.modal-backdrop {
+  z-index: 1040;
 }
 
 .dv-select-search-wrapper {

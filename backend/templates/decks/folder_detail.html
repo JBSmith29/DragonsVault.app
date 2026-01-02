@@ -1318,6 +1318,32 @@
                           </div>
                         {% endif %}
                       {% endfor %}
+                      {# Show mana base optimization details from the ruleset (nonbasic count + ratio). #}
+                      {% set ruleset = _methodology.get('ruleset') or {} %}
+                      {% set nonbasic_lands = ruleset.get('nonbasic_lands') %}
+                      {% set nonbasic_ratio = ruleset.get('nonbasic_ratio') %}
+                      {% set mana_base_optimized = ruleset.get('mana_base_optimized') %}
+                      {% if nonbasic_lands is not none %}
+                        <div class="col-12 col-md-6">
+                          <div class="card hover-card h-100 hover-lift card-hover-shadow">
+                            <div class="card-body">
+                              <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge text-bg-primary">{{ nonbasic_lands }}</span>
+                                <div class="fw-semibold">Mana Base Optimization</div>
+                              </div>
+                              <div class="small text-muted">
+                                {% if nonbasic_ratio is none %}
+                                  No land data yet.
+                                {% elif mana_base_optimized %}
+                                  Optimized mana base ({{ '%.0f'|format((nonbasic_ratio or 0) * 100) }}% nonbasic).
+                                {% else %}
+                                  Not optimized yet ({{ '%.0f'|format((nonbasic_ratio or 0) * 100) }}% nonbasic).
+                                {% endif %}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      {% endif %}
                     </div>
                   </div>
                 </div>

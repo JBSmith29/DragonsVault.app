@@ -1,0 +1,113 @@
+{
+  "version": "2025.10",
+  "description": "Commander Brackets v1 - DragonsVault ruleset aligned with Wizards Oct 2025 update",
+  "brackets": {
+    "1": {
+      "label": "Bracket 1",
+      "expected_turns": 9,
+      "description": "Low interaction, minimal engines, casual gameplay"
+    },
+    "2": {
+      "label": "Bracket 2",
+      "expected_turns": 8,
+      "description": "Some card advantage and interaction, slower engines"
+    },
+    "3": {
+      "label": "Bracket 3",
+      "expected_turns": 6,
+      "description": "Multiple engines, meaningful interaction, consistent threats"
+    },
+    "4": {
+      "label": "Bracket 4",
+      "expected_turns": 4,
+      "description": "Fast engines, strong consistency, high-impact plays"
+    },
+    "5": {
+      "label": "Bracket 5",
+      "expected_turns": 0,
+      "description": "Game-warping effects, early or inevitable wins"
+    }
+  },
+  "metrics": {
+    "card_advantage": {
+      "label": "Card Advantage Sources",
+      "thresholds": [
+        {"min": 5, "bracket": 2},
+        {"min": 10, "bracket": 3},
+        {"min": 15, "bracket": 4}
+      ]
+    },
+    "efficient_interaction": {
+      "label": "Efficient Interaction Spells",
+      "thresholds": [
+        {"min": 3, "bracket": 2},
+        {"min": 6, "bracket": 3}
+      ]
+    },
+    "two_card_infinite_combos": {
+      "label": "Two-Card Infinite Combos",
+      "thresholds": [
+        {"min": 1, "bracket": 2},
+        {"min": 2, "bracket": 3},
+        {"min": 3, "bracket": 4}
+      ]
+    },
+    "game_changers": {
+      "label": "Game Changer Cards",
+      "thresholds": [
+        {"min": 1, "bracket": 3},
+        {"min": 3, "bracket": 4},
+        {"min": 5, "bracket": 5}
+      ]
+    },
+    "mass_land_denial": {
+      "label": "Mass Land Denial Effects",
+      "thresholds": [
+        {"min": 1, "bracket": 4}
+      ]
+    },
+    "extra_turn_loops": {
+      "label": "Extra Turn Loops",
+      "thresholds": [
+        {"min": 1, "bracket": 4}
+      ]
+    }
+  },
+  "modifiers": {
+    "mana_base_optimization": {
+      "label": "Optimized Mana Base",
+      "description": "High non-basic land count improves consistency but does not independently raise bracket",
+      "reinforces": true,
+      "min_nonbasic": 20,
+      "min_ratio": 0.35
+    },
+    "tutors": {
+      "label": "Tutors",
+      "description": "Tutors are tracked and displayed but do not escalate bracket placement",
+      "escalates": false
+    }
+  },
+  "reinforcement": {
+    "min_signals_for_bump": 2,
+    "min_floor_for_bump": 2,
+    "max_bracket": 4
+  },
+  "bracket5_confidence": {
+    "description": "Bracket 5 requires multiple strong signals and is not assigned by a single metric",
+    "weights": {
+      "two_card_infinite_combos": 3,
+      "game_changers": 2,
+      "fast_mana_density": 2
+    },
+    "thresholds": {
+      "promote_to_5": 8,
+      "remain_at_4": 5
+    }
+  },
+  "notes": [
+    "Bracket calculation is based on card identity and known interactions",
+    "Deck synergies and player intent are not inferred",
+    "Tutor presence does not force bracket escalation",
+    "Ruleset is versioned to support future Commander Bracket updates"
+  ]
+}
