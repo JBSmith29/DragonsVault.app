@@ -862,6 +862,8 @@
     const allowedLabels = new Set(['commander', 'recommendations', 'current build']);
     document.querySelectorAll('[data-nav-section]').forEach(section => {
       if (section.classList.contains('d-none')) return;
+      if (section.closest('.d-none')) return;
+      if (section.closest('.build-rec-source.d-none')) return;
       const label = (section.getAttribute('data-nav-label') || '').trim();
       const level = (section.getAttribute('data-nav-level') || '1').trim();
       const id = section.getAttribute('id');

@@ -216,7 +216,7 @@
             <p class="text-muted mb-3">
               Paste a public MTGGoldfish deck link and we’ll pull the list directly into a new deck folder.
             </p>
-            <form class="row gy-3 gx-3 align-items-end" method="post" action="{{ url_for('views.create_proxy_deck') }}">
+            <form class="row gy-3 gx-3 align-items-end" method="post" action="{{ url_for('views.create_proxy_deck') }}" id="proxyDeckImportForm">
               <div class="col-12">
                 <label for="deck_url" class="form-label">Deck URL</label>
                 <input type="url" class="form-control" id="deck_url" name="deck_url" placeholder="https://www.mtggoldfish.com/deck/1234" required>
@@ -1014,5 +1014,24 @@
 })();
 </script>
 {% endif %}
+
+<script>
+  (function () {
+    const form = document.getElementById("proxyDeckImportForm");
+    if (!form) return;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    form.addEventListener("submit", (event) => {
+      if (form.dataset.submitting === "1") {
+        event.preventDefault();
+        return;
+      }
+      form.dataset.submitting = "1";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Importing...";
+      }
+    });
+  })();
+</script>
 
 {% endblock %}

@@ -162,7 +162,7 @@
         Wizards&rsquo; October 2025 update frames each bracket around Theme, Staples, Speed, and Metagame expectations. DragonsVault mirrors those qualitative guardrails and layers in quantitative signals so we can tag a deck automatically.
       </p>
       <p class="mb-3">
-        We evaluate the pressure points the Commander Format Panel highlights: mass land denial, extra turns, fast mana, tutor density, Game Changers, and Commander Spellbook combos. Expand each section below to see how we enforce the latest restrictions.
+        We evaluate the pressure points the Commander Format Panel highlights: mass land denial, extra turns, fast mana, Game Changers, and Commander Spellbook combos. Expand each section below to see how we enforce the latest restrictions.
       </p>
 
       <div class="accordion" id="calcAccordion">
@@ -330,10 +330,10 @@
                data-bs-parent="#calcAccordion">
             <div class="accordion-body">
               <p class="small text-muted mb-2">
-                The October update still warns that Exhibition and Core decks should keep nonland tutors sparse. DragonsVault flags any card that searches for a nonland card or a specific nonland card type (creature, artifact, enchantment, aura, equipment, planeswalker, instant, sorcery, permanent, or a particular creature tribe).
+                The October update removes tutor caps from bracket enforcement. DragonsVault no longer uses nonland tutor counts to push decks up a bracket.
               </p>
               <p class="small text-muted mb-0">
-                Land-only ramp (including fetchlands) and creature-body tutors such as Imperial Recruiter stay unflagged. Up to two nonland tutors keep a list in the first two brackets; hitting three or more promotes the deck to Upgraded.
+                Premium tutors only matter when they appear on the Game Changers list (e.g., Demonic Tutor, Vampiric Tutor). Other tutors do not affect bracket placement.
               </p>
             </div>
           </div>
@@ -493,7 +493,7 @@
     <div class="card-body">
       <h2 class="h5 mb-3">How DragonsVault estimates your bracket</h2>
       <p class="mb-0">
-        When you set a commander, DragonsVault reviews your list for Game Changers, fast mana, tutors,
+        When you set a commander, DragonsVault reviews your list for Game Changers, fast mana,
         extra-turn loops, instant-win combos, and other staples frequently cited by the Commander Format Panel
         and the cEDH Decklist Database. The resulting bracket badge is a conversation starter&mdash;feel free
         to override it whenever your playgroup prefers a different pace.
@@ -504,7 +504,7 @@
       <ul class="small text-muted ps-3 mb-3">
         <li><span class="fw-semibold">Game Changers:</span> any card on Wizards&rsquo; published list.</li>
         <li><span class="fw-semibold">Mass land denial:</span> repeatable Armageddon- or Stasis-style effects.</li>
-        <li><span class="fw-semibold">Extra turns & tutors:</span> the counts outlined in the Wizards article.</li>
+        <li><span class="fw-semibold">Extra turns:</span> repeated time walks and chained turns.</li>
         <li><span class="fw-semibold">cEDH staples & fast mana:</span> high-prevalence cards and 0-mana rocks.</li>
         <li><span class="fw-semibold">Instant-win combos &amp; Spellbook lines:</span> flagged via &ldquo;you win/lose the game&rdquo; text, classic finishers like Laboratory Maniac, Jace, Wielder of Mysteries, and Thassa&rsquo;s Oracle, plus Commander Spellbook&rsquo;s two-card combos that win outright or go infinite on mana, life, damage, card draw, tokens, or turns.</li>
       </ul>
@@ -560,6 +560,4 @@
 </script>
 
 {% endblock %}
-
-
 

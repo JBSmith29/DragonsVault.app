@@ -108,7 +108,7 @@ BRACKET_LABELS: Dict[int, str] = {
 
 
 
-BRACKET_RULESET_EPOCH = 3
+BRACKET_RULESET_EPOCH = 4
 
 
 def _spellbook_data_candidates() -> List[Path]:
@@ -645,26 +645,6 @@ SCORE_CURVES = {
 
     ],
 
-    "nonland_tutors": [
-
-        (0, 0.0),
-
-        (1, 1.5),
-
-        (2, 3.0),
-
-        (3, 4.5),
-
-        (4, 5.8),
-
-        (5, 7.0),
-
-        (6, 8.1),
-
-        (8, 9.5),
-
-    ],
-
     "zero_cmc_mana": [
 
         (0, 0.0),
@@ -815,6 +795,13 @@ def _score_piecewise(value: float, curve: Sequence[Tuple[float, float]]) -> floa
     slope = (last_val - prev_val) / (last_thr - prev_thr)
     return float(last_val + slope * (value - last_thr))
 
+
+def _score_to_band(score: float) -> int:
+    for threshold, level in SCORE_BANDS:
+        if score <= threshold:
+            return level
+    return SCORE_BANDS[-1][1]
+
 @dataclass(frozen=True)
 class ScoreSignal:
     key: str
@@ -876,26 +863,6 @@ SCORE_SIGNALS: Tuple[ScoreSignal, ...] = (
             "0: Table-friendly for casual pods",
             "1: Immediately pushes table to higher brackets",
             "2+: Reserved for stax-heavy or tournament metas",
-        ),
-    ),
-    ScoreSignal(
-        key="nonland_tutors",
-        label="Tutors (nonland)",
-        description="Efficient tutors increase consistency and combo access beyond casual expectations.",
-        curve=(
-            (0, 0.0),
-            (1, 1.0),
-            (2, 2.0),
-            (3, 3.0),
-            (4, 3.6),
-            (5, 4.2),
-            (6, 5.2),
-            (8, 6.5),
-        ),
-        guidance=(
-            "0-2: Fits Exhibition/Core expectations",
-            "3-5: Tuned synergy without competitive pressure",
-            "6+: Approaching tournament-level consistency",
         ),
     ),
     ScoreSignal(
@@ -971,22 +938,31 @@ SIGNAL_REASON_LABELS: Dict[str, str] = {
     "game_changers": "Game Changers list card",
     "extra_turns": "extra turn effect",
     "mass_land": "mass land denial piece",
-    "nonland_tutors": "nonland tutor",
     "zero_cmc_mana": "fast mana source",
     "cedh_signatures": "cEDH signature card",
     "instant_win": "instant-win enabler",
 }
 
 SCORE_OVERVIEW_TEXT = (
-    "We grade decks by counting high-velocity signals—fast mana, tutors, combo density, and similar "
-    "pressure points. Each axis feeds a diminishing-returns curve tuned to Wizards' Commander Brackets guidance."
+    "We apply hard bracket gates first (Game Changers, mass land denial, extra turns, fast mana, "
+    "instant-win lines, and Commander Spellbook combos). The score then places decks into coarse "
+    "bands, but the hard gate always wins."
 )
 
 SCORE_OVERVIEW_GUIDANCE: Tuple[str, ...] = (
-    "0-5: Exhibition/Core — precon strength or slower brews",
-    "6-11: Upgraded/Optimized casual — fast value engines appear",
-    "12-24: High-power — proactive wins expected",
-    "25+: cEDH range — lists race to deterministic finishes",
+    "0-4: Exhibition — theme-first pods",
+    "5-8: Core — low-pressure casual",
+    "9-12: Upgraded — tuned synergy",
+    "13-24: Optimized — high-power",
+    "25+: cEDH — competitive pace",
+)
+
+SCORE_BANDS: Tuple[Tuple[float, int], ...] = (
+    (4.0, 1),
+    (8.0, 2),
+    (12.0, 3),
+    (24.0, 4),
+    (math.inf, 5),
 )
 
 AVG_CMC_BENEFITS = [
@@ -2146,16 +2122,12 @@ def evaluate_commander_bracket(
 
     score_methodology["total_points"] = round(score, 2)
 
-    tutor_game_changers = sum(
-        qty for name, qty in buckets["nonland_tutors"].entries if name in GAME_CHANGERS
-    )
-    effective_game_changers = max(0, count["game_changers"] - tutor_game_changers)
+    effective_game_changers = count["game_changers"]
 
     bracket1_ok = (
         effective_game_changers == 0
         and count["extra_turns"] == 0
         and count["mass_land"] == 0
-        and count["nonland_tutors"] <= 2
         and count["cedh_signatures"] == 0
         and count["zero_cmc_mana"] == 0
         and count["instant_win"] == 0
@@ -2177,20 +2149,16 @@ def evaluate_commander_bracket(
         and count["extra_turns"] <= 2
     )
 
-    restriction_level = 4
+    hard_floor = 4
     if bracket1_ok:
-        restriction_level = 1
+        hard_floor = 1
     elif bracket2_ok:
-        restriction_level = 2
+        hard_floor = 2
     elif bracket3_ok:
-        restriction_level = 3
+        hard_floor = 3
 
-    if score > 24:
-        level = 5
-    elif score > 12:
-        level = 4
-    else:
-        level = restriction_level
+    score_band = _score_to_band(score)
+    level = max(hard_floor, score_band)
 
 
     label = BRACKET_LABELS.get(level, "Unknown")
@@ -2202,8 +2170,6 @@ def evaluate_commander_bracket(
     for key in (
 
         "game_changers",
-
-        "nonland_tutors",
 
         "extra_turns",
 
@@ -2326,6 +2292,7 @@ BRACKET_REFERENCE: List[Dict[str, Any]] = [
         "subtitle": "Mechanically focused, low-pressure pods",
         "experience": (
             "Decks tighten their mechanics but still leave room for creative or entertaining card choices. "
+            "Core is a landing point for low-pressure play rather than a strict precon baseline. "
             "Games are proactive yet considerate so every list can execute its plan."
         ),
         "deck_building": [
@@ -2372,7 +2339,7 @@ BRACKET_REFERENCE: List[Dict[str, Any]] = [
         ),
         "deck_building": [
             "Do not assume opponents are bringing cEDH lists, but be ready for lethal, consistent, and fast decks.",
-            "Expect Game Changers to include fast mana, snowballing engines, free disruption, and tutors.",
+            "Expect Game Changers to include fast mana, snowballing engines, free disruption, and premium tutors.",
             "Tune win conditions to be efficient and instantaneous once assembled.",
             "Prepare for gameplay that is explosive and powerful, matching threats with equally efficient disruption.",
         ],

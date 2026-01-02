@@ -1221,7 +1221,7 @@
                     </div>
                     <div class="row g-3">
                       {% for key, count in commander_bracket.metrics.items() %}
-                        {% if count and key not in ('land_tutors', 'zero_cmc_mana') %}
+                        {% if count and key not in ('land_tutors', 'nonland_tutors', 'zero_cmc_mana') %}
                           {% set names = commander_bracket.summary_cards.get(key) or [] %}
                           {% set col_class = 'col-12 col-md-6' %}
                           {% if key == 'spellbook_combos' %}

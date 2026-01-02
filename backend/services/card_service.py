@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import random
 import re
+import time
 from collections import defaultdict
 from math import ceil
 from typing import Dict, Iterable, List, Optional, Set
@@ -1226,6 +1228,29 @@ def create_proxy_deck():
             flash(msg, "warning")
         return redirect(request.referrer or url_for("views.decks_overview"))
 
+    signature_source = "\n".join(deck_lines).strip().lower()
+    if deck_url:
+        signature_source = f"url:{deck_url.strip().lower()}\n{signature_source}"
+    if deck_name:
+        signature_source = f"name:{deck_name.strip().lower()}\n{signature_source}"
+    if owner:
+        signature_source = f"owner:{owner.strip().lower()}\n{signature_source}"
+    if commander_input:
+        signature_source = f"commander:{commander_input.strip().lower()}\n{signature_source}"
+    signature = hashlib.sha256(signature_source.encode("utf-8")).hexdigest()
+    last_signature = session.get("proxy_deck_signature")
+    last_ts = session.get("proxy_deck_signature_ts")
+    last_id = session.get("proxy_deck_signature_id")
+    if last_signature == signature and isinstance(last_ts, (int, float)):
+        if (time.time() - float(last_ts)) < 15:
+            existing_folder = db.session.get(Folder, last_id) if last_id else None
+            if existing_folder and existing_folder.is_proxy:
+                redirect_url = url_for("views.folder_detail", folder_id=existing_folder.id)
+                if expects_json:
+                    return jsonify({"ok": True, "folder_id": existing_folder.id, "redirect": redirect_url}), 200
+                flash('Proxy deck already created. Redirecting to the existing deck.', "info")
+                return redirect(redirect_url)
+
     folder, creation_warnings, info_messages = _create_proxy_deck_from_lines(
         deck_name,
         owner,
@@ -1264,6 +1289,9 @@ def create_proxy_deck():
 
     db.session.commit()
     redirect_url = url_for("views.folder_detail", folder_id=folder.id)
+    session["proxy_deck_signature"] = signature
+    session["proxy_deck_signature_ts"] = time.time()
+    session["proxy_deck_signature_id"] = folder.id
 
     combined_warnings = fetched_errors + creation_warnings
     if expects_json:
