@@ -59,6 +59,15 @@ class EdhrecTagCommander(db.Model):
     commander_oracle_id = db.Column(db.String(36), primary_key=True)
 
 
+class EdhrecCommanderTypeDistribution(db.Model):
+    __tablename__ = "edhrec_commander_type_distribution"
+
+    commander_oracle_id = db.Column(db.String(36), primary_key=True)
+    tag = db.Column(db.String(120), primary_key=True)
+    card_type = db.Column(db.String(64), primary_key=True)
+    count = db.Column(db.Integer, nullable=False)
+
+
 class EdhrecMetadata(db.Model):
     __tablename__ = "edhrec_metadata"
 

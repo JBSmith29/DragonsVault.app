@@ -15,6 +15,7 @@ from extensions import db
 from models import (
     EdhrecCommanderCard,
     EdhrecCommanderCategoryCard,
+    EdhrecCommanderTypeDistribution,
     EdhrecCommanderTag,
     EdhrecCommanderTagCard,
     EdhrecCommanderTagCategoryCard,
@@ -70,6 +71,7 @@ def _ensure_tables() -> None:
                 EdhrecCommanderTagCard.__table__,
                 EdhrecCommanderTagCategoryCard.__table__,
                 EdhrecTagCommander.__table__,
+                EdhrecCommanderTypeDistribution.__table__,
                 EdhrecMetadata.__table__,
             ],
         )
@@ -584,6 +586,30 @@ def get_commander_tags(commander_oracle_id: str) -> list[str]:
     return [row.tag for row in rows if row.tag]
 
 
+def get_commander_type_distribution(
+    commander_oracle_id: str,
+    *,
+    tag: str | None = None,
+) -> list[tuple[str, int]]:
+    _ensure_tables()
+    commander_oracle_id = primary_commander_oracle_id(commander_oracle_id) or ""
+    if not commander_oracle_id:
+        return []
+    tag_label = (tag or "").strip()
+    if tag_label:
+        query = EdhrecCommanderTypeDistribution.query.filter_by(
+            commander_oracle_id=commander_oracle_id,
+            tag=tag_label,
+        )
+    else:
+        query = EdhrecCommanderTypeDistribution.query.filter_by(
+            commander_oracle_id=commander_oracle_id,
+            tag="",
+        )
+    rows = query.order_by(EdhrecCommanderTypeDistribution.card_type.asc()).all()
+    return [(row.card_type, int(row.count or 0)) for row in rows if row.card_type]
+
+
 def get_tag_commanders(tag: str) -> list[str]:
     _ensure_tables()
     label = (tag or "").strip()
@@ -868,6 +894,7 @@ __all__ = [
     "edhrec_cache_snapshot",
     "get_commander_synergy",
     "get_commander_tags",
+    "get_commander_type_distribution",
     "get_commander_category_groups",
     "get_commander_tag_synergy_groups",
     "get_tag_commanders",

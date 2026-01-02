@@ -261,10 +261,54 @@ select.form-select-sm option {
 
 .build-commander-img {
   width: 100%;
-  max-width: 180px;
+  max-width: 100%;
   height: auto;
   border-radius: 0.65rem;
   image-rendering: auto;
+}
+
+@media (max-width: 576px) {
+  .build-commander-img {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+.build-session .commander-portrait {
+  flex: 0 0 200px;
+  max-width: 200px;
+  align-self: stretch;
+}
+
+.build-session .commander-portrait-frame {
+  border-radius: 1rem;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.35);
+}
+
+.build-session .commander-portrait-placeholder {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  color: var(--bs-secondary-color);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+@media (max-width: 576px) {
+  .build-session .commander-portrait {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .build-session .commander-portrait-frame {
+    max-width: 260px;
+    margin: 0 auto;
+  }
 }
 
 .build-metric-row,
@@ -649,7 +693,63 @@ select.form-select-sm option {
   flex: 0 0 auto;
 }
 
+.deck-curve-grid {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.deck-curve-col {
+  width: 48px;
+  text-align: center;
+}
+
+.deck-curve-bar {
+  position: relative;
+  height: 140px;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.deck-curve-fill {
+  width: 100%;
+  background: var(--bs-primary);
+  opacity: 0.3;
+  border-radius: 0.65rem 0.65rem 0 0;
+  transition: height 0.15s ease;
+}
+
+.deck-curve-count {
+  position: absolute;
+  top: 0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.deck-curve-label {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  font-weight: 600;
+}
+
 #buildDrawer {
+  z-index: 2000;
+}
+
+#deckDrawer {
   z-index: 2000;
 }
 

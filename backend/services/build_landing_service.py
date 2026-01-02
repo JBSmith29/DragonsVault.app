@@ -9,8 +9,12 @@ from sqlalchemy import func
 from extensions import db
 from models import BuildSession, BuildSessionCard, Card, EdhrecCommanderTagCard, Folder, FolderRole
 from services import scryfall_cache as sc
+from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
+from services.commander_cache import compute_bracket_signature
 from services.deck_tags import get_deck_tag_groups
 from services.edhrec_cache_service import cache_ready
+from services.request_cache import request_cached
+from routes.base import color_identity_name
 
 
 def build_landing_page():
@@ -151,6 +155,106 @@ def _oracle_colors(oracle_id: str) -> list[str]:
     return pr.get("color_identity") or pr.get("colors") or []
 
 
+def _oracle_color_label(oracle_id: str) -> str:
+    letters, _ = sc.normalize_color_identity(_oracle_colors(oracle_id))
+    return color_identity_name(letters)
+
+
+def _oracle_detail(oracle_id: str, cache: dict[str, dict]) -> dict:
+    cached = cache.get(oracle_id)
+    if cached is not None:
+        return cached
+    payload = {"type_line": "", "cmc": None, "mana_costs": [], "oracle_text": ""}
+    try:
+        sc.ensure_cache_loaded()
+        prints = sc.prints_for_oracle(oracle_id) or []
+    except Exception:
+        cache[oracle_id] = payload
+        return payload
+    if not prints:
+        cache[oracle_id] = payload
+        return payload
+    pr = prints[0]
+    payload["type_line"] = pr.get("type_line") or ""
+    payload["cmc"] = pr.get("cmc")
+    payload["mana_costs"] = _mana_costs_from_faces(pr)
+    payload["oracle_text"] = _oracle_text_from_faces(pr)
+    cache[oracle_id] = payload
+    return payload
+
+
+def _mana_costs_from_faces(print_obj: dict) -> list[str]:
+    costs: list[str] = []
+    mana_cost = print_obj.get("mana_cost")
+    if mana_cost:
+        costs.append(str(mana_cost))
+    faces = print_obj.get("card_faces") or []
+    for face in faces:
+        if not isinstance(face, dict):
+            continue
+        face_cost = face.get("mana_cost")
+        if face_cost:
+            costs.append(str(face_cost))
+    return [cost for cost in costs if cost]
+
+
+def _oracle_text_from_faces(print_obj: dict) -> str:
+    texts: list[str] = []
+    oracle_text = print_obj.get("oracle_text")
+    if oracle_text:
+        texts.append(str(oracle_text))
+    faces = print_obj.get("card_faces") or []
+    for face in faces:
+        if not isinstance(face, dict):
+            continue
+        face_text = face.get("oracle_text")
+        if face_text:
+            texts.append(str(face_text))
+    return " // ".join([t for t in texts if t])
+
+
+def _build_session_bracket_context(
+    session_id: int,
+    commander_oracle_id: str,
+    commander_name: str | None,
+    cards: list[BuildSessionCard],
+) -> dict:
+    detail_cache: dict[str, dict] = {}
+    bracket_cards: list[dict[str, object]] = []
+    for entry in cards or []:
+        oracle_id = (entry.card_oracle_id or "").strip()
+        if not oracle_id:
+            continue
+        qty = int(entry.quantity or 0)
+        if qty <= 0:
+            continue
+        detail = _oracle_detail(oracle_id, detail_cache)
+        costs = [cost for cost in (detail.get("mana_costs") or []) if cost]
+        bracket_cards.append(
+            {
+                "name": _oracle_name(oracle_id) or oracle_id,
+                "type_line": detail.get("type_line") or "",
+                "oracle_text": detail.get("oracle_text") or "",
+                "mana_value": detail.get("cmc"),
+                "quantity": qty,
+                "mana_cost": " // ".join(costs) if costs else None,
+                "produced_mana": None,
+            }
+        )
+    commander_stub = {
+        "oracle_id": commander_oracle_id,
+        "name": commander_name or _oracle_name(commander_oracle_id) or commander_oracle_id,
+    }
+    epoch = sc.cache_epoch() + BRACKET_RULESET_EPOCH + spellbook_dataset_epoch()
+    signature = compute_bracket_signature(bracket_cards, commander_stub, epoch=epoch)
+    cache_key = ("build_landing_bracket", session_id, signature, epoch)
+    commander_ctx = request_cached(
+        cache_key,
+        lambda: evaluate_commander_bracket(bracket_cards, commander_stub),
+    )
+    return commander_ctx or {}
+
+
 def _current_builds(user_id: int) -> list[dict]:
     rows = (
         db.session.query(
@@ -170,12 +274,24 @@ def _current_builds(user_id: int) -> list[dict]:
         .limit(12)
         .all()
     )
+    session_ids = [row.id for row in rows]
+    cards_by_session: dict[int, list[BuildSessionCard]] = {}
+    if session_ids:
+        card_rows = (
+            BuildSessionCard.query.filter(BuildSessionCard.session_id.in_(session_ids))
+            .order_by(BuildSessionCard.session_id.asc())
+            .all()
+        )
+        for card in card_rows:
+            cards_by_session.setdefault(card.session_id, []).append(card)
+
     builds: list[dict] = []
     for row in rows:
         oracle_id = (row.commander_oracle_id or "").strip()
         commander_name = (row.commander_name or "").strip() or _oracle_name(oracle_id) or "unknown commander"
         updated = row.updated_at or row.created_at
         updated_label = updated.strftime("%Y-%m-%d") if updated else ""
+        bracket_ctx = _build_session_bracket_context(row.id, oracle_id, commander_name, cards_by_session.get(row.id, []))
         builds.append(
             {
                 "id": row.id,
@@ -183,9 +299,13 @@ def _current_builds(user_id: int) -> list[dict]:
                 "commander_name": commander_name,
                 "image": _oracle_image(oracle_id),
                 "colors": _oracle_colors(oracle_id),
+                "color_label": _oracle_color_label(oracle_id),
                 "tags": _normalized_tags(row.tags_json),
                 "card_count": int(row.card_count or 0),
                 "updated_label": updated_label,
+                "bracket_level": bracket_ctx.get("level"),
+                "bracket_label": bracket_ctx.get("label"),
+                "bracket_score": bracket_ctx.get("score"),
             }
         )
     return builds

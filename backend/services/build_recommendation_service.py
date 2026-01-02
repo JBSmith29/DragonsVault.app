@@ -146,6 +146,7 @@ def _card_payload(oracle_id: str) -> dict | None:
         return None
     pr = prints[0]
     name = (pr.get("name") or "").strip()
+    type_line = pr.get("type_line") or ""
     image = None
     image_uris = pr.get("image_uris") or {}
     if not image_uris:
@@ -153,7 +154,14 @@ def _card_payload(oracle_id: str) -> dict | None:
         if faces:
             image_uris = (faces[0] or {}).get("image_uris") or {}
     image = image_uris.get("normal") or image_uris.get("large") or image_uris.get("small")
-    return {"name": name or oracle_id, "image": image}
+    lowered = type_line.lower()
+    is_basic_land = "land" in lowered and "basic" in lowered
+    return {
+        "name": name or oracle_id,
+        "image": image,
+        "type_line": type_line,
+        "is_basic_land": is_basic_land,
+    }
 
 
 def _role_map(oracle_ids: set[str]) -> dict[str, set[str]]:
@@ -201,6 +209,8 @@ def _edhrec_card_payload(
         "oracle_id": oracle_id,
         "name": payload["name"],
         "image": payload["image"],
+        "type_line": payload.get("type_line") or "",
+        "is_basic_land": bool(payload.get("is_basic_land")),
         "synergy_score": float(synergy_score or 0.0),
         "synergy_percent": synergy_percent,
         "synergy_rank": rec.get("synergy_rank"),

@@ -3,6 +3,49 @@
 {% block title %}build-a-deck{% endblock %}
 
 {% block content %}
+<style>
+  /* Ensure the build drawer overlays the high z-index build-landing header cards. */
+  #buildDrawer.offcanvas { z-index: 6100; }
+  /* Match deck drawer curve styling when cache-busting is delayed. */
+  #buildDrawer .deck-curve-grid { display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; }
+  #buildDrawer .deck-curve-col { width:48px; text-align:center; }
+  #buildDrawer .deck-curve-bar {
+    position:relative;
+    height:140px;
+    border:1px solid var(--bs-border-color);
+    border-radius:0.65rem;
+    background:rgba(255, 255, 255, 0.05);
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    overflow:hidden;
+  }
+  #buildDrawer .deck-curve-fill {
+    width:100%;
+    background:var(--bs-primary);
+    opacity:0.3;
+    border-radius:0.65rem 0.65rem 0 0;
+    transition:height 0.15s ease;
+  }
+  #buildDrawer .deck-curve-count {
+    position:absolute;
+    top:0.35rem;
+    left:50%;
+    transform:translateX(-50%);
+    background:rgba(0, 0, 0, 0.6);
+    color:#fff;
+    font-weight:700;
+    padding:0.1rem 0.45rem;
+    border-radius:0.35rem;
+    font-size:0.75rem;
+  }
+  #buildDrawer .deck-curve-label {
+    margin-top:0.35rem;
+    font-size:0.8rem;
+    color:var(--bs-secondary-color);
+    font-weight:600;
+  }
+</style>
 <div class="container-fluid">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
@@ -187,8 +230,17 @@
                         <div class="build-session-thumb build-session-thumb-placeholder">?</div>
                       {% endif %}
                       <div>
-                        <div class="fw-semibold">{{ build.build_name or build.commander_name }}</div>
-                        <div class="text-muted small">commander: {{ build.commander_name }}</div>
+                        <div class="fw-semibold">
+                          <a class="text-decoration-none" href="{{ url_for('views.build_session', session_id=build.id) }}">
+                            {{ build.build_name or build.commander_name }}
+                          </a>
+                        </div>
+                        <div class="text-muted small">
+                          commander:
+                          <a class="text-muted text-decoration-none" href="{{ url_for('views.build_session', session_id=build.id) }}">
+                            {{ build.commander_name }}
+                          </a>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -207,15 +259,31 @@
                     <span class="text-muted small">{{ current_user.display_name or current_user.username or 'you' }}</span>
                   </td>
                   <td>
-                    {% if build.colors %}
-                      {% set colors = build.colors %}
-                      {% include "includes/_color_identity.html" %}
+                    {% if build.color_label %}
+                      <span class="text-muted small">{{ build.color_label }}</span>
                     {% else %}
                       <span class="text-muted small">—</span>
                     {% endif %}
                   </td>
-                  <td class="col-ci-pips text-muted small">—</td>
-                  <td class="text-start text-muted small">—</td>
+                  <td class="col-ci-pips">
+                    {% set colors = build.colors %}
+                    {% include "includes/_color_identity.html" %}
+                  </td>
+                  <td class="text-start">
+                    {% if build.bracket_level %}
+                      <div class="deck-bracket">
+                        <span class="badge text-bg-primary">{{ build.bracket_level }}</span>
+                        {% if build.bracket_label %}
+                          <span class="label text-muted">{{ build.bracket_label }}</span>
+                        {% endif %}
+                        {% if build.bracket_score is not none %}
+                          <span class="text-muted small">Score {{ build.bracket_score }}</span>
+                        {% endif %}
+                      </div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
                   <td class="text-end">{{ build.card_count }}</td>
                   <td class="text-end">
                     <div class="d-inline-flex gap-2">
@@ -237,18 +305,20 @@
     </div>
   </div>
 
-  <div class="offcanvas offcanvas-end w-500"
-       tabindex="-1"
-       id="buildDrawer"
-       aria-labelledby="buildDrawerLabel"
-       data-bs-backdrop="false"
-       data-bs-scroll="true">
-    <div class="offcanvas-header">
-      <h5 class="offcanvas-title" id="buildDrawerLabel">build details</h5>
-      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body" id="buildDrawerBody"></div>
+</div>
+
+<!-- Drawer moved outside the landing container to avoid stacking/overflow clipping. -->
+<div class="offcanvas offcanvas-end w-500"
+     tabindex="-1"
+     id="buildDrawer"
+     aria-labelledby="buildDrawerLabel"
+     data-bs-backdrop="false"
+     data-bs-scroll="true">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="buildDrawerLabel">build details</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
   </div>
+  <div class="offcanvas-body" id="buildDrawerBody"></div>
 </div>
 
 <script>
@@ -258,123 +328,327 @@
   if (!drawerEl || !bodyEl || typeof bootstrap === 'undefined') return;
   const instance = new bootstrap.Offcanvas(drawerEl, { backdrop: false, scroll: true });
 
-  function renderBuild(row) {
-    const buildName = row.dataset.buildName || 'build';
-    const commander = row.dataset.commanderName || '';
-    const tags = (row.dataset.buildTags || '').split(',').map(t => t.trim()).filter(Boolean);
-    const cardCount = row.dataset.cardCount || '0';
-    const updated = row.dataset.updated || '';
-    const colors = (row.dataset.colors || '').split(',').map(c => c.trim()).filter(Boolean);
-    const image = row.dataset.image || '';
-    const buildId = row.dataset.buildId;
+  function buildPill(label, count, icon){
+    const span = document.createElement('span');
+    span.className = 'deck-drawer-pill';
+    const labelWrap = document.createElement('span');
+    if (icon){
+      const img = document.createElement('img');
+      img.src = icon;
+      img.alt = label;
+      img.className = 'mana mana-sm';
+      labelWrap.appendChild(img);
+    } else {
+      const textNode = document.createElement('span');
+      textNode.textContent = label;
+      labelWrap.appendChild(textNode);
+    }
+    span.appendChild(labelWrap);
+    const value = document.createElement('span');
+    value.textContent = count;
+    span.appendChild(value);
+    return span;
+  }
 
+  function appendBadges(section, title, pills){
+    if (!pills || !pills.length) return;
+    const heading = document.createElement('h6');
+    heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+    heading.textContent = title;
+    section.appendChild(heading);
+    const grid = document.createElement('div');
+    grid.className = 'deck-drawer-grid';
+    pills.forEach(p => grid.appendChild(p));
+    section.appendChild(grid);
+  }
+
+  function appendList(section, title, items){
+    if (!items || !items.length) return;
+    const heading = document.createElement('h6');
+    heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+    heading.textContent = title;
+    section.appendChild(heading);
+    const list = document.createElement('ul');
+    list.className = 'deck-drawer-list';
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.innerHTML = item;
+      list.appendChild(li);
+    });
+    section.appendChild(list);
+  }
+
+  function renderSummary(data){
     bodyEl.innerHTML = '';
+    const deck = data.deck || {};
+    const commander = data.commander || {};
+    const bracket = data.bracket || {};
+
     const topSection = document.createElement('div');
     topSection.className = 'deck-drawer-section';
     const headerRow = document.createElement('div');
     headerRow.className = 'd-flex align-items-center gap-3';
 
-    if (image) {
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'rounded overflow-hidden';
+    if (commander.image || commander.hover) {
       const img = document.createElement('img');
-      img.src = image;
-      img.alt = commander || 'Commander';
+      img.src = commander.image || commander.hover;
+      img.alt = commander.name || 'Commander';
       img.style.width = '72px';
       img.style.height = 'auto';
       img.className = 'rounded';
-      headerRow.appendChild(img);
+      imgWrap.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'bg-secondary-subtle rounded';
+      placeholder.style.width = '72px';
+      placeholder.style.height = '96px';
+      placeholder.style.opacity = '.25';
+      imgWrap.appendChild(placeholder);
     }
+    headerRow.appendChild(imgWrap);
 
     const meta = document.createElement('div');
+    meta.className = 'min-w-0';
     const title = document.createElement('div');
-    title.className = 'fw-semibold fs-5';
-    title.textContent = buildName;
+    title.className = 'h5 mb-1 text-truncate';
+    title.textContent = deck.name || 'Build';
     meta.appendChild(title);
-    if (commander) {
-      const sub = document.createElement('div');
-      sub.className = 'text-muted';
-      sub.textContent = 'commander: ' + commander;
-      meta.appendChild(sub);
+    if (deck.tag_label) {
+      const tagLine = document.createElement('div');
+      tagLine.className = 'small text-muted text-truncate';
+      tagLine.textContent = deck.tag_label;
+      meta.appendChild(tagLine);
     }
-    if (colors.length) {
-      const colorRow = document.createElement('div');
-      colorRow.className = 'd-flex gap-1 mt-2';
-      colors.forEach(c => {
-        const img = document.createElement('img');
-        img.src = '/static/symbols/' + c.toUpperCase() + '.svg';
-        img.alt = '{' + c.toUpperCase() + '}';
-        img.className = 'mana mana-sm';
-        colorRow.appendChild(img);
-      });
-      meta.appendChild(colorRow);
+    if (commander.name) {
+      const cmdLine = document.createElement('div');
+      cmdLine.className = 'small text-muted text-truncate';
+      cmdLine.textContent = 'Commander: ' + commander.name;
+      meta.appendChild(cmdLine);
+    }
+    if (data.total_cards) {
+      const totalLine = document.createElement('div');
+      totalLine.className = 'small text-muted';
+      totalLine.textContent = data.total_cards + ' total cards';
+      meta.appendChild(totalLine);
     }
     headerRow.appendChild(meta);
     topSection.appendChild(headerRow);
     bodyEl.appendChild(topSection);
 
-    if (tags.length) {
-      const tagSection = document.createElement('div');
-      tagSection.className = 'deck-drawer-section';
+    if (bracket.level) {
+      const bracketSection = document.createElement('div');
+      bracketSection.className = 'deck-drawer-section';
+      const badgeRow = document.createElement('div');
+      badgeRow.className = 'd-flex align-items-center gap-2 mb-2';
+      const badge = document.createElement('span');
+      badge.className = 'badge text-bg-primary';
+      badge.textContent = bracket.level;
+      badgeRow.appendChild(badge);
+      if (bracket.label) {
+        const label = document.createElement('span');
+        label.className = 'fw-semibold';
+        label.textContent = bracket.label;
+        badgeRow.appendChild(label);
+      }
+      if (typeof bracket.score === 'number') {
+        const score = document.createElement('span');
+        score.className = 'text-muted small';
+        score.textContent = 'Score ' + bracket.score;
+        badgeRow.appendChild(score);
+      }
+      bracketSection.appendChild(badgeRow);
+      const points = bracket.summary_points || [];
+      if (points.length) {
+        const list = document.createElement('ul');
+        list.className = 'deck-drawer-list';
+        points.forEach(point => {
+          const li = document.createElement('li');
+          li.textContent = point;
+          list.appendChild(li);
+        });
+        bracketSection.appendChild(list);
+      } else {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted small';
+        empty.textContent = 'No summary available.';
+        bracketSection.appendChild(empty);
+      }
+      bodyEl.appendChild(bracketSection);
+    }
+
+    const typePills = (data.type_breakdown || []).map(item => buildPill(item[0] + ":", item[1], null));
+    const typeSection = document.createElement('div');
+    typeSection.className = 'deck-drawer-section';
+    appendBadges(typeSection, 'Types', typePills);
+    if (typeSection.children.length > 0) bodyEl.appendChild(typeSection);
+
+    const manaCostPills = (data.mana_pip_dist || []).map(item => buildPill(item.color, item.count, item.icon));
+    const costSection = document.createElement('div');
+    costSection.className = 'deck-drawer-section';
+    appendBadges(costSection, 'Color Distribution', manaCostPills);
+    if (costSection.children.length > 0) bodyEl.appendChild(costSection);
+
+    const deckColors = new Set((data.deck_colors || []).map(color => String(color || '').toUpperCase()));
+    const manaSourcePills = (data.land_mana_sources || [])
+      .filter(item => {
+        const code = String(item.color || item.code || '').toUpperCase();
+        if (!code) return false;
+        return deckColors.has(code) || code === 'C';
+      })
+      .map(item => {
+        let label = item.label || item.color || "C";
+        let icon = item.icon;
+        if ((label === "C" || label.toUpperCase() === "COLORLESS") && !icon) {
+          icon = "/static/symbols/C.svg";
+          label = "C";
+        }
+        return buildPill(label + ":", item.count, icon);
+      });
+    if (manaSourcePills.length) {
+      const sourceSection = document.createElement('div');
+      sourceSection.className = 'deck-drawer-section';
+      appendBadges(sourceSection, 'Mana Sources', manaSourcePills);
+      bodyEl.appendChild(sourceSection);
+    }
+
+    const curveRows = data.curve_rows || [];
+    if (curveRows.length) {
+      const section = document.createElement('div');
+      section.className = 'deck-drawer-section';
       const heading = document.createElement('h6');
       heading.className = 'text-uppercase text-muted fw-semibold mb-2';
-      heading.textContent = 'themes';
-      tagSection.appendChild(heading);
-      const tagWrap = document.createElement('div');
-      tagWrap.className = 'deck-drawer-tags';
-      tags.forEach(label => {
-        const span = document.createElement('span');
-        span.className = 'deck-drawer-tag';
-        span.textContent = label;
-        tagWrap.appendChild(span);
+      heading.textContent = 'Mana Curve';
+      section.appendChild(heading);
+      const grid = document.createElement('div');
+      grid.className = 'deck-curve-grid';
+      const maxPct = Math.max(...curveRows.map(row => row.pct || 0));
+      curveRows.forEach(row => {
+        const col = document.createElement('div');
+        col.className = 'deck-curve-col';
+        const bar = document.createElement('div');
+        bar.className = 'deck-curve-bar';
+        const fill = document.createElement('div');
+        fill.className = 'deck-curve-fill';
+        const pct = row.pct || 0;
+        const height = maxPct ? Math.max(12, (pct / maxPct) * 100) : 0;
+        fill.style.height = height + '%';
+        bar.appendChild(fill);
+        const count = document.createElement('div');
+        count.className = 'deck-curve-count';
+        count.textContent = row.count;
+        bar.appendChild(count);
+        col.appendChild(bar);
+        const label = document.createElement('div');
+        label.className = 'deck-curve-label';
+        label.textContent = row.label;
+        col.appendChild(label);
+        grid.appendChild(col);
       });
-      tagSection.appendChild(tagWrap);
-      bodyEl.appendChild(tagSection);
+      section.appendChild(grid);
+      bodyEl.appendChild(section);
     }
 
-    const statsSection = document.createElement('div');
-    statsSection.className = 'deck-drawer-section';
-    const statsHeading = document.createElement('h6');
-    statsHeading.className = 'text-uppercase text-muted fw-semibold mb-2';
-    statsHeading.textContent = 'summary';
-    statsSection.appendChild(statsHeading);
-    const grid = document.createElement('div');
-    grid.className = 'deck-drawer-grid';
-    const cardsPill = document.createElement('span');
-    cardsPill.className = 'deck-drawer-pill';
-    cardsPill.innerHTML = '<span>cards</span><span>' + cardCount + '</span>';
-    grid.appendChild(cardsPill);
-    if (updated) {
-      const updatedPill = document.createElement('span');
-      updatedPill.className = 'deck-drawer-pill';
-      updatedPill.innerHTML = '<span>updated</span><span>' + updated + '</span>';
-      grid.appendChild(updatedPill);
+    const combos = (bracket.spellbook_combos || []);
+    if (combos.length) {
+      const comboSection = document.createElement('div');
+      comboSection.className = 'deck-drawer-section';
+      const heading = document.createElement('h6');
+      heading.className = 'text-uppercase text-muted fw-semibold mb-2';
+      heading.textContent = 'Commander Spellbook Combos';
+      comboSection.appendChild(heading);
+      const list = document.createElement('div');
+      list.className = 'd-flex flex-column gap-2';
+      combos.forEach(combo => {
+        const wrapper = document.createElement(combo.url ? 'a' : 'div');
+        wrapper.classList.add('deck-drawer-combo-wrapper');
+        if (combo.url) {
+          wrapper.href = combo.url;
+          wrapper.target = '_blank';
+          wrapper.rel = 'noopener';
+          wrapper.classList.add('text-decoration-none', 'text-reset');
+        }
+        const tags = Array.isArray(combo.tags) ? combo.tags : [];
+        if (tags.length) {
+          const tagGroup = document.createElement('div');
+          tagGroup.className = 'deck-drawer-tags';
+          tags.forEach(label => {
+            const tagEl = document.createElement('span');
+            tagEl.className = 'deck-drawer-tag';
+            tagEl.textContent = label;
+            tagGroup.appendChild(tagEl);
+          });
+          wrapper.appendChild(tagGroup);
+        }
+        const pill = document.createElement('div');
+        pill.className = 'deck-drawer-combo';
+        const cards = combo.cards || [];
+        cards.forEach((card, index) => {
+          const span = document.createElement('span');
+          span.textContent = card.name;
+          if (card.hover) {
+            span.setAttribute('data-hover-src', card.hover);
+          }
+          pill.appendChild(span);
+          if (index < cards.length - 1) {
+            const plus = document.createElement('span');
+            plus.textContent = '+';
+            pill.appendChild(plus);
+          }
+        });
+        wrapper.appendChild(pill);
+        list.appendChild(wrapper);
+      });
+      comboSection.appendChild(list);
+      bodyEl.appendChild(comboSection);
     }
-    statsSection.appendChild(grid);
-    bodyEl.appendChild(statsSection);
 
-    if (buildId) {
+    if (deck.id) {
       const actionSection = document.createElement('div');
       actionSection.className = 'deck-drawer-section';
       const link = document.createElement('a');
       link.className = 'btn btn-outline-primary w-100';
-      link.href = '/decks/build/' + buildId;
+      link.href = '/decks/build/' + deck.id;
       link.textContent = 'resume build';
       actionSection.appendChild(link);
       bodyEl.appendChild(actionSection);
     }
   }
 
+  async function openDrawer(buildId){
+    if (!buildId) return;
+    bodyEl.innerHTML = '<div class="text-center py-5 text-muted">Loading build insight...</div>';
+    bodyEl.scrollTop = 0;
+    drawerEl.scrollTop = 0;
+    instance.show();
+    try {
+      const resp = await fetch('/api/build-sessions/' + buildId + '/insight');
+      if (!resp.ok) throw new Error('Failed to load build insight');
+      const payload = await resp.json();
+      renderSummary(payload);
+      bodyEl.scrollTop = 0;
+      drawerEl.scrollTop = 0;
+    } catch (err) {
+      const message = err && err.message ? err.message : 'Unable to load build details.';
+      bodyEl.innerHTML = '<div class="text-center text-danger py-5">' + message + '</div>';
+      bodyEl.scrollTop = 0;
+      drawerEl.scrollTop = 0;
+    }
+  }
+
   document.querySelectorAll('.build-row').forEach(row => {
     row.addEventListener('click', (event) => {
       if (event.target.closest('a, button, form')) return;
-      renderBuild(row);
-      instance.show();
+      const buildId = row.dataset.buildId;
+      openDrawer(buildId);
     });
     row.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       if (event.target.closest('a, button, form')) return;
       event.preventDefault();
-      renderBuild(row);
-      instance.show();
+      const buildId = row.dataset.buildId;
+      openDrawer(buildId);
     });
   });
 })();

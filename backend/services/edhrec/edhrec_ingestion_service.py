@@ -22,6 +22,7 @@ from models import (
     EdhrecCommanderTag,
     EdhrecCommanderTagCard,
     EdhrecCommanderTagCategoryCard,
+    EdhrecCommanderTypeDistribution,
     EdhrecMetadata,
     EdhrecTagCommander,
     Folder,
@@ -94,6 +95,7 @@ def _ensure_schema() -> None:
             EdhrecCommanderTagCard.__table__,
             EdhrecCommanderTagCategoryCard.__table__,
             EdhrecTagCommander.__table__,
+            EdhrecCommanderTypeDistribution.__table__,
             EdhrecMetadata.__table__,
         ],
     )
@@ -628,6 +630,96 @@ def _normalize_tag_candidates(raw: dict) -> list[str]:
     return deduped
 
 
+_TYPE_LABEL_MAP = {
+    "creature": "Creature",
+    "creatures": "Creature",
+    "instant": "Instant",
+    "instants": "Instant",
+    "sorcery": "Sorcery",
+    "sorceries": "Sorcery",
+    "artifact": "Artifact",
+    "artifacts": "Artifact",
+    "enchantment": "Enchantment",
+    "enchantments": "Enchantment",
+    "planeswalker": "Planeswalker",
+    "planeswalkers": "Planeswalker",
+    "land": "Land",
+    "lands": "Land",
+    "battle": "Battle",
+    "battles": "Battle",
+    "other": "Other",
+}
+
+
+def _normalize_type_label(label: str | None) -> str | None:
+    if not label:
+        return None
+    cleaned = str(label).strip()
+    if not cleaned:
+        return None
+    key = cleaned.casefold()
+    if key in _TYPE_LABEL_MAP:
+        return _TYPE_LABEL_MAP[key]
+    if "creature" in key:
+        return "Creature"
+    if "instant" in key:
+        return "Instant"
+    if "sorcery" in key:
+        return "Sorcery"
+    if "artifact" in key:
+        return "Artifact"
+    if "enchantment" in key:
+        return "Enchantment"
+    if "planeswalker" in key:
+        return "Planeswalker"
+    if "land" in key:
+        return "Land"
+    if "battle" in key:
+        return "Battle"
+    return "Other"
+
+
+def _extract_type_distribution(payload: dict | None) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    panels = None
+    if isinstance(payload.get("panels"), dict):
+        panels = payload.get("panels")
+    elif isinstance(payload.get("container"), dict) and isinstance(payload["container"].get("panels"), dict):
+        panels = payload["container"].get("panels")
+    else:
+        container = payload.get("props", {}).get("pageProps", {}).get("data", {}).get("container")
+        if isinstance(container, dict):
+            panels = container.get("panels")
+    if not isinstance(panels, dict):
+        return []
+    piechart = panels.get("piechart")
+    if not isinstance(piechart, dict):
+        return []
+    content = piechart.get("content")
+    if not isinstance(content, list):
+        return []
+    counts: dict[str, int] = {}
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        value = item.get("value")
+        if label is None or value is None:
+            continue
+        try:
+            numeric_value = int(round(float(value)))
+        except (TypeError, ValueError):
+            continue
+        card_type = _normalize_type_label(label)
+        if not card_type:
+            continue
+        counts[card_type] = counts.get(card_type, 0) + numeric_value
+    if not counts:
+        return []
+    return [{"card_type": key, "count": int(value)} for key, value in counts.items() if value]
+
+
 def _upsert_edhrec_tags(tags: Iterable[str]) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -1025,6 +1117,7 @@ def run_monthly_edhrec_ingestion(
 
         tag_card_rows: dict[str, list[dict]] = {}
         tag_category_rows: dict[str, list[dict]] = {}
+        tag_type_rows: dict[str, list[dict]] = {}
         tag_cards_added = 0
         for tag in tags_to_fetch:
             tag_slug = slugify_theme(tag)
@@ -1033,7 +1126,7 @@ def run_monthly_edhrec_ingestion(
             last_request_at = _rate_limit(last_request_at)
             tag_base = slug_used or candidates_to_try[0]
             tag_url = f"https://edhrec.com/commanders/{tag_base}/{tag_slug}"
-            tag_payload, _, tag_error = _fetch_commander_json(session, tag_url)
+            tag_payload, tag_raw_json, tag_error = _fetch_commander_json(session, tag_url)
             if tag_error:
                 if tag_error == "Commander page not found.":
                     _LOG.info("EDHREC tag page not found for %s (%s).", target.name, tag)
@@ -1049,12 +1142,16 @@ def run_monthly_edhrec_ingestion(
             tag_rows = _map_synergy_cards(tag_views)
             tag_cardlists = _extract_cardlists(tag_payload)
             tag_category = _map_category_cards(tag_cardlists)
+            tag_type_dist = _extract_type_distribution(tag_payload or tag_raw_json)
             if tag_rows:
                 tag_card_rows[tag] = tag_rows
                 tag_cards_added += len(tag_rows)
             if tag_category:
                 tag_category_rows[tag] = tag_category
+            if tag_type_dist:
+                tag_type_rows[tag] = tag_type_dist
 
+        commander_type_rows = _extract_type_distribution(payload or raw_json)
         try:
             if needs_commander:
                 EdhrecCommanderCard.query.filter_by(
@@ -1081,6 +1178,23 @@ def run_monthly_edhrec_ingestion(
                         [
                             {"commander_oracle_id": target.oracle_id, "tag": tag}
                             for tag in tags
+                        ],
+                    )
+
+                if commander_type_rows:
+                    EdhrecCommanderTypeDistribution.query.filter_by(
+                        commander_oracle_id=target.oracle_id,
+                        tag="",
+                    ).delete(synchronize_session=False)
+                    db.session.bulk_insert_mappings(
+                        EdhrecCommanderTypeDistribution,
+                        [
+                            {
+                                "commander_oracle_id": target.oracle_id,
+                                "tag": "",
+                                **row,
+                            }
+                            for row in commander_type_rows
                         ],
                     )
 
@@ -1122,6 +1236,22 @@ def run_monthly_edhrec_ingestion(
                 ).delete(synchronize_session=False)
                 db.session.bulk_insert_mappings(
                     EdhrecCommanderTagCategoryCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            "tag": tag,
+                            **row,
+                        }
+                        for row in rows
+                    ],
+                )
+            for tag, rows in tag_type_rows.items():
+                EdhrecCommanderTypeDistribution.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTypeDistribution,
                     [
                         {
                             "commander_oracle_id": target.oracle_id,
@@ -1266,6 +1396,7 @@ def ingest_commander_tag_data(
 
     tag_card_rows: dict[str, list[dict]] = {}
     tag_category_rows: dict[str, list[dict]] = {}
+    tag_type_rows: dict[str, list[dict]] = {}
     tag_cards_added = 0
     for tag in requested_tags:
         tag_slug = slugify_theme(tag)
@@ -1274,7 +1405,7 @@ def ingest_commander_tag_data(
         last_request_at = _rate_limit(last_request_at)
         tag_base = slug_used or slug_candidates[0]
         tag_url = f"https://edhrec.com/commanders/{tag_base}/{tag_slug}"
-        tag_payload, _, tag_error = _fetch_commander_json(session, tag_url)
+        tag_payload, tag_raw_json, tag_error = _fetch_commander_json(session, tag_url)
         if tag_error:
             if tag_error == "Commander page not found.":
                 _LOG.info("EDHREC tag page not found for %s (%s).", target.name, tag)
@@ -1288,12 +1419,16 @@ def ingest_commander_tag_data(
         tag_rows = _map_synergy_cards(tag_views)
         tag_cardlists = _extract_cardlists(tag_payload)
         tag_category = _map_category_cards(tag_cardlists)
+        tag_type_dist = _extract_type_distribution(tag_payload or tag_raw_json)
         if tag_rows:
             tag_card_rows[tag] = tag_rows
             tag_cards_added += len(tag_rows)
         if tag_category:
             tag_category_rows[tag] = tag_category
+        if tag_type_dist:
+            tag_type_rows[tag] = tag_type_dist
 
+    commander_type_rows = _extract_type_distribution(payload or raw_json)
     try:
         with db.session.no_autoflush:
             EdhrecCommanderCard.query.filter_by(
@@ -1338,6 +1473,23 @@ def ingest_commander_tag_data(
                     ],
                 )
 
+            if commander_type_rows:
+                EdhrecCommanderTypeDistribution.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag="",
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTypeDistribution,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            "tag": "",
+                            **row,
+                        }
+                        for row in commander_type_rows
+                    ],
+                )
+
             for tag, rows in tag_card_rows.items():
                 EdhrecCommanderTagCard.query.filter_by(
                     commander_oracle_id=target.oracle_id,
@@ -1361,6 +1513,23 @@ def ingest_commander_tag_data(
                 ).delete(synchronize_session=False)
                 db.session.bulk_insert_mappings(
                     EdhrecCommanderTagCategoryCard,
+                    [
+                        {
+                            "commander_oracle_id": target.oracle_id,
+                            "tag": tag,
+                            **row,
+                        }
+                        for row in rows
+                    ],
+                )
+
+            for tag, rows in tag_type_rows.items():
+                EdhrecCommanderTypeDistribution.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).delete(synchronize_session=False)
+                db.session.bulk_insert_mappings(
+                    EdhrecCommanderTypeDistribution,
                     [
                         {
                             "commander_oracle_id": target.oracle_id,

@@ -27,6 +27,7 @@ from .edhrec_cache import (  # type: ignore F401
     EdhrecCommanderTag,
     EdhrecCommanderTagCard,
     EdhrecCommanderTagCategoryCard,
+    EdhrecCommanderTypeDistribution,
     EdhrecTagCommander,
     EdhrecMetadata,
 )
@@ -71,6 +72,7 @@ __all__ = [
     "EdhrecCommanderTag",
     "EdhrecCommanderTagCard",
     "EdhrecCommanderTagCategoryCard",
+    "EdhrecCommanderTypeDistribution",
     "EdhrecTagCommander",
     "EdhrecMetadata",
     "Role",
