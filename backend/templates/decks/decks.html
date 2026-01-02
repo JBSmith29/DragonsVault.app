@@ -318,7 +318,7 @@
         Import Proxy Deck
       </button>
       <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#bulkProxyModal">
-        Bulk Import (MTGGoldfish)
+        Bulk Import (MTGGoldfish or Moxfield)
       </button>
     </div>
   </div>
@@ -591,9 +591,9 @@
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label for="bulkProxyUrls" class="form-label">MTGGoldfish Deck URLs</label>
+            <label for="bulkProxyUrls" class="form-label">Deck URLs (MTGGoldfish or Moxfield)</label>
             <textarea class="form-control" id="bulkProxyUrls" name="deck_urls" rows="8" placeholder="https://www.mtggoldfish.com/deck/#####&#10;https://www.mtggoldfish.com/deck/#####"></textarea>
-            <div class="form-text">One URL per line. Each deck will be imported as its own proxy deck using the MTGGoldfish name, owner, commander, and decklist.</div>
+            <div class="form-text">One URL per line. Each deck will be imported as its own proxy deck using the deck name, owner, commander, and decklist.</div>
           </div>
           <div class="alert alert-info small">
             Existing deck names are kept when available. If a name already exists, a numeric suffix is appended automatically.
@@ -643,9 +643,9 @@
             </div>
           </div>
           <div class="mt-3">
-            <label for="proxyDeckUrl" class="form-label">MTGGoldfish Deck URL <span class="text-muted small">(optional)</span></label>
+            <label for="proxyDeckUrl" class="form-label">Deck URL <span class="text-muted small">(MTGGoldfish or Moxfield)</span></label>
             <div class="input-group">
-              <input type="url" class="form-control" id="proxyDeckUrl" name="deck_url" placeholder="https://www.mtggoldfish.com/deck/123456">
+              <input type="url" class="form-control" id="proxyDeckUrl" name="deck_url" placeholder="https://www.mtggoldfish.com/deck/123456 or https://moxfield.com/decks/ABC123">
               <button class="btn btn-outline-primary" type="button" id="proxyDeckFetchBtn">Fetch</button>
             </div>
             <div class="form-text">Paste the deck URL, then click Fetch to auto-fill name, owner, commander, and decklist.</div>
@@ -1271,7 +1271,7 @@
     if (!fetchBtn || !urlInput) return;
     const deckUrl = (urlInput.value || '').trim();
     if (!deckUrl){
-      showAlert('Please paste an MTGGoldfish deck URL first.', 'warning');
+      showAlert('Please paste an MTGGoldfish or Moxfield deck URL first.', 'warning');
       return;
     }
 

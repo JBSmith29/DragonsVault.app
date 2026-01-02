@@ -731,6 +731,7 @@
     {% endif %}
     {% if user_is_authenticated %}
       {% set user_display = current_user.display_name or current_user.username or current_user.email or "Local User" %}
+      {% set session_identity = current_user.email or current_user.username or current_user.display_name or "Local User" %}
       {% if user_is_admin %}
         {% set user_context = "Admin Mode" %}
       {% else %}
@@ -738,6 +739,7 @@
       {% endif %}
     {% else %}
       {% set user_display = "Guest" %}
+      {% set session_identity = "Guest" %}
       {% set user_context = "Not signed in" %}
     {% endif %}
     {% set sidebar_active = not (disable_sidebar | default(false)) %}
@@ -746,7 +748,11 @@
         <div class="app-header__title">DragonsVault</div>
         <p class="app-header__motto">Collect &bull; Vault &bull; Conquer</p>
       </a>
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-3">
+        <div class="d-none d-lg-flex flex-column align-items-end lh-sm">
+          <div class="small text-muted">signed in as <span class="text-body">{{ session_identity }}</span></div>
+          <div class="small text-muted">server <span class="text-body">{{ request.host }}</span></div>
+        </div>
         <button id="themeToggleBtn"
                 class="theme-toggle btn-soft"
                 type="button"

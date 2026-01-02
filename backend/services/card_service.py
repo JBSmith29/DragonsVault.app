@@ -22,7 +22,7 @@ from extensions import cache, db
 from models import Card, Folder, FolderRole, FolderShare, User, UserSetting
 from models.role import Role, SubRole, CardRole, OracleCoreRoleTag, OracleEvergreenTag, OracleRole
 from services import scryfall_cache as sc
-from services.proxy_decks import fetch_goldfish_deck, resolve_proxy_cards
+from services.proxy_decks import fetch_proxy_deck, resolve_proxy_cards
 from services.commander_brackets import BRACKET_RULESET_EPOCH, evaluate_commander_bracket, spellbook_dataset_epoch
 from services.commander_cache import compute_bracket_signature, get_cached_bracket, store_cached_bracket
 from services.deck_tags import (
@@ -1189,7 +1189,7 @@ def create_proxy_deck():
         errors: list[str] = []
 
         # ARCHIDEKT REMOVED — replaced by internal role engine
-        fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_goldfish_deck(deck_url)
+        fetched_name, fetched_owner, fetched_commander, fetched_lines, errors = fetch_proxy_deck(deck_url)
         fetched_errors.extend(errors)
         if fetched_lines:
             decklist_text = decklist_text or "\n".join(fetched_lines)
@@ -1338,7 +1338,7 @@ def create_proxy_deck_bulk():
     failure_messages: list[str] = []
 
     for url in urls:
-        fetched_name, fetched_owner, fetched_commander, fetched_lines, fetch_errors = fetch_goldfish_deck(url)
+        fetched_name, fetched_owner, fetched_commander, fetched_lines, fetch_errors = fetch_proxy_deck(url)
         if not fetched_lines:
             message = fetch_errors[0] if fetch_errors else "No decklist data returned."
             failure_messages.append(f"{url}: {message}")
@@ -1396,7 +1396,7 @@ def api_fetch_proxy_deck():
     if not deck_url:
         return jsonify({"ok": False, "error": "No deck URL provided."}), 400
 
-    name, owner, commander, lines, errors = fetch_goldfish_deck(deck_url)
+    name, owner, commander, lines, errors = fetch_proxy_deck(deck_url)
     response = {
         "ok": True,
         "deck_name": name,

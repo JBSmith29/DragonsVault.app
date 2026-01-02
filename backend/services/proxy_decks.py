@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from html import unescape
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Set, Tuple
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import requests
@@ -29,6 +29,7 @@ _REQUEST_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 _ALLOWED_GOLDFISH_HOSTS = {"mtggoldfish.com", "www.mtggoldfish.com"}
+_ALLOWED_MOXFIELD_HOSTS = {"moxfield.com", "www.moxfield.com"}
 _ALLOWED_GOLDFISH_PORTS = {None, 80, 443}
 _ALLOWED_SCHEMES = {"http", "https"}
 # ARCHIDEKT REMOVED — replaced by internal role engine
@@ -171,9 +172,48 @@ def _normalize_goldfish_url(deck_url: str) -> str:
     return urlunsplit((scheme, netloc, path, query, ""))
 
 
+def _normalize_moxfield_url(deck_url: str) -> str:
+    raw = (deck_url or "").strip()
+    if not raw:
+        raw = "https://moxfield.com/"
+
+    parts = urlsplit(raw)
+
+    if not parts.netloc and parts.path.startswith("//"):
+        parts = urlsplit(f"https:{parts.path}")
+
+    scheme = (parts.scheme or "https").lower()
+    if scheme not in _ALLOWED_SCHEMES:
+        scheme = "https"
+
+    hostname = (parts.hostname or "moxfield.com").lower()
+    port = parts.port
+    if port:
+        netloc = f"{hostname}:{port}"
+    else:
+        netloc = hostname
+
+    path = parts.path or "/"
+    query = parts.query
+
+    return urlunsplit((scheme, netloc, path, query, ""))
+
+
 def _is_allowed_goldfish_location(parts: SplitResult) -> bool:
     hostname = (parts.hostname or "").lower()
     if hostname not in _ALLOWED_GOLDFISH_HOSTS:
+        return False
+    if parts.port not in _ALLOWED_GOLDFISH_PORTS:
+        return False
+    scheme = (parts.scheme or "").lower()
+    if scheme and scheme not in _ALLOWED_SCHEMES:
+        return False
+    return True
+
+
+def _is_allowed_moxfield_location(parts: SplitResult) -> bool:
+    hostname = (parts.hostname or "").lower()
+    if hostname not in _ALLOWED_MOXFIELD_HOSTS:
         return False
     if parts.port not in _ALLOWED_GOLDFISH_PORTS:
         return False
@@ -309,4 +349,148 @@ def fetch_goldfish_deck(deck_url: str) -> Tuple[str | None, str | None, str | No
     return deck_name, owner, commander_name, filtered_lines, errors
 
 
-__all__ = ["ResolvedCard", "parse_decklist", "resolve_proxy_cards", "fetch_goldfish_deck"]
+def _iter_moxfield_entries(board: object) -> Iterable[Tuple[str, int]]:
+    if isinstance(board, dict):
+        entries = board.values()
+    elif isinstance(board, list):
+        entries = board
+    else:
+        return []
+
+    out: List[Tuple[str, int]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        card = entry.get("card") or {}
+        name = (
+            (card.get("name") or "")
+            or (entry.get("name") or "")
+            or (entry.get("cardName") or "")
+        ).strip()
+        if not name:
+            continue
+        qty_raw = entry.get("quantity") or entry.get("qty") or 1
+        try:
+            qty = max(int(qty_raw), 1)
+        except (TypeError, ValueError):
+            qty = 1
+        out.append((name, qty))
+    return out
+
+
+def fetch_moxfield_deck(deck_url: str) -> Tuple[str | None, str | None, str | None, List[str], List[str]]:
+    """Fetch deck metadata and list from a Moxfield deck URL."""
+    errors: List[str] = []
+    if not deck_url:
+        return None, None, None, [], ["No deck URL provided."]
+
+    cleaned_url = _normalize_moxfield_url(deck_url)
+    parts = urlsplit(cleaned_url)
+    if not _is_allowed_moxfield_location(parts):
+        host = parts.hostname or "(unknown host)"
+        errors.append(f"Unsupported Moxfield host {host}.")
+        return None, None, None, [], errors
+
+    match = re.search(r"/decks/([A-Za-z0-9_-]+)", parts.path or "")
+    if not match:
+        errors.append("Could not find a deck id in the Moxfield URL.")
+        return None, None, None, [], errors
+
+    deck_id = match.group(1)
+    api_candidates = [
+        f"https://api.moxfield.com/v2/decks/all/{deck_id}",
+        f"https://api.moxfield.com/v2/decks/{deck_id}",
+    ]
+
+    deck_payload = None
+    for api_url in api_candidates:
+        try:
+            resp = requests.get(
+                api_url,
+                timeout=12,
+                headers={
+                    **_REQUEST_HEADERS,
+                    "Accept": "application/json",
+                    "Referer": "https://moxfield.com/",
+                },
+            )
+            if resp.status_code == 403:
+                errors.append(
+                    "Moxfield blocked the request. Export the decklist from Moxfield and paste it directly."
+                )
+                continue
+            resp.raise_for_status()
+            deck_payload = resp.json()
+            break
+        except Exception as exc:
+            errors.append(f"Failed to download deck data from Moxfield: {exc}")
+
+    if not deck_payload:
+        return None, None, None, [], errors or ["Unable to fetch deck data from Moxfield."]
+
+    deck_name = (deck_payload.get("name") or "").strip() or None
+    owner = (
+        (deck_payload.get("createdByDisplayName") or "")
+        or (deck_payload.get("createdBy") or "")
+    ).strip() or None
+
+    commanders_board = deck_payload.get("commanders") or deck_payload.get("commandZone") or {}
+    commander_entries = list(_iter_moxfield_entries(commanders_board))
+    commander_names = [name for name, _ in commander_entries if name]
+    commander_name = " // ".join(commander_names) if commander_names else None
+
+    mainboard_entries = list(_iter_moxfield_entries(deck_payload.get("mainboard") or {}))
+    sideboard_entries = list(_iter_moxfield_entries(deck_payload.get("sideboard") or {}))
+
+    lines: List[str] = []
+    seen: Set[str] = set()
+    for name, qty in commander_entries:
+        if name in seen:
+            continue
+        lines.append(f"{qty} {name}")
+        seen.add(name)
+    for name, qty in mainboard_entries:
+        if name in seen:
+            continue
+        lines.append(f"{qty} {name}")
+        seen.add(name)
+    for name, qty in sideboard_entries:
+        if name in seen:
+            continue
+        lines.append(f"{qty} {name}")
+        seen.add(name)
+
+    if not lines:
+        errors.append("No card entries were found in the Moxfield payload.")
+
+    return deck_name, owner, commander_name, lines, errors
+
+
+def fetch_proxy_deck(deck_url: str) -> Tuple[str | None, str | None, str | None, List[str], List[str]]:
+    """Dispatch deck fetch to the correct provider based on URL host."""
+    if not deck_url:
+        return None, None, None, [], ["No deck URL provided."]
+
+    cleaned = _normalize_moxfield_url(deck_url)
+    parts = urlsplit(cleaned)
+    host = (parts.hostname or "").lower()
+    if host in _ALLOWED_MOXFIELD_HOSTS:
+        return fetch_moxfield_deck(deck_url)
+
+    cleaned = _normalize_goldfish_url(deck_url)
+    parts = urlsplit(cleaned)
+    host = (parts.hostname or "").lower()
+    if host in _ALLOWED_GOLDFISH_HOSTS:
+        return fetch_goldfish_deck(deck_url)
+
+    return None, None, None, [], ["Unsupported deck URL host."]
+
+
+__all__ = [
+    "ResolvedCard",
+    "parse_decklist",
+    "resolve_proxy_cards",
+    "fetch_goldfish_deck",
+    "fetch_moxfield_deck",
+    "fetch_proxy_deck",
+]
