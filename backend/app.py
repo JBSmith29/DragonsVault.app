@@ -186,7 +186,8 @@ def _configure_login_manager(app: Flask) -> None:
         if request.path.startswith("/api/") or accepts_json:
             return jsonify({"error": "authentication_required"}), 401
         flash("Please sign in to continue.", "warning")
-        return redirect(url_for("views.login", next=request.url))
+        next_url = request.full_path or request.path or "/"
+        return redirect(url_for("views.login", next=next_url))
 
 
 # ---------------------------------------------------------------------------

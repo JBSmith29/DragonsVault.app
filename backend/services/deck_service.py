@@ -52,8 +52,8 @@ def _add_colored_pips(cost_str: str | None, qty: int, counts: dict[str, int]) ->
 
 
 def _is_permanent_type(type_line: str | None) -> bool:
-    t_val = type_line or ""
-    return any(k in t_val for k in ("Land", "Artifact", "Creature", "Enchantment", "Planeswalker"))
+    lowered = (type_line or "").lower()
+    return any(token in lowered for token in ("land", "artifact", "creature", "enchantment", "planeswalker", "battle"))
 
 
 def _colors_from_oracle_text_add(text: str | None) -> set[str]:
@@ -61,12 +61,13 @@ def _colors_from_oracle_text_add(text: str | None) -> set[str]:
     if not text:
         return out
     upper = text.upper()
+    if "ADD" not in upper:
+        return out
     for sym in RE_COST_SYMBOL.findall(text):
         symbol = sym.upper()
-        if "ADD" in upper:
-            for ch in ("W", "U", "B", "R", "G", "C"):
-                if ch in symbol:
-                    out.add(ch)
+        for ch in ("W", "U", "B", "R", "G", "C"):
+            if ch in symbol:
+                out.add(ch)
     if "ANY COLOR" in upper:
         out.update({"W", "U", "B", "R", "G"})
     return out
@@ -95,7 +96,9 @@ def _deck_stats_payload(folder_id: int, *, session=None) -> dict[str, Any]:
     )
 
     for qty, type_line, mana_value, faces_json, oracle_text in rows:
-        qty = int(qty or 0) or 1
+        qty = int(qty or 0)
+        if qty <= 0:
+            continue
         is_land = bool(type_line and "Land" in type_line)
         text = oracle_text or ""
         if not text and faces_json:
@@ -243,9 +246,7 @@ def deck_curve_rows(folder_id: int, *, mode: str = "detail") -> list[dict]:
     stats = get_deck_stats(folder_id)
     curve = stats.get("curve") or {}
     bins = dict(curve.get("bins") or {})
-    missing = int(curve.get("missing") or 0)
     if mode == "drawer":
-        bins["7+"] = int(bins.get("7+") or 0) + missing
         max_curve = max(bins.values()) if bins else 0
         rows = []
         for bucket in ["0", "1", "2", "3", "4", "5", "6", "7+"]:
@@ -256,7 +257,6 @@ def deck_curve_rows(folder_id: int, *, mode: str = "detail") -> list[dict]:
             rows.append({"label": bucket, "count": count, "pct": pct})
         return rows
 
-    bins["0"] = int(bins.get("0") or 0) + missing
     total_curve = sum(int(val or 0) for val in bins.values()) or 1
     rows = []
     for bucket in ["0", "1", "2", "3", "4", "5", "6", "7+"]:
@@ -264,6 +264,12 @@ def deck_curve_rows(folder_id: int, *, mode: str = "detail") -> list[dict]:
         pct = int(round(100.0 * count / total_curve)) if total_curve else 0
         rows.append({"label": bucket, "count": count, "pct": pct})
     return rows
+
+
+def deck_curve_missing(folder_id: int) -> int:
+    stats = get_deck_stats(folder_id)
+    curve = stats.get("curve") or {}
+    return int(curve.get("missing") or 0)
 
 
 def deck_mana_pip_dist(folder_id: int, *, mode: str = "detail") -> list:
@@ -417,6 +423,12 @@ def opening_hand():
     return card_service.opening_hand()
 
 
+def opening_hand_play():
+    from services import card_service
+
+    return card_service.opening_hand_play()
+
+
 def opening_hand_shuffle():
     from services import card_service
 
@@ -429,12 +441,19 @@ def opening_hand_draw():
     return card_service.opening_hand_draw()
 
 
+def opening_hand_token_search():
+    from services import card_service
+
+    return card_service.opening_hand_token_search()
+
+
 __all__ = [
     "api_deck_insight",
     "api_fetch_proxy_deck",
     "create_proxy_deck",
     "create_proxy_deck_bulk",
     "deck_curve_rows",
+    "deck_curve_missing",
     "deck_from_collection",
     "deck_land_mana_sources",
     "deck_mana_pip_dist",
@@ -442,8 +461,10 @@ __all__ = [
     "decks_overview",
     "get_deck_stats",
     "opening_hand",
+    "opening_hand_play",
     "opening_hand_draw",
     "opening_hand_shuffle",
+    "opening_hand_token_search",
     "register_deck_stats_listeners",
     "recompute_deck_stats",
 ]

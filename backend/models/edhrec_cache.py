@@ -10,6 +10,7 @@ class EdhrecCommanderCard(db.Model):
     card_oracle_id = db.Column(db.String(36), primary_key=True)
     synergy_rank = db.Column(db.Integer, nullable=True)
     synergy_score = db.Column(db.Float, nullable=True)
+    inclusion_percent = db.Column(db.Float, nullable=True)
 
 
 class EdhrecCommanderTag(db.Model):
@@ -27,6 +28,7 @@ class EdhrecCommanderTagCard(db.Model):
     card_oracle_id = db.Column(db.String(36), primary_key=True)
     synergy_rank = db.Column(db.Integer, nullable=True)
     synergy_score = db.Column(db.Float, nullable=True)
+    inclusion_percent = db.Column(db.Float, nullable=True)
 
 
 class EdhrecCommanderCategoryCard(db.Model):
@@ -38,6 +40,7 @@ class EdhrecCommanderCategoryCard(db.Model):
     category_rank = db.Column(db.Integer, nullable=True)
     synergy_rank = db.Column(db.Integer, nullable=True)
     synergy_score = db.Column(db.Float, nullable=True)
+    inclusion_percent = db.Column(db.Float, nullable=True)
 
 
 class EdhrecCommanderTagCategoryCard(db.Model):
@@ -50,6 +53,7 @@ class EdhrecCommanderTagCategoryCard(db.Model):
     category_rank = db.Column(db.Integer, nullable=True)
     synergy_rank = db.Column(db.Integer, nullable=True)
     synergy_score = db.Column(db.Float, nullable=True)
+    inclusion_percent = db.Column(db.Float, nullable=True)
 
 
 class EdhrecTagCommander(db.Model):

@@ -71,12 +71,12 @@
   </div>
 
   <div class="d-flex align-items-center gap-2">
-    <a href="{{ url_for('views.list_checker') }}" class="btn btn-outline-light btn-sm">List Checker</a>
+    <a href="{{ url_for('views.list_checker') }}" class="btn btn-outline-theme btn-sm">List Checker</a>
     <button type="button" class="btn btn-outline-secondary btn-sm" id="wishlistExportBtn" data-export-url="{{ url_for('views.wishlist_export') }}">Export CSV</button>
     <button type="button" class="btn btn-outline-primary btn-sm" id="wishlistCopyBtn">Copy All to Clipboard</button>
     <div class="btn-group btn-group-sm wishlist-view-toggle" role="group" aria-label="Wishlist view toggle">
-      <button type="button" class="btn btn-outline-light active" data-view-mode="list">List</button>
-      <button type="button" class="btn btn-outline-light" data-view-mode="gallery">Gallery</button>
+      <button type="button" class="btn btn-outline-theme active" data-view-mode="list">List</button>
+      <button type="button" class="btn btn-outline-theme" data-view-mode="gallery">Gallery</button>
     </div>
   </div>
 </div>

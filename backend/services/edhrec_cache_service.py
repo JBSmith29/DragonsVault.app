@@ -86,10 +86,32 @@ def _ensure_columns() -> None:
         columns = {col["name"] for col in inspector.get_columns("edhrec_commander_cards")}
         if "synergy_rank" not in columns:
             db.session.execute(text("ALTER TABLE edhrec_commander_cards ADD COLUMN synergy_rank INTEGER"))
-            db.session.commit()
+        if "inclusion_percent" not in columns:
+            db.session.execute(text("ALTER TABLE edhrec_commander_cards ADD COLUMN inclusion_percent FLOAT"))
+        db.session.commit()
     except Exception as exc:
         db.session.rollback()
         _LOG.warning("Failed to ensure EDHREC cache columns: %s", exc)
+
+    def _ensure_inclusion_column(table: str) -> None:
+        try:
+            table_columns = {col["name"] for col in inspector.get_columns(table)}
+            if "inclusion_percent" not in table_columns:
+                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN inclusion_percent FLOAT"))
+                db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            _LOG.warning("Failed to ensure EDHREC cache columns for %s: %s", table, exc)
+
+    _ensure_inclusion_column("edhrec_commander_tag_cards")
+    _ensure_inclusion_column("edhrec_commander_category_cards")
+    _ensure_inclusion_column("edhrec_commander_tag_category_cards")
+
+
+def _inclusion_percent(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(value, 1)
 
 
 def _bulk_upsert(model, rows: list[dict], index_elements: list[str], update_cols: list[str]) -> None:
@@ -366,18 +388,26 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
             continue
 
         views = commander_cardviews(payload)
-        card_map: dict[str, float] = {}
+        card_map: dict[str, dict] = {}
         for view in views:
             oracle_id = _oracle_id_for_name(view.name, oracle_cache)
             if not oracle_id:
                 continue
             score = float(view.synergy or 0.0)
+            inclusion = float(view.inclusion) if view.inclusion is not None else None
             existing = card_map.get(oracle_id)
-            if existing is None or score > existing:
-                card_map[oracle_id] = score
+            if existing is None or score > existing.get("synergy_score", 0.0):
+                card_map[oracle_id] = {"synergy_score": score, "inclusion_percent": inclusion}
+            elif score == existing.get("synergy_score", 0.0) and inclusion is not None:
+                if (existing.get("inclusion_percent") or 0) < inclusion:
+                    existing["inclusion_percent"] = inclusion
 
         top_cards = sorted(
-            card_map.items(), key=lambda item: -(item[1] or 0.0)
+            card_map.items(),
+            key=lambda item: (
+                -(item[1].get("synergy_score") or 0.0),
+                -(item[1].get("inclusion_percent") or 0.0),
+            ),
         )
         if _MAX_SYNERGY_CARDS is not None:
             top_cards = top_cards[:_MAX_SYNERGY_CARDS]
@@ -386,13 +416,14 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
         commander_tags = [entry["tag"] for entry in tag_entries]
 
         card_rows = []
-        for rank, (oracle_id, score) in enumerate(top_cards, start=1):
+        for rank, (oracle_id, values) in enumerate(top_cards, start=1):
             card_rows.append(
                 {
                     "commander_oracle_id": commander_oracle_id,
                     "card_oracle_id": oracle_id,
                     "synergy_rank": rank,
-                    "synergy_score": score,
+                    "synergy_score": values.get("synergy_score"),
+                    "inclusion_percent": values.get("inclusion_percent"),
                 }
             )
         tag_rows = [
@@ -419,29 +450,38 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
             if not tag_payload:
                 continue
             tag_views = commander_cardviews(tag_payload)
-            tag_card_map: dict[str, float] = {}
+            tag_card_map: dict[str, dict] = {}
             for view in tag_views:
                 oracle_id = _oracle_id_for_name(view.name, oracle_cache)
                 if not oracle_id:
                     continue
                 score = float(view.synergy or 0.0)
+                inclusion = float(view.inclusion) if view.inclusion is not None else None
                 existing = tag_card_map.get(oracle_id)
-                if existing is None or score > existing:
-                    tag_card_map[oracle_id] = score
+                if existing is None or score > existing.get("synergy_score", 0.0):
+                    tag_card_map[oracle_id] = {"synergy_score": score, "inclusion_percent": inclusion}
+                elif score == existing.get("synergy_score", 0.0) and inclusion is not None:
+                    if (existing.get("inclusion_percent") or 0) < inclusion:
+                        existing["inclusion_percent"] = inclusion
             top_tag_cards = sorted(
-                tag_card_map.items(), key=lambda item: -(item[1] or 0.0)
+                tag_card_map.items(),
+                key=lambda item: (
+                    -(item[1].get("synergy_score") or 0.0),
+                    -(item[1].get("inclusion_percent") or 0.0),
+                ),
             )
             if _MAX_SYNERGY_CARDS is not None:
                 top_tag_cards = top_tag_cards[:_MAX_SYNERGY_CARDS]
             rows = []
-            for rank, (oracle_id, score) in enumerate(top_tag_cards, start=1):
+            for rank, (oracle_id, values) in enumerate(top_tag_cards, start=1):
                 rows.append(
                     {
                         "commander_oracle_id": commander_oracle_id,
                         "tag": tag,
                         "card_oracle_id": oracle_id,
                         "synergy_rank": rank,
-                        "synergy_score": score,
+                        "synergy_score": values.get("synergy_score"),
+                        "inclusion_percent": values.get("inclusion_percent"),
                     }
                 )
             if rows:
@@ -456,7 +496,7 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
                     EdhrecCommanderCard,
                     card_rows,
                     ["commander_oracle_id", "card_oracle_id"],
-                    ["synergy_rank", "synergy_score"],
+                    ["synergy_rank", "synergy_score", "inclusion_percent"],
                 )
 
                 EdhrecCommanderTag.query.filter_by(
@@ -477,7 +517,7 @@ def refresh_edhrec_cache(*, force_refresh: bool = False, scope: str = "all") -> 
                         EdhrecCommanderTagCard,
                         rows,
                         ["commander_oracle_id", "tag", "card_oracle_id"],
-                        ["synergy_rank", "synergy_score"],
+                        ["synergy_rank", "synergy_score", "inclusion_percent"],
                     )
             db.session.commit()
         except SQLAlchemyError as exc:
@@ -680,6 +720,7 @@ def get_commander_category_groups(
                 "oracle_id": oracle_id,
                 "synergy_score": float(row.synergy_score) if row.synergy_score is not None else None,
                 "synergy_percent": _synergy_percent(float(row.synergy_score)) if row.synergy_score is not None else None,
+                "inclusion_percent": _inclusion_percent(row.inclusion_percent),
                 "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
             }
         )
@@ -724,6 +765,7 @@ def get_commander_tag_synergy_groups(
                 "oracle_id": oracle_id,
                 "synergy_score": float(row.synergy_score or 0.0),
                 "synergy_percent": _synergy_percent(float(row.synergy_score or 0.0)),
+                "inclusion_percent": _inclusion_percent(row.inclusion_percent),
                 "synergy_rank": int(row.synergy_rank or 0) if row.synergy_rank is not None else None,
             }
         )
@@ -790,11 +832,19 @@ def _get_commander_synergy(
                     continue
                 score = float(row.synergy_score or 0.0)
                 rank = int(row.synergy_rank or 0) if row.synergy_rank is not None else None
+                inclusion = _inclusion_percent(row.inclusion_percent)
                 current = merged.get(oracle_id)
                 if not current or score > current["synergy_score"]:
-                    merged[oracle_id] = {"oracle_id": oracle_id, "synergy_score": score, "synergy_rank": rank}
-                elif score == current["synergy_score"] and rank is not None:
-                    if current["synergy_rank"] is None or rank < current["synergy_rank"]:
+                    merged[oracle_id] = {
+                        "oracle_id": oracle_id,
+                        "synergy_score": score,
+                        "synergy_rank": rank,
+                        "inclusion_percent": inclusion,
+                    }
+                elif score == current["synergy_score"]:
+                    if inclusion is not None and (current.get("inclusion_percent") or 0) < inclusion:
+                        current["inclusion_percent"] = inclusion
+                    if rank is not None and (current["synergy_rank"] is None or rank < current["synergy_rank"]):
                         current["synergy_rank"] = rank
             rows = list(merged.values())
 
@@ -823,6 +873,7 @@ def _get_commander_synergy(
                     "card_oracle_id": row.card_oracle_id,
                     "synergy_score": row.synergy_score,
                     "synergy_rank": row.synergy_rank,
+                    "inclusion_percent": row.inclusion_percent,
                 }
             )
 
@@ -833,6 +884,7 @@ def _get_commander_synergy(
         name = _oracle_name_for_id(oracle_id, name_cache) or oracle_id
         synergy_score = row.get("synergy_score")
         synergy_rank = row.get("synergy_rank")
+        inclusion_percent = row.get("inclusion_percent")
         score_value = float(synergy_score or 0.0)
         results.append(
             {
@@ -840,6 +892,7 @@ def _get_commander_synergy(
                 "name": name,
                 "synergy_score": score_value,
                 "synergy_percent": _synergy_percent(score_value),
+                "inclusion_percent": _inclusion_percent(inclusion_percent),
                 "synergy_rank": int(synergy_rank or 0) if synergy_rank is not None else None,
                 "source": "edhrec",
                 "tag_matches": list(tag_matches),

@@ -6,6 +6,7 @@ import re
 from collections import OrderedDict
 from functools import lru_cache
 import time
+from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, redirect, render_template, request, url_for, flash
 from flask_login import current_user
@@ -53,6 +54,20 @@ def limiter_key_user_or_ip() -> str:
             addr = None
     addr = addr or request.remote_addr or "unknown"
     return f"ip:{addr}"
+
+
+def _safe_next_url(target: str | None) -> str | None:
+    if not target:
+        return None
+    try:
+        parts = urlsplit(target)
+    except Exception:
+        return None
+    if parts.scheme or parts.netloc:
+        return None
+    if not target.startswith("/") or target.startswith("//"):
+        return None
+    return target
 
 
 # ---------------------------------------------------------------------------
@@ -641,7 +656,7 @@ def landing_page():
     from flask import request, url_for, redirect, render_template
 
     if current_user.is_authenticated:
-        dest = request.args.get("next") or url_for("views.dashboard")
+        dest = _safe_next_url(request.args.get("next")) or url_for("views.dashboard")
         return redirect(dest)
     return render_template("landing.html")
 

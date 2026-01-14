@@ -5,34 +5,45 @@
 
 <style>
   #main {
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding-bottom: 0;
     margin-top: 0;
   }
   .opening-hand-stage {
-    height: 100%;
-    min-height: 0;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
+    --hand-actions-safe: env(safe-area-inset-bottom, 0px);
+    padding-bottom: calc(var(--hand-actions-space, 0px) + var(--hand-actions-safe));
+  }
+  .opening-hand-stage.compact-mode .opening-hand-header {
+    display: none;
+  }
+  .opening-hand-stage.compact-mode .opening-hand-board .card-body > .d-flex {
+    margin-bottom: 0.35rem !important;
+  }
+  .opening-hand-stage.compact-mode .opening-hand-board .card-body > .d-flex > div:first-child {
+    display: none;
   }
   .opening-hand-header {
     flex: 0 0 auto;
     margin: 0;
   }
   .opening-hand-board {
-    flex: 0 0 clamp(260px, 38vh, 440px);
+    flex: 0 0 auto;
     min-height: 240px;
   }
   .opening-hand-board .card-body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
   }
   .opening-hand-board .board-grid-layout {
     flex: 1 1 auto;
-    overflow: auto;
+    overflow: visible;
     padding-right: 0.25rem;
   }
   .opening-hand-board .board-note {
@@ -56,6 +67,14 @@
   .opening-hand-layout > section {
     min-height: 0;
   }
+  .opening-hand-hand-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .opening-hand-hand-wrapper .opening-hand-hand {
+    flex: 1 1 auto;
+  }
   #deckSourceCard,
   .opening-hand-hand {
     height: 100%;
@@ -73,6 +92,9 @@
     overflow: hidden;
     position: relative;
   }
+  .hand-status {
+    order: 1;
+  }
   .hand-card-grid {
     flex: 1 1 auto;
     min-height: 0;
@@ -84,6 +106,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
+    order: 2;
   }
   .hand-card-grid > .text-muted {
     margin: auto;
@@ -153,9 +176,10 @@
   .hand-card.card-tapped {
     border-color: rgba(250, 204, 21, 0.65);
     background: rgba(250, 204, 21, 0.08);
+    transform-origin: center center;
     transform: rotate(90deg);
     margin-right: 1.25rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
   }
   .hand-card.card-tapped:hover {
     transform: rotate(90deg);
@@ -240,12 +264,17 @@
   }
   .board-zone-command .board-zone-cards {
     justify-content: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .board-zone-strip {
-    flex-wrap: wrap;
-    overflow-x: visible;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  .board-zone-strip .hand-card {
+    flex: 0 0 auto;
   }
   .board-zone-strip::-webkit-scrollbar {
     height: 6px;
@@ -357,38 +386,34 @@
   }
   .opening-hand-actions {
     position: fixed;
-    top: calc(var(--app-header-h, 96px) + 1rem);
-    left: calc(var(--sidebar-w, 0px) + 1.5rem);
-    right: auto;
+    left: calc(var(--sidebar-w, 0px) + 2rem);
+    right: 2rem;
+    bottom: var(--hand-actions-safe);
     z-index: 1040;
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.5rem 0.65rem;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.75);
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(12px);
-    max-width: min(420px, 90vw);
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    padding: 0.65rem 0.5rem;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    overflow-x: auto;
+    pointer-events: auto;
   }
   .opening-hand-actions .btn {
-    min-width: 120px;
-    font-size: 0.8rem;
-    padding: 0.35rem 0.8rem;
+    min-width: 0;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.9rem;
     border-radius: 999px;
     white-space: nowrap;
-  }
-  .opening-hand-actions > .d-flex {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.45rem;
   }
   @media (max-width: 992px) {
     .opening-hand-actions {
       left: 1rem;
-      right: auto;
-      top: calc(var(--app-header-h, 96px) + 0.75rem);
+      right: 1rem;
     }
   }
   @media (max-width: 576px) {
@@ -490,11 +515,12 @@
   }
 </style>
 
-<div class="opening-hand-stage">
+{% set selection_active = selected_deck_id or selected_deck_list %}
+<div class="opening-hand-stage{% if selection_active %} compact-mode{% endif %}">
 <div class="opening-hand-header">
   <h1 class="mb-1">Opening Hand Simulator</h1>
   <div class="text-muted small">
-    Pick an existing deck or paste a list to shuffle up and draw a virtual opening hand. The commander is automatically excluded.
+    Shuffle your selected deck, then drag cards between zones to track your opening hand.
   </div>
 </div>
 
@@ -546,81 +572,18 @@
   </div>
 </div>
 
-<div class="opening-hand-layout">
-  <section class="card shadow-sm border-0" id="deckSourceCard">
+<div class="opening-hand-layout{% if selection_active %} full-mode{% endif %}">
+  <section class="card shadow-sm border-0{% if selection_active %} d-none{% endif %}" id="deckSourceCard">
     <div class="card-body">
       <h2 class="h6 text-uppercase text-muted mb-3">Deck Source</h2>
 
-      <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#deckPickerModal" id="deckPickerBtn">
-          Pick Deck
-        </button>
-        <span class="text-muted small" id="deckPickerSummary">No deck selected</span>
-      </div>
-
-      <div class="alert alert-info small mt-3 d-none" role="status" id="handMessage"></div>
-      <div class="alert alert-warning small mt-3 d-none" role="alert" id="handWarnings"></div>
-
-      <input type="hidden" id="handState" value="">
-    </div>
-  </section>
-
-  <section>
-    <div class="card shadow-sm border-0 opening-hand-hand">
-      <div class="card-body">
-        <div class="opening-hand-actions d-none mb-3" id="handActionBar">
-          <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
-            <button class="btn btn-primary" type="button" id="shuffleBtn">
-              Shuffle &amp; Deal
-            </button>
-            <button class="btn btn-outline-secondary" type="button" id="resetBtn">
-              Reset
-            </button>
-            <button class="btn btn-outline-light" type="button" id="drawBtn" disabled>
-              Draw 1
-            </button>
-            <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
-              Select New Deck
-            </button>
-          </div>
-          <button class="btn btn-outline-success ms-auto" type="button" id="untapAllBtn">
-            Untap All
-          </button>
-        </div>
-        <div class="hand-status">
-          <span class="badge text-bg-primary text-uppercase" id="handDeckName">No deck selected</span>
-          <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
-        </div>
-        <div class="hand-card-grid" id="handGrid">
-          <div class="text-muted small">
-            Shuffle a deck to see your opening seven.
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </section>
-</div>
-</div>
-
-
-{% from "macros/modal_wrapper.html" import wrap_modal %}
-{% call wrap_modal() %}
-<div class="modal fade" id="deckPickerModal" tabindex="-1" aria-labelledby="deckPickerLabel" aria-hidden="true" role="dialog" aria-modal="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border border-secondary">
-      <div class="modal-header border-secondary-subtle">
-        <h5 class="modal-title" id="deckPickerLabel">Pick a deck</h5>
-        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
+      <div class="d-flex flex-column gap-3 mb-3">
+        <div>
           <label id="deckSelectLabel" class="form-label">Choose a deck</label>
           <div class="dropdown dv-select w-100" data-dv-select="deck">
-            <input type="hidden" id="deckSelect" data-dv-select-input value="">
+            <input type="hidden" id="deckSelect" data-dv-select-input value="{{ selected_deck_id or '' }}">
             <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="deckSelectToggle" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="deckSelectLabel deckSelectToggle">
-              <span data-dv-select-label>Select a deck</span>
+              <span data-dv-select-label>{% if selected_deck_id %}{{ selected_deck_name }}{% else %}Select a deck{% endif %}</span>
               <i class="bi bi-chevron-down"></i>
             </button>
             <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="deckSelectToggle">
@@ -636,20 +599,83 @@
           </div>
           <div class="form-text">Choose one of your saved decks to use its draw pile. Commanders stored with the deck are automatically excluded.</div>
         </div>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+          <button class="btn btn-outline-theme" type="button" data-bs-toggle="modal" data-bs-target="#deckPickerModal" id="deckListBtn">
+            Paste Deck List
+          </button>
+          <span class="text-muted small" id="deckPickerSummary">No deck selected</span>
+        </div>
+      </div>
+
+      <div class="alert alert-info small mt-3 d-none" role="status" id="handMessage"></div>
+      <div class="alert alert-warning small mt-3 d-none" role="alert" id="handWarnings"></div>
+
+      <input type="hidden" id="handState" value="">
+    </div>
+  </section>
+
+  <section class="opening-hand-hand-wrapper">
+    <div class="card shadow-sm border-0 opening-hand-hand">
+      <div class="card-body">
+        <div class="hand-status">
+          <span class="badge text-bg-primary text-uppercase" id="handDeckName">{{ selected_deck_name or 'No deck selected' }}</span>
+          <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
+        </div>
+        <div class="hand-card-grid" id="handGrid">
+          <div class="text-muted small">
+            Shuffle a deck to see your opening seven.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="opening-hand-actions{% if not selection_active %} d-none{% endif %}" id="handActionBar">
+      <button class="btn btn-primary" type="button" id="shuffleBtn">
+        Shuffle &amp; Deal
+      </button>
+      <button class="btn btn-outline-secondary" type="button" id="resetBtn">
+        Reset
+      </button>
+      <button class="btn btn-outline-theme" type="button" id="drawBtn" disabled>
+        Draw 1
+      </button>
+      <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
+        Select New Deck
+      </button>
+      <button class="btn btn-outline-success" type="button" id="untapAllBtn">
+        Untap All
+      </button>
+    </div>
+
+  </section>
+</div>
+</div>
+
+
+{% from "macros/modal_wrapper.html" import wrap_modal %}
+{% call wrap_modal() %}
+<div class="modal fade" id="deckPickerModal" tabindex="-1" aria-labelledby="deckPickerLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="deckPickerLabel">Paste a Deck List</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
         <div class="border rounded-3 p-3 bg-body-tertiary">
-          <label for="deckListInput" class="form-label">Deck list (optional)</label>
-          <textarea id="deckListInput" class="form-control" rows="6" placeholder="7 Island&#10;1 Sol Ring&#10;1 Rhystic Study"></textarea>
-          <div class="form-text mt-2">Provide quantities like "2 Lightning Bolt" or "2x Lightning Bolt". Only one source is needed per shuffle.</div>
+          <label for="deckListInput" class="form-label">Deck list</label>
+          <textarea id="deckListInput" class="form-control" rows="6" placeholder="7 Island&#10;1 Sol Ring&#10;1 Rhystic Study">{{ (selected_deck_list or '') | e }}</textarea>
+          <div class="form-text mt-2">Provide quantities like "2 Lightning Bolt" or "2x Lightning Bolt". The pasted list replaces any selected deck for this shuffle.</div>
         </div>
         <div class="border rounded-3 p-3 bg-body-tertiary mt-3">
           <label for="commanderInput" class="form-label">Commander name (optional)</label>
-          <input type="text" id="commanderInput" class="form-control" placeholder="Commander name(s) to exclude">
+          <input type="text" id="commanderInput" class="form-control" placeholder="Commander name(s) to exclude" value="{{ (selected_commander_name or '') | e }}">
           <div class="form-text mt-2">If your list includes partners or special commanders, list them here (use "//" between names) so they stay out of the draw.</div>
         </div>
       </div>
       <div class="modal-footer border-secondary-subtle">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="deckPickerApply">Use selection</button>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="deckPickerApply">Use deck list</button>
       </div>
     </div>
   </div>
@@ -776,8 +802,38 @@
       </div>
       <div class="modal-body">
         <div class="text-muted small mb-3">Tokens are pulled from the selected deck's printings. Pick one to place it on the battlefield.</div>
+        <div class="mb-3">
+          <label for="tokenPickerSearch" class="form-label">Find a token</label>
+          <input
+            type="search"
+            class="form-control"
+            id="tokenPickerSearch"
+            placeholder="Search token name or type">
+          <div class="form-text">Type to filter tokens or enter a name to add a custom token.</div>
+        </div>
+        <div id="tokenPickerCustom" class="d-none mb-3">
+          <button type="button" class="btn btn-outline-primary w-100" id="tokenPickerCustomBtn">Add custom token</button>
+        </div>
         <div id="tokenPickerList" class="row g-3"></div>
         <div id="tokenPickerEmpty" class="text-muted small text-center">Select a deck to view its tokens.</div>
+        <div id="tokenPickerNoMatch" class="text-muted small text-center d-none">No tokens match that search.</div>
+        <hr class="border-secondary-subtle my-4">
+        <div class="text-muted small text-uppercase mb-2">Search all tokens</div>
+        <div class="mb-3">
+          <label for="tokenAllSearch" class="form-label">Token name or type</label>
+          <input
+            type="search"
+            class="form-control"
+            id="tokenAllSearch"
+            placeholder="Search all tokens">
+          <div class="form-text">Search across every token, not just this deck.</div>
+        </div>
+        <div id="tokenAllCustom" class="d-none mb-3">
+          <button type="button" class="btn btn-outline-primary w-100" id="tokenAllCustomBtn">Add custom token</button>
+        </div>
+        <div id="tokenAllList" class="row g-3"></div>
+        <div id="tokenAllEmpty" class="text-muted small text-center">Search for a token to add it.</div>
+        <div id="tokenAllNoMatch" class="text-muted small text-center d-none">No tokens match that search.</div>
       </div>
       <div class="modal-footer border-secondary-subtle d-flex justify-content-between">
         <div class="text-muted small" id="tokenPickerStatus"></div>
@@ -818,6 +874,16 @@
   const tokenPickerModal = document.getElementById('tokenPickerModal');
   const tokenPickerList = document.getElementById('tokenPickerList');
   const tokenPickerEmpty = document.getElementById('tokenPickerEmpty');
+  const tokenPickerNoMatch = document.getElementById('tokenPickerNoMatch');
+  const tokenPickerSearch = document.getElementById('tokenPickerSearch');
+  const tokenPickerCustom = document.getElementById('tokenPickerCustom');
+  const tokenPickerCustomBtn = document.getElementById('tokenPickerCustomBtn');
+  const tokenAllSearch = document.getElementById('tokenAllSearch');
+  const tokenAllList = document.getElementById('tokenAllList');
+  const tokenAllEmpty = document.getElementById('tokenAllEmpty');
+  const tokenAllNoMatch = document.getElementById('tokenAllNoMatch');
+  const tokenAllCustom = document.getElementById('tokenAllCustom');
+  const tokenAllCustomBtn = document.getElementById('tokenAllCustomBtn');
   const tokenPickerStatus = document.getElementById('tokenPickerStatus');
   const untapAllBtn = document.getElementById('untapAllBtn');
   const fetchCardName = document.getElementById('fetchCardName');
@@ -828,10 +894,18 @@
   const deckPickerApply = document.getElementById('deckPickerApply');
   const deckSourceCard = document.getElementById('deckSourceCard');
   const openingLayout = document.querySelector('.opening-hand-layout');
+  const openingStage = document.querySelector('.opening-hand-stage');
+  const sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
   const placeholderImage = "{{ url_for('static', filename='img/card-placeholder.svg') }}";
   const deckCardLookup = {{ deck_card_lookup_json | safe }} || {};
   const deckTokenLookup = {{ deck_token_lookup_json | safe }} || {};
+  const customTokenEntries = {{ custom_token_entries_json | default('[]', true) | safe }} || [];
+  const commanderSeedPayload = {{ selected_commander_cards_json | default('[]', true) | safe }} || [];
   const csrfToken = window.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
+  let sidebarRestoreState = null;
+  let commanderSeed = Array.isArray(commanderSeedPayload) ? commanderSeedPayload.slice() : [];
+  let tokenAllSearchTimer = null;
+  let tokenAllLastQuery = '';
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),
@@ -1131,6 +1205,9 @@
     if (openingLayout) {
       openingLayout.classList.toggle('full-mode', active);
     }
+    if (openingStage) {
+      openingStage.classList.toggle('compact-mode', active);
+    }
     if (handDeckName) {
       if (deckId) {
         const labelEl = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-label]') : null;
@@ -1144,6 +1221,8 @@
     if (handActionBar) {
       handActionBar.classList.toggle('d-none', !active);
     }
+    syncActionBarSpacing();
+    syncSidebarCollapse(active);
     if (!active) {
       showMessage('Select a deck or paste a deck list to begin.', 'info');
     } else if (handMessage && handMessage.classList.contains('alert-info')) {
@@ -1161,6 +1240,50 @@
     }
   }
 
+  function syncSidebarCollapse(active) {
+    const body = document.body;
+    if (!body) {
+      return;
+    }
+    if (active) {
+      if (sidebarRestoreState === null) {
+        sidebarRestoreState = body.classList.contains('sidebar-collapsed');
+      }
+      body.classList.add('sidebar-collapsed');
+      if (sidebarCollapseBtn) {
+        sidebarCollapseBtn.classList.add('collapsed');
+        sidebarCollapseBtn.setAttribute('aria-pressed', 'true');
+        sidebarCollapseBtn.setAttribute('aria-label', 'Expand sidebar');
+        sidebarCollapseBtn.setAttribute('title', 'Expand sidebar');
+      }
+      return;
+    }
+    if (sidebarRestoreState !== null) {
+      body.classList.toggle('sidebar-collapsed', sidebarRestoreState);
+      if (sidebarCollapseBtn) {
+        const collapsed = sidebarRestoreState;
+        sidebarCollapseBtn.classList.toggle('collapsed', collapsed);
+        sidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+        sidebarCollapseBtn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+        sidebarCollapseBtn.setAttribute('title', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      }
+      sidebarRestoreState = null;
+    }
+  }
+
+  function syncActionBarSpacing() {
+    if (!openingStage || !handActionBar) {
+      return;
+    }
+    if (handActionBar.classList.contains('d-none')) {
+      openingStage.style.setProperty('--hand-actions-space', '0px');
+      return;
+    }
+    const height = handActionBar.getBoundingClientRect().height || 0;
+    const space = Math.ceil(height + 12);
+    openingStage.style.setProperty('--hand-actions-space', `${space}px`);
+  }
+
   if (fetchCardSearch) {
     fetchCardSearch.addEventListener('input', function (event) {
       applyFetchFilter(event.target.value || '');
@@ -1169,7 +1292,8 @@
 
   function tokensForDeck(deckId) {
     if (!deckId) {
-      return [];
+      const deckList = (deckListInput ? deckListInput.value : '').trim();
+      return deckList ? customTokenEntries : [];
     }
     return deckTokenLookup[deckId] || [];
   }
@@ -1180,6 +1304,134 @@
     tokenPickerStatus.className = 'text-muted small';
     if (level === 'error') tokenPickerStatus.classList.add('text-danger');
     if (level === 'success') tokenPickerStatus.classList.add('text-success');
+  }
+
+  function applyTokenFilter(query) {
+    if (!tokenPickerList) return;
+    const needle = (query || '').toLowerCase().trim();
+    const buttons = Array.from(tokenPickerList.querySelectorAll('[data-token-item="1"]'));
+    let anyVisible = false;
+    buttons.forEach(function (btn) {
+      const filterText = btn.dataset.filter || '';
+      const match = !needle || filterText.includes(needle);
+      const wrapper = btn.closest('[data-token-entry]');
+      if (wrapper) {
+        wrapper.classList.toggle('d-none', !match);
+      }
+      if (match) {
+        anyVisible = true;
+      }
+    });
+    if (tokenPickerNoMatch) {
+      tokenPickerNoMatch.classList.toggle('d-none', anyVisible || !needle);
+    }
+    if (tokenPickerCustom) {
+      const showCustom = Boolean(needle) && !anyVisible;
+      tokenPickerCustom.classList.toggle('d-none', !showCustom);
+      if (tokenPickerCustomBtn) {
+        tokenPickerCustomBtn.textContent = showCustom
+          ? `Add "${query.trim()}" token`
+          : 'Add custom token';
+      }
+    }
+  }
+
+  function clearTokenAllResults() {
+    if (tokenAllList) {
+      tokenAllList.innerHTML = '';
+    }
+    if (tokenAllEmpty) {
+      tokenAllEmpty.classList.remove('d-none');
+    }
+    if (tokenAllNoMatch) {
+      tokenAllNoMatch.classList.add('d-none');
+    }
+    if (tokenAllCustom) {
+      tokenAllCustom.classList.add('d-none');
+    }
+  }
+
+  function renderTokenAllResults(tokens, query) {
+    if (!tokenAllList) {
+      return;
+    }
+    tokenAllList.innerHTML = '';
+    const hasTokens = Array.isArray(tokens) && tokens.length > 0;
+    if (tokenAllEmpty) {
+      tokenAllEmpty.classList.toggle('d-none', Boolean(query));
+    }
+    if (tokenAllNoMatch) {
+      tokenAllNoMatch.classList.toggle('d-none', !query || hasTokens);
+    }
+    if (tokenAllCustom) {
+      const showCustom = Boolean(query) && !hasTokens;
+      tokenAllCustom.classList.toggle('d-none', !showCustom);
+      if (tokenAllCustomBtn) {
+        tokenAllCustomBtn.textContent = showCustom ? `Add "${query}" token` : 'Add custom token';
+      }
+    }
+    if (!hasTokens) {
+      return;
+    }
+    tokens.forEach(function (token) {
+      const col = document.createElement('div');
+      col.className = 'col-12 col-sm-6 col-md-4';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn w-100 text-start bg-dark text-light border border-secondary d-flex align-items-center gap-3';
+      const thumb = document.createElement('div');
+      thumb.className = 'flex-shrink-0 overflow-hidden rounded';
+      thumb.style.width = '88px';
+      thumb.style.aspectRatio = '0.72';
+      const img = document.createElement('img');
+      img.src = token.image || placeholderImage;
+      img.alt = token.name || 'Token';
+      img.className = 'w-100 h-100 object-fit-cover';
+      thumb.appendChild(img);
+      const body = document.createElement('div');
+      body.className = 'flex-grow-1';
+      const title = document.createElement('div');
+      title.className = 'fw-semibold';
+      title.textContent = token.name || 'Token';
+      const subtitle = document.createElement('div');
+      subtitle.className = 'text-muted small';
+      subtitle.textContent = token.type_line || 'Token';
+      body.appendChild(title);
+      body.appendChild(subtitle);
+      btn.appendChild(thumb);
+      btn.appendChild(body);
+      btn.addEventListener('click', function () {
+        addTokenToBoard(token);
+      });
+      col.appendChild(btn);
+      tokenAllList.appendChild(col);
+    });
+  }
+
+  async function fetchTokenAllResults(query) {
+    const trimmed = (query || '').trim();
+    if (!trimmed || trimmed.length < 2) {
+      clearTokenAllResults();
+      return;
+    }
+    const requestQuery = trimmed;
+    tokenAllLastQuery = requestQuery;
+    try {
+      const response = await fetch(`{{ url_for("views.opening_hand_token_search") }}?q=${encodeURIComponent(requestQuery)}`, {
+        credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (tokenAllLastQuery !== requestQuery) {
+        return;
+      }
+      if (!response.ok || !data.ok) {
+        renderTokenAllResults([], requestQuery);
+        return;
+      }
+      renderTokenAllResults(data.tokens || [], requestQuery);
+    } catch (err) {
+      renderTokenAllResults([], trimmed);
+    }
   }
 
   function applyFetchFilter(query) {
@@ -1220,18 +1472,24 @@
     if (!tokenPickerList || !tokenPickerEmpty) return;
     tokenPickerList.innerHTML = '';
     const tokens = tokensForDeck(deckId);
+    const deckListActive = !deckId && (deckListInput ? deckListInput.value.trim() : '');
     const hasTokens = Array.isArray(tokens) && tokens.length > 0;
     tokenPickerEmpty.classList.toggle('d-none', hasTokens);
     tokenPickerEmpty.textContent = deckId
       ? 'No tokens detected for this deck yet.'
+      : deckListActive
+        ? 'No tokens detected for this list yet.'
       : 'Select a deck to view its tokens.';
     if (!hasTokens) {
-      if (deckId) {
+      if (deckId || deckListActive) {
         const col = document.createElement('div');
         col.className = 'col-12';
+        col.dataset.tokenEntry = '1';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn btn-outline-secondary w-100';
+        btn.dataset.tokenItem = '1';
+        btn.dataset.filter = 'token';
         btn.textContent = 'Add a generic token to the battlefield';
         btn.addEventListener('click', function () {
           addTokenToBoard({
@@ -1251,15 +1509,19 @@
         tokenPickerList.appendChild(col);
         tokenPickerEmpty.classList.add('d-none');
       }
+      applyTokenFilter(tokenPickerSearch ? tokenPickerSearch.value : '');
       return;
     }
 
     tokens.forEach(function(token) {
       const col = document.createElement('div');
       col.className = 'col-12 col-sm-6 col-md-4';
+      col.dataset.tokenEntry = '1';
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn w-100 text-start bg-dark text-light border border-secondary d-flex align-items-center gap-3';
+      btn.dataset.tokenItem = '1';
+      btn.dataset.filter = `${(token.name || '').toLowerCase()} ${(token.type_line || '').toLowerCase()}`.trim();
       const thumb = document.createElement('div');
       thumb.className = 'flex-shrink-0 overflow-hidden rounded';
       thumb.style.width = '88px';
@@ -1287,6 +1549,7 @@
       col.appendChild(btn);
       tokenPickerList.appendChild(col);
     });
+    applyTokenFilter(tokenPickerSearch ? tokenPickerSearch.value : '');
   }
 
   function addTokenToBoard(token) {
@@ -1359,6 +1622,27 @@
     copy.zone_hint = copy.zone_hint || card.zone_hint || card.zoneHint || 'permanents';
 
     return copy;
+  }
+
+  function setCommanderSeed(cards) {
+    commanderSeed = Array.isArray(cards) ? cards.slice() : [];
+  }
+
+  function seedCommandZone() {
+    boardState.command = [];
+    if (!commanderSeed.length) {
+      return;
+    }
+    commanderSeed.forEach(function (entry) {
+      const card = normalizeCard(entry);
+      if (!card) {
+        return;
+      }
+      card.boardZone = 'command';
+      card.lastBoardZone = 'command';
+      card.tapped = false;
+      boardState.command.push(card);
+    });
   }
 
   function showMessage(text, kind) {
@@ -1449,6 +1733,15 @@
     if (source === 'board') {
       cardEl.addEventListener('dblclick', function (event) {
         event.preventDefault();
+        if (zone === 'command') {
+          const moved = removeCardFromBoard(cardEl.dataset.cardId);
+          if (!moved) {
+            return;
+          }
+          moveCommanderToBattlefield(moved);
+          closeContextMenu();
+          return;
+        }
         returnCardToHand(cardEl.dataset.cardId, 'board');
       });
     }
@@ -1602,6 +1895,32 @@
     boardZones.forEach(renderZone);
   }
 
+  function applyHandFan() {
+    if (!handGrid) {
+      return;
+    }
+    const cards = Array.from(handGrid.querySelectorAll('.hand-card'));
+    const count = cards.length;
+    if (!count) {
+      return;
+    }
+    const center = (count - 1) / 2;
+    const maxRotation = count <= 3 ? 2.5 : 3.5;
+    const maxOffset = count <= 3 ? 3 : 6;
+
+    cards.forEach(function (cardEl, index) {
+      let angle = 0;
+      let offset = 0;
+      if (center > 0) {
+        const ratio = (index - center) / center;
+        angle = ratio * maxRotation;
+        offset = Math.abs(ratio) * maxOffset;
+      }
+      cardEl.style.setProperty('--hand-rotate', angle.toFixed(2) + 'deg');
+      cardEl.style.setProperty('--hand-offset', offset.toFixed(1) + 'px');
+    });
+  }
+
   function untapAllBoardCards() {
     let changed = false;
     boardZones.forEach(function (zone) {
@@ -1625,6 +1944,7 @@
       emptyText: 'Shuffle a deck to see your opening seven.',
       emptyClass: 'text-muted small'
     });
+    applyHandFan();
   }
 
   function classifyCard(card) {
@@ -1654,6 +1974,14 @@
       return 'permanents';
     }
     return 'permanents';
+  }
+
+  function moveCommanderToBattlefield(card) {
+    if (!card) {
+      return;
+    }
+    const targetZone = classifyCard(Object.assign({}, card, { boardZone: null, lastBoardZone: null }));
+    moveCardToBoard(card, targetZone);
   }
 
   function removeCardFromBoard(cardId) {
@@ -2154,7 +2482,7 @@
         if (!moved) {
           return;
         }
-        moveCardToBoard(moved);
+        moveCommanderToBattlefield(moved);
         closeContextMenu();
         return;
       }
@@ -2189,11 +2517,9 @@
     boardZones.forEach(function (zone) {
       boardState[zone] = [];
     });
+    seedCommandZone();
     renderHand();
     renderBoard();
-    if (handDeckName) {
-      handDeckName.textContent = 'No deck selected';
-    }
     if (handRemaining) {
       handRemaining.hidden = true;
       handRemaining.textContent = '';
@@ -2204,6 +2530,7 @@
     showMessage('');
     showWarnings([]);
     closeContextMenu();
+    updateActionVisibility();
   }
 
   if (fetchCardForm && fetchCardModalEl) {
@@ -2400,18 +2727,10 @@
         boardZones.forEach(function (zone) {
           boardState[zone] = [];
         });
-        if (Array.isArray(data.commanders) && data.commanders.length) {
-          const commanderCards = data.commanders
-            .map(function (entry) {
-              return normalizeCard(entry);
-            })
-            .filter(Boolean);
-          commanderCards.forEach(function (commanderCard) {
-            commanderCard.boardZone = 'command';
-            commanderCard.lastBoardZone = 'command';
-            boardState.command.push(commanderCard);
-          });
+        if (Array.isArray(data.commanders)) {
+          setCommanderSeed(data.commanders);
         }
+        seedCommandZone();
         renderBoard();
         closeContextMenu();
         if (drawBtn) {
@@ -2492,6 +2811,9 @@
     });
     deckSelectWrapper.addEventListener('dv-select:change', function (event) {
       const value = event.detail && event.detail.value ? event.detail.value : '';
+      if (value && deckListInput && deckListInput.value.trim()) {
+        deckListInput.value = '';
+      }
       populateFetchList(value);
       updateTokenPicker(value);
       updateActionVisibility();
@@ -2510,6 +2832,9 @@
 
   if (deckPickerApply) {
     deckPickerApply.addEventListener('click', () => {
+      if (deckSelectWrapper) {
+        updateDvSelect(deckSelectWrapper, '', 'Select a deck', { trigger: true, hide: true });
+      }
       populateFetchList(currentDeckId());
       updateTokenPicker(currentDeckId());
       updateActionVisibility();
@@ -2523,6 +2848,9 @@
   if (deckPickerModal) {
     deckPickerModal.addEventListener('shown.bs.modal', () => {
       populateFetchList(currentDeckId());
+      if (deckListInput) {
+        setTimeout(() => deckListInput.focus({ preventScroll: true }), 60);
+      }
     });
     deckPickerModal.addEventListener('hidden.bs.modal', () => {
       updateActionVisibility();
@@ -2536,10 +2864,19 @@
     tokenModalInstance = ModalCtor ? ModalCtor.getOrCreateInstance(tokenPickerModal) : null;
 
     tokenPickerModal.addEventListener('show.bs.modal', function () {
+      if (tokenPickerSearch) {
+        tokenPickerSearch.value = '';
+      }
+      if (tokenAllSearch) {
+        tokenAllSearch.value = '';
+      }
       const deckId = currentDeckId();
+      const deckListActive = !deckId && (deckListInput ? deckListInput.value.trim() : '');
       lastTokenDeckId = deckId;
       renderTokenList(deckId);
-      setTokenStatus(deckId ? '' : 'Select a deck first.');
+      setTokenStatus(deckId || deckListActive ? '' : 'Select a deck first.');
+      applyTokenFilter('');
+      clearTokenAllResults();
     });
 
     tokenPickerModal.addEventListener('hidden.bs.modal', function () {
@@ -2547,21 +2884,77 @@
     });
   }
 
+  if (tokenPickerSearch) {
+    tokenPickerSearch.addEventListener('input', function (event) {
+      applyTokenFilter(event.target.value || '');
+    });
+  }
+
+  if (tokenAllSearch) {
+    tokenAllSearch.addEventListener('input', function (event) {
+      const value = event.target.value || '';
+      if (tokenAllSearchTimer) {
+        clearTimeout(tokenAllSearchTimer);
+      }
+      tokenAllSearchTimer = setTimeout(function () {
+        fetchTokenAllResults(value);
+      }, 200);
+    });
+  }
+
+  if (tokenAllCustomBtn) {
+    tokenAllCustomBtn.addEventListener('click', function () {
+      const name = (tokenAllSearch ? tokenAllSearch.value : '').trim();
+      if (!name) {
+        return;
+      }
+      addTokenToBoard({
+        name: name,
+        image: null,
+        hover: null,
+        type_line: `Token — ${name}`,
+        is_creature: false,
+        is_land: false,
+        is_instant: false,
+        is_sorcery: false,
+        is_permanent: true,
+        zone_hint: 'permanents',
+      });
+      if (tokenModalInstance) {
+        tokenModalInstance.hide();
+      }
+      setTokenStatus(`Added ${name} token.`, 'success');
+    });
+  }
+
+  if (tokenPickerCustomBtn) {
+    tokenPickerCustomBtn.addEventListener('click', function () {
+      const name = (tokenPickerSearch ? tokenPickerSearch.value : '').trim();
+      if (!name) {
+        return;
+      }
+      addTokenToBoard({
+        name: name,
+        image: null,
+        hover: null,
+        type_line: `Token — ${name}`,
+        is_creature: false,
+        is_land: false,
+        is_instant: false,
+        is_sorcery: false,
+        is_permanent: true,
+        zone_hint: 'permanents',
+      });
+      if (tokenModalInstance) {
+        tokenModalInstance.hide();
+      }
+      setTokenStatus(`Added ${name} token.`, 'success');
+    });
+  }
+
   if (newDeckBtn) {
     newDeckBtn.addEventListener('click', function () {
-      if (deckSelectWrapper) {
-        updateDvSelect(deckSelectWrapper, '', 'Select a deck', { trigger: true, hide: true });
-      }
-      if (deckListInput) {
-        deckListInput.value = '';
-      }
-      if (fetchCardSearch) {
-        fetchCardSearch.value = '';
-      }
-      resetSimulator();
-      populateFetchList(currentDeckId());
-      updateTokenPicker('');
-      updateActionVisibility();
+      window.location.href = '{{ url_for("views.opening_hand") }}';
     });
   }
 
@@ -2576,6 +2969,16 @@
   updateTokenPicker(currentDeckId());
   resetSimulator();
   updateActionVisibility();
+  syncActionBarSpacing();
+
+  if (handActionBar && window.ResizeObserver) {
+    const observer = new ResizeObserver(() => {
+      syncActionBarSpacing();
+    });
+    observer.observe(handActionBar);
+  }
+
+  window.addEventListener('resize', syncActionBarSpacing, { passive: true });
 })();
 </script>
 

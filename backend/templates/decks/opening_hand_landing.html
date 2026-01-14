@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Opening Hand - DragonsVault{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h2 mb-1">Opening Hand Simulator</h1>
+      <p class="text-muted mb-0">Pick a deck to shuffle, draw, and play out your opening hand on a dedicated board.</p>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('views.opening_hand_play') }}" class="row g-4" id="openingHandStartForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="col-12 col-lg-5">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Use a saved deck</h5>
+          <p class="text-muted small mb-3">Choose one of your decks to build the draw pile automatically.</p>
+
+          <label class="form-label small text-muted">Deck</label>
+          <div class="dropdown dv-select w-100" data-dv-select="opening-deck">
+            <input type="hidden" name="deck_id" id="openingHandDeckId" data-dv-select-input value="">
+            <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="openingHandDeckToggle" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="openingHandDeckToggle">
+              <span data-dv-select-label>Select a deck</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="openingHandDeckToggle">
+              <li>
+                <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a deck">Select a deck</button>
+              </li>
+              {% for deck in deck_options %}
+                <li>
+                  <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck.id }}" data-label="{{ deck.name }}">{{ deck.name }}</button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="form-text">Commanders stored with the deck are automatically excluded.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-7">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Paste a deck list</h5>
+          <p class="text-muted small mb-3">Use a list if the deck is not saved yet.</p>
+
+          <label for="openingHandDeckList" class="form-label small text-muted">Deck list</label>
+          <textarea id="openingHandDeckList" name="deck_list" class="form-control" rows="7" placeholder="7 Island&#10;1 Sol Ring&#10;1 Rhystic Study"></textarea>
+          <div class="form-text mt-2">Quantities like "2 Lightning Bolt" or "2x Lightning Bolt" are supported.</div>
+
+          <label for="openingHandCommander" class="form-label small text-muted mt-3">Commander name (optional)</label>
+          <input type="text" id="openingHandCommander" name="commander_name" class="form-control" placeholder="Commander name(s) to exclude">
+          <div class="form-text mt-2">Use "//" between partner commanders.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="text-muted small" id="openingHandHelp">Select a deck or paste a list to continue.</div>
+        <button class="btn btn-primary" type="submit" id="openingHandStartBtn" disabled>Start Opening Hand</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  const deckSelectWrapper = document.querySelector('[data-dv-select="opening-deck"]');
+  const deckSelectInput = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-input]') : null;
+  const deckSelectLabel = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-label]') : null;
+  const deckOptionButtons = deckSelectWrapper ? Array.from(deckSelectWrapper.querySelectorAll('[data-dv-select-option]')) : [];
+  const deckListInput = document.getElementById('openingHandDeckList');
+  const commanderInput = document.getElementById('openingHandCommander');
+  const startBtn = document.getElementById('openingHandStartBtn');
+  const helpText = document.getElementById('openingHandHelp');
+
+  function selectionState() {
+    const deckId = deckSelectInput ? (deckSelectInput.value || '').trim() : '';
+    const deckList = deckListInput ? (deckListInput.value || '').trim() : '';
+    return {
+      deckId,
+      deckList,
+      hasSelection: Boolean(deckId || deckList),
+    };
+  }
+
+  function setHelpText(message) {
+    if (helpText) {
+      helpText.textContent = message;
+    }
+  }
+
+  function updateStartState() {
+    const state = selectionState();
+    if (startBtn) {
+      startBtn.disabled = !state.hasSelection;
+    }
+    if (!state.hasSelection) {
+      setHelpText('Select a deck or paste a list to continue.');
+    } else if (state.deckId) {
+      setHelpText('Using a saved deck.');
+    } else {
+      setHelpText('Using a pasted list.');
+    }
+  }
+
+  function clearDeckSelect() {
+    if (!deckSelectWrapper) {
+      return;
+    }
+    const placeholder = 'Select a deck';
+    deckOptionButtons.forEach((btn) => {
+      btn.classList.toggle('active', (btn.dataset.value || '') === '');
+    });
+    if (deckSelectInput) {
+      deckSelectInput.value = '';
+      deckSelectInput.dispatchEvent(new Event('input', { bubbles: true }));
+      deckSelectInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (deckSelectLabel) {
+      deckSelectLabel.textContent = placeholder;
+    }
+    deckSelectWrapper.dataset.dvSelectValue = '';
+  }
+
+  if (deckSelectWrapper) {
+    deckSelectWrapper.addEventListener('dv-select:ready', updateStartState);
+    deckSelectWrapper.addEventListener('dv-select:change', function (event) {
+      const value = event.detail && event.detail.value ? event.detail.value : '';
+      if (value && deckListInput && deckListInput.value.trim()) {
+        deckListInput.value = '';
+        if (commanderInput) {
+          commanderInput.value = '';
+        }
+      }
+      updateStartState();
+    });
+  }
+
+  if (deckListInput) {
+    deckListInput.addEventListener('input', function () {
+      if (deckListInput.value.trim()) {
+        clearDeckSelect();
+      }
+      updateStartState();
+    });
+  }
+
+  updateStartState();
+})();
+</script>
+{% endblock %}

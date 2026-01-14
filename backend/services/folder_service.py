@@ -50,7 +50,7 @@ from services.commander_brackets import (
 )
 from services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from services.authz import ensure_folder_access
-from services.deck_service import deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
+from services.deck_service import deck_curve_missing, deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
 from services.build_session_service import ensure_build_session_tables
 from utils.db import get_or_404
 from utils.validation import ValidationError, log_validation_error, parse_positive_int, parse_positive_int_list
@@ -447,6 +447,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     mana_pip_dist = deck_mana_pip_dist(folder_id, mode="detail")
     land_mana_sources = deck_land_mana_sources(folder_id)
     curve_rows = deck_curve_rows(folder_id, mode="detail")
+    curve_missing = deck_curve_missing(folder_id)
 
     name_col = _name_sort_expr()
     cn_num = _collector_number_numeric()
@@ -855,6 +856,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         mana_pip_dist=mana_pip_dist,
         land_mana_sources=land_mana_sources,
         curve_rows=curve_rows,
+        curve_missing=curve_missing,
         deck_tokens=deck_tokens,
         deck_cards=card_vms,
         card_groups=card_groups,

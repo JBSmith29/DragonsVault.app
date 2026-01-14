@@ -74,7 +74,10 @@
 
       const name = document.createElement("div");
       name.className = "d-flex align-items-center gap-2";
-      name.innerHTML = `<span class="fw-semibold">${folder.name}</span>`;
+      const nameText = document.createElement("span");
+      nameText.className = "fw-semibold";
+      nameText.textContent = `${folder.name}`;
+      name.appendChild(nameText);
 
       const pill = document.createElement("span");
       pill.className = "badge text-bg-light";
@@ -133,12 +136,27 @@
     state.cards.forEach((card) => {
       const tr = document.createElement("tr");
       const fmt = (val) => (val === true ? "Yes" : val === false ? "No" : val || "—");
-      tr.innerHTML = `
-        <td class="fw-semibold">${card.name}</td>
-        <td class="text-uppercase">${card.set_code || ""} #${card.collector_number || ""}</td>
-        <td class="text-center">${card.quantity}</td>
-        <td class="text-center">${fmt(card.is_foil)}</td>
-      `;
+
+      const nameTd = document.createElement("td");
+      nameTd.className = "fw-semibold";
+      nameTd.textContent = `${card.name}`;
+
+      const setTd = document.createElement("td");
+      setTd.className = "text-uppercase";
+      setTd.textContent = `${card.set_code || ""} #${card.collector_number || ""}`;
+
+      const qtyTd = document.createElement("td");
+      qtyTd.className = "text-center";
+      qtyTd.textContent = `${card.quantity}`;
+
+      const foilTd = document.createElement("td");
+      foilTd.className = "text-center";
+      foilTd.textContent = fmt(card.is_foil);
+
+      tr.appendChild(nameTd);
+      tr.appendChild(setTd);
+      tr.appendChild(qtyTd);
+      tr.appendChild(foilTd);
       cardsBodyEl.appendChild(tr);
     });
   };

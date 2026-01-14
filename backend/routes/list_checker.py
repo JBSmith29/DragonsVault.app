@@ -155,7 +155,10 @@ def _compute_list_checker(pasted: str):
     collection_ids, _, _ = _collection_metadata()
     collection_id_set = set(collection_ids)
 
-    def _rank_folder(fid, fname):
+    def _rank_folder(fid, fname=None):
+        if fname is None:
+            fname = fid
+            fid = None
         lower = (fname or "").strip().lower()
         return (
             0 if (fid in collection_id_set) else 1,

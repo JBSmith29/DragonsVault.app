@@ -1656,6 +1656,36 @@ def _lookup_token_by_name(name: str) -> Optional[Dict[str, Any]]:
         return None
     return _token_name_index().get(name.strip().casefold())
 
+def search_tokens(name_q: str | None = None, limit: int = 36) -> List[Dict[str, Any]]:
+    if not name_q:
+        return []
+    normalized = _normalize_search_text(name_q)
+    if not normalized:
+        return []
+    tokens = [t for t in normalized.split() if t]
+    results: List[Dict[str, Any]] = []
+    for pr in _token_name_index().values():
+        name = (pr.get("name") or "").strip()
+        if not name:
+            continue
+        type_line = (pr.get("type_line") or "").strip()
+        haystack = f"{name} {type_line}".casefold()
+        if tokens and any(token not in haystack for token in tokens):
+            continue
+        images = _image_uris(pr)
+        results.append(
+            {
+                "id": pr.get("id"),
+                "name": name,
+                "type_line": type_line,
+                "images": images,
+            }
+        )
+    results.sort(key=lambda item: (item.get("name") or "").lower())
+    if limit and len(results) > limit:
+        return results[:limit]
+    return results
+
 def _token_stub(name: str, type_line: Optional[str] = None) -> Dict[str, Any]:
     p = _lookup_token_by_name(name)
     if p:

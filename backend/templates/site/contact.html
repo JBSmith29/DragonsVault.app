@@ -10,6 +10,7 @@
     <div class="col-12 col-lg-6">
       <div class="card border-0 shadow-sm h-100">
         <form method="post" class="card-body d-flex flex-column gap-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div>
             <h2 class="h5 mb-1">General questions</h2>
             <p class="text-muted small mb-0">Send a note about purchases, decks, or anything on your mind.</p>
@@ -34,6 +35,7 @@
     <div class="col-12 col-lg-6">
       <div class="card border-0 shadow-sm h-100">
         <form method="post" class="card-body d-flex flex-column gap-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div>
             <h2 class="h5 mb-1">Bug or feature request</h2>
             <p class="text-muted small mb-0">Share issues or ideas the admin team can track and mark as they work.</p>

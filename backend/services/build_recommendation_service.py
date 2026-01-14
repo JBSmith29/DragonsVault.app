@@ -53,6 +53,7 @@ def get_edhrec_recommendations(
             "image": payload["image"],
             "synergy_score": rec.get("synergy_score"),
             "synergy_percent": rec.get("synergy_percent"),
+            "inclusion_percent": rec.get("inclusion_percent"),
             "synergy_rank": rec.get("synergy_rank"),
             "reasons": reasons,
         }
@@ -198,6 +199,7 @@ def _edhrec_card_payload(
         return None
     synergy_score = rec.get("synergy_score")
     synergy_percent = rec.get("synergy_percent")
+    inclusion_percent = rec.get("inclusion_percent")
     if synergy_percent is None and synergy_score is not None:
         synergy_percent = round(float(synergy_score) * 100.0, 1)
     roles = role_map.get(oracle_id, set())
@@ -213,6 +215,7 @@ def _edhrec_card_payload(
         "is_basic_land": bool(payload.get("is_basic_land")),
         "synergy_score": float(synergy_score or 0.0),
         "synergy_percent": synergy_percent,
+        "inclusion_percent": inclusion_percent,
         "synergy_rank": rec.get("synergy_rank"),
         "roles": sorted(roles),
         "role_score": len(roles),

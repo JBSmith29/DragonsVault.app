@@ -104,10 +104,26 @@ def _ensure_schema() -> None:
         columns = {col["name"] for col in inspector.get_columns("edhrec_commander_cards")}
         if "synergy_rank" not in columns:
             db.session.execute(text("ALTER TABLE edhrec_commander_cards ADD COLUMN synergy_rank INTEGER"))
-            db.session.commit()
+        if "inclusion_percent" not in columns:
+            db.session.execute(text("ALTER TABLE edhrec_commander_cards ADD COLUMN inclusion_percent FLOAT"))
+        db.session.commit()
     except Exception as exc:
         db.session.rollback()
         _LOG.warning("EDHREC schema update skipped: %s", exc)
+
+    def _ensure_inclusion_column(table: str) -> None:
+        try:
+            table_columns = {col["name"] for col in inspector.get_columns(table)}
+            if "inclusion_percent" not in table_columns:
+                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN inclusion_percent FLOAT"))
+                db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            _LOG.warning("EDHREC schema update skipped for %s: %s", table, exc)
+
+    _ensure_inclusion_column("edhrec_commander_tag_cards")
+    _ensure_inclusion_column("edhrec_commander_category_cards")
+    _ensure_inclusion_column("edhrec_commander_tag_category_cards")
 
 
 def _is_commander_print(card: dict) -> bool:
@@ -537,6 +553,7 @@ def _extract_cardviews(payload: dict) -> list[dict]:
                     "name": name,
                     "rank": raw.get("rank"),
                     "synergy": _safe_float(raw.get("synergy")),
+                    "inclusion": _safe_float(raw.get("inclusion")),
                 }
             )
     return views
@@ -568,6 +585,7 @@ def _extract_cardlists(payload: dict) -> list[dict]:
                     "name": name,
                     "rank": raw.get("rank"),
                     "synergy": _safe_float(raw.get("synergy")),
+                    "inclusion": _safe_float(raw.get("inclusion")),
                 }
             )
         if views:
@@ -720,6 +738,13 @@ def _extract_type_distribution(payload: dict | None) -> list[dict]:
     return [{"card_type": key, "count": int(value)} for key, value in counts.items() if value]
 
 
+def _extract_type_distribution_from_sources(primary: dict | None, fallback: dict | None) -> list[dict]:
+    rows = _extract_type_distribution(primary)
+    if rows:
+        return rows
+    return _extract_type_distribution(fallback) if fallback is not None else []
+
+
 def _upsert_edhrec_tags(tags: Iterable[str]) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -797,14 +822,21 @@ def _map_synergy_cards(views: Iterable[dict]) -> list[dict]:
         if not oracle_id:
             continue
         score = view.get("synergy")
+        inclusion = view.get("inclusion")
         rank = view.get("rank")
         existing = card_map.get(oracle_id)
         if existing is None or (score or 0) > (existing.get("synergy_score") or 0):
             card_map[oracle_id] = {
                 "card_oracle_id": oracle_id,
                 "synergy_score": score,
+                "inclusion_percent": inclusion,
                 "rank_hint": rank,
             }
+        elif score == existing.get("synergy_score") and inclusion is not None:
+            if (existing.get("inclusion_percent") or 0) < inclusion:
+                existing["inclusion_percent"] = inclusion
+            if rank is not None and (existing.get("rank_hint") is None or rank < existing["rank_hint"]):
+                existing["rank_hint"] = rank
 
     items = list(card_map.values())
     if any(item.get("synergy_score") is not None for item in items):
@@ -820,6 +852,7 @@ def _map_synergy_cards(views: Iterable[dict]) -> list[dict]:
                 "card_oracle_id": item["card_oracle_id"],
                 "synergy_rank": idx,
                 "synergy_score": item.get("synergy_score"),
+                "inclusion_percent": item.get("inclusion_percent"),
             }
         )
     return ranked
@@ -842,16 +875,20 @@ def _map_category_cards(cardlists: Iterable[dict]) -> list[dict]:
             if not oracle_id:
                 continue
             score = view.get("synergy")
+            inclusion = view.get("inclusion")
             rank = view.get("rank")
             existing = card_map.get(oracle_id)
             if existing is None or (score or 0) > (existing.get("synergy_score") or 0):
                 card_map[oracle_id] = {
                     "card_oracle_id": oracle_id,
                     "synergy_score": score,
+                    "inclusion_percent": inclusion,
                     "rank_hint": rank,
                 }
-            elif score == existing.get("synergy_score") and rank is not None:
-                if existing.get("rank_hint") is None or rank < existing["rank_hint"]:
+            elif score == existing.get("synergy_score"):
+                if inclusion is not None and (existing.get("inclusion_percent") or 0) < inclusion:
+                    existing["inclusion_percent"] = inclusion
+                if rank is not None and (existing.get("rank_hint") is None or rank < existing["rank_hint"]):
                     existing["rank_hint"] = rank
 
         items = list(card_map.values())
@@ -871,6 +908,7 @@ def _map_category_cards(cardlists: Iterable[dict]) -> list[dict]:
                     "card_oracle_id": item["card_oracle_id"],
                     "synergy_rank": idx,
                     "synergy_score": item.get("synergy_score"),
+                    "inclusion_percent": item.get("inclusion_percent"),
                 }
             )
     return rows
@@ -1142,7 +1180,7 @@ def run_monthly_edhrec_ingestion(
             tag_rows = _map_synergy_cards(tag_views)
             tag_cardlists = _extract_cardlists(tag_payload)
             tag_category = _map_category_cards(tag_cardlists)
-            tag_type_dist = _extract_type_distribution(tag_payload or tag_raw_json)
+            tag_type_dist = _extract_type_distribution_from_sources(tag_payload, tag_raw_json)
             if tag_rows:
                 tag_card_rows[tag] = tag_rows
                 tag_cards_added += len(tag_rows)
@@ -1151,7 +1189,7 @@ def run_monthly_edhrec_ingestion(
             if tag_type_dist:
                 tag_type_rows[tag] = tag_type_dist
 
-        commander_type_rows = _extract_type_distribution(payload or raw_json)
+        commander_type_rows = _extract_type_distribution_from_sources(payload, raw_json)
         try:
             if needs_commander:
                 EdhrecCommanderCard.query.filter_by(
@@ -1339,6 +1377,13 @@ def ingest_commander_tag_data(
             ).first()
             is not None
         )
+        commander_type_ready = (
+            EdhrecCommanderTypeDistribution.query.filter_by(
+                commander_oracle_id=target.oracle_id,
+                tag="",
+            ).first()
+            is not None
+        )
         tags_ready = True
         for tag in requested_tags:
             exists = (
@@ -1348,10 +1393,17 @@ def ingest_commander_tag_data(
                 ).first()
                 is not None
             )
-            if not exists:
+            type_exists = (
+                EdhrecCommanderTypeDistribution.query.filter_by(
+                    commander_oracle_id=target.oracle_id,
+                    tag=tag,
+                ).first()
+                is not None
+            )
+            if not exists or not type_exists:
                 tags_ready = False
                 break
-        if commander_ready and tags_ready:
+        if commander_ready and commander_type_ready and tags_ready:
             return {"status": "ok", "message": "EDHREC data already cached."}
 
     slug_candidates = _slug_candidates_for_target(target)
@@ -1419,7 +1471,7 @@ def ingest_commander_tag_data(
         tag_rows = _map_synergy_cards(tag_views)
         tag_cardlists = _extract_cardlists(tag_payload)
         tag_category = _map_category_cards(tag_cardlists)
-        tag_type_dist = _extract_type_distribution(tag_payload or tag_raw_json)
+        tag_type_dist = _extract_type_distribution_from_sources(tag_payload, tag_raw_json)
         if tag_rows:
             tag_card_rows[tag] = tag_rows
             tag_cards_added += len(tag_rows)
@@ -1428,7 +1480,7 @@ def ingest_commander_tag_data(
         if tag_type_dist:
             tag_type_rows[tag] = tag_type_dist
 
-    commander_type_rows = _extract_type_distribution(payload or raw_json)
+    commander_type_rows = _extract_type_distribution_from_sources(payload, raw_json)
     try:
         with db.session.no_autoflush:
             EdhrecCommanderCard.query.filter_by(

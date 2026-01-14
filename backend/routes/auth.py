@@ -13,7 +13,7 @@ from models import User
 from services.audit import record_audit_event
 from utils.time import utcnow
 
-from .base import views, limiter_key_user_or_ip
+from .base import views, limiter_key_user_or_ip, _safe_next_url
 
 MIN_PASSWORD_LENGTH = 8
 MAX_USERNAME_LENGTH = 80
@@ -23,7 +23,8 @@ MAX_DISPLAY_NAME_LENGTH = 120
 @views.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(request.args.get("next") or url_for("views.dashboard"))
+        dest = _safe_next_url(request.args.get("next")) or url_for("views.dashboard")
+        return redirect(dest)
 
     if request.method == "POST":
         identifier = (request.form.get("identifier") or "").strip()
@@ -44,7 +45,7 @@ def login():
         db.session.commit()
         record_audit_event("login", {"email": user.email})
         session["force_full_refresh"] = True
-        dest = request.args.get("next") or url_for("views.dashboard")
+        dest = _safe_next_url(request.args.get("next")) or url_for("views.dashboard")
         resp = redirect(dest)
         if request.headers.get("HX-Request"):
             resp.headers["HX-Redirect"] = dest

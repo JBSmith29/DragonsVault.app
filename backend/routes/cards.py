@@ -96,6 +96,11 @@ def opening_hand():
     return deck_service.opening_hand()
 
 
+@views.route("/opening-hand/play", methods=["GET", "POST"])
+def opening_hand_play():
+    return deck_service.opening_hand_play()
+
+
 @views.post("/opening-hand/shuffle")
 def opening_hand_shuffle():
     return deck_service.opening_hand_shuffle()
@@ -104,6 +109,11 @@ def opening_hand_shuffle():
 @views.post("/opening-hand/draw")
 def opening_hand_draw():
     return deck_service.opening_hand_draw()
+
+
+@views.get("/opening-hand/tokens/search")
+def opening_hand_token_search():
+    return deck_service.opening_hand_token_search()
 
 
 __all__ = [
@@ -117,8 +127,10 @@ __all__ = [
     "api_fetch_proxy_deck",
     "deck_tokens_overview",
     "opening_hand",
+    "opening_hand_play",
     "opening_hand_shuffle",
     "opening_hand_draw",
+    "opening_hand_token_search",
     "decks_overview",
     "list_cards",
 ]

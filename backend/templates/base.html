@@ -918,11 +918,11 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'views.opening_hand' %}active{% endif %}"
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.opening_hand', 'views.opening_hand_play'] %}active{% endif %}"
                href="{{ url_for('views.opening_hand') }}"
                title="Opening Hand"
                aria-label="Opening Hand"
-               data-endpoints="views.opening_hand">
+               data-endpoints="views.opening_hand,views.opening_hand_play">
               <i class="bi bi-hand-index-thumb" aria-hidden="true"></i>
               <span class="sidebar-label">Opening Hand</span>
             </a>

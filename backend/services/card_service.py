@@ -4411,7 +4411,7 @@ def deck_tokens_overview():
     )
 
 
-def opening_hand():
+def _opening_hand_deck_options() -> tuple[list[Folder], list[FolderOptionVM]]:
     decks = (
         Folder.query.filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
         .order_by(Folder.name.asc())
@@ -4421,11 +4421,16 @@ def opening_hand():
         FolderOptionVM(id=deck.id, name=deck.name or f"Deck {deck.id}")
         for deck in decks
     ]
+    return decks, deck_options
 
+
+def _opening_hand_lookups(deck_ids: Iterable[int]) -> tuple[str, str]:
     deck_card_lookup: dict[str, list[dict]] = {}
     deck_token_lookup: dict[str, list[dict]] = {}
-    deck_ids = [deck.id for deck in decks]
+    deck_ids = [int(deck_id) for deck_id in (deck_ids or []) if deck_id]
     if deck_ids:
+        have_cache = _ensure_cache_ready()
+        token_cache: dict[str, list[dict]] = {}
         card_rows = (
             Card.query.with_entities(
                 Card.folder_id,
@@ -4433,17 +4438,17 @@ def opening_hand():
                 Card.name,
                 Card.set_code,
                 Card.collector_number,
-            Card.lang,
-            Card.is_foil,
-            Card.oracle_id,
-            Card.type_line,
-            Card.mana_value,
-            Card.oracle_text,
-            Card.faces_json,
-        )
-        .filter(Card.folder_id.in_(deck_ids))
-        .order_by(Card.folder_id.asc(), Card.name.asc(), Card.collector_number.asc())
-        .all()
+                Card.lang,
+                Card.is_foil,
+                Card.oracle_id,
+                Card.type_line,
+                Card.mana_value,
+                Card.oracle_text,
+                Card.faces_json,
+            )
+            .filter(Card.folder_id.in_(deck_ids))
+            .order_by(Card.folder_id.asc(), Card.name.asc(), Card.collector_number.asc())
+            .all()
         )
         placeholder_image = url_for("static", filename="img/card-placeholder.svg")
         seen_map: dict[str, set[str]] = {}
@@ -4510,8 +4515,20 @@ def opening_hand():
             )
             entries.append(entry_vm.to_payload())
 
-            text = oracle_text or _oracle_text_from_faces(faces_json)
-            tokens = _token_stubs_from_oracle_text(text)
+            tokens: list[dict] = []
+            if have_cache and oracle_id:
+                cached_tokens = token_cache.get(oracle_id)
+                if cached_tokens is None:
+                    try:
+                        cached_tokens = sc.tokens_from_oracle(oracle_id) or []
+                    except Exception:
+                        cached_tokens = []
+                    token_cache[oracle_id] = cached_tokens
+                tokens = cached_tokens
+
+            if not tokens:
+                text = oracle_text or _oracle_text_from_faces(faces_json)
+                tokens = _token_stubs_from_oracle_text(text)
 
             if tokens:
                 token_bucket = deck_token_lookup.setdefault(folder_key, [])
@@ -4546,18 +4563,128 @@ def opening_hand():
         for token_entries in deck_token_lookup.values():
             token_entries.sort(key=lambda item: (item.get("name") or "").lower())
 
-    for deck in decks:
-        deck_card_lookup.setdefault(str(deck.id), [])
-        deck_token_lookup.setdefault(str(deck.id), [])
+    for deck_id in deck_ids:
+        deck_card_lookup.setdefault(str(deck_id), [])
+        deck_token_lookup.setdefault(str(deck_id), [])
 
     deck_card_lookup_json = json.dumps(deck_card_lookup, ensure_ascii=True)
     deck_token_lookup_json = json.dumps(deck_token_lookup, ensure_ascii=True)
+    return deck_card_lookup_json, deck_token_lookup_json
+
+
+def opening_hand():
+    _, deck_options = _opening_hand_deck_options()
+    return render_template(
+        "decks/opening_hand_landing.html",
+        deck_options=deck_options,
+    )
+
+
+def opening_hand_play():
+    if request.method == "GET":
+        return redirect(url_for("views.opening_hand"))
+
+    deck_id_raw = (request.form.get("deck_id") or "").strip()
+    deck_list_text = (request.form.get("deck_list") or "").strip()
+    commander_hint = (request.form.get("commander_name") or "").strip()
+
+    decks, deck_options = _opening_hand_deck_options()
+    deck_lookup = {deck.id: deck for deck in decks}
+
+    deck_id = None
+    if deck_id_raw:
+        try:
+            deck_id = parse_positive_int(deck_id_raw, field="deck id")
+        except ValidationError as exc:
+            log_validation_error(exc, context="opening_hand_play")
+            flash("Invalid deck selection.", "danger")
+            return redirect(url_for("views.opening_hand"))
+        if deck_id not in deck_lookup:
+            flash("Deck not found.", "warning")
+            return redirect(url_for("views.opening_hand"))
+
+    commander_cards: list[dict] = []
+
+    custom_token_entries_json = json.dumps([], ensure_ascii=True)
+
+    if deck_id:
+        selected_deck = deck_lookup[deck_id]
+        selected_deck_name = selected_deck.name or f"Deck {deck_id}"
+        deck_list_text = ""
+        commander_hint = ""
+        deck_ids = [deck_id]
+        commander_cards = _commander_card_payloads(
+            selected_deck.commander_name,
+            selected_deck.commander_oracle_id,
+        )
+    elif deck_list_text:
+        selected_deck_name = "Custom list"
+        deck_ids = []
+        _, entries_from_list, _, commander_cards = _deck_entries_from_list(deck_list_text, commander_hint)
+        oracle_ids = {
+            entry.get("oracle_id")
+            for entry in entries_from_list
+            if entry.get("oracle_id")
+        }
+        for cmd in commander_cards:
+            cmd_oid = cmd.get("oracle_id")
+            if cmd_oid:
+                oracle_ids.add(cmd_oid)
+        if oracle_ids and _ensure_cache_ready():
+            placeholder_image = url_for("static", filename="img/card-placeholder.svg")
+            token_seen: set[str] = set()
+            token_payloads: list[dict] = []
+            for oracle_id in sorted(oracle_ids):
+                try:
+                    tokens = sc.tokens_from_oracle(oracle_id) or []
+                except Exception:
+                    tokens = []
+                for token in tokens:
+                    token_name = (token.get("name") or "Token").strip()
+                    token_type = (token.get("type_line") or "").strip()
+                    token_id = token.get("id")
+                    token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                    if token_key in token_seen:
+                        continue
+                    token_seen.add(token_key)
+                    token_imgs = token.get("images") or {}
+                    token_flags = _card_type_flags(token_type)
+                    token_vm = OpeningHandTokenVM(
+                        id=token_id,
+                        name=token_name,
+                        type_line=token_type,
+                        image=token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                        hover=token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                        is_creature=bool(token_flags["is_creature"]),
+                        is_land=bool(token_flags["is_land"]),
+                        is_instant=bool(token_flags["is_instant"]),
+                        is_sorcery=bool(token_flags["is_sorcery"]),
+                        is_permanent=bool(token_flags["is_permanent"]),
+                        zone_hint=str(token_flags["zone_hint"]),
+                    )
+                    token_payloads.append(token_vm.to_payload())
+            token_payloads.sort(key=lambda item: (item.get("name") or "").lower())
+            custom_token_entries_json = json.dumps(token_payloads, ensure_ascii=True)
+    else:
+        flash("Select a deck or paste a deck list to continue.", "warning")
+        return redirect(url_for("views.opening_hand"))
+
+    deck_card_lookup_json, deck_token_lookup_json = _opening_hand_lookups(deck_ids)
+    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    commander_payload = [_client_card_payload(card, placeholder) for card in commander_cards]
+    selected_commander_cards_json = json.dumps(commander_payload, ensure_ascii=True)
 
     return render_template(
         "decks/opening_hand.html",
         deck_options=deck_options,
         deck_card_lookup_json=deck_card_lookup_json,
         deck_token_lookup_json=deck_token_lookup_json,
+        selected_deck_id=str(deck_id) if deck_id else "",
+        selected_deck_name=selected_deck_name,
+        selected_deck_list=deck_list_text,
+        selected_commander_name=commander_hint,
+        selected_commander_cards_json=selected_commander_cards_json,
+        custom_token_entries_json=custom_token_entries_json,
     )
 
 
@@ -4654,6 +4781,45 @@ def opening_hand_draw():
             "deck_name": deck_name,
         }
     )
+
+
+def opening_hand_token_search():
+    query = (request.args.get("q") or "").strip()
+    if len(query) < 2:
+        return jsonify({"ok": True, "tokens": []})
+
+    if not _ensure_cache_ready():
+        return jsonify({"ok": False, "error": "Token search is unavailable."}), 503
+
+    try:
+        tokens = sc.search_tokens(query, limit=36) or []
+    except Exception:
+        tokens = []
+
+    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    payloads: list[dict] = []
+    for token in tokens:
+        token_name = (token.get("name") or "Token").strip()
+        token_type = (token.get("type_line") or "").strip()
+        token_id = token.get("id")
+        token_imgs = token.get("images") or {}
+        token_flags = _card_type_flags(token_type)
+        token_vm = OpeningHandTokenVM(
+            id=token_id,
+            name=token_name,
+            type_line=token_type,
+            image=token_imgs.get("normal") or token_imgs.get("small") or placeholder,
+            hover=token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder,
+            is_creature=bool(token_flags["is_creature"]),
+            is_land=bool(token_flags["is_land"]),
+            is_instant=bool(token_flags["is_instant"]),
+            is_sorcery=bool(token_flags["is_sorcery"]),
+            is_permanent=bool(token_flags["is_permanent"]),
+            zone_hint=str(token_flags["zone_hint"]),
+        )
+        payloads.append(token_vm.to_payload())
+
+    return jsonify({"ok": True, "tokens": payloads})
 
 
 def _facets():
@@ -5100,8 +5266,10 @@ __all__ = [
     "api_fetch_proxy_deck",
     "deck_tokens_overview",
     "opening_hand",
+    "opening_hand_play",
     "opening_hand_shuffle",
     "opening_hand_draw",
+    "opening_hand_token_search",
     "decks_overview",
     "list_cards",
 ]

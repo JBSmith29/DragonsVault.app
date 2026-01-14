@@ -40,7 +40,7 @@ from viewmodels.folder_vm import FolderExportVM
 from routes.base import _collector_number_numeric, _move_folder_choices, _name_sort_expr, _safe_commit
 from utils.validation import ValidationError, log_validation_error, parse_optional_positive_int, parse_positive_int_list
 
-ALLOWED_IMPORT_EXTS = {".csv", ".xlsx", ".xls"}
+ALLOWED_IMPORT_EXTS = {".csv", ".xlsx", ".xls", ".xlsm"}
 MAX_IMPORT_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
 
 _MANUAL_LINE_RE = re.compile(r"^\s*(\d+)\s*[xX]?\s+(.*)$")
@@ -160,7 +160,7 @@ def _save_upload_if_present(file) -> str | None:
         return None
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_IMPORT_EXTS:
-        raise ValueError("Unsupported file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).")
+        raise ValueError("Unsupported file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls, .xlsm).")
     fname = secure_filename(file.filename) or f"import{ext}"
     ts = int(time.time())
     dest_path = _uploads_dir() / f"{ts}-{fname}"

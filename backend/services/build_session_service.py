@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import threading
+import uuid
 from collections import defaultdict
 from typing import Iterable
 
@@ -24,8 +27,9 @@ from services.edhrec_cache_service import (
     get_commander_type_distribution,
 )
 from services.edhrec.edhrec_ingestion_service import ingest_commander_tag_data
+from services.live_updates import emit_job_event, latest_job_events
 from services.request_cache import request_cached
-from services.symbols_cache import colors_to_icons
+from services.symbols_cache import colors_to_icons, render_mana_html
 
 _LOG = logging.getLogger(__name__)
 
@@ -49,7 +53,9 @@ def build_session_page(session_id: int):
     )
     build_bracket = _build_session_bracket_context(session, session.cards or [])
     sort_mode = _normalize_sort_mode(request.args.get("sort"))
+    build_view = _normalize_build_view(request.args.get("build_view"))
     rec_source = (request.args.get("rec_source") or "edhrec").strip().lower()
+    edhrec_job_id = (request.args.get("edhrec_job_id") or "").strip() or None
     if rec_source not in {"edhrec", "collection"}:
         rec_source = "edhrec"
     tag_groups = get_deck_tag_groups()
@@ -89,6 +95,9 @@ def build_session_page(session_id: int):
         land_mana_sources=metrics["land_mana_sources"],
         sort_mode=sort_mode,
         rec_source=rec_source,
+        build_view=build_view,
+        edhrec_estimate_seconds=_edhrec_estimate_seconds(tags),
+        edhrec_job_id=edhrec_job_id,
         phase=metrics["phase"],
         session_cards=cards,
         session_cards_by_type=cards_by_type,
@@ -149,7 +158,7 @@ def add_card(session_id: int):
         abort(404)
     oracle_id = (request.form.get("card_oracle_id") or "").strip()
     if not oracle_id:
-        return redirect(url_for("views.build_session", session_id=session_id))
+        return _redirect_session(session_id)
 
     entry = BuildSessionCard.query.filter_by(session_id=session.id, card_oracle_id=oracle_id).first()
     if entry:
@@ -162,7 +171,7 @@ def add_card(session_id: int):
     except Exception:
         db.session.rollback()
         flash("Unable to add card to the build session.", "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    return _redirect_session(session_id)
 
 
 def add_cards_bulk(session_id: int):
@@ -172,7 +181,7 @@ def add_cards_bulk(session_id: int):
     oracle_ids = [oid.strip() for oid in request.form.getlist("card_oracle_id") if oid]
     if not oracle_ids:
         flash("No cards selected to add.", "warning")
-        return redirect(url_for("views.build_session", session_id=session_id))
+        return _redirect_session(session_id)
 
     unique_oracles = []
     seen: set[str] = set()
@@ -195,7 +204,7 @@ def add_cards_bulk(session_id: int):
     except Exception:
         db.session.rollback()
         flash("Unable to add cards to the build session.", "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    return _redirect_session(session_id)
 
 
 def remove_card(session_id: int):
@@ -204,11 +213,11 @@ def remove_card(session_id: int):
         abort(404)
     oracle_id = (request.form.get("card_oracle_id") or "").strip()
     if not oracle_id:
-        return redirect(url_for("views.build_session", session_id=session_id))
+        return _redirect_session(session_id)
 
     entry = BuildSessionCard.query.filter_by(session_id=session.id, card_oracle_id=oracle_id).first()
     if not entry:
-        return redirect(url_for("views.build_session", session_id=session_id))
+        return _redirect_session(session_id)
     if (entry.quantity or 0) > 1:
         entry.quantity = int(entry.quantity or 0) - 1
     else:
@@ -218,7 +227,7 @@ def remove_card(session_id: int):
     except Exception:
         db.session.rollback()
         flash("Unable to remove card from the build session.", "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    return _redirect_session(session_id)
 
 
 def update_quantity(session_id: int):
@@ -227,7 +236,7 @@ def update_quantity(session_id: int):
         abort(404)
     oracle_id = (request.form.get("card_oracle_id") or "").strip()
     if not oracle_id:
-        return redirect(url_for("views.build_session", session_id=session_id))
+        return _redirect_session(session_id)
     try:
         quantity = int(request.form.get("quantity") or 0)
     except (TypeError, ValueError):
@@ -235,7 +244,7 @@ def update_quantity(session_id: int):
 
     entry = BuildSessionCard.query.filter_by(session_id=session.id, card_oracle_id=oracle_id).first()
     if not entry:
-        return redirect(url_for("views.build_session", session_id=session_id))
+        return _redirect_session(session_id)
 
     if quantity <= 0:
         db.session.delete(entry)
@@ -246,7 +255,7 @@ def update_quantity(session_id: int):
     except Exception:
         db.session.rollback()
         flash("Unable to update card quantity.", "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    return _redirect_session(session_id)
 
 
 def update_tags(session_id: int):
@@ -260,7 +269,7 @@ def update_tags(session_id: int):
     except Exception:
         db.session.rollback()
         flash("Unable to update tags for this build session.", "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    return _redirect_session(session_id)
 
 
 def update_name(session_id: int):
@@ -275,7 +284,7 @@ def update_name(session_id: int):
         db.session.rollback()
         _LOG.error("Failed to update build session name: %s", exc)
         flash("Unable to update build name. Please try again.", "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    return _redirect_session(session_id)
 
 
 def delete_session(session_id: int):
@@ -297,33 +306,155 @@ def refresh_edhrec(session_id: int):
     session = _get_session(session_id)
     if session is None:
         abort(404)
+    wants_json = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
+    )
     commander_oracle_id = (session.commander_oracle_id or "").strip()
     commander_name = (session.commander_name or "").strip()
     if not commander_oracle_id and not commander_name:
-        flash("Set a commander before loading EDHREC data.", "warning")
-        return redirect(url_for("views.build_session", session_id=session_id))
+        message = "Set a commander before loading EDHREC data."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return _redirect_session(session_id)
 
     tags = _normalized_tags(session.tags_json)
     requested_tag = (request.form.get("deck_tag") or "").strip()
     if requested_tag:
         tags = [requested_tag]
     if not tags:
-        flash("Set at least one deck tag before loading EDHREC data.", "warning")
-        return redirect(url_for("views.build_session", session_id=session_id))
-
-    result = ingest_commander_tag_data(
-        commander_oracle_id,
-        commander_name or None,
-        tags[:1],
-        force_refresh=True,
+        message = "Set at least one deck tag before loading EDHREC data."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "warning")
+        return _redirect_session(session_id)
+    job_id = _enqueue_edhrec_refresh_job(
+        session_id=session_id,
+        commander_oracle_id=commander_oracle_id,
+        commander_name=commander_name or None,
+        tags=tags[:1],
     )
-    status = result.get("status")
-    message = result.get("message") or "EDHREC refresh completed."
-    if status == "ok":
-        flash(message, "success")
-    else:
-        flash(message, "danger")
-    return redirect(url_for("views.build_session", session_id=session_id))
+    status_url = url_for("views.build_session_edhrec_status", session_id=session_id, job_id=job_id)
+    if wants_json:
+        resp = jsonify({"ok": True, "job_id": job_id, "status_url": status_url})
+        resp.status_code = 202
+        return resp
+    flash("EDHREC refresh queued. Leave this page open for updates.", "info")
+    return _redirect_session(session_id, extra_params={"edhrec_job_id": job_id})
+
+
+def edhrec_status(session_id: int):
+    session = _get_session(session_id)
+    if session is None:
+        abort(404)
+    job_id = (request.args.get("job_id") or "").strip()
+    if not job_id:
+        return jsonify({"ok": False, "error": "job_id is required"}), 400
+    events = latest_job_events("build_edhrec", dataset=_edhrec_job_dataset(session_id))
+    user_id = current_user.id if current_user.is_authenticated else None
+    filtered = []
+    for event in events:
+        if event.get("job_id") != job_id:
+            continue
+        event_user_id = event.get("user_id")
+        if user_id is not None and event_user_id not in (None, user_id):
+            continue
+        filtered.append(event)
+    return jsonify({"ok": True, "job_id": job_id, "events": filtered})
+
+
+def _enqueue_edhrec_refresh_job(
+    *,
+    session_id: int,
+    commander_oracle_id: str,
+    commander_name: str | None,
+    tags: list[str],
+) -> str:
+    job_id = uuid.uuid4().hex
+    dataset = _edhrec_job_dataset(session_id)
+    user_id = current_user.id if current_user.is_authenticated else None
+    tag_label = tags[0] if tags else ""
+    emit_job_event(
+        "build_edhrec",
+        "queued",
+        job_id=job_id,
+        dataset=dataset,
+        session_id=session_id,
+        user_id=user_id,
+        commander_oracle_id=commander_oracle_id,
+        commander_name=commander_name or "",
+        tag=tag_label,
+    )
+
+    def _runner():
+        from app import create_app
+
+        app = create_app()
+        with app.app_context():
+            emit_job_event(
+                "build_edhrec",
+                "started",
+                job_id=job_id,
+                dataset=dataset,
+                session_id=session_id,
+                user_id=user_id,
+            )
+            try:
+                result = ingest_commander_tag_data(
+                    commander_oracle_id,
+                    commander_name,
+                    tags,
+                    force_refresh=False,
+                )
+                status = result.get("status")
+                message = result.get("message") or "EDHREC refresh completed."
+            except Exception as exc:
+                _LOG.exception("EDHREC refresh failed for build session %s", session_id)
+                emit_job_event(
+                    "build_edhrec",
+                    "failed",
+                    job_id=job_id,
+                    dataset=dataset,
+                    session_id=session_id,
+                    user_id=user_id,
+                    error=str(exc),
+                )
+                return
+
+            if status == "ok":
+                emit_job_event(
+                    "build_edhrec",
+                    "completed",
+                    job_id=job_id,
+                    dataset=dataset,
+                    session_id=session_id,
+                    user_id=user_id,
+                    message=message,
+                    status="ok",
+                )
+            else:
+                emit_job_event(
+                    "build_edhrec",
+                    "failed",
+                    job_id=job_id,
+                    dataset=dataset,
+                    session_id=session_id,
+                    user_id=user_id,
+                    error=message,
+                )
+
+    thread = threading.Thread(
+        target=_runner,
+        name=f"build-edhrec-{job_id[:8]}",
+        daemon=True,
+    )
+    thread.start()
+    return job_id
+
+
+def _edhrec_job_dataset(session_id: int) -> str:
+    return f"build_session_{session_id}"
 
 
 def _get_session(session_id: int) -> BuildSession | None:
@@ -333,6 +464,29 @@ def _get_session(session_id: int) -> BuildSession | None:
         BuildSession.query.filter_by(id=session_id, owner_user_id=current_user.id)
         .first()
     )
+
+
+def _redirect_session(session_id: int, extra_params: dict[str, str] | None = None):
+    rec_source_raw = request.form.get("rec_source") or request.args.get("rec_source")
+    rec_source = (rec_source_raw or "").strip().lower()
+    if rec_source not in {"edhrec", "collection"}:
+        rec_source = ""
+    sort_raw = request.form.get("sort") or request.args.get("sort")
+    sort_mode = _normalize_sort_mode(sort_raw) if sort_raw else ""
+    build_view_raw = request.form.get("build_view") or request.args.get("build_view")
+    build_view = _normalize_build_view(build_view_raw)
+    params: dict[str, str] = {}
+    if rec_source:
+        params["rec_source"] = rec_source
+    if sort_mode:
+        params["sort"] = sort_mode
+    if build_view:
+        params["build_view"] = build_view
+    if extra_params:
+        for key, value in extra_params.items():
+            if value:
+                params[key] = value
+    return redirect(url_for("views.build_session", session_id=session_id, **params))
 
 
 def _collection_oracle_ids(user_id: int | None) -> set[str]:
@@ -492,11 +646,13 @@ def _collection_recommendation_sections(
         synergy_score = None
         synergy_percent = None
         synergy_rank = None
+        inclusion_percent = None
         edhrec_rec = edhrec_map.get(oracle_id)
         if edhrec_rec:
             synergy_score = edhrec_rec.get("synergy_score")
             synergy_percent = edhrec_rec.get("synergy_percent")
             synergy_rank = edhrec_rec.get("synergy_rank")
+            inclusion_percent = edhrec_rec.get("inclusion_percent")
             reasons.append("edhrec synergy")
 
         tag_matches = sorted(tag_map.get(oracle_id, set()))
@@ -527,6 +683,7 @@ def _collection_recommendation_sections(
                 "is_basic_land": is_basic_land,
                 "synergy_score": synergy_score,
                 "synergy_percent": synergy_percent,
+                "inclusion_percent": inclusion_percent,
                 "synergy_rank": synergy_rank,
                 "role_score": len(role_matches),
                 "need_score": len(role_matches),
@@ -730,6 +887,9 @@ def _session_cards(entries: Iterable[BuildSessionCard]) -> list[dict]:
         payload = _oracle_payload(oracle_id)
         detail = _oracle_detail(oracle_id, detail_cache)
         price_text = _cheapest_price_for_oracle(oracle_id, price_cache)
+        raw_costs = [cost for cost in (detail.get("mana_costs") or []) if cost]
+        mana_cost_line = " // ".join(raw_costs) if raw_costs else ""
+        mana_cost_html = render_mana_html(mana_cost_line, use_local=True) if mana_cost_line else None
         cmc_raw = detail.get("cmc")
         cmc_val = None
         if cmc_raw is not None:
@@ -753,6 +913,7 @@ def _session_cards(entries: Iterable[BuildSessionCard]) -> list[dict]:
                 "type_line": detail.get("type_line") or "",
                 "cmc_bucket": cmc_bucket,
                 "price_text": price_text,
+                "mana_cost_html": mana_cost_html,
             }
         )
     cards.sort(key=lambda item: (item["name"].casefold(), item["oracle_id"]))
@@ -836,7 +997,6 @@ def _deck_metrics(entries: Iterable[BuildSessionCard]) -> dict:
     deck_health, role_needs = _deck_health(role_counts)
     phase = "exploration" if total_cards < 20 else "refinement"
 
-    curve_buckets["0"] += missing_cmc
     total_curve = sum(curve_buckets.values()) or 1
     curve_rows = []
     for label in ["0", "1", "2", "3", "4", "5", "6", "7+"]:
@@ -852,6 +1012,7 @@ def _deck_metrics(entries: Iterable[BuildSessionCard]) -> dict:
         "land_mana_sources": _mana_source_dist(production_counts),
         "curve_buckets": curve_buckets,
         "curve_rows": curve_rows,
+        "missing_cmc": missing_cmc,
         "role_counts": role_counts,
         "deck_health": deck_health,
         "role_needs": role_needs,
@@ -1255,6 +1416,7 @@ def _build_session_drawer_summary(session: BuildSession) -> dict:
         "mana_pip_dist": mana_pip_dist,
         "land_mana_sources": land_mana_sources,
         "curve_rows": curve_rows,
+        "missing_cmc": metrics.get("missing_cmc") or 0,
         "total_cards": metrics.get("total_cards") or 0,
         "deck_colors": deck_colors,
     }
@@ -1289,7 +1451,6 @@ def _commander_drawer_payload(oracle_id: str | None, fallback_name: str | None) 
 
 def _curve_rows_for_entries(entries: Iterable[BuildSessionCard]) -> list[dict]:
     bins = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7+": 0}
-    missing = 0
     detail_cache: dict[str, dict] = {}
     for entry in entries or []:
         oracle_id = (entry.card_oracle_id or "").strip()
@@ -1311,7 +1472,6 @@ def _curve_rows_for_entries(entries: Iterable[BuildSessionCard]) -> list[dict]:
             except (TypeError, ValueError):
                 cmc = None
         if cmc is None:
-            missing += qty
             continue
         bucket_val = int(round(cmc))
         if bucket_val < 0:
@@ -1319,7 +1479,6 @@ def _curve_rows_for_entries(entries: Iterable[BuildSessionCard]) -> list[dict]:
         bucket = str(bucket_val) if bucket_val <= 6 else "7+"
         bins[bucket] += qty
 
-    bins["7+"] += missing
     max_curve = max(bins.values()) if bins else 0
     rows = []
     for bucket in ["0", "1", "2", "3", "4", "5", "6", "7+"]:
@@ -1336,6 +1495,24 @@ def _normalize_sort_mode(raw: str | None) -> str:
     if value in {"role", "need"}:
         return value
     return "synergy"
+
+
+def _normalize_build_view(raw: str | None) -> str:
+    value = (raw or "").strip().lower()
+    if value in {"list", "gallery", "type"}:
+        return value
+    return ""
+
+
+def _edhrec_estimate_seconds(tags: list[str] | None) -> int:
+    try:
+        interval = float(os.getenv("EDHREC_INGEST_INTERVAL", "1.0"))
+    except (TypeError, ValueError):
+        interval = 1.0
+    interval = max(1.0, interval)
+    request_count = 1 + (1 if tags else 0)
+    estimate = (request_count * interval) + 3
+    return int(round(estimate))
 
 
 def _slugify(label: str) -> str:

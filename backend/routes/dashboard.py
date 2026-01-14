@@ -6,9 +6,9 @@ from services import card_service, scryfall_service
 from .base import views
 
 
-@views.route("/")
+@views.route("/dashboard/index")
 def index():
-    """Landing route that forwards to the dashboard summary."""
+    """Legacy route that forwards to the dashboard summary."""
     return card_service.dashboard_index()
 
 

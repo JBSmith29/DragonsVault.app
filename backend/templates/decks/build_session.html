@@ -19,14 +19,35 @@
     @media (min-width:992px){ .build-session .summary-row{ grid-template-columns: repeat(3, 1fr); } }
     .build-session .summary-row > div{ min-width:0; }
     /* Align build summary row with folder_detail commander-meta-secondary layout. */
-    .build-session .commander-meta-secondary{ flex:1 1 auto; display:flex; flex-wrap:wrap; gap:1.25rem; align-items:flex-start; }
-    .build-session .commander-meta-block{ flex:0 0 auto; min-width:0; display:flex; flex-direction:column; justify-content:space-between; }
+    .build-session .commander-meta-secondary{ flex:1 1 auto; display:flex; flex-wrap:wrap; gap:1.25rem; align-items:center; }
+    .build-session .commander-meta-block{ flex:0 0 auto; min-width:0; display:flex; flex-direction:column; justify-content:center; }
+    .build-session .commander-meta-block.commander-block{ align-items:center; text-align:center; }
+    .build-session .commander-meta-block.commander-block .build-commander{ align-items:center; }
     .build-session .commander-meta-divider{ flex:0 0 auto; width:1px; background:var(--bs-border-color); align-self:stretch; }
     .build-session .identity-body{ flex:1 1 auto; display:flex; flex-direction:column; gap:.75rem; align-items:center; text-align:center; }
     .build-session .identity-body.counts-body{ gap:.35rem; }
     .build-session .card-count-block{ flex:0 0 auto; text-align:center; align-items:center; min-width:0; }
     .build-session .card-count-block .counts-body{ gap:0; }
     .build-session .card-count-block .card-count-total{ font-size:clamp(1.8rem, 3vw, 2rem); line-height:1; }
+    .build-session .build-meta-group{ flex:1 1 auto; min-width:0; }
+    .build-session .build-meta-grid{
+      display:grid;
+      gap:1rem;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      align-items:start;
+      max-width: 560px;
+    }
+    .build-session .build-meta-item{ min-width:0; }
+    .build-session .build-meta-item.card-count-block{ max-width: 220px; }
+    .build-session .build-bracket-row{ display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start; }
+    .build-session .build-bracket-row .bracket-block{ min-width: 140px; }
+    .build-session .build-bracket-row .count-block{ min-width: 160px; }
+    .build-session .build-meta-field{ max-width: 260px; }
+    .build-session .build-meta-field .form-control,
+    .build-session .build-meta-field .dv-select-toggle{ width:100%; }
+    @media (max-width: 575.98px){
+      .build-session .build-meta-field{ max-width: 100%; }
+    }
     /* Keep recommendation source dropdowns and nav anchored without overlapping content. */
     .build-session .build-rec-source{ margin-bottom:1.25rem; }
     .build-nav-dropdown{ position:fixed; bottom:1.5rem; left:calc(var(--sidebar-w, 0px) + 1.5rem); z-index:1100; }
@@ -39,15 +60,40 @@
     .build-session .build-nav-link[data-level="2"]{ padding-left:1.15rem; font-size:0.85rem; }
     .build-session .build-nav-link[data-level="3"]{ padding-left:2rem; font-size:0.8rem; }
     .build-nav-menu{ max-height: 60vh; overflow-y: auto; }
+    /* MTGGoldfish-style type list for current build. */
+    .build-session .build-view[data-build-view="type"]{ column-count: 2; column-gap: 2rem; }
+    @media (max-width: 1199.98px){ .build-session .build-view[data-build-view="type"]{ column-count: 1; } }
+    .build-session .build-type-group{ border-top:1px solid var(--bs-border-color); padding-top:0.75rem; margin-top:1rem; }
+    .build-session .build-type-group{ break-inside: avoid; }
+    .build-session .build-type-header{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; }
+    .build-session .build-type-header .type-label{ font-weight:700; letter-spacing:0.04em; text-transform:uppercase; font-size:0.75rem; color:var(--bs-secondary-color); }
+    .build-session .build-type-list{ display:flex; flex-direction:column; gap:0.35rem; margin-top:0.5rem; }
+    .build-session .build-type-row{
+      display:grid;
+      grid-template-columns: minmax(140px, auto) 1fr auto auto auto;
+      align-items:center;
+      gap:0.75rem;
+      padding:0.35rem 0;
+      border-bottom:1px dashed var(--bs-border-color);
+    }
+    @media (max-width: 991.98px){
+      .build-session .build-type-row{ grid-template-columns: 1fr; align-items:start; }
+    }
+    .build-session .build-type-row:last-child{ border-bottom:0; }
+    .build-session .build-type-name{ font-weight:600; }
+    .build-session .build-type-cost{ display:inline-flex; align-items:center; gap:0.2rem; white-space:nowrap; }
+    .build-session .build-type-cost .mana{ height:1em; }
+    .build-session .build-type-price{ min-width:4rem; text-align:right; }
+    .build-session .build-edhrec-progress{ min-width: 220px; max-width: 320px; }
   </style>
 
   <div class="row g-4">
     <div class="col-12">
       <!-- Match folder_detail commander-meta-secondary layout for summary alignment. -->
       <div class="build-summary-row commander-meta-secondary" id="buildCommander" data-nav-section data-nav-label="Commander" data-nav-level="1">
-        <div class="commander-meta-block">
+        <div class="commander-meta-block commander-block">
           <div class="text-uppercase text-muted small fw-semibold">Commander</div>
-          <div class="build-commander d-flex align-items-start gap-3 mt-2">
+          <div class="build-commander d-flex flex-column gap-2 mt-2">
             <div class="commander-portrait">
               <div class="commander-portrait-frame">
                 {% if commander.image %}
@@ -60,96 +106,98 @@
                 {% endif %}
               </div>
             </div>
-            <div>
-              <div class="fw-semibold">{{ commander.name }}</div>
-              {% if commander.colors is defined %}
-                {% set colors = commander.colors %}
+            <div class="fw-semibold">{{ commander.name }}</div>
+            {% if commander.colors is defined %}
+              {% set colors = commander.colors %}
+              <div class="d-flex justify-content-center">
                 {% include "includes/_color_identity.html" %}
-              {% endif %}
-            </div>
+              </div>
+            {% endif %}
           </div>
           <span class="badge rounded-pill bg-info-subtle text-info-emphasis mt-2">Proxy</span>
         </div>
 
         <div class="commander-meta-divider d-none d-lg-block"></div>
 
-        <div class="commander-meta-block">
-          <!-- Use folder_detail label hierarchy for consistent emphasis. -->
-          <div class="text-uppercase text-muted small fw-semibold">Build Name</div>
-          <form method="post" action="{{ url_for('views.build_session_name', session_id=build_session.id) }}" class="mt-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" class="form-control form-control-sm" name="build_name" value="{{ build_session.build_name or '' }}" placeholder="Name this build">
-            <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">Update Name</button>
-          </form>
-        </div>
-
-        <div class="commander-meta-divider d-none d-lg-block"></div>
-
-        <div class="commander-meta-block">
-          <div class="text-uppercase text-muted small fw-semibold">Deck Tag</div>
-          <form method="post" action="{{ url_for('views.build_session_tags', session_id=build_session.id) }}" class="mt-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="dropdown dv-select w-100" data-dv-select="build-session-tag" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
-              <input type="hidden" name="deck_tag" data-dv-select-input value="{{ tags[0] if tags else '' }}">
-              <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                <span data-dv-select-label>{{ tags[0] if tags else "Select a Tag..." }}</span>
-              </button>
-              <ul class="dropdown-menu dv-select-menu">
-                <li class="px-2 pb-2">
-                  <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
-                </li>
-                <li>
-                  <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a Tag...">Select a Tag...</button>
-                </li>
-                {% for category, tag_list in tag_groups.items() %}
-                  <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
-                  {% for tag in tag_list %}
-                    <li>
-                      <button class="dropdown-item{% if tags and tags[0] == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
-                    </li>
-                  {% endfor %}
-                {% endfor %}
-              </ul>
-            </div>
-          </form>
-          {% if tags %}
-            <div class="d-flex flex-wrap gap-1 mt-2">
-              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tags[0] }}</span>
-            </div>
-          {% else %}
-            <p class="text-muted small mt-2 mb-0">No tag selected yet.</p>
-          {% endif %}
-        </div>
-
-        <div class="commander-meta-divider d-none d-lg-block"></div>
-
-        <div class="commander-meta-block card-count-block align-items-center">
-          <div class="identity-body counts-body">
-            <div class="text-uppercase text-muted small fw-semibold">Card Counts</div>
-            <div class="fw-semibold card-count-total">{{ deck_metrics.total_cards }}</div>
-            <div class="small text-muted">Lands {{ deck_metrics.land_count }}</div>
-            <div class="small text-muted">Non-lands {{ deck_metrics.non_land_count }}</div>
-          </div>
-        </div>
-
-        <div class="commander-meta-divider d-none d-lg-block"></div>
-
-        <div class="commander-meta-block card-count-block align-items-center">
-          <div class="identity-body counts-body">
-            <div class="text-uppercase text-muted small fw-semibold">Bracket</div>
-            {% if build_bracket and build_bracket.level %}
-              <div class="d-flex align-items-center justify-content-center gap-2 mt-1">
-                <span class="badge text-bg-primary">{{ build_bracket.level }}</span>
-                {% if build_bracket.label %}
-                  <span class="small text-muted">{{ build_bracket.label }}</span>
+        <div class="commander-meta-block build-meta-group">
+          <div class="build-meta-grid">
+            <div class="build-meta-item">
+              <!-- Use folder_detail label hierarchy for consistent emphasis. -->
+              <div class="text-uppercase text-muted small fw-semibold">Build Name</div>
+              <form method="post" action="{{ url_for('views.build_session_name', session_id=build_session.id) }}" class="mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                <input type="hidden" name="sort" value="{{ sort_mode }}">
+                <div class="build-meta-field">
+                  <input type="text" class="form-control form-control-sm" name="build_name" value="{{ build_session.build_name or '' }}" placeholder="Name this build">
+                  <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="submit">Update Name</button>
+                </div>
+              </form>
+              <div class="mt-3">
+                <div class="text-uppercase text-muted small fw-semibold">Deck Tag</div>
+                <form method="post" action="{{ url_for('views.build_session_tags', session_id=build_session.id) }}" class="mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                  <input type="hidden" name="sort" value="{{ sort_mode }}">
+                  <div class="build-meta-field">
+                    <div class="dropdown dv-select w-100" data-dv-select="build-session-tag" data-dv-select-portal="body" data-auto-submit="true" data-bs-auto-close="outside">
+                      <input type="hidden" name="deck_tag" data-dv-select-input value="{{ tags[0] if tags else '' }}">
+                      <button class="btn dv-select-toggle dropdown-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span data-dv-select-label>{{ tags[0] if tags else "Select a Tag..." }}</span>
+                      </button>
+                      <ul class="dropdown-menu dv-select-menu">
+                      <li class="px-2 pb-2">
+                        <input type="text" class="form-control form-control-sm dv-select-search" placeholder="Search tags..." autocomplete="off" data-dv-select-search>
+                      </li>
+                      <li>
+                        <button class="dropdown-item{% if not tags %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a Tag...">Select a Tag...</button>
+                      </li>
+                      {% for category, tag_list in tag_groups.items() %}
+                        <li class="dropdown-header text-uppercase small text-muted" data-dv-select-category>{{ category }}</li>
+                        {% for tag in tag_list %}
+                          <li>
+                            <button class="dropdown-item{% if tags and tags[0] == tag %} active{% endif %}" type="button" data-dv-select-option data-value="{{ tag }}" data-label="{{ tag }}">{{ tag }}</button>
+                          </li>
+                        {% endfor %}
+                      {% endfor %}
+                    </ul>
+                    </div>
+                  </div>
+                </form>
+                {% if tags %}
+                  <div class="d-flex flex-wrap gap-1 mt-2">
+                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ tags[0] }}</span>
+                  </div>
+                {% else %}
+                  <p class="text-muted small mt-2 mb-0">No tag selected yet.</p>
                 {% endif %}
               </div>
-              {% if build_bracket.score is not none %}
-                <div class="small text-muted">Score {{ build_bracket.score }}</div>
-              {% endif %}
-            {% else %}
-              <div class="small text-muted">—</div>
-            {% endif %}
+
+              <div class="mt-3 build-bracket-row">
+                <div class="bracket-block">
+                  <div class="text-uppercase text-muted small fw-semibold">Bracket</div>
+                  {% if build_bracket and build_bracket.level %}
+                    <div class="d-flex align-items-center gap-2 mt-1">
+                      <span class="badge text-bg-primary">{{ build_bracket.level }}</span>
+                      {% if build_bracket.label %}
+                        <span class="small text-muted">{{ build_bracket.label }}</span>
+                      {% endif %}
+                    </div>
+                    {% if build_bracket.score is not none %}
+                      <div class="small text-muted">Score {{ build_bracket.score }}</div>
+                    {% endif %}
+                  {% else %}
+                    <div class="small text-muted">—</div>
+                  {% endif %}
+                </div>
+                <div class="count-block">
+                  <div class="text-uppercase text-muted small fw-semibold">Card Counts</div>
+                  <div class="fw-semibold card-count-total">{{ deck_metrics.total_cards }}</div>
+                  <div class="small text-muted">Lands {{ deck_metrics.land_count }}</div>
+                  <div class="small text-muted">Non-lands {{ deck_metrics.non_land_count }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -164,8 +212,17 @@
               <p class="text-muted small mb-0">Cards are proxies until you commit the build.</p>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <form method="post" action="{{ url_for('views.build_session_edhrec', session_id=build_session.id) }}">
+              <form method="post"
+                    action="{{ url_for('views.build_session_edhrec', session_id=build_session.id) }}"
+                    id="buildEdhrecForm"
+                    data-estimate-seconds="{{ edhrec_estimate_seconds }}"
+                    data-status-endpoint="{{ url_for('views.build_session_edhrec_status', session_id=build_session.id) }}"
+                    data-job-id="{{ edhrec_job_id or '' }}"
+                    data-session-id="{{ build_session.id }}"
+                    data-hx-boost="false">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                <input type="hidden" name="sort" value="{{ sort_mode }}">
                 {% if tags %}
                   <input type="hidden" name="deck_tag" value="{{ tags[0] }}">
                 {% endif %}
@@ -198,6 +255,19 @@
                   </ul>
                 </div>
               </form>
+            </div>
+          </div>
+          <div class="d-flex justify-content-end">
+            <div id="buildEdhrecProgress" class="build-edhrec-progress d-none">
+              <div class="progress" style="height:6px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     aria-valuenow="0"
+                     style="width:0%;"></div>
+              </div>
+              <div class="small text-muted mt-1" id="buildEdhrecEta">Estimated time: ~{{ edhrec_estimate_seconds }}s</div>
             </div>
           </div>
 
@@ -234,6 +304,8 @@
                               action="{{ url_for('views.build_session_add_bulk', session_id=build_session.id) }}"
                               class="d-flex justify-content-start mb-3">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                          <input type="hidden" name="sort" value="{{ sort_mode }}">
                           {% for rec in section.cards %}
                             <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
                           {% endfor %}
@@ -255,8 +327,15 @@
                                     <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">In Collection</span>
                                   {% endif %}
                                 </div>
-                                {% if rec.synergy_percent is not none %}
-                                  <div class="text-muted small">Synergy {{ rec.synergy_percent }}%</div>
+                                {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}
+                                  <div class="d-flex text-muted small">
+                                    {% if rec.synergy_percent is not none %}
+                                      <span>Synergy {{ rec.synergy_percent }}%</span>
+                                    {% endif %}
+                                    {% if rec.inclusion_percent is not none %}
+                                      <span class="ms-auto">Incl {{ rec.inclusion_percent }}%</span>
+                                    {% endif %}
+                                  </div>
                                 {% endif %}
                                 {% if rec.reasons %}
                                   <div class="d-flex flex-wrap gap-1 mt-2">
@@ -267,6 +346,8 @@
                                 {% endif %}
                                 <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}" class="mt-3">
                                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                  <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                                  <input type="hidden" name="sort" value="{{ sort_mode }}">
                                   <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
                                   {% set add_locked = rec.in_build and not rec.is_basic_land %}
                                   <button class="btn btn-sm w-100 {% if add_locked %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
@@ -321,8 +402,15 @@
                               {% endif %}
                               <div class="card-body">
                                 <div class="build-rec-title">{{ rec.name }}</div>
-                                {% if rec.synergy_percent is not none %}
-                                  <div class="text-muted small">EDHRec {{ rec.synergy_percent }}%</div>
+                                {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}
+                                  <div class="d-flex text-muted small">
+                                    {% if rec.synergy_percent is not none %}
+                                      <span>EDHRec {{ rec.synergy_percent }}%</span>
+                                    {% endif %}
+                                    {% if rec.inclusion_percent is not none %}
+                                      <span class="ms-auto">Incl {{ rec.inclusion_percent }}%</span>
+                                    {% endif %}
+                                  </div>
                                 {% endif %}
                                 {% if rec.collection_score_percent is not none %}
                                   <div class="text-muted small">Fit {{ rec.collection_score_percent }}%</div>
@@ -336,6 +424,8 @@
                                 {% endif %}
                                 <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}" class="mt-3">
                                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                  <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                                  <input type="hidden" name="sort" value="{{ sort_mode }}">
                                   <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
                                   {% set add_locked = rec.in_build and not rec.is_basic_land %}
                                   <button class="btn btn-sm w-100 {% if add_locked %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
@@ -441,6 +531,11 @@
               Filtering by CMC <strong data-cmc-label></strong>.
               <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="cmcFilterClear">Clear</button>
             </div>
+            {% if deck_metrics.missing_cmc %}
+              <div class="small text-muted text-center mt-2">
+                Missing MV: {{ deck_metrics.missing_cmc }} (not shown in curve)
+              </div>
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -487,6 +582,8 @@
                         <td class="text-center">
                           <form method="post" action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}" class="d-inline-flex align-items-center gap-2">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                            <input type="hidden" name="sort" value="{{ sort_mode }}">
                             <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
                             <input type="number"
                                    name="quantity"
@@ -502,6 +599,8 @@
                         <td class="text-end">
                           <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                            <input type="hidden" name="sort" value="{{ sort_mode }}">
                             <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
                             <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                           </form>
@@ -526,6 +625,8 @@
                         <div class="small text-muted">{{ card.price_text or '—' }}</div>
                         <form method="post" action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}" class="d-flex align-items-center gap-2">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                          <input type="hidden" name="sort" value="{{ sort_mode }}">
                           <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
                           <input type="number"
                                  name="quantity"
@@ -539,6 +640,8 @@
                       <div class="card-footer bg-transparent border-0 pt-0">
                         <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
                           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                          <input type="hidden" name="sort" value="{{ sort_mode }}">
                           <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
                           <button class="btn btn-sm btn-outline-danger w-100" type="submit">Remove</button>
                         </form>
@@ -551,58 +654,52 @@
 
             <div class="build-view d-none" data-build-view="type">
               {% for group in session_cards_by_type %}
-                <div class="mb-4">
-                  <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0">{{ group.label }}</h6>
+                <div class="build-type-group">
+                  <div class="build-type-header">
+                    <span class="type-label">{{ group.label }}</span>
                     <span class="text-muted small">{{ group.cards | length }} cards</span>
                   </div>
-                  <div class="table-responsive">
-                    <table class="table table-sm cards-table align-middle">
-                      <thead>
-                        <tr>
-                          <th>Card</th>
-                          <th class="text-center">Qty</th>
-                          <th class="text-end">Cheapest</th>
-                          <th class="text-end">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for card in group.cards %}
-                          <tr>
-                            <td>
-                              <div class="d-flex align-items-center gap-2">
-                                {% if card.image %}
-                                  <img src="{{ card.image }}" alt="{{ card.name }}" class="rounded" style="width: 36px;">
-                                {% endif %}
-                                <span>{{ card.name }}</span>
-                              </div>
-                            </td>
-                            <td class="text-center">
-                              <form method="post" action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}" class="d-inline-flex align-items-center gap-2">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                                <input type="number"
-                                       name="quantity"
-                                       class="form-control form-control-sm text-center"
-                                       value="{{ card.quantity }}"
-                                       min="1"
-                                       step="1"
-                                       style="width: 80px;">
-                                <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
-                              </form>
-                            </td>
-                            <td class="text-end small text-muted">{{ card.price_text or '—' }}</td>
-                            <td class="text-end">
-                              <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                                <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                              </form>
-                            </td>
-                          </tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
+                  <div class="build-type-list">
+                    {% for card in group.cards %}
+                      <div class="build-type-row">
+                        <form method="post"
+                              action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}"
+                              class="d-inline-flex align-items-center gap-2">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                          <input type="hidden" name="sort" value="{{ sort_mode }}">
+                          <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                          <input type="number"
+                                 name="quantity"
+                                 class="form-control form-control-sm text-center"
+                                 value="{{ card.quantity }}"
+                                 min="1"
+                                 step="1"
+                                 style="width: 72px;">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
+                        </form>
+                        <div class="build-type-name"
+                             data-card-name="{{ card.name }}"
+                             {% if card.image %}data-hover-src="{{ card.image }}"{% endif %}>
+                          {{ card.name }}
+                        </div>
+                        <div class="build-type-cost small text-muted">
+                          {% if card.mana_cost_html %}
+                            <span class="mana-cost">{{ card.mana_cost_html | safe }}</span>
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </div>
+                        <div class="build-type-price small text-muted">{{ card.price_text or '—' }}</div>
+                        <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                          <input type="hidden" name="sort" value="{{ sort_mode }}">
+                          <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                        </form>
+                      </div>
+                    {% endfor %}
                   </div>
                 </div>
               {% endfor %}
@@ -822,9 +919,12 @@
   const views = Array.from(document.querySelectorAll('[data-build-view]'));
   if (!toggles.length || !views.length) return;
   const storageKey = 'buildSessionView:{{ build_session.id }}';
+  let currentView = '';
+  const viewInputs = () => Array.from(document.querySelectorAll('input[name="build_view"]'));
 
   function setView(name, persist = true) {
     const target = name || 'list';
+    currentView = target;
     views.forEach(view => {
       view.classList.toggle('d-none', view.dataset.buildView !== target);
     });
@@ -832,6 +932,9 @@
       const isActive = btn.dataset.view === target;
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    viewInputs().forEach(input => {
+      input.value = target;
     });
     if (persist && window.sessionStorage) {
       sessionStorage.setItem(storageKey, target);
@@ -842,21 +945,212 @@
     btn.addEventListener('click', () => setView(btn.dataset.view));
   });
 
-  let initial = 'list';
+  const initialFromServer = "{{ build_view or '' }}";
+  let initial = initialFromServer || 'list';
   if (window.sessionStorage) {
     initial = sessionStorage.getItem(storageKey) || initial;
   }
   setView(initial, false);
+
+  document.addEventListener('submit', event => {
+    if (!(event.target instanceof HTMLFormElement)) return;
+    let input = event.target.querySelector('input[name="build_view"]');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'build_view';
+      event.target.appendChild(input);
+    }
+    input.value = currentView || initial || 'list';
+    if (window.sessionStorage) {
+      sessionStorage.setItem(storageKey, input.value);
+    }
+  }, true);
 })();
 
 (() => {
-  const dropdownMenu = document.querySelector('[data-build-nav-links]');
-  const toggleBtn = document.querySelector('.build-nav-dropdown .build-nav-toggle');
-  if (!dropdownMenu || !toggleBtn) return;
-  const dropdown = typeof bootstrap !== 'undefined' && bootstrap.Dropdown
-    ? bootstrap.Dropdown.getOrCreateInstance(toggleBtn)
-    : null;
+  const form = document.getElementById('buildEdhrecForm');
+  const progressWrap = document.getElementById('buildEdhrecProgress');
+  const progressBar = progressWrap ? progressWrap.querySelector('.progress-bar') : null;
+  const etaLabel = document.getElementById('buildEdhrecEta');
+  if (!form || !progressWrap || !progressBar) return;
 
+  const statusEndpoint = (form.dataset.statusEndpoint || '').trim();
+  const storageKey = `dv-build-edhrec:${form.dataset.sessionId || '0'}`;
+  let activeJobId = (form.dataset.jobId || '').trim();
+  if (!activeJobId && window.sessionStorage) {
+    activeJobId = sessionStorage.getItem(storageKey) || '';
+  }
+  if (activeJobId && window.sessionStorage) {
+    sessionStorage.setItem(storageKey, activeJobId);
+  }
+
+  let timerId = null;
+  let pollTimer = null;
+  let startTime = 0;
+  const estimatedSeconds = parseInt(form.dataset.estimateSeconds || '20', 10);
+  const durationMs = Math.max(5, estimatedSeconds) * 1000;
+
+  function clearTimers() {
+    if (timerId) {
+      window.clearInterval(timerId);
+      timerId = null;
+    }
+    if (pollTimer) {
+      window.clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function cleanUrl() {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('edhrec_job_id');
+      window.history.replaceState({}, '', url.toString());
+      return url.toString();
+    } catch (err) {
+      return window.location.href;
+    }
+  }
+
+  function startProgress(label) {
+    if (!progressWrap.classList.contains('is-active')) {
+      progressWrap.classList.remove('d-none');
+      progressWrap.classList.add('is-active');
+      progressBar.style.width = '5%';
+      progressBar.setAttribute('aria-valuenow', '5');
+    }
+    if (etaLabel) {
+      etaLabel.textContent = label || `Estimated time: ~${estimatedSeconds}s`;
+    }
+    startTime = Date.now();
+    if (!timerId) {
+      timerId = window.setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const ratio = Math.min(elapsed / durationMs, 1);
+        const pct = Math.min(95, Math.round(5 + ratio * 90));
+        progressBar.style.width = `${pct}%`;
+        progressBar.setAttribute('aria-valuenow', String(pct));
+        if (etaLabel) {
+          const remaining = Math.max(1, Math.ceil((durationMs - elapsed) / 1000));
+          etaLabel.textContent = elapsed >= durationMs
+            ? 'Finalizing...'
+            : `Estimated time: ~${remaining}s`;
+        }
+      }, 500);
+    }
+  }
+
+  function finishProgress(message, reload) {
+    clearTimers();
+    progressWrap.classList.remove('d-none');
+    progressWrap.classList.add('is-active');
+    progressBar.style.width = '100%';
+    progressBar.setAttribute('aria-valuenow', '100');
+    if (etaLabel) {
+      etaLabel.textContent = message || 'EDHREC refresh completed.';
+    }
+    if (window.sessionStorage) {
+      sessionStorage.removeItem(storageKey);
+    }
+    activeJobId = '';
+    if (reload) {
+      const target = cleanUrl();
+      window.setTimeout(() => {
+        window.location.assign(target);
+      }, 600);
+    } else {
+      cleanUrl();
+    }
+  }
+
+  function applyEvent(event) {
+    if (!event) return false;
+    const type = event.type || '';
+    if (type === 'queued') {
+      startProgress('Queued...');
+      return false;
+    }
+    if (type === 'started') {
+      startProgress('Loading EDHREC data...');
+      return false;
+    }
+    if (type === 'completed') {
+      finishProgress(event.message || 'EDHREC refresh completed.', true);
+      return true;
+    }
+    if (type === 'failed') {
+      finishProgress(event.error || 'EDHREC refresh failed.', false);
+      return true;
+    }
+    return false;
+  }
+
+  function pollStatus() {
+    if (!activeJobId || !statusEndpoint) return;
+    const url = `${statusEndpoint}?job_id=${encodeURIComponent(activeJobId)}`;
+    fetch(url, { headers: { Accept: 'application/json' } })
+      .then((resp) => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return resp.json();
+      })
+      .then((data) => {
+        const events = Array.isArray(data.events) ? data.events : [];
+        if (!events.length) {
+          pollTimer = window.setTimeout(pollStatus, 1500);
+          return;
+        }
+        const latest = events[events.length - 1];
+        const done = applyEvent(latest);
+        if (!done) {
+          pollTimer = window.setTimeout(pollStatus, 1500);
+        }
+      })
+      .catch(() => {
+        pollTimer = window.setTimeout(pollStatus, 2500);
+      });
+  }
+
+  if (activeJobId) {
+    startProgress('Queued...');
+    pollStatus();
+  }
+})();
+
+(() => {
+  const details = Array.from(document.querySelectorAll('.build-rec-section[id]'));
+  if (!details.length || !window.sessionStorage) return;
+  const storageKey = "build-session:{{ build_session.id }}:details";
+
+  function saveState() {
+    const state = {};
+    details.forEach(item => {
+      state[item.id] = !!item.open;
+    });
+    sessionStorage.setItem(storageKey, JSON.stringify(state));
+  }
+
+  function restoreState() {
+    let state = {};
+    try {
+      state = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
+    } catch (err) {
+      state = {};
+    }
+    details.forEach(item => {
+      if (Object.prototype.hasOwnProperty.call(state, item.id)) {
+        item.open = !!state[item.id];
+      }
+    });
+  }
+
+  details.forEach(item => item.addEventListener('toggle', saveState));
+  document.addEventListener('submit', saveState, true);
+  restoreState();
+  document.dispatchEvent(new CustomEvent('build-nav-refresh'));
+})();
+
+(() => {
   function collectSections() {
     const items = [];
     const allowedLabels = new Set(['commander', 'recommendations', 'current build']);
@@ -875,9 +1169,21 @@
     return items;
   }
 
-  function renderLinks() {
+  function renderLinks(dropdownMenu, toggleBtn) {
+    if (!dropdownMenu || !toggleBtn) return;
+    const dropdown = typeof bootstrap !== 'undefined' && bootstrap.Dropdown
+      ? bootstrap.Dropdown.getOrCreateInstance(toggleBtn)
+      : null;
     dropdownMenu.innerHTML = '';
-    collectSections().forEach(item => {
+    const items = collectSections();
+    if (!items.length) {
+      const empty = document.createElement('span');
+      empty.className = 'dropdown-item text-muted small';
+      empty.textContent = 'No sections available';
+      dropdownMenu.appendChild(empty);
+      return;
+    }
+    items.forEach(item => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dropdown-item build-nav-link';
@@ -896,9 +1202,29 @@
     });
   }
 
-  toggleBtn.addEventListener('click', renderLinks);
-  toggleBtn.addEventListener('show.bs.dropdown', renderLinks);
-  renderLinks();
+  function setupBuildNav() {
+    const dropdownMenu = document.querySelector('[data-build-nav-links]');
+    const toggleBtn = document.querySelector('.build-nav-dropdown .build-nav-toggle');
+    if (!dropdownMenu || !toggleBtn) return;
+    if (toggleBtn.dataset.navBound !== '1') {
+      toggleBtn.dataset.navBound = '1';
+      toggleBtn.addEventListener('click', () => renderLinks(dropdownMenu, toggleBtn));
+      toggleBtn.addEventListener('show.bs.dropdown', () => renderLinks(dropdownMenu, toggleBtn));
+    }
+    renderLinks(dropdownMenu, toggleBtn);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupBuildNav, { once: true });
+  } else {
+    setupBuildNav();
+  }
+  document.addEventListener('build-nav-refresh', setupBuildNav);
+  document.addEventListener('htmx:afterSwap', (event) => {
+    if (event.target && event.target.id === 'main') {
+      setupBuildNav();
+    }
+  });
 })();
 </script>
 {% endblock %}

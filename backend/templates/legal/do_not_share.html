@@ -9,6 +9,7 @@
     please submit this request. We will respond within the legally required timeframe.
   </p>
   <form method="post" class="card border-0 shadow-sm mt-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="card-body d-flex flex-column gap-3">
       <div>
         <label class="form-label" for="dnsh-name">Name</label>

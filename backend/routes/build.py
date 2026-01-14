@@ -74,6 +74,12 @@ def build_session_edhrec(session_id: int):
     return build_session_service.refresh_edhrec(session_id)
 
 
+@views.get("/decks/build/<int:session_id>/edhrec/status")
+@login_required
+def build_session_edhrec_status(session_id: int):
+    return build_session_service.edhrec_status(session_id)
+
+
 @views.get("/api/build-sessions/<int:session_id>/insight")
 @login_required
 def api_build_session_insight(session_id: int):
@@ -92,5 +98,6 @@ __all__ = [
     "build_session_name",
     "build_session_delete",
     "build_session_edhrec",
+    "build_session_edhrec_status",
     "api_build_session_insight",
 ]

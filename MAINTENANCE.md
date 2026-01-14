@@ -3,16 +3,58 @@
 Use these commands from the project root (where `docker-compose.yml` lives).
 Note: this compose stack is treated as dev/staging; production uses separate deployment config.
 
+## Stack Map (services + routing)
+Compose services:
+- `nginx` — reverse proxy on port 80 for `/`, `/api*`, `/api-next`, and `/static`.
+- `ui` — Vite SPA dev server (proxied at `/` by nginx).
+- `web` — Flask monolith (legacy UI + `/api` routes + admin) with SQLAlchemy.
+- `worker` — RQ worker for background jobs and long-running tasks.
+- `user-manager` — auth/user microservice scaffold (health + ping only right now).
+- `card-data` — oracle-level Scryfall data + annotations (`card_data` schema).
+- `folder-service` — folder/deck microservice scaffold (not wired in nginx yet).
+- `price-service` — MTGJSON pricing normalizer (`price_service` schema).
+- `edhrec-service` — EDHREC fetch + cache (`edhrec_service` schema, internal only).
+- `django-api` — experimental DRF service at `/api-next`.
+- `postgres`, `pgbouncer`, `redis`, `pgmaintenance` — primary data stores and maintenance loop.
+
+Nginx routing (exact):
+- `/` -> `ui`
+- `/static/*` -> `backend/static` (served directly by nginx)
+- `/healthz` -> nginx itself
+- `/readyz` -> `user-manager` `/readyz`
+- `/api/user/*` -> `user-manager`
+- `/api/cards/*` -> `card-data`
+- `/api/prices/*` -> `price-service`
+- `/api/folders/*` -> `web` (legacy; `folder-service` not wired yet)
+- `/api-next/*` -> `django-api`
+- `/api/*` -> `web` (legacy Flask API + server-rendered pages)
+
+## Data Operations (pipelines + storage)
+Storage + caching:
+- Postgres is the system of record (`dragonsvault`), fronted by PgBouncer. Service schemas are created via `backend/scripts/init_service_schemas.sql` (`user_manager`, `card_data`, `folder_service`, `price_service`, `edhrec_service`); the monolith uses `public`.
+- Redis DBs: `0` for RQ jobs (`REDIS_URL`), `1` for rate limiting (`RATELIMIT_STORAGE_URI`), `2` for Flask cache (`CACHE_REDIS_URL`).
+- Local disk: `instance/data` for Scryfall bulk + rulings caches, `data/spellbook_combos.json` for Commander Spellbook data, `instance/cache` + `instance/jinja_cache` for filesystem and template caches.
+
+Pipelines:
+- Scryfall cache (monolith): `flask fetch-scryfall-bulk` writes `instance/data/scryfall_default_cards.json`; `flask refresh-scryfall` loads in-memory indexes; `run_scryfall_refresh_inline('rulings')` writes `instance/data/scryfall_rulings.json`.
+- Card-data oracle sync: `POST /api/cards/v1/scryfall/sync` downloads Scryfall bulk, collapses prints into oracle rows, and upserts into `card_data` tables. Uses `SCRYFALL_DATA_DIR` (default `/tmp/scryfall`) and honors `?force=1`.
+- Commander Spellbook combos: `flask sync-spellbook-combos` writes `data/spellbook_combos.json` (or `SCRYFALL_DATA_DIR`); used by commander bracket scoring and deck views.
+- Oracle tagging/roles: `flask refresh-oracle-tags` and `flask refresh-oracle-tags-full` rebuild tag tables from the Scryfall cache; `flask refresh-card-roles` recomputes roles from card rows when the cache is missing.
+- Pricing: price-service fetches MTGJSON GraphQL and caches in `price_service.print_prices` (TTL `PRICE_CACHE_TTL`); web/worker cache service responses for `PRICE_SERVICE_CACHE_TTL`.
+- EDHREC: edhrec-service fetches EDHREC data and caches JSON payloads in `edhrec_service`; web/worker call it via `EDHREC_SERVICE_URL`.
+- FTS: `flask fts-ensure` creates FTS tables/triggers; `flask fts-reindex` rebuilds after large data changes.
+- Postgres maintenance: `pgmaintenance` runs `vacuumdb --all --analyze-in-stages` weekly; `flask vacuum` only applies to SQLite deployments.
+
 ## Quick Health Checks
 - `docker ps` — verify containers are running.
 - `docker compose ps` — check statuses and health indicators.
-- Inspect last exit/error per container:  
-  - `docker inspect dragonsvaultapp-web-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - `docker inspect dragonsvaultapp-worker-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - `docker inspect dragonsvaultapp-nginx-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - `docker inspect dragonsvaultapp-pgmaintenance-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - `docker inspect dragonsvaultapp-pgbouncer-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - `docker inspect dragonsvaultapp-redis-1 --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`
+- Inspect last exit/error per container (replace `<service>`):  
+  - `docker inspect $(docker compose ps -q <service>) --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
+  - Core: `web`, `worker`, `nginx`, `ui`, `postgres`, `pgbouncer`, `redis`, `pgmaintenance`  
+  - Microservices: `user-manager`, `card-data`, `folder-service`, `price-service`, `edhrec-service`, `django-api`
+- `curl http://localhost/healthz` — nginx health endpoint.
+- `curl http://localhost/readyz` — user-manager readiness (DB connection check).
+- `curl http://localhost/api-next/healthz` — django-api health (if enabled).
 - `docker compose exec web python - <<'PY'`  
   `import urllib.request; req=urllib.request.Request('http://localhost:5000/healthz', headers={'X-Forwarded-Proto':'https'});`  
   `resp=urllib.request.urlopen(req, timeout=5); print(resp.status, resp.read().decode())`  
@@ -24,6 +66,8 @@ Note: this compose stack is treated as dev/staging; production uses separate dep
   - `curl http://localhost/api/user/v1/ping`  
   - `curl http://localhost/api/cards/v1/ping`  
   - `curl http://localhost/api/prices/v1/ping`
+- Internal-only ping (not exposed via nginx):  
+  - `docker compose exec edhrec-service curl -s http://localhost:5000/v1/ping`
 - Folder APIs (`/api/folders/*`) are currently served by the monolith and require auth (no public ping).
 
 ## Logs (recent)
@@ -32,16 +76,23 @@ Note: this compose stack is treated as dev/staging; production uses separate dep
 - `docker compose logs card-data --tail=200`
 - `docker compose logs folder-service --tail=200`
 - `docker compose logs price-service --tail=200`
+- `docker compose logs edhrec-service --tail=200`
+- `docker compose logs django-api --tail=200`
+- `docker compose logs ui --tail=200`
 - `docker compose logs worker --tail=200`
+- `docker compose logs redis --tail=200`
 - `docker compose logs pgbouncer --tail=200`
 - `docker compose logs nginx --tail=200`
 - `docker compose logs postgres --tail=200`
+- `docker compose logs pgmaintenance --tail=200`
 
 ## Live Logs (follow)
-- `docker compose logs -f web worker nginx pgbouncer postgres` — watch multiple services live.
+- `docker compose logs -f web worker nginx pgbouncer postgres redis` — watch core services live.
+- `docker compose logs -f user-manager card-data folder-service price-service edhrec-service django-api ui` — watch API/UI services live.
 
 ## Restart / Recreate
 - `docker compose restart web worker nginx` — fast restart of app-facing services.
+- `docker compose restart user-manager card-data folder-service price-service edhrec-service django-api ui` — restart API/UI services.
 - `docker compose up -d` — recreate/start everything using current images/config.
 
 ## App Maintenance Commands
@@ -51,11 +102,15 @@ Run inside the web container:
 - `docker compose exec web flask sync-spellbook-combos` — download Commander Spellbook combos (use `--progress/--no-progress`; bump `--concurrency` to speed up; optionally `--skip-existing` to avoid reprocessing already written combos).
 - `docker compose exec web flask refresh-oracle-tags` — recompute oracle core roles and evergreen tags from the Scryfall cache.
 - `docker compose exec web flask refresh-oracle-tags-full` — recompute oracle roles, keywords, typal tags, core roles, deck tags, and evergreen tags.
+- `docker compose exec web flask refresh-card-roles` — recompute card roles from oracle text (uses cache if available).
 - `docker compose exec web flask fts-ensure` — ensure FTS table and triggers exist.
 - `docker compose exec web flask fts-reindex` — rebuild FTS index.
+- `docker compose exec web flask cache-stats` — Scryfall cache status (prints + rulings).
+- `docker compose exec web flask rulings-stats` — Scryfall rulings file status.
 - `docker compose exec web flask analyze` — run `ANALYZE` on the DB.
-- `docker compose exec web flask vacuum` — run `VACUUM` (SQLite) / maintenance helper.
+- `docker compose exec web flask vacuum` — run `VACUUM` (SQLite only).
 - `docker compose exec web flask db upgrade` — apply migrations (after code updates).
+- `docker compose exec web flask repair-oracle-ids-advanced --dry-run` — preview/fix missing `oracle_id` values.
 
 Inline helpers (copy/paste as shown):
 - `docker compose exec web flask shell <<'PY'`  
@@ -73,6 +128,7 @@ Card Data service (oracle-level DB):
 - Trigger sync: `curl -X POST http://localhost/api/cards/v1/scryfall/sync`
 - Force re-sync: `curl -X POST http://localhost/api/cards/v1/scryfall/sync?force=1`
 - Status: `curl http://localhost/api/cards/v1/scryfall/status`
+- Oracle detail: `curl http://localhost/api/cards/v1/oracles/<oracle_id>`
 
 ## Job Queue / Background Tasks
 - `docker compose exec worker rq info` — inspect RQ queues.
@@ -106,6 +162,6 @@ Card Data service (oracle-level DB):
 1) Check container status (`docker ps`, `docker compose ps`).  
 2) Tail web/worker logs for tracebacks.  
 3) Confirm DB/Redis: `pg_isready`, Redis ping from worker.  
-4) If caches are stale: run `fetch-scryfall-bulk`, `refresh-scryfall`, then `sync-spellbook-combos`.  
+4) If caches are stale: run `fetch-scryfall-bulk`, `refresh-scryfall`, then `sync-spellbook-combos` (and `/api/cards/v1/scryfall/sync` if the card-data service is in use).  
 5) If jobs stuck: restart worker (`docker compose restart worker`) and re-run the command.  
 6) After code updates: `docker compose exec web flask db upgrade` and consider `fts-reindex`.

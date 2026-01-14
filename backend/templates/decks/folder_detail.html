@@ -955,6 +955,7 @@
             action="{{ url_for('views.set_folder_tag', folder_id=folder.id) }}"
             class="modal-content"
             data-hx-boost="false">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title" id="tagPickerLabel">Select a Deck Tag</h5>
           {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
@@ -1221,8 +1222,8 @@
                     </div>
                     <div class="row g-3">
                       {% for key, count in commander_bracket.metrics.items() %}
-                        {% if count and key not in ('land_tutors', 'nonland_tutors', 'zero_cmc_mana') %}
-                          {% set names = commander_bracket.summary_cards.get(key) or [] %}
+                        {% set names = commander_bracket.summary_cards.get(key) or [] %}
+                        {% if count and key not in ('land_tutors', 'nonland_tutors', 'zero_cmc_mana', 'mana_base_optimization') and (key == 'spellbook_combos' or names) %}
                           {% set col_class = 'col-12 col-md-6' %}
                           {% if key == 'spellbook_combos' %}
                             {% set col_class = 'col-12' %}
@@ -1446,6 +1447,11 @@
           Filtering by CMC <strong data-cmc-label></strong>.
           <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="cmcFilterClear">Clear</button>
         </div>
+        {% if curve_missing %}
+          <div class="small text-muted text-center mt-2">
+            Missing MV: {{ curve_missing }} (not shown in curve)
+          </div>
+        {% endif %}
       {% endif %}
     </div>
   </div>

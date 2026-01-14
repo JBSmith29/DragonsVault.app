@@ -73,6 +73,55 @@
       ]
     }
   },
+  "wizard_signals": {
+    "extra_turns": {
+      "label": "Extra Turn Effects",
+      "thresholds": [
+        {"min": 1, "bracket": 4}
+      ]
+    },
+    "mass_land_destruction": {
+      "label": "Mass Land Destruction",
+      "thresholds": [
+        {"min": 1, "bracket": 4}
+      ]
+    },
+    "game_changers": {
+      "label": "Game Changer Cards",
+      "thresholds": [
+        {"min": 1, "bracket": 3},
+        {"min": 3, "bracket": 4},
+        {"min": 5, "bracket": 5}
+      ]
+    },
+    "early_game": {
+      "label": "Early-Game Acceleration",
+      "thresholds": [
+        {"min": 1, "bracket": 3},
+        {"min": 3, "bracket": 4}
+      ]
+    },
+    "late_game": {
+      "label": "Late-Game Inevitability",
+      "thresholds": [
+        {"min": 3, "bracket": 2},
+        {"min": 5, "bracket": 3},
+        {"min": 7, "bracket": 4}
+      ]
+    },
+    "cedh_staples": {
+      "label": "cEDH Staples",
+      "thresholds": [
+        {"min": 2, "bracket": 4},
+        {"min": 4, "bracket": 5}
+      ]
+    },
+    "combos": {
+      "instant_win_floor": 5,
+      "three_card_floor": 4,
+      "three_card_min": 2
+    }
+  },
   "modifiers": {
     "mana_base_optimization": {
       "label": "Optimized Mana Base",
@@ -101,7 +150,9 @@
     },
     "thresholds": {
       "promote_to_5": 8,
-      "remain_at_4": 5
+      "remain_at_4": 5,
+      "soft_score_threshold": 12.0,
+      "min_signals_for_5": 2
     }
   },
   "notes": [

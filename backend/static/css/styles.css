@@ -111,6 +111,33 @@ html[data-bs-theme="light"] .form-select.select-ghost optgroup {
   --dv-glass-border: rgba(15, 23, 42, 0.08);
 }
 
+.btn-outline-theme {
+  --bs-btn-color: rgba(226, 232, 240, 0.95);
+  --bs-btn-border-color: rgba(226, 232, 240, 0.45);
+  --bs-btn-hover-color: #0f172a;
+  --bs-btn-hover-bg: rgba(226, 232, 240, 0.22);
+  --bs-btn-hover-border-color: rgba(226, 232, 240, 0.75);
+  --bs-btn-active-color: #0f172a;
+  --bs-btn-active-bg: rgba(226, 232, 240, 0.3);
+  --bs-btn-active-border-color: rgba(226, 232, 240, 0.85);
+  --bs-btn-disabled-color: rgba(226, 232, 240, 0.45);
+  --bs-btn-disabled-border-color: rgba(226, 232, 240, 0.25);
+}
+
+html[data-bs-theme="light"] .btn-outline-theme {
+  --bs-btn-color: #0f172a;
+  --bs-btn-border-color: rgba(15, 23, 42, 0.55);
+  --bs-btn-bg: rgba(15, 23, 42, 0.05);
+  --bs-btn-hover-color: #0f172a;
+  --bs-btn-hover-bg: rgba(15, 23, 42, 0.14);
+  --bs-btn-hover-border-color: rgba(15, 23, 42, 0.75);
+  --bs-btn-active-color: #0f172a;
+  --bs-btn-active-bg: rgba(15, 23, 42, 0.22);
+  --bs-btn-active-border-color: rgba(15, 23, 42, 0.9);
+  --bs-btn-disabled-color: rgba(15, 23, 42, 0.45);
+  --bs-btn-disabled-border-color: rgba(15, 23, 42, 0.32);
+}
+
 body {
   transition: background-color 0.35s var(--dv-ease-soft), color 0.35s var(--dv-ease-soft);
   background-image: radial-gradient(circle at 20% 20%, rgba(86, 141, 255, 0.08), transparent 45%),

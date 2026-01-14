@@ -110,7 +110,7 @@ BRACKET_LABELS: Dict[int, str] = {
 
 
 
-BRACKET_RULESET_EPOCH = 5
+BRACKET_RULESET_EPOCH = 6
 
 BRACKET_RULESET_PATH = Path(__file__).resolve().parents[1] / "commander-brackets" / "commander_brackets_ruleset.json"
 
@@ -1743,7 +1743,8 @@ def evaluate_commander_bracket(
 
 
 
-    advantage_roles = {"draw", "selection", "advantage", "engine", "recursion"}
+    advantage_roles = {"draw", "selection", "advantage", "recursion"}
+    repeatable_roles = {"engine", "recursion"}
     interaction_roles = {"removal", "wipe", "counter", "bounce", "tax", "stax", "hate", "protection"}
 
     buckets: Dict[str, MetricBucket] = {
@@ -1768,6 +1769,9 @@ def evaluate_commander_bracket(
     land_count = 0
     basic_land_count = 0
     deck_counts: Dict[str, int] = defaultdict(int)
+    advantage_burst = 0
+    advantage_repeatable = 0
+    advantage_commander_based = False
 
 
 
@@ -1801,6 +1805,12 @@ def evaluate_commander_bracket(
         )
         if roles & advantage_roles:
             buckets["card_advantage"].add(card.name, qty)
+            if roles & repeatable_roles:
+                advantage_repeatable += qty
+            else:
+                advantage_burst += qty
+            if commander_name and card.name.casefold() == commander_name.casefold():
+                advantage_commander_based = True
         if roles & interaction_roles:
             buckets["efficient_interaction"].add(card.name, qty)
 
@@ -2021,6 +2031,199 @@ def evaluate_commander_bracket(
                     f"{label}: {metric_count} (threshold {threshold_val} -> bracket {bracket_val})"
                 )
 
+    wizard_cfg = ruleset.get("wizard_signals") if isinstance(ruleset, dict) else {}
+    if not isinstance(wizard_cfg, dict):
+        wizard_cfg = {}
+
+    def _threshold_floor(count_value: int, thresholds: Sequence[Dict[str, Any]]) -> int:
+        floor_val = 1
+        for rule in thresholds or []:
+            if not isinstance(rule, dict):
+                continue
+            if count_value >= int(rule.get("min") or 0):
+                floor_val = max(floor_val, int(rule.get("bracket") or 0))
+        return max(floor_val, 1)
+
+    def _severity_from_floor(floor_val: int, present: bool) -> Optional[str]:
+        if not present:
+            return None
+        if floor_val >= 5:
+            return "high"
+        if floor_val >= 4:
+            return "high"
+        if floor_val >= 3:
+            return "medium"
+        return "low"
+
+    commander_combo_based = False
+    if commander_name:
+        commander_key = commander_name.casefold()
+        for combo in spellbook_early + spellbook_late + spellbook_three_card:
+            if any(commander_key == name.casefold() for name in combo.cards):
+                commander_combo_based = True
+                break
+
+    extra_turns_thresholds = (
+        (wizard_cfg.get("extra_turns") or {}).get("thresholds")
+        or (ruleset_metrics.get("extra_turn_loops") or {}).get("thresholds")
+        or []
+    )
+    mass_land_thresholds = (
+        (wizard_cfg.get("mass_land_destruction") or {}).get("thresholds")
+        or (ruleset_metrics.get("mass_land_denial") or {}).get("thresholds")
+        or []
+    )
+    game_changer_thresholds = (
+        (wizard_cfg.get("game_changers") or {}).get("thresholds")
+        or (ruleset_metrics.get("game_changers") or {}).get("thresholds")
+        or []
+    )
+    combo_thresholds = (
+        (wizard_cfg.get("combos") or {}).get("thresholds")
+        or (ruleset_metrics.get("two_card_infinite_combos") or {}).get("thresholds")
+        or []
+    )
+    early_game_thresholds = (wizard_cfg.get("early_game") or {}).get("thresholds") or [
+        {"min": 1, "bracket": 3},
+        {"min": 3, "bracket": 4},
+    ]
+    late_game_thresholds = (wizard_cfg.get("late_game") or {}).get("thresholds") or [
+        {"min": 3, "bracket": 2},
+        {"min": 5, "bracket": 3},
+        {"min": 7, "bracket": 4},
+    ]
+    cedh_thresholds = (wizard_cfg.get("cedh_staples") or {}).get("thresholds") or [
+        {"min": 2, "bracket": 4},
+        {"min": 4, "bracket": 5},
+    ]
+    combo_cfg = wizard_cfg.get("combos") or {}
+    if not isinstance(combo_cfg, dict):
+        combo_cfg = {}
+
+    wizard_signals: Dict[str, Dict[str, Any]] = {}
+    def _add_wizard_signal(
+        key: str,
+        count_value: int,
+        floor_val: int,
+        explanation: str,
+        present: Optional[bool] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        is_present = present if present is not None else count_value > 0
+        wizard_signals[key] = {
+            "present": is_present,
+            "severity": _severity_from_floor(floor_val, is_present),
+            "bracket_floor": floor_val if is_present else 1,
+            "explanation": explanation,
+            "count": count_value,
+        }
+        if details:
+            wizard_signals[key]["details"] = details
+
+    extra_turns_count = count.get("extra_turns", 0)
+    extra_turns_floor = _threshold_floor(extra_turns_count, extra_turns_thresholds)
+    _add_wizard_signal(
+        "extra_turns",
+        extra_turns_count,
+        extra_turns_floor,
+        f"{extra_turns_count} extra turn effect{'s' if extra_turns_count != 1 else ''} detected."
+        if extra_turns_count
+        else "No extra turn effects detected.",
+    )
+
+    mass_land_count = count.get("mass_land", 0)
+    mass_land_floor = _threshold_floor(mass_land_count, mass_land_thresholds)
+    _add_wizard_signal(
+        "mass_land_destruction",
+        mass_land_count,
+        mass_land_floor,
+        f"{mass_land_count} mass land denial piece{'s' if mass_land_count != 1 else ''} detected."
+        if mass_land_count
+        else "No mass land denial pieces detected.",
+    )
+
+    game_changer_count = count.get("game_changers", 0)
+    game_changer_floor = _threshold_floor(game_changer_count, game_changer_thresholds)
+    _add_wizard_signal(
+        "game_changers",
+        game_changer_count,
+        game_changer_floor,
+        f"{game_changer_count} Game Changer card{'s' if game_changer_count != 1 else ''} detected."
+        if game_changer_count
+        else "No Game Changers detected.",
+    )
+
+    early_game_count = fast_mana_density
+    early_game_floor = _threshold_floor(early_game_count, early_game_thresholds)
+    _add_wizard_signal(
+        "early_game",
+        early_game_count,
+        early_game_floor,
+        f"{early_game_count} fast mana source{'s' if early_game_count != 1 else ''} detected."
+        if early_game_count
+        else "No fast mana acceleration detected.",
+        details={"fast_mana": early_game_count},
+    )
+
+    late_game_count = advantage_repeatable
+    late_game_floor = _threshold_floor(late_game_count, late_game_thresholds)
+    _add_wizard_signal(
+        "late_game",
+        late_game_count,
+        late_game_floor,
+        "Repeatable card advantage and recursion are present."
+        if late_game_count
+        else "No repeatable card advantage engines detected.",
+        details={
+            "repeatable": advantage_repeatable,
+            "burst": advantage_burst,
+            "commander_based": advantage_commander_based,
+        },
+    )
+
+    cedh_count = count.get("cedh_signatures", 0) + (1 if commander_name and commander_name in CEDH_COMMANDERS else 0)
+    cedh_floor = _threshold_floor(cedh_count, cedh_thresholds)
+    _add_wizard_signal(
+        "cedh_staples",
+        cedh_count,
+        cedh_floor,
+        "cEDH staple density suggests high-power intent."
+        if cedh_count
+        else "No cEDH staple signals detected.",
+        details={"commander_based": commander_name in CEDH_COMMANDERS if commander_name else False},
+    )
+
+    combo_floor = _threshold_floor(early_combo_count, combo_thresholds)
+    instant_floor = int(combo_cfg.get("instant_win_floor") or 5)
+    three_card_floor = int(combo_cfg.get("three_card_floor") or 4)
+    three_card_min = int(combo_cfg.get("three_card_min") or 2)
+    if instant_win_combo_count:
+        combo_floor = max(combo_floor, instant_floor)
+    if three_card_combo_count >= three_card_min:
+        combo_floor = max(combo_floor, three_card_floor)
+    combo_present = (
+        early_combo_count > 0
+        or instant_win_combo_count > 0
+        or three_card_combo_count > 0
+        or commander_combo_based
+    )
+    _add_wizard_signal(
+        "combos",
+        early_combo_count,
+        combo_floor,
+        "Commander Spellbook combo lines detected."
+        if combo_present
+        else "No Commander Spellbook combos detected.",
+        present=combo_present,
+        details={
+            "instant_win": instant_win_combo_count,
+            "three_card": three_card_combo_count,
+            "commander_based": commander_combo_based,
+        },
+    )
+
+    wizard_bracket_floor = max((signal["bracket_floor"] for signal in wizard_signals.values()), default=1)
+
 
 
     score = 0.0
@@ -2033,7 +2236,7 @@ def evaluate_commander_bracket(
     }
     if ruleset_metrics:
         score_methodology["guidance"].append(
-            "Bracket floor uses the ruleset thresholds; score provides additional context."
+            "Wizard signals set the hard bracket floor; score provides additional context."
         )
 
     def add_component(key: str, value: float, reason: str) -> None:
@@ -2224,15 +2427,16 @@ def evaluate_commander_bracket(
     ruleset_reinforced: Optional[int] = None
     bracket5_score: float | None = None
     bracket5_signals: int | None = None
+    cedh_adjacent = False
 
     if ruleset_metrics:
-        ruleset_floor_val = ruleset_floor or 1
+        ruleset_floor_val = wizard_bracket_floor or 1
         min_signals_for_bump = int(ruleset_reinforcement.get("min_signals_for_bump") or 2)
         min_floor_for_bump = int(ruleset_reinforcement.get("min_floor_for_bump") or 2)
         max_bracket = int(ruleset_reinforcement.get("max_bracket") or 4)
         signals_at_floor = sum(
-            1 for key, bracket in ruleset_metric_brackets.items()
-            if bracket == ruleset_floor_val and ruleset_metric_counts.get(key, 0) > 0
+            1 for signal in wizard_signals.values()
+            if signal.get("present") and signal.get("bracket_floor") == ruleset_floor_val
         )
         ruleset_reinforced = ruleset_floor_val
         if ruleset_floor_val >= min_floor_for_bump and signals_at_floor >= min_signals_for_bump:
@@ -2247,6 +2451,8 @@ def evaluate_commander_bracket(
             b5_thresholds = {}
         promote_to_5 = float(b5_thresholds.get("promote_to_5") or 0)
         remain_at_4 = float(b5_thresholds.get("remain_at_4") or 0)
+        soft_score_threshold = float(b5_thresholds.get("soft_score_threshold") or 4.6)
+        min_signals_for_5 = int(b5_thresholds.get("min_signals_for_5") or 2)
         bracket5_score = 0.0
         bracket5_signals = 0
         for key, weight in b5_weights.items():
@@ -2254,12 +2460,20 @@ def evaluate_commander_bracket(
             if metric_value:
                 bracket5_score += float(weight) * float(metric_value)
                 bracket5_signals += 1
-        if promote_to_5 and bracket5_score >= promote_to_5 and bracket5_signals >= 2:
+        if ruleset_floor_val >= 5:
             ruleset_level = 5
-        elif remain_at_4 and bracket5_score >= remain_at_4 and bracket5_signals >= 2:
+        elif score >= soft_score_threshold:
+            ruleset_level = 5
+        elif promote_to_5 and bracket5_score >= promote_to_5 and bracket5_signals >= min_signals_for_5:
+            ruleset_level = 5
+        elif remain_at_4 and bracket5_score >= remain_at_4 and bracket5_signals >= min_signals_for_5:
             ruleset_level = max(ruleset_level or 0, 4)
+            cedh_adjacent = True
 
         level = ruleset_level or ruleset_floor_val
+        if score < soft_score_threshold and level > 4:
+            level = 4
+            ruleset_level = 4
         bracket1_ok = ruleset_floor_val == 1
         bracket2_ok = ruleset_floor_val <= 2
         bracket3_ok = ruleset_floor_val <= 3
@@ -2306,32 +2520,33 @@ def evaluate_commander_bracket(
 
     summary_points: List[str] = []
 
-    for key in (
-
-        "game_changers",
-
-        "extra_turns",
-
-        "mass_land",
-
-        "zero_cmc_mana",
-
-        "cedh_signatures",
-
-        "spellbook_combos",
-
-    ):
-
-        bucket = buckets[key]
-
-        if not bucket.entries:
-
-            continue
-
-        summary_points.append(f"{bucket.count} {key.replace('_', ' ')}")
+    if wizard_signals.get("extra_turns", {}).get("present"):
+        summary_points.append(f"{extra_turns_count} extra turn effect{'s' if extra_turns_count != 1 else ''}")
+    if wizard_signals.get("mass_land_destruction", {}).get("present"):
+        summary_points.append(f"{mass_land_count} mass land denial piece{'s' if mass_land_count != 1 else ''}")
+    if wizard_signals.get("game_changers", {}).get("present"):
+        summary_points.append(f"{game_changer_count} Game Changer card{'s' if game_changer_count != 1 else ''}")
+    if wizard_signals.get("early_game", {}).get("present"):
+        summary_points.append(f"{early_game_count} fast mana source{'s' if early_game_count != 1 else ''}")
+    if wizard_signals.get("late_game", {}).get("present"):
+        summary_points.append(f"{late_game_count} repeatable advantage engine{'s' if late_game_count != 1 else ''}")
+    if wizard_signals.get("combos", {}).get("present"):
+        combo_bits = []
+        if instant_win_combo_count:
+            combo_bits.append(f"{instant_win_combo_count} instant-win")
+        if three_card_combo_count:
+            combo_bits.append(f"{three_card_combo_count} three-card")
+        if not combo_bits and early_combo_count:
+            combo_bits.append(f"{early_combo_count} spellbook")
+        combo_summary = ", ".join(combo_bits) if combo_bits else "combo lines"
+        summary_points.append(f"Combos: {combo_summary}")
+    if wizard_signals.get("cedh_staples", {}).get("present"):
+        summary_points.append(f"{cedh_count} cEDH staple signal{'s' if cedh_count != 1 else ''}")
 
     if mana_base_optimized:
         summary_points.append("Mana base optimized")
+    if cedh_adjacent:
+        summary_points.append("High-Power (cEDH-adjacent)")
 
 
 
@@ -2366,16 +2581,34 @@ def evaluate_commander_bracket(
 
     )
 
-    metrics_payload = {key: bucket.count for key, bucket in buckets.items()}
-    metrics_payload["two_card_infinite_combos"] = early_combo_count
-    metrics_payload["mana_base_optimization"] = 1 if mana_base_optimized else 0
-    metrics_payload["tutors"] = count.get("nonland_tutors", 0)
+    metrics_payload = {
+        "extra_turns": count.get("extra_turns", 0),
+        "mass_land": count.get("mass_land", 0),
+        "game_changers": count.get("game_changers", 0),
+        "early_game": early_game_count,
+        "late_game": late_game_count,
+        "cedh_staples": cedh_count,
+        "instant_win_combos": instant_win_combo_count,
+        "three_card_combos": three_card_combo_count,
+        "spellbook_combos": count.get("spellbook_combos", 0),
+        "two_card_infinite_combos": early_combo_count,
+        "card_advantage": count.get("card_advantage", 0),
+        "efficient_interaction": count.get("efficient_interaction", 0),
+        "mana_base_optimization": 1 if mana_base_optimized else 0,
+        "tutors": count.get("nonland_tutors", 0),
+        "cedh_signatures": count.get("cedh_signatures", 0),
+        "instant_win": count.get("instant_win", 0),
+        "zero_cmc_mana": count.get("zero_cmc_mana", 0),
+        "nonland_tutors": count.get("nonland_tutors", 0),
+        "land_tutors": count.get("land_tutors", 0),
+    }
 
     if ruleset_metrics:
         score_methodology["ruleset"] = {
             "version": ruleset.get("version"),
             "floor": ruleset_floor,
             "reinforced": ruleset_reinforced,
+            "wizard_bracket_floor": wizard_bracket_floor,
             "metric_brackets": ruleset_metric_brackets,
             "triggers": ruleset_triggers,
             "mana_base_optimized": mana_base_optimized,
@@ -2383,7 +2616,15 @@ def evaluate_commander_bracket(
             "nonbasic_ratio": round(nonbasic_ratio, 3) if land_count else None,
             "bracket5_score": round(bracket5_score, 2) if bracket5_score is not None else None,
             "bracket5_signals": bracket5_signals,
+            "cedh_adjacent": cedh_adjacent,
         }
+
+    score_methodology["wizard_signals"] = wizard_signals
+    score_methodology["card_advantage_breakdown"] = {
+        "burst": advantage_burst,
+        "repeatable": advantage_repeatable,
+        "commander_based": advantage_commander_based,
+    }
 
 
 
