@@ -285,7 +285,7 @@
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox" name="color" value="{{ color }}" id="sb_color_{{ color }}" {% if checked %}checked{% endif %}>
                   <label class="form-check-label" for="sb_color_{{ color }}">
-                    <img class="mana mana-sm" src="/static/symbols/{{ up }}.svg" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
+                    <img class="mana mana-sm" src="{{ static_url('symbols/' ~ up ~ '.svg') }}" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
                     <span class="visually-hidden">{{ up }}</span>
                   </label>
                 </div>

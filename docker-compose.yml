@@ -53,7 +53,7 @@ services:
       - postgres
       - pgbouncer
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -86,7 +86,7 @@ services:
       - postgres
       - pgbouncer
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -115,7 +115,7 @@ services:
       - postgres
       - pgbouncer
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -150,7 +150,7 @@ services:
       - postgres
       - pgbouncer
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -184,7 +184,7 @@ services:
       - postgres
       - pgbouncer
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -222,9 +222,13 @@ services:
       PRICE_SERVICE_URL: http://price-service:5000
       PRICE_SERVICE_HTTP_TIMEOUT: ${PRICE_SERVICE_HTTP_TIMEOUT:-3}
       PRICE_SERVICE_CACHE_TTL: ${PRICE_SERVICE_CACHE_TTL:-300}
+      USER_MANAGER_URL: http://user-manager:5000
+      CARD_DATA_URL: http://card-data:5000
+      FOLDER_SERVICE_URL: http://folder-service:5000
       EDHREC_SERVICE_URL: http://edhrec-service:5000
       EDHREC_SERVICE_HTTP_TIMEOUT: ${EDHREC_SERVICE_HTTP_TIMEOUT:-300}
       EDHREC_SERVICE_CACHE_TTL: ${EDHREC_SERVICE_CACHE_TTL:-600}
+      DJANGO_API_URL: http://django-api:5000
       WEB_CONCURRENCY: "12"
       WEB_THREADS: "3"
       WEB_TIMEOUT: "180"
@@ -250,7 +254,7 @@ services:
     init: true
     mem_limit: 32g
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; req=urllib.request.Request('http://localhost:5000/healthz', headers={'X-Forwarded-Proto':'https'}); sys.exit(0 if urllib.request.urlopen(req, timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; req=urllib.request.Request('http://localhost:5000/readyz', headers={'X-Forwarded-Proto':'https'}); sys.exit(0 if urllib.request.urlopen(req, timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -285,7 +289,7 @@ services:
       - postgres
       - pgbouncer
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz', timeout=5).getcode()==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -355,6 +359,44 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    command: python -m services.refresh_scheduler
+    restart: unless-stopped
+    environment:
+      PYTHONPATH: /app/backend
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      INSTANCE_DIR: /app/instance
+      SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      EDHREC_SERVICE_URL: http://edhrec-service:5000
+      EDHREC_SERVICE_HTTP_TIMEOUT: ${EDHREC_SERVICE_HTTP_TIMEOUT:-300}
+      EDHREC_SERVICE_CACHE_TTL: ${EDHREC_SERVICE_CACHE_TTL:-600}
+      SCHEDULE_REFRESH_ENABLED: "1"
+      SCHEDULE_REFRESH_WEEKDAY: "sunday"
+      SCHEDULE_REFRESH_HOUR: "0"
+      SCHEDULE_REFRESH_MINUTE: "0"
+      SCHEDULE_REFRESH_TZ: "UTC"
+      SCHEDULE_REFRESH_MODE: "rq"
+      SCHEDULE_EDHREC_SCOPE: "full"
+    volumes:
+      - .:/app
+    secrets:
+      - flask_secret_key
+    depends_on:
+      - redis
+      - postgres
+      - pgbouncer
+      - edhrec-service
 
   postgres:
     image: postgres:16-alpine

@@ -881,10 +881,12 @@
                 <div class="identity-body counts-body">
                   <div class="text-uppercase text-muted small fw-semibold">Card counts</div>
                   <div class="fw-semibold card-count-total">{{ total_qty }}</div>
-                  {% if commander_bracket and not folder.is_collection %}
+                    {% if commander_bracket and not folder.is_collection %}
                     <div class="mt-4">
                       <div class="text-uppercase text-muted small fw-semibold">Bracket</div>
-                      <div class="summary-value mb-0">{{ commander_bracket.level }}</div>
+                      <div class="mt-2">
+                        <span class="badge bracket-badge" data-bracket="{{ commander_bracket.level }}">{{ commander_bracket.level }}</span>
+                      </div>
                     </div>
                   {% endif %}
                 </div>
@@ -912,7 +914,7 @@
                         type="button"
                         data-bs-toggle="modal"
                         data-bs-target="#bracketModal">
-                  Bracket: {{ commander_bracket.level }}
+                  Bracket: <span class="badge bracket-badge" data-bracket="{{ commander_bracket.level }}">{{ commander_bracket.level }}</span>
                 </button>
               {% endif %}
             </div>
@@ -1162,7 +1164,7 @@
         <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="bracketModalLabel">
-            Bracket {{ commander_bracket.level }} &mdash; {{ commander_bracket.label }}
+            Bracket <span class="badge bracket-badge" data-bracket="{{ commander_bracket.level }}">{{ commander_bracket.level }}</span> &mdash; {{ commander_bracket.label }}
           </h5>
           {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1412,7 +1414,7 @@
               {% if pip %}
                 <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
               {% elif c in ['C', 'Colorless'] %}
-                <img src="{{ url_for('static', filename='symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+                <img src="{{ static_url('symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
               {% else %}
                 <span class="me-1">{{ c }}</span>
               {% endif %}
@@ -1787,7 +1789,7 @@
                     {% for src in c.color_icons %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
                   </span>
                 {% else %}
-                  <span class="pip-row"><img class="pip" src="/static/symbols/C.svg" alt="{C}"></span>
+                  <span class="pip-row"><img class="pip" src="{{ static_url('symbols/C.svg') }}" alt="{C}"></span>
                 {% endif %}
               </td>
               <td class="text-center nowrap col-cmc" data-cmc="{{ ('%.4f' % c.cmc_value) if c.cmc_value is not none else '' }}">
@@ -1973,7 +1975,7 @@
     return `<span class="pip-row">${
       arr.map(c => {
         const L = String(c || '').toUpperCase();
-        return `<img class="mana mana-sm" src="/static/symbols/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
+        return `<img class="mana mana-sm" src="{{ static_url('symbols') }}/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
       }).join('')
     }</span>`;
   }

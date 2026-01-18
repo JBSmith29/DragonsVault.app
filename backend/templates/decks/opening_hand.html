@@ -32,7 +32,7 @@
     margin: 0;
   }
   .opening-hand-board {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     min-height: 240px;
   }
   .opening-hand-board .card-body {
@@ -50,11 +50,12 @@
     font-size: 0.78rem;
   }
   .opening-hand-layout {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     display: grid;
     gap: 0.75rem;
     grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+    align-items: start;
   }
   .opening-hand-layout.full-mode {
     grid-template-columns: 1fr;
@@ -73,11 +74,13 @@
     min-height: 0;
   }
   .opening-hand-hand-wrapper .opening-hand-hand {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
   }
-  #deckSourceCard,
-  .opening-hand-hand {
+  #deckSourceCard {
     height: 100%;
+  }
+  .opening-hand-hand {
+    height: auto;
   }
   #deckSourceCard .card-body {
     height: 100%;
@@ -86,7 +89,7 @@
     gap: 0.6rem;
   }
   .opening-hand-hand .card-body {
-    height: 100%;
+    height: auto;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -132,6 +135,23 @@
     max-width: 120px;
     transform: translateY(var(--hand-offset)) rotate(var(--hand-rotate));
     transform-origin: bottom center;
+  }
+  .hand-card .card-flip-btn {
+    position: absolute;
+    top: 0.35rem;
+    left: 0.35rem;
+    z-index: 6;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.75);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.65rem;
+    line-height: 1;
+  }
+  .hand-card .card-flip-btn:hover,
+  .hand-card .card-flip-btn:focus-visible {
+    background: rgba(15, 23, 42, 0.9);
   }
   .hand-card-grid .hand-card {
     width: clamp(90px, 11vw, 120px);
@@ -293,15 +313,15 @@
   .board-zone-stack {
     position: relative;
     min-height: 200px;
-    padding-bottom: 2.2rem;
+    padding-bottom: 3rem;
   }
   .board-zone-stack .hand-card {
     position: absolute;
     top: 0;
     left: 0;
     transform: translate(
-      calc(var(--stack-index, 0) * 14px),
-      calc(var(--stack-index, 0) * 10px)
+      calc(var(--stack-index, 0) * 20px),
+      calc(var(--stack-index, 0) * 14px)
     );
     z-index: calc(100 + var(--stack-index, 0));
     max-width: 100px;
@@ -312,25 +332,25 @@
   }
   .card-stack {
     position: relative;
-    min-height: 120px;
-    width: min(120px, 100%);
-    max-width: 140px;
+    min-height: 150px;
+    width: min(160px, 100%);
+    max-width: 180px;
   }
   .card-stack .hand-card {
     position: absolute;
     top: 0;
     left: 0;
     transform: translate(
-      calc(var(--stack-index, 0) * 12px),
-      calc(var(--stack-index, 0) * 8px)
+      calc(var(--stack-index, 0) * 18px),
+      calc(var(--stack-index, 0) * 12px)
     );
     transition: transform 0.18s ease, box-shadow 0.18s ease;
   }
   .card-stack .hand-card:hover {
     z-index: 25;
     transform: translate(
-      calc(var(--stack-index, 0) * 12px),
-      calc(var(--stack-index, 0) * 8px)
+      calc(var(--stack-index, 0) * 18px),
+      calc(var(--stack-index, 0) * 12px)
     ) scale(1.05);
     box-shadow: 0 0.5rem 1.25rem rgba(15, 23, 42, 0.35);
   }
@@ -896,7 +916,7 @@
   const openingLayout = document.querySelector('.opening-hand-layout');
   const openingStage = document.querySelector('.opening-hand-stage');
   const sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
-  const placeholderImage = "{{ url_for('static', filename='img/card-placeholder.svg') }}";
+  const placeholderImage = "{{ static_url('img/card-placeholder.svg') }}";
   const deckCardLookup = {{ deck_card_lookup_json | safe }} || {};
   const deckTokenLookup = {{ deck_token_lookup_json | safe }} || {};
   const customTokenEntries = {{ custom_token_entries_json | default('[]', true) | safe }} || [];
@@ -952,6 +972,20 @@
   let fetchCardOptions = {};
   let tokenModalInstance = null;
   let lastTokenDeckId = null;
+  const BASIC_LAND_NAMES = new Set([
+    'plains',
+    'island',
+    'swamp',
+    'mountain',
+    'forest',
+    'wastes',
+    'snow-covered plains',
+    'snow-covered island',
+    'snow-covered swamp',
+    'snow-covered mountain',
+    'snow-covered forest',
+    'snow-covered wastes',
+  ]);
 
   function setDeckSelection(value, label) {
     const normalizedValue = value || '';
@@ -1103,18 +1137,79 @@
     }
   }
 
+  function normalizeCardName(value) {
+    return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function isBasicLandName(value) {
+    return BASIC_LAND_NAMES.has(normalizeCardName(value));
+  }
+
+  function parseDeckListNames(raw) {
+    const names = new Set();
+    if (!raw) {
+      return names;
+    }
+    raw.split(/\r?\n/).forEach((line) => {
+      const text = (line || '').trim();
+      if (!text || text.startsWith('#')) {
+        return;
+      }
+      let name = text;
+      let match = text.match(/^\s*(\d+)\s*[xX]?\s+(.+)$/);
+      if (match) {
+        name = match[2];
+      } else {
+        match = text.match(/^\s*(.+?)\s*[xX]\s*(\d+)\s*$/);
+        if (match) {
+          name = match[1];
+        }
+      }
+      const normalized = normalizeCardName(name);
+      if (normalized) {
+        names.add(normalized);
+      }
+    });
+    return names;
+  }
+
+  function deckNameSetForSelection(deckId) {
+    const names = new Set();
+    if (deckId && Array.isArray(deckCardLookup[deckId])) {
+      deckCardLookup[deckId].forEach((entry) => {
+        const normalized = normalizeCardName(entry.name || entry.value || '');
+        if (normalized) {
+          names.add(normalized);
+        }
+      });
+      return names;
+    }
+    const deckList = (deckListInput ? deckListInput.value : '').trim();
+    if (deckList) {
+      return parseDeckListNames(deckList);
+    }
+    return names;
+  }
+
   function populateFetchList(deckId) {
     if (!fetchCardList || !fetchCardName || !fetchCardSearch || !fetchCardEmpty) {
       return;
     }
     const entries = (deckCardLookup[deckId] || []).filter(function (entry) {
       const name = (entry.name || entry.value || '').toLowerCase();
+      const typeLine = (entry.type_line || '').toLowerCase();
+      const isBasicLand = typeLine.includes('basic land');
       if (!name) return false;
-      const inHand = handCards.some(function (c) { return (c.name || '').toLowerCase() === name; });
-      const onBoard = boardZones.some(function (zone) {
-        return (boardState[zone] || []).some(function (c) { return (c.name || '').toLowerCase() === name; });
-      });
-      return !(inHand || onBoard);
+      if (!isBasicLand) {
+        const inHand = handCards.some(function (c) { return (c.name || '').toLowerCase() === name; });
+        const onBoard = boardZones.some(function (zone) {
+          return (boardState[zone] || []).some(function (c) { return (c.name || '').toLowerCase() === name; });
+        });
+        if (inHand || onBoard) {
+          return false;
+        }
+      }
+      return true;
     });
     fetchCardOptions = {};
     fetchCardList.innerHTML = '';
@@ -1131,6 +1226,8 @@
         name: displayName,
         image: entry.image || entry.hover || null,
         hover: entry.hover || entry.image || null,
+        back_image: entry.back_image || null,
+        back_hover: entry.back_hover || entry.back_image || null,
         type_line: typeLine,
         mana_value: manaValueRaw,
         is_creature: Boolean(entry.is_creature),
@@ -1573,6 +1670,41 @@
     setTokenStatus('Token added to battlefield.', 'success');
   }
 
+  function applyCardFace(card) {
+    if (!card) {
+      return;
+    }
+    const frontImage = card.front_image || card.image || placeholderImage;
+    const frontHover = card.front_hover || card.hover || frontImage;
+    const backImage = card.back_image || null;
+    const backHover = card.back_hover || backImage || frontHover;
+    if (card.flipped && backImage) {
+      card.image = backImage;
+      card.hover = backHover;
+    } else {
+      card.image = frontImage;
+      card.hover = frontHover;
+    }
+  }
+
+  function toggleCardFace(card, source, zone) {
+    if (!card || !card.back_image) {
+      return;
+    }
+    card.flipped = !card.flipped;
+    applyCardFace(card);
+    if (source === 'board') {
+      renderBoard();
+    } else if (source === 'hand') {
+      renderHand();
+    } else if (zone) {
+      renderBoard();
+    } else {
+      renderHand();
+      renderBoard();
+    }
+  }
+
   function updateTokenPicker(deckId) {
     const tokens = tokensForDeck(deckId);
     const hasTokens = Array.isArray(tokens) && tokens.length > 0;
@@ -1607,11 +1739,13 @@
     copy.__uid = copy.__uid || 'card-' + Date.now() + '-' + (cardSerial++);
     copy.name = copy.name || card.name || 'Card';
 
-    if (!copy.image) {
-      copy.image = copy.image || card.image || card.normal || card.small || card.large || placeholderImage;
-    }
-
-    copy.hover = copy.hover || card.hover || card.hover_image || card.hoverImage || copy.image;
+    const fallbackImage = copy.image || card.image || card.normal || card.small || card.large || placeholderImage;
+    copy.front_image = copy.front_image || card.front_image || card.frontImage || fallbackImage;
+    copy.front_hover = copy.front_hover || card.front_hover || card.frontHover || copy.hover || card.hover || card.hover_image || card.hoverImage || copy.front_image;
+    copy.back_image = copy.back_image || card.back_image || card.backImage || null;
+    copy.back_hover = copy.back_hover || card.back_hover || card.backHover || copy.back_image || null;
+    copy.flipped = Boolean(copy.flipped);
+    applyCardFace(copy);
     copy.type_line = copy.type_line || card.type_line || card.typeLine || '';
     copy.tapped = Boolean(card.tapped);
     copy.is_creature = Boolean(copy.is_creature ?? card.is_creature ?? card.isCreature);
@@ -1722,6 +1856,20 @@
 
     if (nameEl) {
       nameEl.textContent = card.name || 'Card';
+    }
+
+    if (card.back_image) {
+      cardEl.classList.add('has-back');
+      const flipBtn = document.createElement('button');
+      flipBtn.type = 'button';
+      flipBtn.className = 'card-flip-btn';
+      flipBtn.textContent = card.flipped ? 'Front' : 'Back';
+      flipBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleCardFace(card, source, zone || null);
+      });
+      cardEl.appendChild(flipBtn);
     }
 
     cardEl.addEventListener('click', function (event) {
@@ -2325,6 +2473,14 @@
           renderBoard();
         }
       });
+      if (card.back_image) {
+        options.push({
+          label: card.flipped ? 'Show Front' : 'Show Back',
+          action: function () {
+            toggleCardFace(card, source, currentZone);
+          }
+        });
+      }
       options.push({
         label: 'Return to Hand',
         action: function () {
@@ -2336,6 +2492,15 @@
         label: 'Return to Hand',
         action: function () {
           returnCardToHand(cardId, source);
+        }
+      });
+    }
+
+    if (!isBoardCard && card.back_image) {
+      options.push({
+        label: card.flipped ? 'Show Front' : 'Show Back',
+        action: function () {
+          toggleCardFace(card, source, currentZone);
         }
       });
     }
@@ -2561,8 +2726,22 @@
         return;
       }
 
+      if (!selectedOption) {
+        const deckNames = deckNameSetForSelection(currentDeckId());
+        const normalizedName = normalizeCardName(cardName);
+        if (deckNames.size && isBasicLandName(normalizedName) && !deckNames.has(normalizedName)) {
+          showMessage('That basic land is not in this deck.', 'warning');
+          if (fetchCardSearch) {
+            fetchCardSearch.focus();
+          }
+          return;
+        }
+      }
+
       const inferredImage = selectedOption ? (selectedOption.image || selectedOption.hover || null) : null;
       const inferredHover = selectedOption ? (selectedOption.hover || selectedOption.image || null) : null;
+      const inferredBackImage = selectedOption ? (selectedOption.back_image || null) : null;
+      const inferredBackHover = selectedOption ? (selectedOption.back_hover || selectedOption.back_image || null) : null;
       const inferredTypeLine = selectedOption ? selectedOption.type_line : '';
       const inferredIsCreature = selectedOption ? Boolean(selectedOption.is_creature) : false;
       const inferredIsLand = selectedOption ? Boolean(selectedOption.is_land) : false;
@@ -2575,6 +2754,8 @@
         name: cardName,
         image: imageUrl || inferredImage || placeholderImage,
         hover: imageUrl || inferredHover || inferredImage || placeholderImage,
+        back_image: inferredBackImage,
+        back_hover: inferredBackHover,
         type_line: inferredTypeLine,
         is_creature: inferredIsCreature,
         is_land: inferredIsLand,

@@ -588,6 +588,7 @@ def jinja_ci_name(ci):
     return color_identity_name(ci)
 
 
+@cache.memoize(timeout=300)
 def compute_folder_color_identity(folder_id: int):
     """
     Return (letters, label) for the folder's color identity using Scryfall cache.

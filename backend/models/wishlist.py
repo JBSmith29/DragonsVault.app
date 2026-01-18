@@ -28,6 +28,7 @@ class WishlistItem(db.Model):
         nullable=True,
         index=True,
     )
+    card = db.relationship("Card", lazy="selectin")
 
     # Group wishlist rows by a card's oracle id (all printings)
     oracle_id = db.Column(db.String(64), nullable=True, index=True)
@@ -46,6 +47,8 @@ class WishlistItem(db.Model):
 
     # Optional JSON payload describing where to retrieve the card(s)
     source_folders = db.Column(db.Text, nullable=True)
+    # Optional order reference or URL for ordered items
+    order_ref = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)

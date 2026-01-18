@@ -3,10 +3,9 @@
 <div class="ci-strip d-inline-flex align-items-center gap-1" aria-label="Color identity">
   {% if letters %}
     {% for c in letters %}
-      <img class="mana mana-sm" src="{{ url_for('static', filename='symbols/' ~ c|upper ~ '.svg') }}" alt="{{ '{' ~ c|upper ~ '}' }}">
+      <img class="mana mana-sm" src="{{ static_url('symbols/' ~ c|upper ~ '.svg') }}" alt="{{ '{' ~ c|upper ~ '}' }}">
     {% endfor %}
   {% else %}
-    <img class="mana mana-sm" src="{{ url_for('static', filename='symbols/C.svg') }}" alt="{C}">
+    <img class="mana mana-sm" src="{{ static_url('symbols/C.svg') }}" alt="{C}">
   {% endif %}
 </div>
-

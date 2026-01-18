@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import click
 from flask import Flask, render_template, g, has_request_context, request, flash, redirect, url_for, jsonify, session
@@ -30,6 +31,7 @@ from config import Config, INSTANCE_DIR as CONFIG_INSTANCE_DIR
 from extensions import db, migrate, cache, csrf, limiter, login_manager, generate_csrf
 from flask_login import current_user
 from utils.time import utcnow
+from utils.assets import static_url
 
 # Scryfall helpers
 from services import scryfall_cache as sc
@@ -258,6 +260,43 @@ def _configure_logging(app: Flask) -> None:
     logging.getLogger("werkzeug").setLevel(logging.INFO)
 
 
+def _csp_origin_from_url(raw_url: str | None) -> str | None:
+    if not raw_url:
+        return None
+    parsed = urlparse(raw_url)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _append_csp_source(existing: object, origin: str) -> object:
+    if not existing:
+        return origin
+    if isinstance(existing, (list, tuple, set)):
+        items = list(existing)
+        if origin not in items:
+            items.append(origin)
+        return items
+    if isinstance(existing, str):
+        parts = existing.split()
+        if origin in parts:
+            return existing
+        return f"{existing} {origin}"
+    return existing
+
+
+def _extend_csp_for_static_assets(app: Flask) -> None:
+    origin = _csp_origin_from_url(app.config.get("STATIC_ASSET_BASE_URL"))
+    if not origin:
+        return
+    csp = app.config.get("CONTENT_SECURITY_POLICY")
+    if not isinstance(csp, dict):
+        return
+    for directive in ("img-src", "script-src", "style-src", "font-src"):
+        csp[directive] = _append_csp_source(csp.get(directive), origin)
+    app.config["CONTENT_SECURITY_POLICY"] = csp
+
+
 def _ensure_folder_deck_tag_column():
     """Ensure legacy databases gain the deck_tag column/index without Alembic."""
     try:
@@ -463,6 +502,8 @@ def _ensure_wishlist_columns():
     missing = []
     if "source_folders" not in columns:
         missing.append(("source_folders", "TEXT"))
+    if "order_ref" not in columns:
+        missing.append(("order_ref", "TEXT"))
 
     if not missing:
         return
@@ -563,6 +604,7 @@ def create_app():
     )
     app.config.from_object(Config)
     _configure_logging(app)
+    app.jinja_env.globals["static_url"] = static_url
 
     # Honor X-Forwarded-* headers from our reverse proxy (nginx/Cloudflare).
     # This prevents Flask-Talisman from forcing HTTPS redirects on plain HTTP health checks.
@@ -593,6 +635,7 @@ def create_app():
     app.config.setdefault("RATELIMIT_DEFAULT", "200 per minute")
     app.config.setdefault("RATELIMIT_STORAGE_URI", "memory://")
     app.config.setdefault("SCRYFALL_OFFLINE_FIRST", True)
+    app.config.setdefault("STATIC_ASSET_BASE_URL", os.getenv("STATIC_ASSET_BASE_URL"))
 
     # If no DB URI provided, store SQLite DB in instance/
     if not app.config.get("SQLALCHEMY_DATABASE_URI"):
@@ -627,6 +670,7 @@ def create_app():
         "views.healthz",
         "views.readyz",
         "views.metrics",
+        "views.overall_health",
         "views.terms_of_service",
         "views.privacy_policy",
         "views.accessibility_statement",
@@ -690,6 +734,7 @@ def create_app():
         app.logger.warning("Flask-Limiter not installed; rate limiting disabled.")
 
     if _talisman_available and app.config.get("ENABLE_TALISMAN", True):
+        _extend_csp_for_static_assets(app)
         csp = app.config.get("CONTENT_SECURITY_POLICY")
         Talisman(
             app,

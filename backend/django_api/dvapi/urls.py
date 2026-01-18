@@ -6,6 +6,7 @@ from api import views as api_views
 
 urlpatterns = [
     path("healthz", api_views.healthz, name="healthz"),
+    path("readyz", api_views.readyz, name="readyz"),
     path("api-next/health", api_views.health, name="api-health"),
     path("api-next/me", api_views.me, name="api-me"),
     path("api-next/folders", api_views.folders, name="api-folders"),

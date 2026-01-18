@@ -1,6 +1,39 @@
 (() => {
   const RIPPLE_SELECTOR = "[data-ripple]";
   const CONFIRM_SELECTOR = "[data-confirm]";
+  const BUILD_SESSION_SELECTOR = ".build-session[data-build-session-id]";
+  const BUILD_DETAILS_SELECTOR = ".build-rec-section[id]";
+  const BUILD_DETAILS_SUFFIX = ":details";
+  const BUILD_SCROLL_SUFFIX = ":scroll";
+
+  const buildLocalStore = (() => {
+    try {
+      return window.localStorage;
+    } catch (err) {
+      return null;
+    }
+  })();
+  const buildSessionStore = (() => {
+    try {
+      return window.sessionStorage;
+    } catch (err) {
+      return null;
+    }
+  })();
+  const buildDetailsStore = buildLocalStore || buildSessionStore;
+  const buildDetailsFallback = buildDetailsStore
+    && buildSessionStore
+    && buildDetailsStore !== buildSessionStore
+    ? buildSessionStore
+    : null;
+
+  let activeBuildRoot = null;
+  let activeBuildSessionId = null;
+  let buildDetailsKey = null;
+  let buildScrollKey = null;
+  let buildListenersBound = false;
+  let scrollRestoreScheduled = false;
+  let scrollRestored = false;
 
   function createRipple(evt) {
     const target = evt.currentTarget;
@@ -36,9 +69,194 @@
     el.dataset.rippleBound = "1";
   }
 
+  function resolveBuildSessionRoot(scope) {
+    if (scope instanceof Element) {
+      if (scope.matches(BUILD_SESSION_SELECTOR)) return scope;
+      return scope.querySelector(BUILD_SESSION_SELECTOR);
+    }
+    if (scope === document) {
+      return document.querySelector(BUILD_SESSION_SELECTOR);
+    }
+    return null;
+  }
+
+  function setActiveBuildSession(root) {
+    const sessionId = root ? root.dataset.buildSessionId : null;
+    activeBuildRoot = root || null;
+    activeBuildSessionId = sessionId || null;
+    buildDetailsKey = activeBuildSessionId
+      ? `build-session:${activeBuildSessionId}${BUILD_DETAILS_SUFFIX}`
+      : null;
+    buildScrollKey = activeBuildSessionId
+      ? `build-session:${activeBuildSessionId}${BUILD_SCROLL_SUFFIX}`
+      : null;
+    scrollRestoreScheduled = false;
+    scrollRestored = false;
+  }
+
+  function getBuildDetails() {
+    if (!activeBuildRoot) return [];
+    return Array.from(activeBuildRoot.querySelectorAll(BUILD_DETAILS_SELECTOR));
+  }
+
+  function markBuildDetailsRestored() {
+    document.documentElement.dataset.buildDetailsRestored = "1";
+    document.dispatchEvent(new CustomEvent("build-details-restored"));
+  }
+
+  function saveBuildDetailsState() {
+    if (!buildDetailsStore || !buildDetailsKey) return;
+    const details = getBuildDetails();
+    if (!details.length) return;
+    const state = {};
+    details.forEach((item) => {
+      state[item.id] = Boolean(item.open);
+    });
+    try {
+      buildDetailsStore.setItem(buildDetailsKey, JSON.stringify(state));
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function restoreBuildDetailsState() {
+    if (!buildDetailsStore || !buildDetailsKey) return;
+    const details = getBuildDetails();
+    if (!details.length) return;
+    let state = {};
+    try {
+      let raw = buildDetailsStore.getItem(buildDetailsKey);
+      if (!raw && buildDetailsFallback) {
+        raw = buildDetailsFallback.getItem(buildDetailsKey);
+        if (raw) {
+          try {
+            buildDetailsStore.setItem(buildDetailsKey, raw);
+          } catch (err) {
+            /* ignore */
+          }
+        }
+      }
+      state = JSON.parse(raw || "{}");
+    } catch (err) {
+      state = {};
+    }
+    details.forEach((item) => {
+      if (Object.prototype.hasOwnProperty.call(state, item.id)) {
+        item.open = Boolean(state[item.id]);
+      }
+    });
+  }
+
+  function bindBuildDetails(details) {
+    details.forEach((item) => {
+      if (item.dataset.buildDetailsBound === "1") return;
+      item.dataset.buildDetailsBound = "1";
+      item.addEventListener("toggle", saveBuildDetailsState);
+    });
+  }
+
+  function buildScrollElement() {
+    return document.getElementById("main")
+      || document.scrollingElement
+      || document.documentElement;
+  }
+
+  function saveBuildScroll() {
+    if (!buildSessionStore || !buildScrollKey) return;
+    const scrollEl = buildScrollElement();
+    if (!scrollEl) return;
+    try {
+      buildSessionStore.setItem(buildScrollKey, String(scrollEl.scrollTop || 0));
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function restoreBuildScroll() {
+    if (!buildSessionStore || !buildScrollKey) return;
+    const scrollEl = buildScrollElement();
+    if (!scrollEl) return;
+    let raw = null;
+    try {
+      raw = buildSessionStore.getItem(buildScrollKey);
+    } catch (err) {
+      return;
+    }
+    if (!raw) return;
+    const value = parseInt(raw, 10);
+    if (!Number.isFinite(value)) return;
+    scrollEl.scrollTop = value;
+  }
+
+  function scheduleBuildScrollRestore() {
+    if (!buildSessionStore || !buildScrollKey) return;
+    if (scrollRestoreScheduled || scrollRestored) return;
+    scrollRestoreScheduled = true;
+    const run = () => {
+      scrollRestoreScheduled = false;
+      if (scrollRestored) return;
+      restoreBuildScroll();
+      scrollRestored = true;
+    };
+    if (document.readyState === "complete") {
+      window.requestAnimationFrame(run);
+    } else {
+      window.addEventListener("load", () => window.requestAnimationFrame(run), { once: true });
+    }
+  }
+
+  function bindBuildSessionListeners() {
+    if (buildListenersBound) return;
+    const saveAll = () => {
+      if (!activeBuildSessionId) return;
+      saveBuildDetailsState();
+      saveBuildScroll();
+    };
+    document.addEventListener("submit", saveAll, true);
+    window.addEventListener("pagehide", saveAll);
+    window.addEventListener("beforeunload", saveAll);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        saveAll();
+      }
+    });
+    document.addEventListener("htmx:beforeRequest", saveAll);
+    buildListenersBound = true;
+  }
+
+  function initBuildSession(scope) {
+    const root = resolveBuildSessionRoot(scope);
+    if (!root) {
+      if (!document.querySelector(BUILD_SESSION_SELECTOR)) {
+        activeBuildRoot = null;
+        activeBuildSessionId = null;
+        buildDetailsKey = null;
+        buildScrollKey = null;
+        delete document.documentElement.dataset.buildDetailsRestored;
+      }
+      return;
+    }
+    setActiveBuildSession(root);
+    if (!buildDetailsStore) {
+      markBuildDetailsRestored();
+      document.dispatchEvent(new CustomEvent("build-nav-refresh"));
+      return;
+    }
+    const details = getBuildDetails();
+    if (details.length) {
+      bindBuildDetails(details);
+    }
+    restoreBuildDetailsState();
+    markBuildDetailsRestored();
+    document.dispatchEvent(new CustomEvent("build-nav-refresh"));
+    scheduleBuildScrollRestore();
+    bindBuildSessionListeners();
+  }
+
   function init(scope) {
     const root = scope instanceof Element ? scope : document;
     root.querySelectorAll(RIPPLE_SELECTOR).forEach(bindRipple);
+    initBuildSession(scope);
   }
 
   function applySubmitFeedback(form, submitter) {

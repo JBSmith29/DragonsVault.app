@@ -3,8 +3,8 @@
 <div class="container py-4">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
-      <h1 class="mb-1">Data Operations</h1>
-      <div class="text-muted small">Maintenance tools and system confidence checks.</div>
+      <h1 class="mb-1">Maintenance Console</h1>
+      <div class="text-muted small">Maintenance tools, job monitors, and system confidence checks.</div>
     </div>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
   </div>
@@ -87,6 +87,11 @@
             <div class="small text-muted mb-3">
               Downloads the latest Scryfall bulk file to refresh card data and commander lookups.
             </div>
+            {% set scryfall_run = maintenance_runs.scryfall %}
+            <div class="small text-muted mb-3">
+              Last run: {{ scryfall_run.stamp }}
+              <span class="badge text-bg-{{ scryfall_run.tone }} ms-1">{{ scryfall_run.label }}</span>
+            </div>
             <form method="post" action="{{ url_for('views.admin_console') }}"
                   data-job-trigger data-job-scope="scryfall" data-job-dataset="default_cards">
               <input type="hidden" name="action" value="refresh_default_cards">
@@ -117,6 +122,60 @@
                   <span class="small fw-semibold" data-job-progress-label>0%</span>
                 </div>
                 <div class="progress progress-striped" role="progressbar" aria-label="Card import progress" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
+                </div>
+              </div>
+              <ul class="list-unstyled small text-muted mb-0 mt-3 job-monitor__log" data-job-log></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="card-title mb-0">Sync Spellbook Combos</h5>
+              <span class="badge text-bg-warning">Medium impact</span>
+            </div>
+            <div class="small text-muted mb-3">
+              Downloads Commander Spellbook combos used by deck scoring and commander bracket views.
+            </div>
+            {% set spellbook_run = maintenance_runs.spellbook %}
+            <div class="small text-muted mb-3">
+              Last run: {{ spellbook_run.stamp }}
+              <span class="badge text-bg-{{ spellbook_run.tone }} ms-1">{{ spellbook_run.label }}</span>
+            </div>
+            <form method="post" action="{{ url_for('views.admin_console') }}"
+                  data-job-trigger data-job-scope="spellbook" data-job-dataset="spellbook">
+              <input type="hidden" name="action" value="refresh_spellbook_combos">
+              <input type="hidden" name="redirect_to" value="views.admin_data_operations">
+              <button class="btn btn-primary btn-sm" type="submit"
+                      data-confirm="Sync Commander Spellbook combos now?"
+                      data-progress-label="Syncing...">
+                Sync Spellbook Combos
+              </button>
+            </form>
+            <div class="border rounded-3 bg-body-tertiary-subtle p-3 job-monitor mt-3"
+                 data-job-monitor
+                 data-job-scope="spellbook"
+                 data-job-dataset="spellbook"
+                 data-job-label="Spellbook sync">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                  <p class="fw-semibold mb-1 job-monitor__status" data-job-status>No refresh in progress.</p>
+                  <p class="text-muted small mb-0 job-monitor__detail" data-job-detail>
+                    Start a sync to see Spellbook progress and results.
+                  </p>
+                </div>
+                <span class="badge text-bg-secondary job-monitor__badge" data-job-badge>Idle</span>
+              </div>
+              <div class="mt-3 d-none" data-job-progress>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="small text-muted" data-job-progress-text>Working</span>
+                  <span class="small fw-semibold" data-job-progress-label>0%</span>
+                </div>
+                <div class="progress progress-striped" role="progressbar" aria-label="Spellbook progress" aria-valuemin="0" aria-valuemax="100">
                   <div class="progress-bar progress-bar-striped progress-bar-animated" data-job-progress-bar style="width: 0%;" aria-valuenow="0"></div>
                 </div>
               </div>
@@ -283,11 +342,16 @@
         <div class="card h-100">
           <div class="card-body">
             <div class="d-flex align-items-center justify-content-between mb-2">
-              <h5 class="card-title mb-0">Rebuild Search Index</h5>
+              <h5 class="card-title mb-0">Rebuild Search Index (FTS)</h5>
               <span class="badge text-bg-secondary">Low impact</span>
             </div>
             <div class="small text-muted mb-3">
-              Rebuilds the internal search index used by filters and quick search.
+              Rebuilds the FTS search index used by filters and quick search.
+            </div>
+            {% set fts_run = maintenance_runs.fts %}
+            <div class="small text-muted mb-3">
+              Last run: {{ fts_run.stamp }}
+              <span class="badge text-bg-{{ fts_run.tone }} ms-1">{{ fts_run.label }}</span>
             </div>
             <form method="post" action="{{ url_for('views.admin_console') }}"
                   data-job-trigger data-job-scope="search_index" data-job-dataset="cards">

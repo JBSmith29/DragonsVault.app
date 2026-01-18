@@ -18,6 +18,19 @@ class Card(db.Model):
             "is_foil",
             "lang",
         ),
+        db.Index(
+            "ix_cards_folder_oracle",
+            "folder_id",
+            "oracle_id",
+        ),
+        db.Index(
+            "ix_cards_folder_print",
+            "folder_id",
+            "set_code",
+            "collector_number",
+            "lang",
+            "is_foil",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)

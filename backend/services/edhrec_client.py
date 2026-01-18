@@ -309,7 +309,11 @@ def _cardviews_from_payload(
                     rank=int(raw.get("rank") or len(collected) + 1),
                     source_kind=str(payload.get("kind") or ""),
                     synergy=_safe_float(raw.get("synergy")),
-                    inclusion=_safe_float(raw.get("inclusion")),
+                    inclusion=_inclusion_percent(
+                        raw.get("inclusion"),
+                        raw.get("num_decks"),
+                        raw.get("potential_decks"),
+                    ),
                     num_decks=raw.get("num_decks"),
                     potential_decks=raw.get("potential_decks"),
                     url=_full_edhrec_url(raw.get("url")),
@@ -361,6 +365,26 @@ def _safe_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _inclusion_percent(
+    raw_inclusion: Any,
+    raw_num_decks: Any,
+    raw_potential_decks: Any,
+) -> Optional[float]:
+    inclusion = _safe_float(raw_inclusion)
+    num_decks = _safe_float(raw_num_decks)
+    potential_decks = _safe_float(raw_potential_decks)
+    if potential_decks and potential_decks > 0:
+        numerator = num_decks if num_decks is not None else inclusion
+        if numerator is not None:
+            pct = (numerator / potential_decks) * 100.0
+            return round(min(max(pct, 0.0), 100.0), 1)
+    if inclusion is None:
+        return None
+    if inclusion <= 1:
+        return round(min(max(inclusion * 100.0, 0.0), 100.0), 1)
+    return round(min(max(inclusion, 0.0), 100.0), 1)
 
 
 def _full_edhrec_url(url: Optional[str]) -> Optional[str]:

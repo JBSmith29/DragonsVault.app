@@ -3,7 +3,7 @@
 {% block title %}Build Session{% endblock %}
 
 {% block content %}
-<div class="page-section build-session container-fluid">
+<div class="page-section build-session container-fluid" data-build-session-id="{{ build_session.id }}">
   <!-- Align header structure and spacing with folder_detail for consistent hierarchy. -->
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>
@@ -61,19 +61,20 @@
     .build-session .build-nav-link[data-level="3"]{ padding-left:2rem; font-size:0.8rem; }
     .build-nav-menu{ max-height: 60vh; overflow-y: auto; }
     /* MTGGoldfish-style type list for current build. */
-    .build-session .build-view[data-build-view="type"]{ column-count: 2; column-gap: 2rem; }
+    .build-session .build-view[data-build-view="type"]{ column-count: 2; column-gap: 1.5rem; }
+    @media (min-width: 1400px){ .build-session .build-view[data-build-view="type"]{ column-count: 3; column-gap: 1.5rem; } }
     @media (max-width: 1199.98px){ .build-session .build-view[data-build-view="type"]{ column-count: 1; } }
-    .build-session .build-type-group{ border-top:1px solid var(--bs-border-color); padding-top:0.75rem; margin-top:1rem; }
+    .build-session .build-type-group{ border-top:1px solid var(--bs-border-color); padding-top:0.5rem; margin-top:0.75rem; }
     .build-session .build-type-group{ break-inside: avoid; }
     .build-session .build-type-header{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; }
     .build-session .build-type-header .type-label{ font-weight:700; letter-spacing:0.04em; text-transform:uppercase; font-size:0.75rem; color:var(--bs-secondary-color); }
-    .build-session .build-type-list{ display:flex; flex-direction:column; gap:0.35rem; margin-top:0.5rem; }
+    .build-session .build-type-list{ display:flex; flex-direction:column; gap:0.2rem; margin-top:0.4rem; }
     .build-session .build-type-row{
       display:grid;
-      grid-template-columns: minmax(140px, auto) 1fr auto auto auto;
+      grid-template-columns: minmax(120px, auto) 1fr auto auto auto;
       align-items:center;
-      gap:0.75rem;
-      padding:0.35rem 0;
+      gap:0.5rem;
+      padding:0.2rem 0;
       border-bottom:1px dashed var(--bs-border-color);
     }
     @media (max-width: 991.98px){
@@ -83,8 +84,116 @@
     .build-session .build-type-name{ font-weight:600; }
     .build-session .build-type-cost{ display:inline-flex; align-items:center; gap:0.2rem; white-space:nowrap; }
     .build-session .build-type-cost .mana{ height:1em; }
-    .build-session .build-type-price{ min-width:4rem; text-align:right; }
+    .build-session .build-type-price{ min-width:3.25rem; text-align:right; }
+    .build-session .build-type-remove{ padding:0.15rem 0.45rem; font-size:0.75rem; }
     .build-session .build-edhrec-progress{ min-width: 220px; max-width: 320px; }
+    .build-session .build-list-grid{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 0.85rem;
+      align-items: start;
+    }
+    .build-session .build-list-card{
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 0.75rem;
+      padding: 0.6rem 0.8rem;
+      background: rgba(15, 23, 42, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .build-session .build-list-main{
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-width: 0;
+    }
+    .build-session .build-list-thumb{
+      width: 42px;
+      border-radius: 0.4rem;
+      flex-shrink: 0;
+    }
+    .build-session .build-list-title{
+      font-weight: 600;
+      min-width: 0;
+      line-height: 1.2;
+    }
+    .build-session .build-list-meta{
+      display: flex;
+      align-items: center;
+      gap: 0.6rem 0.8rem;
+      flex-wrap: wrap;
+      padding-top: 0.35rem;
+      border-top: 1px dashed rgba(148, 163, 184, 0.2);
+    }
+    .build-session .build-list-meta form{ margin: 0; }
+    .build-session .build-list-qty input[type="number"]{ width: 64px; }
+    .build-session .build-list-price{
+      min-width: 3.5rem;
+      text-align: right;
+      margin-left: auto;
+    }
+    .build-session .build-list-remove{ margin-left: 0; }
+    .build-session .build-gallery-img{
+      height: 200px;
+      object-fit: contain;
+      background: rgba(0, 0, 0, 0.08);
+    }
+    #main[data-active-endpoint="views.build_session"]{
+      scrollbar-gutter: stable;
+    }
+    @media (max-width: 575.98px){
+      .build-session .build-list-meta{ justify-content: flex-start; }
+      .build-session .build-list-price{ margin-left: 0; }
+    }
+    #main[data-active-endpoint="views.build_session"] .build-fab-group{
+      position: fixed;
+      right: 1.5rem;
+      bottom: 1.5rem;
+      z-index: 1040;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    #main[data-active-endpoint="views.build_session"] .build-fab-group .btn{
+      box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.3);
+    }
+    #main[data-active-endpoint="views.build_session"] .build-fab-group .build-breakdown-fab{
+      position: static;
+      right: auto;
+      bottom: auto;
+    }
+    .build-session .build-type-modal .build-view[data-build-view="type"]{ column-count: 1; column-gap: 1.5rem; }
+    @media (min-width: 992px){
+      .build-session .build-type-modal .build-view[data-build-view="type"]{ column-count: 2; }
+    }
+    .build-session .build-type-modal .build-type-group{ padding-top:0.65rem; margin-top:0.85rem; }
+    .build-session .build-type-modal .build-type-list{ gap:0.35rem; margin-top:0.45rem; }
+    .build-session .build-type-modal .build-type-row{
+      grid-template-columns: 0.7rem minmax(280px, 1fr) auto auto;
+      gap:0.35rem;
+      padding:0.3rem 0;
+    }
+    .build-session .build-type-modal .build-type-qty{
+      text-align: center;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .build-session .build-type-modal .build-type-name{ line-height:1.25; word-break: break-word; }
+    .build-session .build-view-dialog{
+      max-width: 1200px;
+      width: min(96vw, 1200px);
+    }
+    @media (max-width: 575.98px){
+      #main[data-active-endpoint="views.build_session"] .build-fab-group{
+        right: 1rem;
+        bottom: 1rem;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+    }
   </style>
 
   <div class="row g-4">
@@ -97,7 +206,10 @@
             <div class="commander-portrait">
               <div class="commander-portrait-frame">
                 {% if commander.image %}
-                  <img src="{{ commander.image }}" class="build-commander-img" alt="{{ commander.name }}">
+                  <img src="{{ commander.image }}"
+                       class="build-commander-img"
+                       alt="{{ commander.name }}"
+                       data-hover-src="{{ commander.image }}">
                 {% else %}
                   <div class="commander-portrait-placeholder">
                     <div class="fw-semibold mb-1">{{ commander.name or 'Commander not set' }}</div>
@@ -178,7 +290,7 @@
                   <div class="text-uppercase text-muted small fw-semibold">Bracket</div>
                   {% if build_bracket and build_bracket.level %}
                     <div class="d-flex align-items-center gap-2 mt-1">
-                      <span class="badge text-bg-primary">{{ build_bracket.level }}</span>
+                      <span class="badge bracket-badge" data-bracket="{{ build_bracket.level }}">{{ build_bracket.level }}</span>
                       {% if build_bracket.label %}
                         <span class="small text-muted">{{ build_bracket.label }}</span>
                       {% endif %}
@@ -318,7 +430,10 @@
                             <div class="card h-100 build-rec-card">
                               <span class="build-proxy-badge">proxy</span>
                               {% if rec.image %}
-                                <img src="{{ rec.image }}" class="card-img-top build-card-img" alt="{{ rec.name }}">
+                                <img src="{{ rec.image }}"
+                                     class="card-img-top build-card-img"
+                                     alt="{{ rec.name }}"
+                                     data-hover-src="{{ rec.image }}">
                               {% endif %}
                               <div class="card-body">
                                 <div class="d-flex align-items-start justify-content-between gap-2">
@@ -333,7 +448,15 @@
                                       <span>Synergy {{ rec.synergy_percent }}%</span>
                                     {% endif %}
                                     {% if rec.inclusion_percent is not none %}
-                                      <span class="ms-auto">Incl {{ rec.inclusion_percent }}%</span>
+                                      {% set inclusion_value = rec.inclusion_percent|float %}
+                                      {% if inclusion_value < 0 %}
+                                        {% set inclusion_display = 0 %}
+                                      {% elif inclusion_value > 100 %}
+                                        {% set inclusion_display = 100 %}
+                                      {% else %}
+                                        {% set inclusion_display = rec.inclusion_percent %}
+                                      {% endif %}
+                                      <span class="ms-auto">Incl {{ inclusion_display }}%</span>
                                     {% endif %}
                                   </div>
                                 {% endif %}
@@ -344,18 +467,29 @@
                                     {% endfor %}
                                   </div>
                                 {% endif %}
-                                <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}" class="mt-3">
-                                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                  <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                                  <input type="hidden" name="sort" value="{{ sort_mode }}">
-                                  <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
-                                  {% set add_locked = rec.in_build and not rec.is_basic_land %}
-                                  <button class="btn btn-sm w-100 {% if add_locked %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
-                                          type="submit"
-                                          {% if add_locked %}disabled{% endif %}>
-                                    {% if add_locked %}In Build{% else %}Add to Build{% endif %}
-                                  </button>
-                                </form>
+                                {% set add_locked = rec.in_build and not rec.is_basic_land %}
+                                <div class="d-grid gap-2 mt-3">
+                                  <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                                    <input type="hidden" name="sort" value="{{ sort_mode }}">
+                                    <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                                    <button class="btn btn-sm w-100 {% if add_locked %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
+                                            type="submit"
+                                            {% if add_locked %}disabled{% endif %}>
+                                      {% if add_locked %}In Build{% else %}Add to Build{% endif %}
+                                    </button>
+                                  </form>
+                                  {% if rec.in_build %}
+                                    <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
+                                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                      <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                                      <input type="hidden" name="sort" value="{{ sort_mode }}">
+                                      <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                                      <button class="btn btn-sm w-100 btn-outline-danger" type="submit">Remove from Build</button>
+                                    </form>
+                                  {% endif %}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -398,7 +532,10 @@
                             <div class="card h-100 build-rec-card">
                               <span class="build-proxy-badge">proxy</span>
                               {% if rec.image %}
-                                <img src="{{ rec.image }}" class="card-img-top build-card-img" alt="{{ rec.name }}">
+                                <img src="{{ rec.image }}"
+                                     class="card-img-top build-card-img"
+                                     alt="{{ rec.name }}"
+                                     data-hover-src="{{ rec.image }}">
                               {% endif %}
                               <div class="card-body">
                                 <div class="build-rec-title">{{ rec.name }}</div>
@@ -408,7 +545,15 @@
                                       <span>EDHRec {{ rec.synergy_percent }}%</span>
                                     {% endif %}
                                     {% if rec.inclusion_percent is not none %}
-                                      <span class="ms-auto">Incl {{ rec.inclusion_percent }}%</span>
+                                      {% set inclusion_value = rec.inclusion_percent|float %}
+                                      {% if inclusion_value < 0 %}
+                                        {% set inclusion_display = 0 %}
+                                      {% elif inclusion_value > 100 %}
+                                        {% set inclusion_display = 100 %}
+                                      {% else %}
+                                        {% set inclusion_display = rec.inclusion_percent %}
+                                      {% endif %}
+                                      <span class="ms-auto">Incl {{ inclusion_display }}%</span>
                                     {% endif %}
                                   </div>
                                 {% endif %}
@@ -422,18 +567,29 @@
                                     {% endfor %}
                                   </div>
                                 {% endif %}
-                                <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}" class="mt-3">
-                                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                  <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                                  <input type="hidden" name="sort" value="{{ sort_mode }}">
-                                  <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
-                                  {% set add_locked = rec.in_build and not rec.is_basic_land %}
-                                  <button class="btn btn-sm w-100 {% if add_locked %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
-                                          type="submit"
-                                          {% if add_locked %}disabled{% endif %}>
-                                    {% if add_locked %}In Build{% else %}Add to Build{% endif %}
-                                  </button>
-                                </form>
+                                {% set add_locked = rec.in_build and not rec.is_basic_land %}
+                                <div class="d-grid gap-2 mt-3">
+                                  <form method="post" action="{{ url_for('views.build_session_add', session_id=build_session.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                                    <input type="hidden" name="sort" value="{{ sort_mode }}">
+                                    <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                                    <button class="btn btn-sm w-100 {% if add_locked %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
+                                            type="submit"
+                                            {% if add_locked %}disabled{% endif %}>
+                                      {% if add_locked %}In Build{% else %}Add to Build{% endif %}
+                                    </button>
+                                  </form>
+                                  {% if rec.in_build %}
+                                    <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
+                                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                      <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                                      <input type="hidden" name="sort" value="{{ sort_mode }}">
+                                      <input type="hidden" name="card_oracle_id" value="{{ rec.oracle_id }}">
+                                      <button class="btn btn-sm w-100 btn-outline-danger" type="submit">Remove from Build</button>
+                                    </form>
+                                  {% endif %}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -456,7 +612,9 @@
       <div class="summary-row mb-3">
         <div>
           {% if deck_type_breakdown and deck_type_breakdown|length %}
-            <div class="section-title">Type Breakdown</div>
+            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+              <div class="section-title mb-0">Type Breakdown</div>
+            </div>
             <div class="d-flex flex-wrap justify-content-center gap-2 type-pill-group">
               {% for t, n in deck_type_breakdown %}
                 <button type="button"
@@ -496,7 +654,7 @@
                   {% if pip %}
                     <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
                   {% elif c in ['C', 'Colorless'] %}
-                    <img src="{{ url_for('static', filename='symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+                    <img src="{{ static_url('symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
                   {% else %}
                     <span class="me-1">{{ c }}</span>
                   {% endif %}
@@ -555,70 +713,61 @@
           </div>
           {% if session_cards %}
             <div class="build-view" data-build-view="list">
-              <div class="table-responsive">
-                <table class="table cards-table align-middle">
-                  <thead>
-                    <tr>
-                      <th>Card</th>
-                      <th class="text-center">Qty</th>
-                      <th class="text-end">Cheapest</th>
-                      <th class="text-end">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="buildSessionTable">
-                    {% for card in session_cards %}
-                      <tr class="build-row"
-                          data-name="{{ card.name | e }}"
-                          data-type="{{ card.type_line | lower }}"
-                          data-cmc-bucket="{{ card.cmc_bucket }}">
-                        <td>
-                          <div class="d-flex align-items-center gap-2">
-                            {% if card.image %}
-                              <img src="{{ card.image }}" alt="{{ card.name }}" class="rounded" style="width: 44px;">
-                            {% endif %}
-                            <span>{{ card.name }}</span>
-                          </div>
-                        </td>
-                        <td class="text-center">
-                          <form method="post" action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}" class="d-inline-flex align-items-center gap-2">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                            <input type="hidden" name="sort" value="{{ sort_mode }}">
-                            <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                            <input type="number"
-                                   name="quantity"
-                                   class="form-control form-control-sm text-center"
-                                   value="{{ card.quantity }}"
-                                   min="1"
-                                   step="1"
-                                   style="width: 80px;">
-                            <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
-                          </form>
-                        </td>
-                        <td class="text-end small text-muted">{{ card.price_text or '—' }}</td>
-                        <td class="text-end">
-                          <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                            <input type="hidden" name="sort" value="{{ sort_mode }}">
-                            <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                          </form>
-                        </td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
+              <div id="buildSessionTable" class="build-list-grid">
+                {% for card in session_cards %}
+                  <div class="build-row build-list-card"
+                       data-name="{{ card.name | e }}"
+                       data-type="{{ card.type_line | lower }}"
+                       data-cmc-bucket="{{ card.cmc_bucket }}">
+                    <div class="build-list-main">
+                      {% if card.image %}
+                        <img src="{{ card.image }}"
+                             alt="{{ card.name }}"
+                             class="build-list-thumb"
+                             data-hover-src="{{ card.image }}">
+                      {% endif %}
+                      <span class="build-list-title">{{ card.name }}</span>
+                    </div>
+                    <div class="build-list-meta">
+                      <form method="post"
+                            action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}"
+                            class="build-list-qty d-inline-flex align-items-center gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                        <input type="hidden" name="sort" value="{{ sort_mode }}">
+                        <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                        <input type="number"
+                               name="quantity"
+                               class="form-control form-control-sm text-center"
+                               value="{{ card.quantity }}"
+                               min="1"
+                               step="1">
+                        <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
+                      </form>
+                      <div class="build-list-price small text-muted">{{ card.price_text or '—' }}</div>
+                      <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}" class="build-list-remove">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                        <input type="hidden" name="sort" value="{{ sort_mode }}">
+                        <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                      </form>
+                    </div>
+                  </div>
+                {% endfor %}
               </div>
             </div>
 
-            <div class="build-view d-none" data-build-view="gallery">
+            <div class="build-view d-none" data-build-view="gallery" data-ignore-hover="true">
               <div class="row g-3">
                 {% for card in session_cards %}
-                  <div class="col-6 col-md-4 col-lg-3">
-                    <div class="card h-100">
+                  <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+                    <div class="card h-100 build-gallery-card">
                       {% if card.image %}
-                        <img src="{{ card.image }}" alt="{{ card.name }}" class="card-img-top">
+                        <img src="{{ card.image }}"
+                             alt="{{ card.name }}"
+                             class="card-img-top build-gallery-img"
+                             data-hover-src="{{ card.image }}">
                       {% endif %}
                       <div class="card-body d-flex flex-column gap-2">
                         <div class="fw-semibold">{{ card.name }}</div>
@@ -657,7 +806,8 @@
                 <div class="build-type-group">
                   <div class="build-type-header">
                     <span class="type-label">{{ group.label }}</span>
-                    <span class="text-muted small">{{ group.cards | length }} cards</span>
+                    {% set total_count = group.cards | sum(attribute='quantity') %}
+                    <span class="text-muted small">{{ total_count }} cards</span>
                   </div>
                   <div class="build-type-list">
                     {% for card in group.cards %}
@@ -675,7 +825,7 @@
                                  value="{{ card.quantity }}"
                                  min="1"
                                  step="1"
-                                 style="width: 72px;">
+                                 style="width: 56px;">
                           <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
                         </form>
                         <div class="build-type-name"
@@ -696,7 +846,7 @@
                           <input type="hidden" name="rec_source" value="{{ rec_source }}">
                           <input type="hidden" name="sort" value="{{ sort_mode }}">
                           <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                          <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                          <button class="btn btn-sm btn-outline-danger build-type-remove" type="submit">Remove</button>
                         </form>
                       </div>
                     {% endfor %}
@@ -725,12 +875,72 @@
   <div class="dropdown-menu build-nav-menu p-2" data-build-nav-links></div>
 </div>
 
-<button class="btn btn-primary build-breakdown-fab"
-        type="button"
-        data-bs-toggle="modal"
-        data-bs-target="#buildTypeBreakdownModal">
-  Type Breakdown
-</button>
+<div class="build-fab-group">
+  {% if session_cards %}
+  <button class="btn btn-primary build-view-fab"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#buildViewModal">
+    View Build
+  </button>
+  {% endif %}
+  <button class="btn btn-primary build-breakdown-fab"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#buildTypeBreakdownModal">
+    Type Breakdown
+  </button>
+</div>
+
+<div class="modal fade" id="buildViewModal" tabindex="-1" aria-labelledby="buildViewLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable build-view-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="buildViewLabel">Current Build (Type View)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="close"></button>
+      </div>
+      <div class="modal-body">
+        {% if session_cards_by_type %}
+          <div class="build-session build-type-modal">
+            <div class="build-view" data-build-view="type">
+              {% for group in session_cards_by_type %}
+                <div class="build-type-group">
+                  <div class="build-type-header">
+                    <span class="type-label">{{ group.label }}</span>
+                    {% set total_count = group.cards | sum(attribute='quantity') %}
+                    <span class="text-muted small">{{ total_count }} cards</span>
+                  </div>
+                  <div class="build-type-list">
+                    {% for card in group.cards %}
+                      <div class="build-type-row">
+                        <div class="build-type-qty">{{ card.quantity }}</div>
+                        <div class="build-type-name"
+                             data-card-name="{{ card.name }}"
+                             {% if card.image %}data-hover-src="{{ card.image }}"{% endif %}>
+                          {{ card.name }}
+                        </div>
+                        <div class="build-type-cost small text-muted">
+                          {% if card.mana_cost_html %}
+                            <span class="mana-cost">{{ card.mana_cost_html | safe }}</span>
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </div>
+                        <div class="build-type-price small text-muted">{{ card.price_text or '—' }}</div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% else %}
+          <div class="text-muted small">No cards in the build yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="buildTypeBreakdownModal" tabindex="-1" aria-labelledby="buildTypeBreakdownLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -1115,39 +1325,6 @@
     startProgress('Queued...');
     pollStatus();
   }
-})();
-
-(() => {
-  const details = Array.from(document.querySelectorAll('.build-rec-section[id]'));
-  if (!details.length || !window.sessionStorage) return;
-  const storageKey = "build-session:{{ build_session.id }}:details";
-
-  function saveState() {
-    const state = {};
-    details.forEach(item => {
-      state[item.id] = !!item.open;
-    });
-    sessionStorage.setItem(storageKey, JSON.stringify(state));
-  }
-
-  function restoreState() {
-    let state = {};
-    try {
-      state = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
-    } catch (err) {
-      state = {};
-    }
-    details.forEach(item => {
-      if (Object.prototype.hasOwnProperty.call(state, item.id)) {
-        item.open = !!state[item.id];
-      }
-    });
-  }
-
-  details.forEach(item => item.addEventListener('toggle', saveState));
-  document.addEventListener('submit', saveState, true);
-  restoreState();
-  document.dispatchEvent(new CustomEvent('build-nav-refresh'));
 })();
 
 (() => {

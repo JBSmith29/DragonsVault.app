@@ -111,7 +111,8 @@ def _ensure_columns() -> None:
 def _inclusion_percent(value: float | None) -> float | None:
     if value is None:
         return None
-    return round(value, 1)
+    clamped = min(max(float(value), 0.0), 100.0)
+    return round(clamped, 1)
 
 
 def _bulk_upsert(model, rows: list[dict], index_elements: list[str], update_cols: list[str]) -> None:

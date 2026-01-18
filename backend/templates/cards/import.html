@@ -3,6 +3,8 @@
 <div class="container py-4">
 {% set selected_mode = (quantity_mode or 'new_only') if quantity_mode is defined else 'new_only' %}
   {% set manual_seed = session.get('manual_import_seed') %}
+  {% set field_errors = field_errors or {} %}
+  {% set form_errors = form_errors or [] %}
 
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-2">
     <div>
@@ -118,7 +120,7 @@
     <div class="col-12 col-lg-7">
       <!-- Upload & Import -->
       <form id="import-form" class="card border-0 shadow-sm h-100" method="post" enctype="multipart/form-data" action="{{ url_for('views.import_csv') }}" data-hx-boost="false">
-        <input type="hidden" name="import_action" value="confirm">
+        <input type="hidden" name="import_action" id="importAction" value="confirm">
         <input type="hidden" name="import_async" value="1">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div>
@@ -135,16 +137,30 @@
           </div>
         </div>
         <div class="card-body">
+          <div class="alert alert-danger {% if not form_errors %}d-none{% endif %}" role="alert" id="importInlineAlert">
+            <div class="fw-semibold">Import needs attention</div>
+            <ul class="mb-0" id="importInlineErrors">
+              {% for err in form_errors %}
+                <li>{{ err }}</li>
+              {% endfor %}
+            </ul>
+          </div>
           <div class="row g-3">
             <div class="col-12">
               <label for="file" class="form-label">Choose CSV or Excel file</label>
-              <input class="form-control" type="file" id="file" name="file"
+              <input class="form-control{% if field_errors.file %} is-invalid{% endif %}" type="file" id="file" name="file"
                      accept=".csv,.tsv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                     required>
+                     {% if not preview %}required{% endif %}>
+              <div class="invalid-feedback" id="fileError">{{ field_errors.file }}</div>
               <div class="form-text">
                 Supports DragonShield exports and ManaBox binder exports. Files are limited to 10MB to keep imports fast and safe.
                 ManaBox&#8217;s &#8220;Binder Name&#8221; maps to folders, and &#8220;Binder Type&#8221; switches between deck and collection buckets automatically.
+                Use Preview &amp; map to confirm column assignments before you import.
               </div>
+              {% if preview_filename %}
+                <div class="form-text text-success">Using saved upload: {{ preview_filename }}</div>
+                <input type="hidden" name="filepath" value="{{ filepath }}">
+              {% endif %}
             </div>
             <div class="col-12">
               <label class="form-label">Import mode</label>
@@ -181,7 +197,10 @@
           </div>
 
           <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-            <button type="submit" class="btn btn-primary btn-progress" id="btn-import">
+            <button type="submit" class="btn btn-outline-secondary" id="btn-preview" data-import-action="preview">
+              Preview &amp; map
+            </button>
+            <button type="submit" class="btn btn-primary btn-progress" id="btn-import" data-import-action="confirm">
               <span class="btn-progress__icon" aria-hidden="true">
                 <i class="bi bi-upload btn-progress__idle"></i>
                 <span class="spinner-border spinner-border-sm btn-progress__spinner" role="status"></span>
@@ -200,8 +219,88 @@
               <div class="progress-bar progress-bar-striped progress-bar-animated" id="importProgressBar" style="width: 0%;" aria-valuenow="0"></div>
             </div>
             <div class="small text-muted mt-1">This may take a minute for larger binders. Please keep this tab open.</div>
+            <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
+              <button type="button" class="btn btn-outline-danger btn-sm d-none" id="importRetry">
+                Retry import
+              </button>
+              <span class="small text-muted d-none" id="importRetryHelp">We can retry this upload without reselecting the file.</span>
+            </div>
           </div>
         </div>
+        {% if preview %}
+          <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header d-flex align-items-center gap-2">
+              <i class="bi bi-eye"></i>
+              <span>Preview &amp; column mapping</span>
+            </div>
+            <div class="card-body">
+              <p class="text-muted small mb-3">
+                Showing {{ preview.rows|length }} row{% if preview.rows|length != 1 %}s{% endif %}. Map columns to the required fields before importing.
+              </p>
+              {% if mapping_missing_labels or mapping_invalid %}
+                <div class="alert alert-warning">
+                  {% if mapping_missing_labels %}
+                    Missing required mappings: {{ mapping_missing_labels | join(', ') }}.
+                  {% endif %}
+                  {% if mapping_invalid %}
+                    Please fix invalid mappings before importing.
+                  {% endif %}
+                </div>
+              {% endif %}
+              <div class="row g-3">
+                {% for spec in mapping_fields %}
+                  {% set map_key = 'map_' ~ spec.key %}
+                  <div class="col-12 col-md-6">
+                    <label class="form-label" for="map-{{ spec.key }}">
+                      {{ spec.label }}
+                      {% if spec.required %}
+                        <span class="text-danger">*</span>
+                      {% endif %}
+                    </label>
+                    <select
+                      class="form-select{% if field_errors.get(map_key) %} is-invalid{% endif %}"
+                      name="map_{{ spec.key }}"
+                      id="map-{{ spec.key }}"
+                      data-map-field="{{ spec.key }}"
+                    >
+                      <option value="">-- Not mapped --</option>
+                      {% for header in mapping_headers %}
+                        <option value="{{ header }}" {% if mapping_selected.get(spec.key) == header %}selected{% endif %}>
+                          {{ header }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                    <div class="invalid-feedback" id="map-{{ spec.key }}-error">{{ field_errors.get(map_key) }}</div>
+                    {% set accepted = mapping_expected.get(spec.key) %}
+                    {% if accepted %}
+                      <div class="form-text">Accepted: {{ accepted | join(', ') }}</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="table-responsive mt-3">
+                <table class="table table-sm table-striped align-middle">
+                  <thead>
+                    <tr>
+                      {% for header in preview.headers %}
+                        <th scope="col">{{ header }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in preview.rows[:8] %}
+                      <tr>
+                        {% for header in preview.headers %}
+                          <td>{{ row.get(header) }}</td>
+                        {% endfor %}
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        {% endif %}
       </form>
     </div>
 
@@ -480,6 +579,7 @@
   (function () {
     const form = document.getElementById("import-form");
     const btn = document.getElementById("btn-import");
+    const actionInput = document.getElementById("importAction");
     const STORAGE_KEY = "dv-import-job";
     const COMPLETE_KEY = "dv-import-complete-url";
     const progressWrap = document.getElementById("importProgress");
@@ -488,6 +588,10 @@
     const summaryAlert = document.getElementById("importSummaryAlert");
     const summaryTitle = document.getElementById("importSummaryTitle");
     const summaryDetails = document.getElementById("importSummaryDetails");
+    const inlineAlert = document.getElementById("importInlineAlert");
+    const inlineErrors = document.getElementById("importInlineErrors");
+    const retryBtn = document.getElementById("importRetry");
+    const retryHelp = document.getElementById("importRetryHelp");
     const statusEndpoint = "{{ url_for('views.import_status') }}";
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
     const STATS_KEY = "dv-import-stats";
@@ -513,6 +617,68 @@
 
     function setProgressText(text) {
       if (progressLabel) progressLabel.textContent = text || "";
+    }
+
+    function clearInlineErrors() {
+      if (inlineAlert) {
+        inlineAlert.classList.add("d-none");
+      }
+      if (inlineErrors) {
+        inlineErrors.innerHTML = "";
+      }
+      const invalids = form ? form.querySelectorAll(".is-invalid") : [];
+      invalids.forEach((el) => el.classList.remove("is-invalid"));
+      const feedbacks = form ? form.querySelectorAll(".invalid-feedback") : [];
+      feedbacks.forEach((el) => {
+        if (el.id && el.id.endsWith("-error")) {
+          el.textContent = "";
+        }
+      });
+      const fileError = document.getElementById("fileError");
+      if (fileError) fileError.textContent = "";
+    }
+
+    function applyInlineErrors(message, fieldErrors) {
+      const messages = [];
+      if (message) {
+        messages.push(message);
+      }
+      if (fieldErrors) {
+        Object.values(fieldErrors).forEach((msg) => {
+          if (msg && !messages.includes(msg)) messages.push(msg);
+        });
+      }
+      if (inlineErrors) {
+        inlineErrors.innerHTML = "";
+        messages.forEach((msg) => {
+          const li = document.createElement("li");
+          li.textContent = msg;
+          inlineErrors.appendChild(li);
+        });
+      }
+      if (inlineAlert) {
+        inlineAlert.classList.remove("d-none");
+      }
+      if (fieldErrors && form) {
+        Object.entries(fieldErrors).forEach(([key, msg]) => {
+          if (!key) return;
+          if (key === "file") {
+            const fileInput = document.getElementById("file");
+            if (fileInput) fileInput.classList.add("is-invalid");
+            const fileError = document.getElementById("fileError");
+            if (fileError) fileError.textContent = msg || "";
+            return;
+          }
+          const field = form.querySelector(`[name="${key}"]`);
+          if (field) {
+            field.classList.add("is-invalid");
+            const errorEl = document.getElementById(`${key.replace(/_/g, "-")}-error`) || document.getElementById(`${field.id}-error`);
+            if (errorEl) {
+              errorEl.textContent = msg || "";
+            }
+          }
+        });
+      }
     }
 
     function renderCompletionSummary(summary) {
@@ -544,6 +710,8 @@
       if (!btn) return;
       btn.classList.remove("is-loading", "is-complete");
       btn.disabled = false;
+      if (retryBtn) retryBtn.classList.add("d-none");
+      if (retryHelp) retryHelp.classList.add("d-none");
       if (state === "loading") {
         btn.classList.add("is-loading");
         btn.disabled = true;
@@ -640,6 +808,13 @@
         setBarAnimated(false);
         updateProgress(0);
         setProgressText(event.error || "Import failed");
+        if (retryBtn) {
+          retryBtn.classList.remove("d-none");
+        }
+        if (retryHelp) {
+          retryHelp.classList.remove("d-none");
+        }
+        applyInlineErrors(event.error || "Import failed", null);
         return true;
       }
       return false;
@@ -698,7 +873,68 @@
       pollStatus();
     }
 
+    function handleRetry() {
+      if (!form || !retryBtn) return;
+      clearInlineErrors();
+      retryBtn.disabled = true;
+      setBtnState("loading");
+      setProgressText("Retrying");
+      updateProgress(0);
+      const formData = new FormData();
+      formData.set("import_action", "retry");
+      if (activeJobId) {
+        formData.set("job_id", activeJobId);
+      }
+      const actionUrl = form.getAttribute("action") || (typeof form.action === "string" ? form.action : "");
+      fetch(actionUrl || window.location.href, {
+        method: "POST",
+        body: formData,
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+        },
+      })
+        .then((resp) =>
+          resp
+            .json()
+            .then((data) => ({ ok: resp.ok, status: resp.status, data }))
+            .catch(() => ({ ok: false, status: resp.status, data: {} }))
+        )
+        .then(({ ok, data }) => {
+          if (!ok || !data || data.ok === false) {
+            applyInlineErrors(data?.error || "Retry failed to start.", data?.field_errors || {});
+            throw new Error(data?.error || "Retry failed to start.");
+          }
+          completeUrl = data.complete_url || "";
+          if (completeUrl) {
+            sessionStorage.setItem(COMPLETE_KEY, completeUrl);
+          } else {
+            sessionStorage.removeItem(COMPLETE_KEY);
+          }
+          startPolling(data.job_id);
+        })
+        .catch((err) => {
+          setBtnState("idle");
+          if (progressWrap) {
+            progressWrap.classList.remove("d-none");
+          }
+          setBarAnimated(false);
+          updateProgress(0);
+          setProgressText(err.message || "Retry failed to start.");
+          retryBtn.disabled = false;
+        });
+    }
+
     function handleAsyncSubmit(event) {
+      const submitter = event?.submitter;
+      const requestedAction = submitter?.dataset?.importAction || actionInput?.value || "confirm";
+      if (actionInput) {
+        actionInput.value = requestedAction;
+      }
+      if (requestedAction === "preview") {
+        return;
+      }
       if (event) {
         event.preventDefault();
         event.stopPropagation();
@@ -714,6 +950,7 @@
         setProgressText("Browser upload support missing.");
         return;
       }
+      clearInlineErrors();
       if (submitLocked) {
         setProgressText("Import already running...");
         return;
@@ -746,6 +983,7 @@
         )
         .then(({ ok, data }) => {
           if (!ok || !data || data.ok === false) {
+            applyInlineErrors(data?.error || "Import failed to start.", data?.field_errors || {});
             throw new Error(data?.error || "Import failed to start.");
           }
           completeUrl = data.complete_url || "";
@@ -764,12 +1002,16 @@
           setBarAnimated(false);
           updateProgress(0);
           setProgressText(err.message || "Import failed to start.");
+          applyInlineErrors(err.message || "Import failed to start.", null);
           submitLocked = false;
         });
     }
 
     if (form && btn) {
       form.addEventListener("submit", handleAsyncSubmit, true);
+    }
+    if (retryBtn) {
+      retryBtn.addEventListener("click", handleRetry);
     }
 
     const storedSummary = sessionStorage.getItem(STATS_KEY);

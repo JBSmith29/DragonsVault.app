@@ -309,7 +309,7 @@
             <div class="form-check form-check-inline">
               <input class="form-check-input" type="checkbox" id="c_{{ c }}" name="color" value="{{ c }}" {% if c in (selected_colors or []) %}checked{% endif %}>
               <label class="form-check-label" for="c_{{ c }}">
-                <img class="mana mana-sm" src="/static/symbols/{{ up }}.svg" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
+                <img class="mana mana-sm" src="{{ static_url('symbols/' ~ up ~ '.svg') }}" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
                 <span class="visually-hidden">{{ up }}</span>
               </label>
             </div>
@@ -638,7 +638,7 @@
               <td class="col-colors" data-col="colors">
                 <span class="pip-row">
                   {% for C in card.color_letters %}
-                    <img class="mana mana-sm" src="/static/symbols/{{ C }}.svg" alt="{{ C }}" onerror="this.outerHTML='{{ C }}'">
+                    <img class="mana mana-sm" src="{{ static_url('symbols/' ~ C ~ '.svg') }}" alt="{{ C }}" onerror="this.outerHTML='{{ C }}'">
                   {% endfor %}
                 </span>
               </td>
@@ -1136,7 +1136,7 @@
     return `<span class="pip-row">${
       source.map(c => {
         const L = String(c || '').toUpperCase();
-        return `<img class="mana mana-sm" src="/static/symbols/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
+        return `<img class="mana mana-sm" src="{{ static_url('symbols') }}/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
       }).join('')
     }</span>`;
   }
@@ -1579,7 +1579,7 @@
         return;
       }
       if (emptyState) emptyState.classList.add('d-none');
-      const placeholder = '/static/img/card-placeholder.svg';
+      const placeholder = '{{ static_url('img/card-placeholder.svg') }}';
       let activeCard = null;
 
       const setActive = (btn, finishes) => {

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import requests
+from utils.assets import static_url
 
 # Where we store JSON + SVGs (always under backend/static/symbols)
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
@@ -137,7 +138,7 @@ def ensure_symbols_cache(
     _SRC_MAP_REMOTE = {}
     for sym, rec in sym_map.items():
         fn = _normalize_filename(sym)
-        local = f"/static/symbols/{fn}"
+        local = static_url(f"symbols/{fn}")
         _SRC_MAP_LOCAL[sym] = local
         _SRC_MAP_REMOTE[sym] = rec.get("svg_uri") or rec.get("png_uri") or ""
 

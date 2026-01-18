@@ -111,6 +111,12 @@ EXPECTED = {
     ],
 }
 
+REQUIRED_FIELDS = {
+    "name": "Card name",
+    "set_code": "Set code",
+    "collector_number": "Collector number",
+}
+
 _LANG_MAP = {
     "english": "en",
     "japanese": "ja",
@@ -412,37 +418,75 @@ def _make_reader(filepath: str) -> Tuple[csv.DictReader, str]:
     return reader, delimiter
 
 def _normalize_headers(headers):
+    mapping, missing, invalid = resolve_header_mapping(headers, allow_missing=False)
+    if missing or invalid:
+        raise HeaderValidationError(_format_header_errors(missing, invalid))
+    return mapping
+
+
+def resolve_header_mapping(
+    headers: Iterable[str],
+    mapping_override: Optional[Dict[str, str]] = None,
+    *,
+    allow_missing: bool = False,
+) -> Tuple[Dict[str, str], List[str], List[Tuple[str, str]]]:
     if not headers:
         raise HeaderValidationError([
             "No headers found. Include columns such as 'Name', 'Set Code', 'Collector Number'."
         ])
     lower_to_original = {h.strip().lower(): h for h in headers if isinstance(h, str)}
-    mapping = {}
+    mapping: Dict[str, str] = {}
+    invalid_overrides: List[Tuple[str, str]] = []
+
+    if mapping_override:
+        for field, header in mapping_override.items():
+            if not header:
+                continue
+            header_key = str(header).strip()
+            if not header_key:
+                continue
+            resolved = lower_to_original.get(header_key.lower())
+            if not resolved:
+                invalid_overrides.append((field, header_key))
+                continue
+            mapping[field] = resolved
+
     for field, variants in EXPECTED.items():
+        if field in mapping:
+            continue
         for v in variants:
             if v in lower_to_original:
                 mapping[field] = lower_to_original[v]
                 break
-    required_fields = {
-        "name": "Card name",
-        "set_code": "Set code",
-        "collector_number": "Collector number",
-    }
-    missing = []
-    for req, label in required_fields.items():
-        if req not in mapping:
-            variants = ", ".join(EXPECTED.get(req, []))
-            detail = f"{label} (accepted: {variants})" if variants else label
-            missing.append(detail)
-    if missing:
-        raise HeaderValidationError(missing)
-    return mapping
+
+    missing = [req for req in REQUIRED_FIELDS if req not in mapping]
+    if (missing or invalid_overrides) and not allow_missing:
+        raise HeaderValidationError(_format_header_errors(missing, invalid_overrides))
+    return mapping, missing, invalid_overrides
 
 
-def validate_import_file(filepath: str) -> None:
+def _format_header_errors(missing: Iterable[str], invalid_overrides: Iterable[Tuple[str, str]]) -> List[str]:
+    details: List[str] = []
+    for field, header in invalid_overrides:
+        label = REQUIRED_FIELDS.get(field, field.replace("_", " ").title())
+        details.append(f"{label} mapped to '{header}', but that header is not in the file.")
+    for req in missing:
+        label = REQUIRED_FIELDS.get(req, req.replace("_", " ").title())
+        variants = ", ".join(EXPECTED.get(req, []))
+        detail = f"{label} (accepted: {variants})" if variants else label
+        details.append(detail)
+    return details
+
+
+def validate_import_file(filepath: str, mapping_override: Optional[Dict[str, str]] = None) -> None:
     """Ensure the provided file has the required headers."""
     _, headers, _ = _open_table(filepath)
-    _normalize_headers(headers or [])
+    resolve_header_mapping(headers or [], mapping_override, allow_missing=False)
+
+
+def read_import_headers(filepath: str) -> List[str]:
+    _, headers, _ = _open_table(filepath)
+    return headers or []
 
 @dataclass
 class ImportStats:
@@ -503,6 +547,7 @@ def process_csv(
     owner_user_id: Optional[int] = None,
     owner_username: Optional[str] = None,
     commit: bool = True,
+    mapping_override: Optional[Dict[str, str]] = None,
 ) -> Tuple[ImportStats, Dict[str, int]]:
     """
     Reads a CSV or Excel file and upserts Cards. Returns (stats, by_folder_counts).
@@ -533,7 +578,9 @@ def process_csv(
     is_moxfield = _is_moxfield_headers(headers or [])
     default_folder_local = "Collection" if is_moxfield else default_folder
     processed = 0
-    mapping = _normalize_headers(headers or [])
+    mapping, missing, invalid = resolve_header_mapping(headers or [], mapping_override, allow_missing=False)
+    if missing or invalid:
+        raise HeaderValidationError(_format_header_errors(missing, invalid))
 
     owner_name = (owner_username or "").strip() or None
 

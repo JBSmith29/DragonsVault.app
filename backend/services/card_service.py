@@ -63,6 +63,7 @@ from services.symbols_cache import (
 )
 from services.audit import record_audit_event
 from services.authz import ensure_folder_access
+from utils.assets import static_url
 from utils.db import get_or_404
 from utils.validation import (
     ValidationError,
@@ -114,6 +115,26 @@ from viewmodels.folder_vm import CollectionBucketVM, FolderOptionVM, FolderVM, S
 from viewmodels.opening_hand_vm import OpeningHandCardVM, OpeningHandTokenVM
 
 HAND_SIZE = 7
+
+def _user_cache_key() -> str:
+    return str(getattr(current_user, "id", None) or "anon")
+
+
+def _cache_fetch(key: str, ttl_seconds: int, factory):
+    if not cache:
+        return factory()
+    try:
+        cached = cache.get(key)
+    except Exception:
+        cached = None
+    if cached is not None:
+        return cached
+    value = factory()
+    try:
+        cache.set(key, value, timeout=ttl_seconds)
+    except Exception:
+        pass
+    return value
 
 # Cheap readiness check before touching the Scryfall cache on hot paths
 def _ensure_cache_ready() -> bool:
@@ -524,6 +545,20 @@ def _image_from_print(print_obj: dict | None) -> dict:
     }
 
 
+def _back_image_from_print(print_obj: dict | None) -> dict:
+    if not print_obj:
+        return {"small": None, "normal": None, "large": None}
+    faces = print_obj.get("card_faces") or []
+    if not isinstance(faces, list) or len(faces) < 2:
+        return {"small": None, "normal": None, "large": None}
+    face_imgs = (faces[1] or {}).get("image_uris") or {}
+    return {
+        "small": face_imgs.get("small"),
+        "normal": face_imgs.get("normal"),
+        "large": face_imgs.get("large"),
+    }
+
+
 def _card_entry_payload(
     *,
     name: str,
@@ -639,8 +674,9 @@ def _commander_card_payload(name: Optional[str], oracle_id: Optional[str]) -> Op
             except Exception:
                 pr = None
 
-    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    placeholder = static_url("img/card-placeholder.svg")
     imgs = _image_from_print(pr)
+    back_imgs = _back_image_from_print(pr)
     type_line = ""
     if pr:
         type_line = (pr or {}).get("type_line") or ""
@@ -655,6 +691,9 @@ def _commander_card_payload(name: Optional[str], oracle_id: Optional[str]) -> Op
         "small": imgs.get("small") or placeholder,
         "normal": imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder,
         "large": imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder,
+        "back_small": back_imgs.get("small"),
+        "back_normal": back_imgs.get("normal"),
+        "back_large": back_imgs.get("large"),
         "image": imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder,
         "hover": imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder,
         "type_line": type_line or "",
@@ -745,6 +784,7 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
                 pr = None
 
         imgs = _image_from_print(pr)
+        back_imgs = _back_image_from_print(pr)
         detail_url = url_for("views.card_detail", card_id=card.id)
         external_url = (
             (pr or {}).get("scryfall_uri")
@@ -761,6 +801,9 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
                 "small": imgs.get("small"),
                 "normal": imgs.get("normal"),
                 "large": imgs.get("large"),
+                "back_small": back_imgs.get("small"),
+                "back_normal": back_imgs.get("normal"),
+                "back_large": back_imgs.get("large"),
                 "detail_url": detail_url,
                 "external_url": external_url,
                 "type_line": getattr(card, "type_line", "") or "",
@@ -809,6 +852,7 @@ def _deck_entries_from_list(
         if commander_names and resolved_name.strip().lower() in commander_names:
             continue
         imgs = _image_from_print(pr)
+        back_imgs = _back_image_from_print(pr)
         entries.append(
             {
                 "name": resolved_name,
@@ -818,6 +862,9 @@ def _deck_entries_from_list(
                 "small": imgs.get("small"),
                 "normal": imgs.get("normal"),
                 "large": imgs.get("large"),
+                "back_small": back_imgs.get("small"),
+                "back_normal": back_imgs.get("normal"),
+                "back_large": back_imgs.get("large"),
                 "detail_url": None,
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
                 "type_line": (pr or {}).get("type_line") or "",
@@ -835,9 +882,11 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
     normal = entry.get("large") or entry.get("normal") or entry.get("small") or placeholder
     small = entry.get("small") or entry.get("normal") or entry.get("large") or placeholder
     hover = entry.get("large") or entry.get("normal") or entry.get("small") or placeholder
+    back_image = entry.get("back_large") or entry.get("back_normal") or entry.get("back_small") or entry.get("back_image")
+    back_hover = entry.get("back_large") or entry.get("back_normal") or entry.get("back_small") or entry.get("back_hover")
     detail_url = entry.get("detail_url") or entry.get("external_url")
     flags = _card_type_flags(entry.get("type_line"))
-    return {
+    payload = {
         "name": entry.get("name") or "Card",
         "image": normal,
         "small": small,
@@ -851,6 +900,10 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
         "is_permanent": bool(flags["is_permanent"]),
         "zone_hint": str(flags["zone_hint"]),
     }
+    if back_image or back_hover:
+        payload["back_image"] = back_image or back_hover
+        payload["back_hover"] = back_hover or back_image
+    return payload
 
 
 def _folder_name_exists(name: str, *, exclude_id: int | None = None) -> bool:
@@ -1484,7 +1537,7 @@ def _deck_drawer_summary(folder: Folder) -> dict:
     ]
     curve_rows = deck_curve_rows(folder.id, mode="drawer")
 
-    placeholder_thumb = url_for("static", filename="img/card-placeholder.svg")
+    placeholder_thumb = static_url("img/card-placeholder.svg")
     commander_payload = None
     if folder.commander_oracle_id or folder.commander_name:
         pr = None
@@ -1753,15 +1806,15 @@ def dashboard():
     collection_qty = stats["collection_qty"]
 
     deck_vms: list[DeckVM] = []
-    placeholder_thumb = url_for("static", filename="img/card-placeholder.svg")
+    placeholder_thumb = static_url("img/card-placeholder.svg")
 
     def ci_html_from_letters(letters: str) -> str:
         if not letters:
-            return '<span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>'
+            return f'<span class="pip-row"><img class="mana mana-sm" src="{static_url("symbols/C.svg")}" alt="{{C}}"></span>'
         return (
             '<span class="pip-row">'
             + "".join(
-                f'<img class="mana mana-sm" src="/static/symbols/{c}.svg" alt="{{{c}}}">' for c in letters
+                f'<img class="mana mana-sm" src="{static_url(f"symbols/{c}.svg")}" alt="{{{c}}}">' for c in letters
             )
             + "</span>"
         )
@@ -2512,6 +2565,7 @@ def list_cards():
 
     ordered_ids: list[int] = []
     total = 0
+    cards: list[Card] = []
     if sort in {"price", "art"}:
         all_cards = (
             query.order_by(Card.id.asc())
@@ -2557,33 +2611,42 @@ def list_cards():
                     reverse=reverse,
                 )
             ]
+
+        pages = max(1, ceil(total / per)) if per else 1
+        page = min(page, pages)
+        start = (page - 1) * per + 1 if total else 0
+        end = min(start + per - 1, total) if total else 0
+        offset = (page - 1) * per
+        page_ids = ordered_ids[offset: offset + per]
+        if page_ids:
+            page_cards = (
+                query.options(
+                    load_only(*card_columns),
+                    selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
+                )
+                .filter(Card.id.in_(page_ids))
+                .all()
+            )
+            page_map = {c.id: c for c in page_cards}
+            cards = [page_map[card_id] for card_id in page_ids if card_id in page_map]
     else:
         order_expr = order_col.desc() if reverse else order_col.asc()
-        ordered_ids = [
-            cid
-            for (cid,) in query.with_entities(Card.id).order_by(order_expr).all()
-        ]
-        total = len(ordered_ids)
-
-    pages = max(1, ceil(total / per)) if per else 1
-    page = min(page, pages)
-    start = (page - 1) * per + 1 if total else 0
-    end = min(start + per - 1, total) if total else 0
-    offset = (page - 1) * per
-    page_ids = ordered_ids[offset: offset + per]
-    if page_ids:
-        page_cards = (
+        total = query.order_by(None).count()
+        pages = max(1, ceil(total / per)) if per else 1
+        page = min(page, pages)
+        start = (page - 1) * per + 1 if total else 0
+        end = min(start + per - 1, total) if total else 0
+        offset = (page - 1) * per
+        cards = (
             query.options(
                 load_only(*card_columns),
                 selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
             )
-            .filter(Card.id.in_(page_ids))
+            .order_by(order_expr, Card.id.asc())
+            .limit(per)
+            .offset(offset)
             .all()
         )
-        page_map = {c.id: c for c in page_cards}
-        cards = [page_map[card_id] for card_id in page_ids if card_id in page_map]
-    else:
-        cards = []
 
     oracle_ids = {c.oracle_id for c in cards if c.oracle_id}
     core_role_map: dict[str, list[str]] = {}
@@ -3340,6 +3403,7 @@ def collection_overview():
     """Overview of collection buckets, with cached stats and simple visuals."""
     collection_rows = _collection_rows_with_fallback()
     folder_ids = [fid for fid, _ in collection_rows if fid is not None]
+    user_key = _user_cache_key()
 
     if folder_ids:
         folders = Folder.query.filter(Folder.id.in_(folder_ids)).order_by(func.lower(Folder.name)).all()
@@ -3366,19 +3430,32 @@ def collection_overview():
         filters["folder_ids"] = folder_ids
 
     if folder_ids:
-        stats_list = get_folder_stats(filters)
-        stats_by_id = {s["folder_id"]: {"rows": s["rows"], "qty": s["qty"]} for s in stats_list}
-        total_rows = sum(s["rows"] for s in stats_list)
-        total_qty = sum(s["qty"] for s in stats_list)
-
-        by_set = (
-            db.session.query(Card.set_code, func.coalesce(func.sum(Card.quantity), 0).label("qty"))
-            .filter(Card.folder_id.in_(folder_ids))
-            .group_by(Card.set_code)
-            .order_by(func.coalesce(func.sum(Card.quantity), 0).desc())
-            .limit(10)
-            .all()
+        filters_key = json.dumps(
+            {**filters, "folder_ids": sorted(folder_ids)},
+            sort_keys=True,
+            separators=(",", ":"),
         )
+
+        def _collection_stats():
+            stats_list = get_folder_stats(filters)
+            total_rows = sum(s["rows"] for s in stats_list)
+            total_qty = sum(s["qty"] for s in stats_list)
+            by_set = (
+                db.session.query(Card.set_code, func.coalesce(func.sum(Card.quantity), 0).label("qty"))
+                .filter(Card.folder_id.in_(folder_ids))
+                .group_by(Card.set_code)
+                .order_by(func.coalesce(func.sum(Card.quantity), 0).desc())
+                .limit(10)
+                .all()
+            )
+            return stats_list, total_rows, total_qty, by_set
+
+        stats_list, total_rows, total_qty, by_set = _cache_fetch(
+            f"collection_stats:{user_key}:{filters_key}",
+            120,
+            _collection_stats,
+        )
+        stats_by_id = {s["folder_id"]: {"rows": s["rows"], "qty": s["qty"]} for s in stats_list}
     else:
         total_rows = 0
         total_qty = 0
@@ -3404,48 +3481,55 @@ def collection_overview():
     type_counts = {t: 0 for t in base_types}
 
     if folder_ids and have_cache:
-        rows = (
-            db.session.query(
-                Card.name,
-                Card.set_code,
-                Card.collector_number,
-                Card.oracle_id,
-                func.coalesce(Card.quantity, 0).label("qty"),
-            )
-            .filter(Card.folder_id.in_(folder_ids))
-            .all()
-        )
+        type_cache_key = f"collection_types:{user_key}:{filters_key}:{cache_epoch()}"
 
-        type_line_cache = {}
-        for name, scode, cn, oid, qty in rows:
-            qty = int(qty or 0) or 1
-            key = (
-                f"oid:{oid}"
-                if oid
-                else f"{(scode or '').lower()}:{(str(cn) or '').lower()}:{(name or '').lower()}"
+        def _type_breakdown():
+            rows = (
+                db.session.query(
+                    Card.name,
+                    Card.set_code,
+                    Card.collector_number,
+                    Card.oracle_id,
+                    func.coalesce(Card.quantity, 0).label("qty"),
+                )
+                .filter(Card.folder_id.in_(folder_ids))
+                .all()
             )
-            if key in type_line_cache:
-                tline = type_line_cache[key]
-            else:
-                p = None
-                try:
-                    p = find_by_set_cn(scode, cn, name)
-                except Exception:
+
+            type_line_cache = {}
+            for name, scode, cn, oid, qty in rows:
+                qty = int(qty or 0) or 1
+                key = (
+                    f"oid:{oid}"
+                    if oid
+                    else f"{(scode or '').lower()}:{(str(cn) or '').lower()}:{(name or '').lower()}"
+                )
+                if key in type_line_cache:
+                    tline = type_line_cache[key]
+                else:
                     p = None
-                if not p and oid:
                     try:
-                        prs = prints_for_oracle(oid) or []
-                        if prs:
-                            p = prs[0]
+                        p = find_by_set_cn(scode, cn, name)
                     except Exception:
                         p = None
-                tline = (p or {}).get("type_line")
-                type_line_cache[key] = tline
+                    if not p and oid:
+                        try:
+                            prs = prints_for_oracle(oid) or []
+                            if prs:
+                                p = prs[0]
+                        except Exception:
+                            p = None
+                    tline = (p or {}).get("type_line")
+                    type_line_cache[key] = tline
 
-            for t in [t for t in base_types if t in (tline or "")]:
-                type_counts[t] += qty
+                for t in [t for t in base_types if t in (tline or "")]:
+                    type_counts[t] += qty
+            return [(t, type_counts.get(t, 0)) for t in base_types if type_counts.get(t, 0) > 0]
 
-    type_breakdown = [(t, type_counts.get(t, 0)) for t in base_types if type_counts.get(t, 0) > 0]
+        type_breakdown = _cache_fetch(type_cache_key, 300, _type_breakdown)
+    else:
+        type_breakdown = [(t, type_counts.get(t, 0)) for t in base_types if type_counts.get(t, 0) > 0]
+
     type_icon_classes = {
         "Artifact": "bi-cpu",
         "Battle": "bi-shield-check",
@@ -3483,7 +3567,8 @@ def collection_overview():
 
 def api_deck_insight(deck_id: int):
     folder = get_or_404(Folder, deck_id)
-    payload = _deck_drawer_summary(folder)
+    cache_key = f"deck_drawer:{_user_cache_key()}:{folder.id}"
+    payload = _cache_fetch(cache_key, 60, lambda: _deck_drawer_summary(folder))
     return jsonify(payload)
 
 
@@ -3492,6 +3577,64 @@ def decks_overview():
     sort = (request.args.get("sort") or "").strip().lower()
     direction = (request.args.get("dir") or "").strip().lower() or "desc"
     reverse = direction == "desc"
+
+    allowed_per_page = (25, 50, 100)
+    try:
+        per = int(request.args.get("per", request.args.get("per_page", 25)))
+    except Exception:
+        per = 25
+    if per not in allowed_per_page:
+        per = 25
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+    except Exception:
+        page = 1
+
+    base_filter = Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
+    user_key = _user_cache_key()
+
+    def _summary_payload():
+        base_counts = (
+            db.session.query(
+                Folder.id.label("folder_id"),
+                Folder.owner.label("owner"),
+                Folder.is_proxy.label("is_proxy"),
+                func.coalesce(func.sum(Card.quantity), 0).label("qty_sum"),
+            )
+            .outerjoin(Card, Card.folder_id == Folder.id)
+            .filter(base_filter)
+            .group_by(Folder.id, Folder.owner, Folder.is_proxy)
+            .subquery()
+        )
+        total_decks = db.session.query(func.count(base_counts.c.folder_id)).scalar() or 0
+        proxy_total = (
+            db.session.query(func.count(base_counts.c.folder_id))
+            .filter(base_counts.c.is_proxy.is_(True))
+            .scalar()
+            or 0
+        )
+        owner_rows = db.session.query(base_counts.c.owner).group_by(base_counts.c.owner).all()
+        owner_names = sorted(
+            {
+                owner.strip()
+                for (owner,) in owner_rows
+                if isinstance(owner, str) and owner.strip()
+            }
+        )
+        return total_decks, proxy_total, owner_names
+
+    summary_cache_key = f"deck_summary:{user_key}"
+    total_decks, proxy_total, owner_names = _cache_fetch(
+        summary_cache_key,
+        120,
+        _summary_payload,
+    )
+    total_decks = int(total_decks or 0)
+    proxy_total = int(proxy_total or 0)
+
+    pages = max(1, ceil(total_decks / per)) if per else 1
+    page = min(page, pages)
+    offset = (page - 1) * per
 
     deck_query = (
         db.session.query(
@@ -3505,7 +3648,7 @@ def decks_overview():
             Folder.is_proxy,
         )
         .outerjoin(Card, Card.folder_id == Folder.id)
-        .filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
+        .filter(base_filter)
     )
     grouped = deck_query.group_by(
         Folder.id,
@@ -3515,10 +3658,26 @@ def decks_overview():
         Folder.owner,
         Folder.is_proxy,
     )
-    if sort:
+
+    sort_key = sort if sort in {"name", "owner", "qty", "ci", "pips", "bracket"} else ""
+    requires_full_sort = sort_key in {"ci", "pips", "bracket"}
+
+    if requires_full_sort:
         rows = grouped.all()
     else:
-        rows = grouped.order_by(func.coalesce(func.sum(Card.quantity), 0).desc()).all()
+        if sort_key == "name":
+            order_col = func.lower(Folder.name)
+        elif sort_key == "owner":
+            order_col = func.lower(func.coalesce(Folder.owner, ""))
+        else:
+            order_col = func.coalesce(func.sum(Card.quantity), 0)
+        order_expr = order_col.desc() if reverse else order_col.asc()
+        rows = (
+            grouped.order_by(order_expr, Folder.id.asc())
+            .limit(per)
+            .offset(offset)
+            .all()
+        )
 
     # normalize for the template
     decks = []
@@ -3657,7 +3816,7 @@ def decks_overview():
     deck_ci_name = {}
     deck_ci_html = {}
     deck_cmdr = {}
-    placeholder_thumb = url_for("static", filename="img/card-placeholder.svg")
+    placeholder_thumb = static_url("img/card-placeholder.svg")
 
     for (fid, _name, _rows, _qty, cmd_oid, cmd_name, _owner, _is_proxy) in rows:
         # -- color identity for the deck
@@ -3792,29 +3951,19 @@ def decks_overview():
             deck_cmdr[fid] = payload
 
     # ---- optional sorting ----
-    if sort in {"name", "ci", "pips", "qty", "bracket", "owner"}:
-        if sort == "name":
-            decks.sort(key=lambda d: (d.get("name") or "").lower(), reverse=reverse)
-        elif sort == "ci":
+    if requires_full_sort:
+        if sort_key == "ci":
             decks.sort(key=lambda d: (deck_ci_name.get(d["id"]) or "Colorless"), reverse=reverse)
-        elif sort == "pips":
+        elif sort_key == "pips":
             decks.sort(key=lambda d: (deck_ci_letters.get(d["id"]) or "C"), reverse=reverse)
-        elif sort == "qty":
-            decks.sort(key=lambda d: (d.get("qty") or 0), reverse=reverse)
-        elif sort == "bracket":
+        elif sort_key == "bracket":
             decks.sort(
                 key=lambda d: (
                     deck_bracket_map.get(d["id"], {}).get("level") or 0,
                 ),
                 reverse=reverse,
             )
-        elif sort == "owner":
-            decks.sort(
-                key=lambda d: (
-                    (d.get("owner") or "").lower(),
-                ),
-                reverse=reverse,
-            )
+        decks = decks[offset: offset + per]
 
     owner_summary_raw = _owner_summary(decks)
     owner_summary = [
@@ -3871,14 +4020,48 @@ def decks_overview():
         )
 
     deck_tag_groups = get_deck_tag_groups()
-    wizard_payload = build_deck_metadata_wizard_payload(folders, tag_groups=deck_tag_groups)
+
+    def _wizard_payload():
+        wizard_folders = (
+            Folder.query.options(
+                load_only(
+                    Folder.id,
+                    Folder.name,
+                    Folder.commander_name,
+                    Folder.commander_oracle_id,
+                    Folder.deck_tag,
+                ),
+                selectinload(Folder.role_entries),
+            )
+            .filter(base_filter)
+            .all()
+        )
+        return build_deck_metadata_wizard_payload(wizard_folders, tag_groups=deck_tag_groups)
+
+    wizard_payload = _cache_fetch(f"deck_wizard:{user_key}", 120, _wizard_payload)
+
+    def _url_with(page_num: int):
+        args = request.args.to_dict(flat=False)
+        args["page"] = [str(page_num)]
+        if "per" not in args and "per_page" not in args:
+            args["per"] = [str(per)]
+        return url_for("views.decks_overview", **{k: v if len(v) > 1 else v[0] for k, v in args.items()})
+
+    page_urls = [(n, _url_with(n)) for n in range(1, pages + 1)]
+    page_url_map = {n: url for n, url in page_urls}
 
     return render_template(
         "decks/decks.html",
         decks=deck_vms,
         owner_summary=owner_summary,
-        owner_names=_owner_names(decks),
+        owner_names=owner_names,
         proxy_count=sum(1 for deck in decks if deck.get("is_proxy")),
+        proxy_total=proxy_total,
+        total_decks=total_decks,
+        page=page,
+        pages=pages,
+        per_page=per,
+        page_url_map=page_url_map,
         deck_tag_groups=deck_tag_groups,
         deck_metadata_wizard=wizard_payload,
     )
@@ -4450,7 +4633,7 @@ def _opening_hand_lookups(deck_ids: Iterable[int]) -> tuple[str, str]:
             .order_by(Card.folder_id.asc(), Card.name.asc(), Card.collector_number.asc())
             .all()
         )
-        placeholder_image = url_for("static", filename="img/card-placeholder.svg")
+        placeholder_image = static_url("img/card-placeholder.svg")
         seen_map: dict[str, set[str]] = {}
         token_seen: dict[str, set[str]] = {}
         for (
@@ -4498,12 +4681,15 @@ def _opening_hand_lookups(deck_ids: Iterable[int]) -> tuple[str, str]:
                     pr = None
 
             imgs = _image_from_print(pr)
+            back_imgs = _back_image_from_print(pr)
             flags = _card_type_flags(type_line)
             entry_vm = OpeningHandCardVM(
                 value=value_token,
                 name=card_name,
                 image=imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder_image,
                 hover=imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
+                back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
+                back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
                 type_line=type_line or "",
                 mana_value=mana_value,
                 is_creature=bool(flags["is_creature"]),
@@ -4631,7 +4817,7 @@ def opening_hand_play():
             if cmd_oid:
                 oracle_ids.add(cmd_oid)
         if oracle_ids and _ensure_cache_ready():
-            placeholder_image = url_for("static", filename="img/card-placeholder.svg")
+            placeholder_image = static_url("img/card-placeholder.svg")
             token_seen: set[str] = set()
             token_payloads: list[dict] = []
             for oracle_id in sorted(oracle_ids):
@@ -4670,7 +4856,7 @@ def opening_hand_play():
         return redirect(url_for("views.opening_hand"))
 
     deck_card_lookup_json, deck_token_lookup_json = _opening_hand_lookups(deck_ids)
-    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    placeholder = static_url("img/card-placeholder.svg")
     commander_payload = [_client_card_payload(card, placeholder) for card in commander_cards]
     selected_commander_cards_json = json.dumps(commander_payload, ensure_ascii=True)
 
@@ -4732,7 +4918,7 @@ def opening_hand_shuffle():
     }
     state_token = _encode_state(state)
     remaining = deck_size - next_index
-    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    placeholder = static_url("img/card-placeholder.svg")
     hand_payload = [_client_card_payload(card, placeholder) for card in hand_cards]
     commander_payload = [_client_card_payload(card, placeholder) for card in commander_cards]
 
@@ -4769,7 +4955,7 @@ def opening_hand_draw():
     state["index"] = index
     new_token = _encode_state(state)
     remaining = len(deck) - index
-    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    placeholder = static_url("img/card-placeholder.svg")
     card_payload = _client_card_payload(card_entry, placeholder)
 
     return jsonify(
@@ -4791,12 +4977,15 @@ def opening_hand_token_search():
     if not _ensure_cache_ready():
         return jsonify({"ok": False, "error": "Token search is unavailable."}), 503
 
-    try:
-        tokens = sc.search_tokens(query, limit=36) or []
-    except Exception:
-        tokens = []
+    def _token_search():
+        try:
+            return sc.search_tokens(query, limit=36) or []
+        except Exception:
+            return []
 
-    placeholder = url_for("static", filename="img/card-placeholder.svg")
+    tokens = _cache_fetch(f"token_search:{query.lower()}", 300, _token_search)
+
+    placeholder = static_url("img/card-placeholder.svg")
     payloads: list[dict] = []
     for token in tokens:
         token_name = (token.get("name") or "Token").strip()
@@ -4823,10 +5012,15 @@ def opening_hand_token_search():
 
 
 def _facets():
-    sets = [s for (s,) in db.session.query(Card.set_code).distinct().order_by(Card.set_code.asc()).all() if s]
-    langs = [lg for (lg,) in db.session.query(Card.lang).distinct().order_by(Card.lang.asc()).all() if lg]
-    folders = db.session.query(Folder).order_by(Folder.name.asc()).all()
-    return sets, langs, folders
+    user_key = _user_cache_key()
+
+    def _build():
+        sets = [s for (s,) in db.session.query(Card.set_code).distinct().order_by(Card.set_code.asc()).all() if s]
+        langs = [lg for (lg,) in db.session.query(Card.lang).distinct().order_by(Card.lang.asc()).all() if lg]
+        folders = db.session.query(Folder.id, Folder.name).order_by(Folder.name.asc()).all()
+        return sets, langs, folders
+
+    return _cache_fetch(f"facets:{user_key}", 300, _build)
 
 
 def _rarity_options() -> List[Dict[str, str]]:

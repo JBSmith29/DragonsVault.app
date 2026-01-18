@@ -7,6 +7,25 @@
   .col-ci-pips { width:170px; min-width:170px; white-space:nowrap; }
 
   .deck-bracket { display:inline-flex; align-items:center; gap:.2rem; white-space:nowrap; }
+  .bracket-badge {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:2rem;
+    padding:.2rem .55rem;
+    border-radius:.6rem;
+    font-weight:700;
+    letter-spacing:.02em;
+    line-height:1;
+    color:#f8fafc;
+    border:1px solid rgba(255,255,255,.18);
+    text-shadow:0 1px 1px rgba(0,0,0,.25);
+  }
+  .bracket-badge[data-bracket="1"] { background:#166534; }
+  .bracket-badge[data-bracket="2"] { background:#1d4ed8; }
+  .bracket-badge[data-bracket="3"] { background:#b45309; }
+  .bracket-badge[data-bracket="4"] { background:#be123c; }
+  .bracket-badge[data-bracket="5"] { background:#7c2d12; }
 
   /* Commander thumbnail */
   .cmdr-thumb-wrap {
@@ -295,8 +314,8 @@
 </script>
 
 <div class="page-section">
-  {% set total_decks = decks|length if decks is defined else 0 %}
-  {% set proxy_total = proxy_count or 0 %}
+  {% set total_decks = total_decks if total_decks is defined else (decks|length if decks is defined else 0) %}
+  {% set proxy_total = proxy_total if proxy_total is defined else (proxy_count or 0) %}
   {% set owned_total = total_decks - proxy_total %}
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
       <div>
@@ -486,7 +505,7 @@
                 {% if d.ci_html %}
                   <span class="pip-row">{{ d.ci_html | safe }}</span>
                 {% else %}
-                  <span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>
+                  <span class="pip-row"><img class="mana mana-sm" src="{{ static_url('symbols/C.svg') }}" alt="{C}"></span>
                 {% endif %}
               </td>
 
@@ -496,7 +515,7 @@
               <td class="text-start">
                 {% if level %}
                   <div class="deck-bracket">
-                    <span class="badge text-bg-primary">{{ level }}</span>
+                    <span class="badge bracket-badge" data-bracket="{{ level }}">{{ level }}</span>
                     {% if label %}<span class="label text-muted">{{ label }}</span>{% endif %}
                   </div>
                 {% else %}
@@ -521,6 +540,14 @@
         </tbody>
       </table>
     </div>
+    {% if pages is defined and pages > 1 %}
+      {% from "shared/components/pagination.html" import render_pagination %}
+      <div class="d-flex justify-content-center mt-3">
+        {% call(p) render_pagination(page=page, pages=pages, classes="pagination pagination-sm flex-wrap") %}
+          {{ page_url_map.get(p) if page_url_map is defined else "#" }}
+        {% endcall %}
+      </div>
+    {% endif %}
     <div class="offcanvas offcanvas-end w-500" tabindex="-1" id="deckDrawer" aria-labelledby="deckDrawerLabel">
       <div class="offcanvas-header">
         <h5 class="offcanvas-title" id="deckDrawerLabel">Deck Details</h5>
@@ -796,15 +823,16 @@
     topSection.appendChild(headerRow);
     bodyEl.appendChild(topSection);
 
-    if (bracket.level) {
-      const bracketSection = document.createElement('div');
-      bracketSection.className = 'deck-drawer-section';
-      const badgeRow = document.createElement('div');
-      badgeRow.className = 'd-flex align-items-center gap-2 mb-2';
-      const badge = document.createElement('span');
-      badge.className = 'badge text-bg-primary';
-      badge.textContent = bracket.level;
-      badgeRow.appendChild(badge);
+      if (bracket.level) {
+        const bracketSection = document.createElement('div');
+        bracketSection.className = 'deck-drawer-section';
+        const badgeRow = document.createElement('div');
+        badgeRow.className = 'd-flex align-items-center gap-2 mb-2';
+        const badge = document.createElement('span');
+        badge.className = 'badge bracket-badge';
+        badge.textContent = bracket.level;
+        badge.dataset.bracket = bracket.level;
+        badgeRow.appendChild(badge);
       if (bracket.label) {
         const label = document.createElement('span');
         label.className = 'fw-semibold';
@@ -860,7 +888,7 @@
         let label = item.label || item.color || "C";
         let icon = item.icon;
         if ((label === "C" || label.toUpperCase() === "COLORLESS") && !icon) {
-          icon = "/static/symbols/C.svg";
+          icon = "{{ static_url('symbols/C.svg') }}";
           label = "C";
         }
         return buildPill(label + ":", item.count, icon);
@@ -1240,7 +1268,7 @@
 })();
 </script>
 
-<script src="{{ url_for('static', filename='js/deck_metadata_wizard.js') }}" defer></script>
+<script src="{{ static_url('js/deck_metadata_wizard.js') }}" defer></script>
 
 <script>
 (function(){

@@ -10,9 +10,11 @@ from math import ceil
 
 from flask import abort, flash, jsonify, make_response, redirect, render_template, request, url_for, current_app
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import WishlistItem
+from models import Card, WishlistItem
+from services import scryfall_cache as sc
 from utils.db import get_or_404
 
 from .base import ALLOWED_WISHLIST_STATUSES, views
@@ -59,6 +61,47 @@ def _parse_int(*values, default=1):
         except Exception:
             continue
     return default
+
+
+def _normalize_order_ref(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    return value or None
+
+
+def _color_identity_for_oracle(oracle_id):
+    if not oracle_id:
+        return None
+    try:
+        prints = sc.prints_for_oracle(oracle_id)
+    except Exception:
+        return None
+    if not prints:
+        return None
+    ci = prints[0].get("color_identity") or prints[0].get("colors")
+    if isinstance(ci, list):
+        ci = "".join(ci)
+    return ci or None
+
+
+def _color_identity_for_item(item):
+    card = getattr(item, "card", None)
+    if card:
+        return card.color_identity or card.colors or None
+    oracle_id = item.oracle_id
+    ci = _color_identity_for_oracle(oracle_id)
+    if ci:
+        return ci
+    try:
+        oid = sc.unique_oracle_by_name(item.name)
+    except Exception:
+        oid = None
+    if oid:
+        return _color_identity_for_oracle(oid)
+    return None
 
 
 def _serialize_source_folders(value):
@@ -152,6 +195,13 @@ def _wishlist_upsert_rows(rows) -> tuple[int, int, int]:
                 status_value = None
 
             folders_json = _serialize_source_folders(row.get("source_folders") or row.get("folders"))
+            order_ref = None
+            order_ref_present = False
+            for key in ("order_ref", "order_url", "order_number", "order"):
+                if key in row:
+                    order_ref_present = True
+                    order_ref = _normalize_order_ref(row.get(key))
+                    break
 
             query = WishlistItem.query
             item = None
@@ -173,6 +223,8 @@ def _wishlist_upsert_rows(rows) -> tuple[int, int, int]:
                     item.card_id = card_id
                 if folders_json is not None:
                     item.source_folders = folders_json
+                if order_ref_present:
+                    item.order_ref = order_ref
                 if item.status in {"acquired", "removed"}:
                     item.missing_qty = 0
                 elif item.status == "to_fetch":
@@ -195,6 +247,7 @@ def _wishlist_upsert_rows(rows) -> tuple[int, int, int]:
                     card_id=card_id,
                     status=effective_status,
                     source_folders=folders_json,
+                    order_ref=order_ref,
                 )
                 db.session.add(item)
                 created += 1
@@ -221,8 +274,9 @@ def wishlist():
     page = max(page, 1)
     per = max(1, min(per, 500))
 
-    base_query = WishlistItem.query.order_by(
-        WishlistItem.status.asc(), WishlistItem.created_at.desc(), WishlistItem.name.asc()
+    base_query = (
+        WishlistItem.query.options(selectinload(WishlistItem.card).selectinload(Card.folder))
+        .order_by(WishlistItem.status.asc(), WishlistItem.created_at.desc(), WishlistItem.name.asc())
     )
     total_items = base_query.order_by(None).count()
     pages = max(1, ceil(total_items / per)) if per else 1
@@ -231,6 +285,8 @@ def wishlist():
     end = min(start + per - 1, total_items) if total_items else 0
 
     items = base_query.limit(per).offset((page - 1) * per).all()
+    for item in items:
+        item.display_color_identity = _color_identity_for_item(item)
 
     def _url_with(page_num: int):
         args = request.args.to_dict(flat=False)
@@ -346,6 +402,15 @@ def wishlist_update(item_id: int):
     return redirect(request.referrer or url_for("views.wishlist"))
 
 
+@views.route("/wishlist/order/<int:item_id>", methods=["POST"])
+def wishlist_order_ref(item_id: int):
+    item = get_or_404(WishlistItem, item_id)
+    order_ref = _normalize_order_ref(request.form.get("order_ref"))
+    item.order_ref = order_ref
+    db.session.commit()
+    return redirect(request.referrer or url_for("views.wishlist"))
+
+
 @views.route("/wishlist/export", methods=["GET"])
 def wishlist_export():
     items = (
@@ -356,7 +421,7 @@ def wishlist_export():
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(
-        ["name", "requested_qty", "status", "added_at", "oracle_id", "scryfall_id", "source_folders"]
+        ["name", "requested_qty", "status", "order_ref", "added_at", "oracle_id", "scryfall_id", "source_folders"]
     )
     for item in items:
         writer.writerow(
@@ -364,6 +429,7 @@ def wishlist_export():
                 item.name,
                 item.requested_qty,
                 item.status,
+                item.order_ref or "",
                 (item.created_at.isoformat(sep=" ", timespec="minutes") if item.created_at else ""),
                 item.oracle_id or "",
                 item.scryfall_id or "",
@@ -402,5 +468,6 @@ __all__ = [
     "wishlist_delete",
     "wishlist_export",
     "wishlist_mark",
+    "wishlist_order_ref",
     "wishlist_update",
 ]

@@ -9,6 +9,7 @@ Compose services:
 - `ui` — Vite SPA dev server (proxied at `/` by nginx).
 - `web` — Flask monolith (legacy UI + `/api` routes + admin) with SQLAlchemy.
 - `worker` — RQ worker for background jobs and long-running tasks.
+- `scheduler` — weekly refresh loop for Scryfall/Spellbook/EDHREC (queues RQ jobs or runs inline).
 - `user-manager` — auth/user microservice scaffold (health + ping only right now).
 - `card-data` — oracle-level Scryfall data + annotations (`card_data` schema).
 - `folder-service` — folder/deck microservice scaffold (not wired in nginx yet).
@@ -21,7 +22,7 @@ Nginx routing (exact):
 - `/` -> `ui`
 - `/static/*` -> `backend/static` (served directly by nginx)
 - `/healthz` -> nginx itself
-- `/readyz` -> `user-manager` `/readyz`
+- `/readyz` -> `web` `/ops/health` (overall readiness)
 - `/api/user/*` -> `user-manager`
 - `/api/cards/*` -> `card-data`
 - `/api/prices/*` -> `price-service`
@@ -44,17 +45,20 @@ Pipelines:
 - EDHREC: edhrec-service fetches EDHREC data and caches JSON payloads in `edhrec_service`; web/worker call it via `EDHREC_SERVICE_URL`.
 - FTS: `flask fts-ensure` creates FTS tables/triggers; `flask fts-reindex` rebuilds after large data changes.
 - Postgres maintenance: `pgmaintenance` runs `vacuumdb --all --analyze-in-stages` weekly; `flask vacuum` only applies to SQLite deployments.
+- Weekly refresh scheduler: `scheduler` runs every Sunday at 00:00 UTC by default (set `SCHEDULE_REFRESH_TZ`, `SCHEDULE_REFRESH_WEEKDAY`, `SCHEDULE_REFRESH_HOUR`, `SCHEDULE_REFRESH_MINUTE` to change; `SCHEDULE_REFRESH_MODE=rq|inline`, `SCHEDULE_REFRESH_ENABLED=0` to disable; ensure `worker` is running when using `rq` mode).
 
 ## Quick Health Checks
 - `docker ps` — verify containers are running.
 - `docker compose ps` — check statuses and health indicators.
 - Inspect last exit/error per container (replace `<service>`):  
   - `docker inspect $(docker compose ps -q <service>) --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'`  
-  - Core: `web`, `worker`, `nginx`, `ui`, `postgres`, `pgbouncer`, `redis`, `pgmaintenance`  
+  - Core: `web`, `worker`, `scheduler`, `nginx`, `ui`, `postgres`, `pgbouncer`, `redis`, `pgmaintenance`  
   - Microservices: `user-manager`, `card-data`, `folder-service`, `price-service`, `edhrec-service`, `django-api`
 - `curl http://localhost/healthz` — nginx health endpoint.
-- `curl http://localhost/readyz` — user-manager readiness (DB connection check).
+- `curl http://localhost/readyz` — overall readiness (web aggregates all services).
 - `curl http://localhost/api-next/healthz` — django-api health (if enabled).
+- `curl http://localhost/api/ops/health` — overall readiness (JSON detail).
+- `curl http://localhost/metrics` — Prometheus metrics (queue depth + app counts; use `?format=json` for JSON).
 - `docker compose exec web python - <<'PY'`  
   `import urllib.request; req=urllib.request.Request('http://localhost:5000/healthz', headers={'X-Forwarded-Proto':'https'});`  
   `resp=urllib.request.urlopen(req, timeout=5); print(resp.status, resp.read().decode())`  
@@ -80,19 +84,27 @@ Pipelines:
 - `docker compose logs django-api --tail=200`
 - `docker compose logs ui --tail=200`
 - `docker compose logs worker --tail=200`
+- `docker compose logs scheduler --tail=200`
 - `docker compose logs redis --tail=200`
 - `docker compose logs pgbouncer --tail=200`
 - `docker compose logs nginx --tail=200`
 - `docker compose logs postgres --tail=200`
 - `docker compose logs pgmaintenance --tail=200`
 
+## Observability
+- Logs are JSON lines with `request_id`, `path`, and `method` fields; responses echo `X-Request-ID`.
+- `/metrics` returns Prometheus text; add `?format=json` when you need the legacy JSON payload.
+- Queue metrics default to the `default` RQ queue; set `RQ_QUEUES=default,high,low` to include others.
+- Static CDN support: set `STATIC_ASSET_BASE_URL=https://cdn.example.com/static` (Django uses `STATIC_URL` if needed).
+- Overall health probes `USER_MANAGER_URL`, `CARD_DATA_URL`, `FOLDER_SERVICE_URL`, `PRICE_SERVICE_URL`, `EDHREC_SERVICE_URL`, `DJANGO_API_URL` (defaults to docker service names in compose).
+
 ## Live Logs (follow)
 - `docker compose logs -f web worker nginx pgbouncer postgres redis` — watch core services live.
-- `docker compose logs -f user-manager card-data folder-service price-service edhrec-service django-api ui` — watch API/UI services live.
+- `docker compose logs -f scheduler user-manager card-data folder-service price-service edhrec-service django-api ui` — watch API/UI services live.
 
 ## Restart / Recreate
 - `docker compose restart web worker nginx` — fast restart of app-facing services.
-- `docker compose restart user-manager card-data folder-service price-service edhrec-service django-api ui` — restart API/UI services.
+- `docker compose restart scheduler user-manager card-data folder-service price-service edhrec-service django-api ui` — restart API/UI services.
 - `docker compose up -d` — recreate/start everything using current images/config.
 
 ## App Maintenance Commands

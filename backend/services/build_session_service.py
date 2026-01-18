@@ -30,6 +30,7 @@ from services.edhrec.edhrec_ingestion_service import ingest_commander_tag_data
 from services.live_updates import emit_job_event, latest_job_events
 from services.request_cache import request_cached
 from services.symbols_cache import colors_to_icons, render_mana_html
+from utils.assets import static_url
 
 _LOG = logging.getLogger(__name__)
 
@@ -912,6 +913,7 @@ def _session_cards(entries: Iterable[BuildSessionCard]) -> list[dict]:
                 "quantity": int(entry.quantity or 0),
                 "type_line": detail.get("type_line") or "",
                 "cmc_bucket": cmc_bucket,
+                "cmc_value": cmc_val,
                 "price_text": price_text,
                 "mana_cost_html": mana_cost_html,
             }
@@ -929,12 +931,23 @@ def _group_session_cards_by_type(cards: list[dict]) -> list[dict]:
             groups[label].append(card)
         else:
             extras.append(card)
+
+    def _sort_key(card: dict) -> tuple:
+        cmc = card.get("cmc_value")
+        name = (card.get("name") or "").casefold()
+        oracle_id = card.get("oracle_id") or ""
+        if cmc is None:
+            return (1, 0, name, oracle_id)
+        return (0, cmc, name, oracle_id)
+
     grouped: list[dict] = []
     for label in _COLLECTION_GROUP_ORDER:
         entries = groups.get(label) or []
         if entries:
+            entries.sort(key=_sort_key)
             grouped.append({"label": label, "cards": entries})
     if extras:
+        extras.sort(key=_sort_key)
         grouped.append({"label": "Other", "cards": extras})
     return grouped
 
@@ -1077,18 +1090,20 @@ def _oracle_detail(oracle_id: str, cache: dict[str, dict]) -> dict:
 
 
 def _mana_costs_from_faces(print_obj: dict) -> list[str]:
-    costs: list[str] = []
-    mana_cost = print_obj.get("mana_cost")
-    if mana_cost:
-        costs.append(str(mana_cost))
     faces = print_obj.get("card_faces") or []
+    face_costs: list[str] = []
     for face in faces:
         if not isinstance(face, dict):
             continue
         face_cost = face.get("mana_cost")
         if face_cost:
-            costs.append(str(face_cost))
-    return [cost for cost in costs if cost]
+            face_costs.append(str(face_cost))
+    if face_costs:
+        return [cost for cost in face_costs if cost]
+    mana_cost = print_obj.get("mana_cost")
+    if mana_cost:
+        return [str(mana_cost)]
+    return []
 
 
 def _oracle_text_from_faces(print_obj: dict) -> str:
@@ -1423,7 +1438,7 @@ def _build_session_drawer_summary(session: BuildSession) -> dict:
 
 
 def _commander_drawer_payload(oracle_id: str | None, fallback_name: str | None) -> dict:
-    placeholder_thumb = url_for("static", filename="img/card-placeholder.svg")
+    placeholder_thumb = static_url("img/card-placeholder.svg")
     if not oracle_id:
         return {"name": fallback_name or "Commander", "image": placeholder_thumb, "hover": placeholder_thumb}
     try:

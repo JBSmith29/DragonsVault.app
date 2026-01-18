@@ -21,6 +21,8 @@ class OpeningHandCardVM:
     is_sorcery: bool
     is_permanent: bool
     zone_hint: str
+    back_image: Optional[str] = None
+    back_hover: Optional[str] = None
 
     def to_payload(self) -> dict:
         return {
@@ -28,6 +30,8 @@ class OpeningHandCardVM:
             "name": self.name,
             "image": self.image,
             "hover": self.hover,
+            "back_image": self.back_image,
+            "back_hover": self.back_hover,
             "type_line": self.type_line,
             "mana_value": self.mana_value,
             "is_creature": self.is_creature,

@@ -40,6 +40,7 @@ from services.spellbook_sync import (
     generate_spellbook_combo_dataset,
     write_dataset_to_file,
 )
+from services.background.edhrec_sync import refresh_edhrec_synergy_cache
 from services.commander_brackets import reload_spellbook_combos
 from sqlalchemy import func
 
@@ -55,6 +56,8 @@ def _get_logger():
         return current_app.logger
     return logging.getLogger(__name__)
 
+KEEP_FAILED_IMPORT_UPLOADS = os.getenv("IMPORT_KEEP_FAILED_UPLOADS", "1").lower() in {"1", "true", "yes", "on"}
+
 
 def enqueue_csv_import(
     filepath: str,
@@ -63,6 +66,7 @@ def enqueue_csv_import(
     *,
     owner_user_id: Optional[int] = None,
     owner_username: Optional[str] = None,
+    mapping_override: Optional[dict] = None,
     run_async: bool = False,
 ) -> dict:
     # Force inline imports so users aren't blocked by a missing/idle queue.
@@ -70,7 +74,7 @@ def enqueue_csv_import(
     inline_mode = True  # always inline to avoid hangs when workers are unavailable
     job_id = uuid.uuid4().hex
     # Validate headers before queuing the job to surface errors immediately.
-    validate_import_file(filepath)
+    validate_import_file(filepath, mapping_override)
     log = _get_logger()
     log.info(
         "Import enqueue requested",
@@ -80,6 +84,7 @@ def enqueue_csv_import(
             "quantity_mode": quantity_mode,
             "overwrite": overwrite,
             "filepath": filepath,
+            "mapping_override": mapping_override,
             "run_async": run_async,
         },
     )
@@ -94,6 +99,7 @@ def enqueue_csv_import(
                     owner_user_id=owner_user_id,
                     owner_username=owner_username,
                     job_id=job_id,
+                    mapping_override=mapping_override,
                 )
             except Exception:
                 _get_logger().exception("Async import failed", extra={"job_id": job_id})
@@ -119,6 +125,7 @@ def enqueue_csv_import(
             owner_user_id=owner_user_id,
             owner_username=owner_username,
             job_id=job_id,
+            mapping_override=mapping_override,
         )
         return {
             "job_id": job_id,
@@ -137,6 +144,7 @@ def enqueue_csv_import(
             job_id,
             owner_user_id,
             owner_username,
+            mapping_override,
             job_id=f"import-{job_id}",
             description=f"csv-import:{os.path.basename(filepath)}",
         )
@@ -157,6 +165,7 @@ def enqueue_csv_import(
             owner_user_id=owner_user_id,
             owner_username=owner_username,
             job_id=job_id,
+            mapping_override=mapping_override,
         )
         return {
             "job_id": job_id,
@@ -173,11 +182,13 @@ def run_csv_import_job(
     import_job_id: str,
     owner_user_id: Optional[int],
     owner_username: Optional[str],
+    mapping_override: Optional[dict] = None,
 ):
     app = _create_app()
     with app.app_context():
         job = get_current_job()
         log = _get_logger()
+        success = False
         log.info(
             "Import job started",
             extra={
@@ -187,6 +198,7 @@ def run_csv_import_job(
                 "owner_user_id": owner_user_id,
                 "owner_username": owner_username,
                 "filepath": filepath,
+                "mapping_override": mapping_override,
             },
         )
         try:
@@ -198,13 +210,16 @@ def run_csv_import_job(
                 owner_user_id=owner_user_id,
                 owner_username=owner_username,
                 job_ref=job,
+                mapping_override=mapping_override,
             )
             log.info(
                 "Import job completed",
                 extra={"job_id": import_job_id, "quantity_mode": quantity_mode, "overwrite": overwrite},
             )
+            success = True
         finally:
-            _cleanup_temp_file(filepath, app.logger)
+            if success or not KEEP_FAILED_IMPORT_UPLOADS:
+                _cleanup_temp_file(filepath, app.logger)
 
 
 def run_csv_import_inline(
@@ -215,6 +230,7 @@ def run_csv_import_inline(
     owner_user_id: Optional[int] = None,
     owner_username: Optional[str] = None,
     job_id: Optional[str] = None,
+    mapping_override: Optional[dict] = None,
 ):
     job_id = job_id or f"inline-{uuid.uuid4().hex[:8]}"
     if has_app_context():
@@ -225,6 +241,7 @@ def run_csv_import_inline(
         ctx = app.app_context()
         app_logger = app.logger
     with ctx:
+        success = False
         try:
             app_logger.info(
                 "Import inline start",
@@ -235,6 +252,7 @@ def run_csv_import_inline(
                     "owner_user_id": owner_user_id,
                     "owner_username": owner_username,
                     "filepath": filepath,
+                    "mapping_override": mapping_override,
                 },
             )
             stats, per_folder = _process_csv_import(
@@ -245,6 +263,7 @@ def run_csv_import_inline(
                 owner_user_id=owner_user_id,
                 owner_username=owner_username,
                 job_ref=None,
+                mapping_override=mapping_override,
             )
             app_logger.info(
                 "Import inline complete",
@@ -258,9 +277,11 @@ def run_csv_import_inline(
                     "errors": getattr(stats, "errors", None) if stats else None,
                 },
             )
+            success = True
             return stats, per_folder
         finally:
-            _cleanup_temp_file(filepath, app_logger)
+            if success or not KEEP_FAILED_IMPORT_UPLOADS:
+                _cleanup_temp_file(filepath, app_logger)
 
 
 def _process_csv_import(
@@ -272,6 +293,7 @@ def _process_csv_import(
     owner_user_id: Optional[int],
     owner_username: Optional[str],
     job_ref,
+    mapping_override: Optional[dict] = None,
 ):
     emit_job_event(
         "import",
@@ -290,6 +312,7 @@ def _process_csv_import(
             import_job_id=import_job_id,
             owner_user_id=owner_user_id,
             owner_username=owner_username,
+            mapping_override=mapping_override,
         )
         stats = result.get("stats")
         per_folder = result.get("per_folder")
@@ -534,6 +557,123 @@ def run_spellbook_refresh_inline(force_download: bool = False) -> dict:
         log.error("Spellbook refresh failed (inline): job_id=%s error=%s", job_id, exc, exc_info=True)
         emit_job_event("spellbook", "failed", job_id=job_id, dataset="spellbook", error=str(exc))
         raise
+
+
+def enqueue_edhrec_refresh(*, force_refresh: bool = False, scope: str = "all") -> str:
+    if not _jobs_available:
+        raise RuntimeError("RQ is not installed; unable to queue EDHREC refresh.")
+    job_id = uuid.uuid4().hex
+    queue = get_queue()
+    try:
+        queue.enqueue(
+            run_edhrec_refresh_job,
+            force_refresh,
+            scope,
+            job_id,
+            job_id=f"edhrec-{job_id}",
+            description=f"edhrec-refresh:{scope}",
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Unable to queue EDHREC refresh: {exc}") from exc
+    emit_job_event(
+        "edhrec",
+        "queued",
+        job_id=job_id,
+        dataset="synergy",
+        force=int(force_refresh),
+        refresh_scope=scope,
+    )
+    return job_id
+
+
+def run_edhrec_refresh_job(force_refresh: bool, scope: str, job_id: str) -> dict:
+    app = _create_app()
+    with app.app_context():
+        job = get_current_job()
+        log = _get_logger()
+        log.info("EDHREC refresh started (job): job_id=%s force=%s scope=%s", job_id, force_refresh, scope)
+        emit_job_event(
+            "edhrec",
+            "started",
+            job_id=job_id,
+            dataset="synergy",
+            rq_id=getattr(job, "id", None),
+            refresh_scope=scope,
+        )
+        try:
+            result = refresh_edhrec_synergy_cache(force_refresh=force_refresh, scope=scope)
+        except Exception as exc:
+            log.error("EDHREC refresh failed (job): job_id=%s error=%s", job_id, exc, exc_info=True)
+            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=str(exc))
+            raise
+        status = result.get("status") or "error"
+        message = result.get("message") or "EDHREC refresh failed."
+        if status == "error":
+            emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
+            return result
+        if status == "info":
+            emit_job_event("edhrec", "completed", job_id=job_id, dataset="synergy", status="info", message=message)
+            return result
+        emit_job_event(
+            "edhrec",
+            "completed",
+            job_id=job_id,
+            dataset="synergy",
+            status=status,
+            message=message,
+            commanders=result.get("commanders") or {},
+            themes=result.get("themes") or {},
+        )
+        log.info("EDHREC refresh completed (job): job_id=%s status=%s", job_id, status)
+        return result
+
+
+def run_edhrec_refresh_inline(*, force_refresh: bool = False, scope: str = "all") -> dict:
+    job_id = f"inline-{uuid.uuid4().hex[:8]}"
+    log = _get_logger()
+    log.info("EDHREC refresh started (inline): job_id=%s force=%s scope=%s", job_id, force_refresh, scope)
+    emit_job_event(
+        "edhrec",
+        "queued",
+        job_id=job_id,
+        dataset="synergy",
+        force=int(force_refresh),
+        refresh_scope=scope,
+    )
+    emit_job_event(
+        "edhrec",
+        "started",
+        job_id=job_id,
+        dataset="synergy",
+        rq_id=None,
+        refresh_scope=scope,
+    )
+    try:
+        result = refresh_edhrec_synergy_cache(force_refresh=force_refresh, scope=scope)
+    except Exception as exc:
+        log.error("EDHREC refresh failed (inline): job_id=%s error=%s", job_id, exc, exc_info=True)
+        emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=str(exc))
+        raise
+    status = result.get("status") or "error"
+    message = result.get("message") or "EDHREC refresh failed."
+    if status == "error":
+        emit_job_event("edhrec", "failed", job_id=job_id, dataset="synergy", error=message)
+        return result
+    if status == "info":
+        emit_job_event("edhrec", "completed", job_id=job_id, dataset="synergy", status="info", message=message)
+        return result
+    emit_job_event(
+        "edhrec",
+        "completed",
+        job_id=job_id,
+        dataset="synergy",
+        status=status,
+        message=message,
+        commanders=result.get("commanders") or {},
+        themes=result.get("themes") or {},
+    )
+    log.info("EDHREC refresh completed (inline): job_id=%s status=%s", job_id, status)
+    return result
 
 
 def _download_bulk_to(kind: str, force: bool = False, *, job_id: str | None = None) -> dict:

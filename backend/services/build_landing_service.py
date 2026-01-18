@@ -184,18 +184,20 @@ def _oracle_detail(oracle_id: str, cache: dict[str, dict]) -> dict:
 
 
 def _mana_costs_from_faces(print_obj: dict) -> list[str]:
-    costs: list[str] = []
-    mana_cost = print_obj.get("mana_cost")
-    if mana_cost:
-        costs.append(str(mana_cost))
     faces = print_obj.get("card_faces") or []
+    face_costs: list[str] = []
     for face in faces:
         if not isinstance(face, dict):
             continue
         face_cost = face.get("mana_cost")
         if face_cost:
-            costs.append(str(face_cost))
-    return [cost for cost in costs if cost]
+            face_costs.append(str(face_cost))
+    if face_costs:
+        return [cost for cost in face_costs if cost]
+    mana_cost = print_obj.get("mana_cost")
+    if mana_cost:
+        return [str(mana_cost)]
+    return []
 
 
 def _oracle_text_from_faces(print_obj: dict) -> str:

@@ -97,6 +97,7 @@ class BaseConfig:
         "font-src": "'self' data: https://cdn.jsdelivr.net",
         "frame-src": "https://js.hcaptcha.com",
     }
+    STATIC_ASSET_BASE_URL = os.getenv("STATIC_ASSET_BASE_URL")
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True

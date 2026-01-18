@@ -57,5 +57,5 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/frontend_app.js') }}" defer></script>
+  <script src="{{ static_url('js/frontend_app.js') }}" defer></script>
 {% endblock %}

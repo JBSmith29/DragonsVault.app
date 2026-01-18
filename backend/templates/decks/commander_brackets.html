@@ -453,7 +453,9 @@
                   aria-expanded="{{ 'true' if focus_level == bracket.level else 'false' }}"
                   aria-controls="{{ collapse_id }}"
                   aria-label="Toggle {{ bracket.name }} bracket details">
-            <span class="bracket-pill" aria-hidden="true">Bracket {{ bracket.level }}</span>
+            <span class="bracket-pill" aria-hidden="true">
+              Bracket <span class="badge bracket-badge" data-bracket="{{ bracket.level }}">{{ bracket.level }}</span>
+            </span>
             <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
           </button>
         </h2>
@@ -462,7 +464,7 @@
            aria-labelledby="{{ heading_id }}"
            data-bs-parent="#bracketAccordion">
         <div class="accordion-body">
-            <h3 class="h5 bracket-header-title mb-3">Bracket {{ bracket.level }} &mdash; {{ bracket.name }}</h3>
+            <h3 class="h5 bracket-header-title mb-3">Bracket <span class="badge bracket-badge" data-bracket="{{ bracket.level }}">{{ bracket.level }}</span> &mdash; {{ bracket.name }}</h3>
             <p class="text-muted mb-3">{{ bracket.subtitle }}</p>
             <p class="mb-3">{{ bracket.experience }}</p>
             <div class="row g-4">
@@ -560,4 +562,3 @@
 </script>
 
 {% endblock %}
-

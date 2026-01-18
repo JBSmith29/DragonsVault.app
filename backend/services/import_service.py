@@ -32,7 +32,14 @@ from extensions import db
 from models import Card, Folder
 from services import ServiceResult
 from services.audit import record_audit_event
-from services.csv_importer import FileValidationError, HeaderValidationError, preview_csv
+from services.csv_importer import (
+    EXPECTED,
+    FileValidationError,
+    HeaderValidationError,
+    preview_csv,
+    read_import_headers,
+    resolve_header_mapping,
+)
 from services.jobs import enqueue_csv_import
 from services.live_updates import latest_job_events
 from services.scryfall_cache import ensure_cache_loaded, find_by_set_cn, find_by_set_cn_loose, metadata_from_print, search_prints
@@ -42,8 +49,20 @@ from utils.validation import ValidationError, log_validation_error, parse_option
 
 ALLOWED_IMPORT_EXTS = {".csv", ".xlsx", ".xls", ".xlsm"}
 MAX_IMPORT_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
+IMPORT_UPLOAD_RETENTION_HOURS = int(os.getenv("IMPORT_UPLOAD_RETENTION_HOURS", 24))
 
 _MANUAL_LINE_RE = re.compile(r"^\s*(\d+)\s*[xX]?\s+(.*)$")
+
+IMPORT_MAPPING_FIELDS = [
+    {"key": "name", "label": "Card name", "required": True},
+    {"key": "set_code", "label": "Set code", "required": True},
+    {"key": "collector_number", "label": "Collector number", "required": True},
+    {"key": "qty", "label": "Quantity", "required": False},
+    {"key": "folder", "label": "Folder name", "required": False},
+    {"key": "folder_category", "label": "Folder category", "required": False},
+    {"key": "lang", "label": "Language", "required": False},
+    {"key": "is_foil", "label": "Foil / finish", "required": False},
+]
 
 
 def _store_import_notification(level: str, message: str, session_obj) -> None:
@@ -140,6 +159,24 @@ def _uploads_dir() -> Path:
     return p
 
 
+def _prune_old_uploads(max_age_hours: int) -> None:
+    if max_age_hours <= 0:
+        return
+    uploads_root = _uploads_dir()
+    cutoff = time.time() - (max_age_hours * 3600)
+    try:
+        for entry in uploads_root.iterdir():
+            try:
+                if not entry.is_file():
+                    continue
+                if entry.stat().st_mtime < cutoff:
+                    entry.unlink(missing_ok=True)
+            except Exception:
+                continue
+    except Exception:
+        current_app.logger.debug("Unable to prune old import uploads.", exc_info=True)
+
+
 def _validate_upload_path(filepath: str) -> str:
     """Ensure the path exists and lives under the uploads directory."""
     uploads_root = _uploads_dir().resolve()
@@ -154,10 +191,59 @@ def _validate_upload_path(filepath: str) -> str:
     return str(resolved)
 
 
+def _parse_mapping_from_request() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for spec in IMPORT_MAPPING_FIELDS:
+        key = spec["key"]
+        value = (request.form.get(f"map_{key}") or "").strip()
+        if value:
+            mapping[key] = value
+    return mapping
+
+
+def _mapping_context(
+    headers: list[str],
+    mapping_override: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    mapping, missing_required, invalid_overrides = resolve_header_mapping(
+        headers,
+        mapping_override,
+        allow_missing=True,
+    )
+    selected = {}
+    for spec in IMPORT_MAPPING_FIELDS:
+        key = spec["key"]
+        selected[key] = (mapping_override or {}).get(key) or mapping.get(key, "")
+    missing_labels = [
+        spec["label"]
+        for spec in IMPORT_MAPPING_FIELDS
+        if spec["key"] in missing_required
+    ]
+    return {
+        "mapping_fields": IMPORT_MAPPING_FIELDS,
+        "mapping_headers": headers,
+        "mapping_selected": selected,
+        "mapping_missing": missing_required,
+        "mapping_missing_labels": missing_labels,
+        "mapping_invalid": {field: header for field, header in invalid_overrides},
+        "mapping_expected": EXPECTED,
+    }
+
+
+def _mapping_field_errors(missing_required: list[str], invalid_overrides: dict[str, str]) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    for key in missing_required:
+        errors[f"map_{key}"] = "Required field"
+    for key, header in invalid_overrides.items():
+        errors[f"map_{key}"] = f"Header '{header}' not found"
+    return errors
+
+
 def _save_upload_if_present(file) -> str | None:
     """Return saved path or None if no file provided."""
     if not file or not getattr(file, "filename", ""):
         return None
+    _prune_old_uploads(IMPORT_UPLOAD_RETENTION_HOURS)
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_IMPORT_EXTS:
         raise ValueError("Unsupported file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls, .xlsm).")
@@ -255,95 +341,349 @@ def _export_context(session_obj) -> dict:
     }
 
 
+def _base_import_context(session_obj, *, quantity_mode: str, notification=None, **extra) -> dict:
+    context = {
+        "quantity_mode": quantity_mode,
+        "notification": notification,
+        "deck_category": Folder.CATEGORY_DECK,
+        "collection_category": Folder.CATEGORY_COLLECTION,
+        "disable_hx": True,
+        "field_errors": {},
+        "form_errors": [],
+        **_export_context(session_obj),
+    }
+    context.update(extra)
+    return context
+
+
+def _preview_context(
+    session_obj,
+    *,
+    filepath: str,
+    quantity_mode: str,
+    mapping_override: dict[str, str] | None = None,
+    field_errors: dict[str, str] | None = None,
+    form_errors: list[str] | None = None,
+) -> dict:
+    preview = preview_csv(filepath, default_folder="Unsorted", max_rows=100)
+    mapping_ctx = _mapping_context(preview.headers, mapping_override)
+    return _base_import_context(
+        session_obj,
+        quantity_mode=quantity_mode,
+        preview=preview,
+        filepath=filepath,
+        preview_filename=Path(filepath).name,
+        field_errors=field_errors or {},
+        form_errors=form_errors or [],
+        **mapping_ctx,
+    )
+
+
+def _json_error(message: str, *, field_errors: dict[str, str] | None = None, status: int = 400) -> Response:
+    payload = {"ok": False, "error": message}
+    if field_errors:
+        payload["field_errors"] = field_errors
+        payload["errors"] = list(field_errors.values())
+    resp = jsonify(payload)
+    resp.status_code = status
+    return resp
+
+
 def handle_import_csv(*, session_obj) -> ServiceResult:
     """Upload route that powers CSV/XLS collection imports and dry-run previews."""
     if request.method == "GET":
         notification = session_obj.pop("last_import_notification", None)
         return ServiceResult(
             template="cards/import.html",
-            context={
-                "quantity_mode": "new_only",
-                "notification": notification,
-                "deck_category": Folder.CATEGORY_DECK,
-                "collection_category": Folder.CATEGORY_COLLECTION,
-                "disable_hx": True,
-                **_export_context(session_obj),
-            },
+            context=_base_import_context(
+                session_obj,
+                quantity_mode="new_only",
+                notification=notification,
+            ),
         )
 
     action = (request.form.get("import_action") or request.form.get("action") or "").strip().lower()
+    quantity_mode = _normalize_quantity_mode(request.form.get("quantity_mode"))
 
     if action == "preview":
         file = request.files.get("file")
         saved = None
-        quantity_mode = _normalize_quantity_mode(request.form.get("quantity_mode"))
+        field_errors: dict[str, str] = {}
+        form_errors: list[str] = []
         try:
             saved = _save_upload_if_present(file)
             if not saved:
-                flash("Please choose a CSV or Excel file.", "warning")
-                return ServiceResult(response=redirect(request.referrer or url_for("views.import_csv")))
+                field_errors["file"] = "Please choose a CSV or Excel file."
+                form_errors.append(field_errors["file"])
+                return ServiceResult(
+                    template="cards/import.html",
+                    context=_base_import_context(
+                        session_obj,
+                        quantity_mode=quantity_mode,
+                        field_errors=field_errors,
+                        form_errors=form_errors,
+                    ),
+                )
 
             saved = _validate_upload_path(saved)
-            pv = preview_csv(saved, default_folder="Unsorted", max_rows=100)
             return ServiceResult(
                 template="cards/import.html",
-                context={
-                    "preview": pv,
-                    "filepath": saved,
-                    "quantity_mode": quantity_mode,
-                    "disable_hx": True,
-                    **_export_context(session_obj),
-                },
+                context=_preview_context(
+                    session_obj,
+                    filepath=saved,
+                    quantity_mode=quantity_mode,
+                ),
             )
 
-        except FileValidationError as exc:
+        except (FileValidationError, HeaderValidationError) as exc:
             current_app.logger.warning("Preview failed due to file validation: %s", exc)
             db.session.rollback()
-            flash(str(exc), "warning")
+            field_errors["file"] = str(exc)
+            form_errors.append(str(exc))
             if saved:
                 try:
                     os.remove(saved)
                 except Exception:
                     pass
-            return ServiceResult(response=redirect(url_for("views.import_csv")))
+            return ServiceResult(
+                template="cards/import.html",
+                context=_base_import_context(
+                    session_obj,
+                    quantity_mode=quantity_mode,
+                    field_errors=field_errors,
+                    form_errors=form_errors,
+                ),
+            )
         except Exception as exc:
             current_app.logger.exception("Preview failed")
             db.session.rollback()
-            flash(f"Could not read file: {exc}", "danger")
+            field_errors["file"] = f"Could not read file: {exc}"
+            form_errors.append(field_errors["file"])
             if saved:
                 try:
                     os.remove(saved)
                 except Exception:
                     pass
-            return ServiceResult(response=redirect(url_for("views.import_csv")))
+            return ServiceResult(
+                template="cards/import.html",
+                context=_base_import_context(
+                    session_obj,
+                    quantity_mode=quantity_mode,
+                    field_errors=field_errors,
+                    form_errors=form_errors,
+                ),
+            )
 
-    if action in ("confirm", "overwrite"):
-        filepath = (request.form.get("filepath") or "").strip()
-        file = request.files.get("file")
-        if not filepath:
-            try:
-                filepath = _save_upload_if_present(file)
-            except Exception as exc:
-                flash(str(exc), "warning")
-                return ServiceResult(response=redirect(url_for("views.import_csv")))
-
-        if not filepath:
-            flash("Please choose a CSV or Excel file.", "warning")
-            return ServiceResult(response=redirect(url_for("views.import_csv")))
-        try:
-            filepath = _validate_upload_path(filepath)
-        except Exception as exc:
-            flash(str(exc), "warning")
-            return ServiceResult(response=redirect(url_for("views.import_csv")))
-
-        quantity_mode = _normalize_quantity_mode(request.form.get("quantity_mode"))
-        overwrite = (action == "overwrite") or (quantity_mode == "purge")
-        filename = os.path.basename(filepath)
+    if action == "retry":
         wants_json = (
             request.headers.get("X-Requested-With") == "XMLHttpRequest"
             or request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
         )
+        last_job = session_obj.get("last_import_job") or {}
+        if not last_job:
+            message = "No recent import to retry."
+            if wants_json:
+                return ServiceResult(response=_json_error(message, status=404))
+            flash(message, "warning")
+            return ServiceResult(response=redirect(url_for("views.import_csv")))
+
+        created_at = last_job.get("created_at") or 0
+        max_age_seconds = IMPORT_UPLOAD_RETENTION_HOURS * 3600
+        if max_age_seconds and (time.time() - float(created_at)) > max_age_seconds:
+            message = "The last import upload has expired. Please re-upload the file."
+            if wants_json:
+                return ServiceResult(response=_json_error(message, status=410))
+            flash(message, "warning")
+            return ServiceResult(response=redirect(url_for("views.import_csv")))
+
+        filepath = (last_job.get("filepath") or "").strip()
+        if not filepath or not os.path.exists(filepath):
+            message = "The original upload is no longer available. Please re-upload the file."
+            if wants_json:
+                return ServiceResult(response=_json_error(message, status=410))
+            flash(message, "warning")
+            return ServiceResult(response=redirect(url_for("views.import_csv")))
+        try:
+            filepath = _validate_upload_path(filepath)
+        except Exception as exc:
+            message = str(exc)
+            if wants_json:
+                return ServiceResult(response=_json_error(message))
+            flash(message, "warning")
+            return ServiceResult(response=redirect(url_for("views.import_csv")))
+
+        overwrite = bool(last_job.get("overwrite"))
+        quantity_mode = _normalize_quantity_mode(last_job.get("quantity_mode"))
+        mapping_override = last_job.get("mapping") or None
+
+        try:
+            owner_name_preferred = None
+            if current_user.is_authenticated:
+                owner_name_preferred = (
+                    (current_user.username or "").strip()
+                    or (current_user.email or "").strip()
+                    or None
+                )
+            result = enqueue_csv_import(
+                filepath=filepath,
+                quantity_mode=quantity_mode,
+                overwrite=overwrite,
+                owner_user_id=current_user.id if current_user.is_authenticated else None,
+                owner_username=owner_name_preferred,
+                mapping_override=mapping_override,
+                run_async=True,
+            )
+        except (HeaderValidationError, FileValidationError) as err:
+            if wants_json:
+                return ServiceResult(response=_json_error(str(err)))
+            flash(str(err), "warning")
+            return ServiceResult(response=redirect(url_for("views.import_csv")))
+        except Exception as exc:
+            if wants_json:
+                return ServiceResult(response=_json_error(f"Unable to retry import: {exc}", status=500))
+            flash(f"Unable to retry import: {exc}", "danger")
+            return ServiceResult(response=redirect(url_for("views.import_csv")))
+
+        job_id = result["job_id"]
+        last_job.update(
+            {
+                "job_id": job_id,
+                "created_at": int(time.time()),
+                "filepath": filepath,
+                "quantity_mode": quantity_mode,
+                "overwrite": overwrite,
+            }
+        )
+        session_obj["last_import_job"] = last_job
+        if wants_json:
+            payload = {
+                "ok": True,
+                "job_id": job_id,
+                "mode": quantity_mode,
+                "status_url": url_for("views.import_status", job_id=job_id),
+                "complete_url": url_for("views.import_csv", import_success=1),
+            }
+            resp = jsonify(payload)
+            resp.status_code = 202
+            return ServiceResult(response=resp)
+        flash("Import retry queued.", "info")
+        return ServiceResult(response=redirect(url_for("views.import_csv", import_success=1)))
+
+    if action in ("confirm", "overwrite"):
+        filepath = (request.form.get("filepath") or "").strip()
+        file = request.files.get("file")
+        wants_json = (
+            request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
+        )
+        if file and getattr(file, "filename", ""):
+            try:
+                filepath = _save_upload_if_present(file)
+            except Exception as exc:
+                if wants_json:
+                    return ServiceResult(response=_json_error(str(exc), field_errors={"file": str(exc)}))
+                return ServiceResult(
+                    template="cards/import.html",
+                    context=_base_import_context(
+                        session_obj,
+                        quantity_mode=quantity_mode,
+                        field_errors={"file": str(exc)},
+                        form_errors=[str(exc)],
+                    ),
+                )
+        elif not filepath:
+            try:
+                filepath = _save_upload_if_present(file)
+            except Exception as exc:
+                if wants_json:
+                    return ServiceResult(response=_json_error(str(exc), field_errors={"file": str(exc)}))
+                return ServiceResult(
+                    template="cards/import.html",
+                    context=_base_import_context(
+                        session_obj,
+                        quantity_mode=quantity_mode,
+                        field_errors={"file": str(exc)},
+                        form_errors=[str(exc)],
+                    ),
+                )
+
+        if not filepath:
+            message = "Please choose a CSV or Excel file."
+            if wants_json:
+                return ServiceResult(response=_json_error(message, field_errors={"file": message}))
+            return ServiceResult(
+                template="cards/import.html",
+                context=_base_import_context(
+                    session_obj,
+                    quantity_mode=quantity_mode,
+                    field_errors={"file": message},
+                    form_errors=[message],
+                ),
+            )
+        try:
+            filepath = _validate_upload_path(filepath)
+        except Exception as exc:
+            message = str(exc)
+            if wants_json:
+                return ServiceResult(response=_json_error(message, field_errors={"file": message}))
+            return ServiceResult(
+                template="cards/import.html",
+                context=_base_import_context(
+                    session_obj,
+                    quantity_mode=quantity_mode,
+                    field_errors={"file": message},
+                    form_errors=[message],
+                ),
+            )
+
+        overwrite = (action == "overwrite") or (quantity_mode == "purge")
+        filename = os.path.basename(filepath)
         run_async = wants_json or (request.form.get("import_async") == "1")
+        mapping_override = _parse_mapping_from_request()
+        mapping_override = mapping_override or None
+
+        if mapping_override:
+            try:
+                headers = read_import_headers(filepath)
+                mapping, missing_required, invalid_overrides = resolve_header_mapping(
+                    headers,
+                    mapping_override,
+                    allow_missing=True,
+                )
+            except (HeaderValidationError, FileValidationError) as exc:
+                message = str(exc)
+                if wants_json:
+                    return ServiceResult(response=_json_error(message, field_errors={"file": message}))
+                return ServiceResult(
+                    template="cards/import.html",
+                    context=_base_import_context(
+                        session_obj,
+                        quantity_mode=quantity_mode,
+                        field_errors={"file": message},
+                        form_errors=[message],
+                    ),
+                )
+
+            invalid_map = {field: header for field, header in invalid_overrides}
+            if missing_required or invalid_overrides:
+                field_errors = _mapping_field_errors(missing_required, invalid_map)
+                form_errors = ["Map required columns before importing."]
+                if wants_json:
+                    return ServiceResult(
+                        response=_json_error("Fix the column mapping before importing.", field_errors=field_errors)
+                    )
+                return ServiceResult(
+                    template="cards/import.html",
+                    context=_preview_context(
+                        session_obj,
+                        filepath=filepath,
+                        quantity_mode=quantity_mode,
+                        mapping_override=mapping_override,
+                        field_errors=field_errors,
+                        form_errors=form_errors,
+                    ),
+                )
+            mapping_override = mapping
 
         try:
             owner_name_preferred = None
@@ -360,27 +700,40 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
                 overwrite=overwrite,
                 owner_user_id=current_user.id if current_user.is_authenticated else None,
                 owner_username=owner_name_preferred,
+                mapping_override=mapping_override,
                 run_async=run_async,
             )
         except (HeaderValidationError, FileValidationError) as err:
             current_app.logger.warning("Import aborted due to file validation: %s", err)
             if wants_json:
-                resp = jsonify({"ok": False, "error": str(err)})
-                resp.status_code = 400
-                return ServiceResult(response=resp)
-            flash(str(err), "warning")
-            return ServiceResult(response=redirect(url_for("views.import_csv")))
+                return ServiceResult(response=_json_error(str(err), field_errors={"file": str(err)}))
+            return ServiceResult(
+                template="cards/import.html",
+                context=_base_import_context(
+                    session_obj,
+                    quantity_mode=quantity_mode,
+                    field_errors={"file": str(err)},
+                    form_errors=[str(err)],
+                ),
+            )
         except Exception as exc:
             current_app.logger.exception("Failed to queue import job")
             if wants_json:
-                resp = jsonify({"ok": False, "error": f"Unable to queue import: {exc}"})
-                resp.status_code = 500
-                return ServiceResult(response=resp)
+                return ServiceResult(response=_json_error(f"Unable to queue import: {exc}", status=500))
             flash(f"Unable to queue import: {exc}", "danger")
             return ServiceResult(response=redirect(url_for("views.import_csv")))
 
         mode_note = "overwrite" if overwrite else quantity_mode
         job_id = result["job_id"]
+        session_obj["last_import_job"] = {
+            "job_id": job_id,
+            "filepath": filepath,
+            "quantity_mode": quantity_mode,
+            "overwrite": overwrite,
+            "mapping": mapping_override or {},
+            "created_at": int(time.time()),
+            "filename": filename,
+        }
         if wants_json:
             record_audit_event(
                 "import_queued",

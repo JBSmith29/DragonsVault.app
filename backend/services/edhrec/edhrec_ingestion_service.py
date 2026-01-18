@@ -518,6 +518,26 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _inclusion_percent(
+    raw_inclusion: Any,
+    raw_num_decks: Any,
+    raw_potential_decks: Any,
+) -> float | None:
+    inclusion = _safe_float(raw_inclusion)
+    num_decks = _safe_float(raw_num_decks)
+    potential_decks = _safe_float(raw_potential_decks)
+    if potential_decks and potential_decks > 0:
+        numerator = num_decks if num_decks is not None else inclusion
+        if numerator is not None:
+            pct = (numerator / potential_decks) * 100.0
+            return round(min(max(pct, 0.0), 100.0), 1)
+    if inclusion is None:
+        return None
+    if inclusion <= 1:
+        return round(min(max(inclusion * 100.0, 0.0), 100.0), 1)
+    return round(min(max(inclusion, 0.0), 100.0), 1)
+
+
 def _normalize_header(header: Any) -> str | None:
     if isinstance(header, str):
         cleaned = header.strip()
@@ -553,7 +573,11 @@ def _extract_cardviews(payload: dict) -> list[dict]:
                     "name": name,
                     "rank": raw.get("rank"),
                     "synergy": _safe_float(raw.get("synergy")),
-                    "inclusion": _safe_float(raw.get("inclusion")),
+                    "inclusion": _inclusion_percent(
+                        raw.get("inclusion"),
+                        raw.get("num_decks"),
+                        raw.get("potential_decks"),
+                    ),
                 }
             )
     return views
@@ -585,7 +609,11 @@ def _extract_cardlists(payload: dict) -> list[dict]:
                     "name": name,
                     "rank": raw.get("rank"),
                     "synergy": _safe_float(raw.get("synergy")),
-                    "inclusion": _safe_float(raw.get("inclusion")),
+                    "inclusion": _inclusion_percent(
+                        raw.get("inclusion"),
+                        raw.get("num_decks"),
+                        raw.get("potential_decks"),
+                    ),
                 }
             )
         if views:
@@ -709,8 +737,42 @@ def _extract_type_distribution(payload: dict | None) -> list[dict]:
         container = payload.get("props", {}).get("pageProps", {}).get("data", {}).get("container")
         if isinstance(container, dict):
             panels = container.get("panels")
+    if panels is None:
+        data = payload.get("props", {}).get("pageProps", {}).get("data", {})
+        if isinstance(data, dict) and isinstance(data.get("panels"), dict):
+            panels = data.get("panels")
     if not isinstance(panels, dict):
-        return []
+        def _extract_counts(source: dict) -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for key, label in (
+                ("creature", "Creature"),
+                ("instant", "Instant"),
+                ("sorcery", "Sorcery"),
+                ("artifact", "Artifact"),
+                ("enchantment", "Enchantment"),
+                ("planeswalker", "Planeswalker"),
+                ("land", "Land"),
+                ("battle", "Battle"),
+            ):
+                val = source.get(key)
+                if val is None:
+                    continue
+                try:
+                    numeric_value = int(round(float(val)))
+                except (TypeError, ValueError):
+                    continue
+                if numeric_value <= 0:
+                    continue
+                counts[label] = counts.get(label, 0) + numeric_value
+            return counts
+
+        data = payload.get("props", {}).get("pageProps", {}).get("data", {})
+        counts = _extract_counts(payload)
+        if isinstance(data, dict) and not counts:
+            counts = _extract_counts(data)
+        if not counts:
+            return []
+        return [{"card_type": key, "count": int(value)} for key, value in counts.items() if value]
     piechart = panels.get("piechart")
     if not isinstance(piechart, dict):
         return []

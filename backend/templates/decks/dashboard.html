@@ -193,7 +193,7 @@
                       <span class="pip-row">{{ d.ci_html | safe }}</span>
                       <span class="ms-1">{{ d.ci_name }}</span>
                     {% else %}
-                      <span class="pip-row"><img class="mana mana-sm" src="/static/symbols/C.svg" alt="{C}"></span>
+                      <span class="pip-row"><img class="mana mana-sm" src="{{ static_url('symbols/C.svg') }}" alt="{C}"></span>
                       <span class="ms-1">Colorless</span>
                     {% endif %}
                   </div>

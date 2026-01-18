@@ -26,6 +26,7 @@ def run_csv_import(
     import_job_id: str,
     owner_user_id: Optional[int],
     owner_username: Optional[str],
+    mapping_override: Optional[dict] = None,
 ) -> dict:
     """Run a CSV import and return a summary payload."""
     _LOG.info(
@@ -47,6 +48,7 @@ def run_csv_import(
             job_id=import_job_id,
             owner_user_id=owner_user_id,
             owner_username=owner_username,
+            mapping_override=mapping_override,
         )
         if preserved:
             restore_commander_metadata(preserved)

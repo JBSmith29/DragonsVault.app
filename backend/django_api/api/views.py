@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db import connection
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce, Lower
 from rest_framework import status
@@ -86,6 +87,17 @@ def healthz(_request):
 @permission_classes([])
 def health(_request):
     return Response({"status": "ok", "service": "django-api"})
+
+
+@api_view(["GET"])
+@permission_classes([])
+def readyz(_request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except Exception:
+        return Response({"status": "error", "reason": "database"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response({"status": "ready", "service": "django-api"})
 
 
 @api_view(["GET"])

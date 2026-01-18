@@ -5,7 +5,11 @@
 {% block content %}
 <style>
   /* Ensure the build drawer overlays the high z-index build-landing header cards. */
-  #buildDrawer.offcanvas { z-index: 6100; }
+  #buildDrawer.offcanvas {
+    z-index: 6100;
+    width: 620px;
+    max-width: 100vw;
+  }
   /* Match deck drawer curve styling when cache-busting is delayed. */
   #buildDrawer .deck-curve-grid { display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; }
   #buildDrawer .deck-curve-col { width:48px; text-align:center; }
@@ -272,7 +276,7 @@
                   <td class="text-start">
                     {% if build.bracket_level %}
                       <div class="deck-bracket">
-                        <span class="badge text-bg-primary">{{ build.bracket_level }}</span>
+                        <span class="badge bracket-badge" data-bracket="{{ build.bracket_level }}">{{ build.bracket_level }}</span>
                         {% if build.bracket_label %}
                           <span class="label text-muted">{{ build.bracket_label }}</span>
                         {% endif %}
@@ -443,8 +447,9 @@
       const badgeRow = document.createElement('div');
       badgeRow.className = 'd-flex align-items-center gap-2 mb-2';
       const badge = document.createElement('span');
-      badge.className = 'badge text-bg-primary';
+      badge.className = 'badge bracket-badge';
       badge.textContent = bracket.level;
+      badge.dataset.bracket = bracket.level;
       badgeRow.appendChild(badge);
       if (bracket.label) {
         const label = document.createElement('span');
@@ -501,7 +506,7 @@
         let label = item.label || item.color || "C";
         let icon = item.icon;
         if ((label === "C" || label.toUpperCase() === "COLORLESS") && !icon) {
-          icon = "/static/symbols/C.svg";
+          icon = "{{ static_url('symbols/C.svg') }}";
           label = "C";
         }
         return buildPill(label + ":", item.count, icon);

@@ -7,6 +7,7 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from math import ceil
 from pathlib import Path
 from typing import List, Optional, Set
@@ -561,6 +562,60 @@ def _build_data_ops_context(
         "stats": stats,
         "symbols_enabled": symbols_enabled,
     }
+
+
+def _format_job_timestamp(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    token = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(token)
+    except ValueError:
+        return raw
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _job_badge(event_type: str, status: str | None) -> tuple[str, str]:
+    normalized = (status or "").strip().lower()
+    if event_type == "completed":
+        if normalized == "skipped":
+            return "Skipped", "secondary"
+        if normalized in {"warning", "warn"}:
+            return "Warning", "warning"
+        if normalized in {"error", "failed"}:
+            return "Error", "danger"
+        return "Complete", "success"
+    if event_type == "failed":
+        return "Failed", "danger"
+    if event_type == "started":
+        return "Running", "warning"
+    if event_type == "queued":
+        return "Queued", "info"
+    return "Unknown", "secondary"
+
+
+def _job_last_run(scope: str, dataset: str | None, fallback_stamp: str | None = None) -> dict[str, str]:
+    events = latest_job_events(scope, dataset)
+    if not events:
+        if fallback_stamp:
+            return {"stamp": fallback_stamp, "label": "Cached", "tone": "secondary"}
+        return {"stamp": "Never", "label": "Never", "tone": "secondary"}
+    chosen = None
+    for event in reversed(events):
+        if event.get("type") in {"completed", "failed"}:
+            chosen = event
+            break
+    if chosen is None:
+        chosen = events[-1]
+    event_type = (chosen.get("type") or "unknown").lower()
+    status = chosen.get("status") or chosen.get("download_status")
+    label, tone = _job_badge(event_type, status)
+    stamp = _format_job_timestamp(chosen.get("recorded_at")) or "Unknown"
+    return {"stamp": stamp, "label": label, "tone": tone}
 
 
 def _handle_reset_user_password(target_endpoint: str):
@@ -1412,6 +1467,11 @@ def admin_data_operations():
         "themes": edhrec_snapshot.get("tags", {}),
         "metadata": edhrec_snapshot.get("metadata", {}) or {},
     }
+    maintenance_runs = {
+        "scryfall": _job_last_run("scryfall", "default_cards", data_ops.get("prints", {}).get("mtime")),
+        "spellbook": _job_last_run("spellbook", "spellbook", data_ops.get("spellbook", {}).get("mtime")),
+        "fts": _job_last_run("search_index", "cards"),
+    }
     return render_template(
         "admin/data_operations.html",
         system_health={
@@ -1423,6 +1483,7 @@ def admin_data_operations():
             "tag_count": tag_count,
         },
         edhrec=edhrec,
+        maintenance_runs=maintenance_runs,
     )
 
 

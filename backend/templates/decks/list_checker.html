@@ -280,7 +280,7 @@
 
   // ===== Image hydration + hover preview =====
   (function () {
-    const FALLBACK_IMG = "{{ url_for('static', filename='img/card-back-placeholder.png') }}";
+    const FALLBACK_IMG = "{{ static_url('img/card-back-placeholder.png') }}";
     const cacheByCardId = new Map();
     const cacheByScryId = new Map();
 
