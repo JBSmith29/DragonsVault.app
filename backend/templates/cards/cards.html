@@ -353,6 +353,18 @@
                    onchange="this.form.submit()">
             <label class="form-check-label" for="f_collection">Collection</label>
           </div>
+          {% if current_user.is_authenticated %}
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input"
+                     type="checkbox"
+                     id="f_show_friends"
+                     name="show_friends"
+                     value="1"
+                     {% if show_friends %}checked{% endif %}
+                     onchange="this.form.submit()">
+              <label class="form-check-label" for="f_show_friends">Show Friends Cards</label>
+            </div>
+          {% endif %}
           <div class="d-flex gap-2">
             <button class="btn btn-primary" type="submit">Apply filters</button>
             <a class="btn btn-outline-secondary" href="{{ reset_url }}">Reset</a>
@@ -376,7 +388,7 @@
       {% endif %}
     </div>
     <div class="d-flex gap-3">
-      {% if q or role_query_text or folder_id or set_code or foil_only or (ui_selected_types and ui_selected_types|length) or (selected_colors and selected_colors|length) or collection_flag %}
+      {% if q or role_query_text or folder_id or set_code or foil_only or (ui_selected_types and ui_selected_types|length) or (selected_colors and selected_colors|length) or collection_flag or show_friends %}
         <a class="small" href="{{ reset_url }}">Reset</a>
       {% endif %}
       <div class="dropdown">
@@ -423,6 +435,10 @@
             <label class="form-check-label" for="cardsColFolder">Folder</label>
           </div>
           <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="cardsColOwner" data-columns-toggle="cards" data-col="owner" checked>
+            <label class="form-check-label" for="cardsColOwner">Owner</label>
+          </div>
+          <div class="form-check">
             <input class="form-check-input" type="checkbox" id="cardsColSet" data-columns-toggle="cards" data-col="set" checked>
             <label class="form-check-label" for="cardsColSet">Set</label>
           </div>
@@ -459,13 +475,15 @@
           q=q, role_q=role_query_text, folder=folder_id, set=set_code, foil_only=('1' if foil_only else None),
           type=ui_selected_types, type_mode=type_mode_local,
           color=selected_colors, color_mode=color_mode,
-          collection=1 if collection_flag else None) %}
+          collection=1 if collection_flag else None,
+          show_friends=1 if show_friends else None) %}
       {% else %}
         {% set export_url = url_for('views.export_cards',
           q=q, role_q=role_query_text, folder=folder_id, set=set_code, foil_only=('1' if foil_only else None),
           type_any=ui_selected_types, type_mode='contains',
           color=selected_colors, color_mode=color_mode,
-          collection=1 if collection_flag else None) %}
+          collection=1 if collection_flag else None,
+          show_friends=1 if show_friends else None) %}
       {% endif %}
       {% set export_sep = '&' if '?' in export_url else '?' %}
       {% set export_url_manavault = export_url ~ export_sep ~ 'format=manavault' %}
@@ -518,6 +536,7 @@
                   type=ui_selected_types, type_mode=type_mode_local,
                   color=selected_colors, color_mode=color_mode,
                   collection=1 if collection_flag else None,
+                  show_friends=1 if show_friends else None,
                   sort=sort_field, dir=dir_value) }}
             {%- else -%}
               {{ url_for('views.list_cards',
@@ -525,6 +544,7 @@
                   type_any=ui_selected_types, type_mode='contains',
                   color=selected_colors, color_mode=color_mode,
                   collection=1 if collection_flag else None,
+                  show_friends=1 if show_friends else None,
                   sort=sort_field, dir=dir_value) }}
             {%- endif -%}
           {%- endmacro %}
@@ -542,6 +562,7 @@
             <th class="col-tags" data-col="core_role"><a href="{{ keep_params('core_role', core_dir) }}">Core Role</a></th>
             <th class="col-tags" data-col="evergreen"><a href="{{ keep_params('evergreen', evergreen_dir) }}">Evergreen</a></th>
             <th data-col="folder"><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
+            <th data-col="owner">Owner</th>
             <th data-col="set"><a href="{{ keep_params('set', set_dir) }}">Set</a></th>
             <th class="text-end" data-col="qty"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
             <th class="text-end" data-col="price"><a href="{{ keep_params('price', price_dir) }}">Price</a></th>
@@ -622,6 +643,13 @@
               <td data-col="folder">
                 {% if card.folder_name %}
                   {{ folder_badge(card.folder_name) }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td data-col="owner">
+                {% if card.owner_label %}
+                  {{ card.owner_label }}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}

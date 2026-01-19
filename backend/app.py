@@ -121,11 +121,19 @@ def _register_visibility_filters(card_model, folder_model) -> None:
         except (TypeError, ValueError):
             return
 
-        from models import FolderShare  # local import to avoid early import issues
+        from models import FolderShare, UserFriend  # local import to avoid early import issues
 
         share_exists = (
             exists()
             .where((FolderShare.folder_id == folder_model.id) & (FolderShare.shared_user_id == user_id_int))
+            .correlate(folder_model)
+        )
+        friend_exists = (
+            exists()
+            .where(
+                (UserFriend.user_id == user_id_int)
+                & (UserFriend.friend_user_id == folder_model.owner_user_id)
+            )
             .correlate(folder_model)
         )
         scope_clause = or_(
@@ -133,6 +141,7 @@ def _register_visibility_filters(card_model, folder_model) -> None:
             folder_model.owner_user_id.is_(None),
             folder_model.is_public.is_(True),
             share_exists,
+            friend_exists,
         )
 
         execute_state.statement = execute_state.statement.options(
@@ -836,6 +845,8 @@ def create_app():
                   help="Folder to use when file lacks a folder column.")
     @click.option("--overwrite", is_flag=True,
                   help="Delete ALL cards first (keep folders/commanders), then import.")
+    @click.option("--owner-user-id", type=int, default=None,
+                  help="User ID to scope the import to.")
     @click.option(
         "--quantity-mode",
         type=click.Choice(["new_only"]),
@@ -843,7 +854,7 @@ def create_app():
         show_default=True,
         help="new_only: create only brand-new rows.",
     )
-    def import_csv_cmd(filepath, dry_run, default_folder, overwrite, quantity_mode):
+    def import_csv_cmd(filepath, dry_run, default_folder, overwrite, owner_user_id, quantity_mode):
         """Import CSV or Excel file (xlsx/xlsm supported)."""
         p = Path(filepath).expanduser()
         if not p.is_absolute():
@@ -851,6 +862,8 @@ def create_app():
         p = p.resolve()
         if not p.exists():
             raise click.ClickException(f"File not found: {p}")
+        if owner_user_id is None:
+            raise click.ClickException("Provide --owner-user-id to scope the import to a single user.")
 
         preserved = None
         removed = 0
@@ -859,7 +872,10 @@ def create_app():
             with db.session.begin():
                 if should_reset:
                     click.echo("Clearing existing cards before import...")
-                    preserved = purge_cards_preserve_commanders(commit=False)
+                    preserved = purge_cards_preserve_commanders(
+                        owner_user_id=owner_user_id,
+                        commit=False,
+                    )
 
                 stats, per_folder = process_csv(
                     str(p),
@@ -867,11 +883,19 @@ def create_app():
                     dry_run=dry_run,
                     quantity_mode=quantity_mode,
                     commit=False,
+                    owner_user_id=owner_user_id,
                 )
 
                 if preserved:
-                    restore_commander_metadata(preserved, commit=False)
-                    removed = delete_empty_folders(commit=False)
+                    restore_commander_metadata(
+                        preserved,
+                        owner_user_id=owner_user_id,
+                        commit=False,
+                    )
+                    removed = delete_empty_folders(
+                        owner_user_id=owner_user_id,
+                        commit=False,
+                    )
         except HeaderValidationError as exc:
             raise click.ClickException(str(exc)) from exc
 

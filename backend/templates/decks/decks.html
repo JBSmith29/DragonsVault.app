@@ -316,17 +316,28 @@
 <div class="page-section">
   {% set total_decks = total_decks if total_decks is defined else (decks|length if decks is defined else 0) %}
   {% set proxy_total = proxy_total if proxy_total is defined else (proxy_count or 0) %}
-  {% set owned_total = total_decks - proxy_total %}
+  {% set owned_total = owned_total if owned_total is defined else (total_decks - proxy_total) %}
+  {% set friends_total = friends_total if friends_total is defined else 0 %}
+  {% set scope = scope if scope is defined else 'mine' %}
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
       <div>
       <h1 class="h3 mb-1">Decks</h1>
-      <div class="text-muted small d-flex flex-wrap align-items-center gap-3">
+    <div class="text-muted small d-flex flex-wrap align-items-center gap-3">
         <span>Total: <strong>{{ '{:,}'.format(total_decks) }}</strong></span>
         <span>Owned: <strong>{{ '{:,}'.format(owned_total) }}</strong></span>
         <span>Proxy: <strong>{{ '{:,}'.format(proxy_total) }}</strong></span>
+        {% if scope == 'friends' or friends_total %}
+          <span>Friends: <strong>{{ '{:,}'.format(friends_total) }}</strong></span>
+        {% endif %}
       </div>
     </div>
     <div class="d-flex align-items-center gap-2">
+      {% if show_scope_toggle %}
+        <div class="btn-group btn-group-sm" role="group" aria-label="Deck view scope">
+          <a class="btn btn-outline-primary {% if scope == 'mine' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='mine') }}">My Decks</a>
+          <a class="btn btn-outline-primary {% if scope == 'friends' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='friends') }}">Friends</a>
+        </div>
+      {% endif %}
       <a class="btn btn-outline-theme btn-sm" href="{{ url_for('views.deck_tokens_overview') }}">
         All Deck Tokens
       </a>
@@ -377,6 +388,7 @@
   {% endif %}
 
   {% if decks and decks|length %}
+  {% if scope == 'mine' %}
     <div class="d-flex justify-content-start mb-2">
       <button class="btn btn-outline-info btn-sm" type="button" id="deckMetadataWizardBtn">
         Finish Deck Setup
@@ -395,13 +407,13 @@
         {% set bracket_dir = 'asc' if sort!='bracket' or direction=='desc' else 'desc' %}
         <thead>
           <tr>
-           <th><a href="{{ url_for('views.decks_overview', sort='name', dir=name_dir) }}">Deck</a></th>
+           <th><a href="{{ url_for('views.decks_overview', scope=scope, sort='name', dir=name_dir) }}">Deck</a></th>
            <th>Deck Tag</th>
-           <th class="owner-cell"><a href="{{ url_for('views.decks_overview', sort='owner', dir=owner_dir) }}">Owner</a></th>
-            <th><a href="{{ url_for('views.decks_overview', sort='ci', dir=ci_dir) }}">Color Identity</a></th>
-            <th class="col-ci-pips"><a href="{{ url_for('views.decks_overview', sort='pips', dir=pips_dir) }}">Pips</a></th>
-            <th class="text-start"><a href="{{ url_for('views.decks_overview', sort='bracket', dir=bracket_dir) }}">Bracket</a></th>
-            <th class="text-end"><a href="{{ url_for('views.decks_overview', sort='qty', dir=qty_dir) }}">Qty</a></th>
+           <th class="owner-cell"><a href="{{ url_for('views.decks_overview', scope=scope, sort='owner', dir=owner_dir) }}">Owner</a></th>
+            <th><a href="{{ url_for('views.decks_overview', scope=scope, sort='ci', dir=ci_dir) }}">Color Identity</a></th>
+            <th class="col-ci-pips"><a href="{{ url_for('views.decks_overview', scope=scope, sort='pips', dir=pips_dir) }}">Pips</a></th>
+            <th class="text-start"><a href="{{ url_for('views.decks_overview', scope=scope, sort='bracket', dir=bracket_dir) }}">Bracket</a></th>
+            <th class="text-end"><a href="{{ url_for('views.decks_overview', scope=scope, sort='qty', dir=qty_dir) }}">Qty</a></th>
             <th class="text-end">Actions</th>
           </tr>
         </thead>
@@ -557,6 +569,61 @@
         <div class="text-center small text-muted">Select a deck row to preview details.</div>
       </div>
     </div>
+  {% else %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle cards-table">
+        <thead>
+          <tr>
+            <th>Deck</th>
+            <th class="owner-cell">Owner</th>
+            <th>Commander</th>
+            <th>Color Identity</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in decks %}
+            {% set cmd = d.commander %}
+            <tr>
+              <td class="deck-name-cell">
+                <a href="{{ url_for('views.shared_folder_detail', folder_id=d.id) }}">{{ d.name }}</a>
+              </td>
+              <td class="owner-cell text-truncate">
+                {% if d.owner %}
+                  {{ d.owner }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="text-truncate">
+                {% if cmd and cmd.name %}
+                  {{ cmd.name }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="text-nowrap">{{ d.ci_name }}</td>
+              <td class="text-end">{{ '{:,}'.format(d.qty or 0) }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('views.shared_folder_detail', folder_id=d.id) }}">
+                  View
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if pages is defined and pages > 1 %}
+      {% from "shared/components/pagination.html" import render_pagination %}
+      <div class="d-flex justify-content-center mt-3">
+        {% call(p) render_pagination(page=page, pages=pages, classes="pagination pagination-sm flex-wrap") %}
+          {{ page_url_map.get(p) if page_url_map is defined else "#" }}
+        {% endcall %}
+      </div>
+    {% endif %}
+  {% endif %}
   {% else %}
     {# Empty state when no decks exist #}
     <div class="alert alert-secondary">

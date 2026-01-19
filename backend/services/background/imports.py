@@ -39,7 +39,7 @@ def run_csv_import(
     removed = 0
     try:
         if overwrite or quantity_mode in {"absolute", "purge"}:
-            preserved = purge_cards_preserve_commanders()
+            preserved = purge_cards_preserve_commanders(owner_user_id=owner_user_id)
         stats, per_folder = process_csv(
             filepath,
             default_folder="Unsorted",
@@ -51,8 +51,8 @@ def run_csv_import(
             mapping_override=mapping_override,
         )
         if preserved:
-            restore_commander_metadata(preserved)
-            removed = delete_empty_folders()
+            restore_commander_metadata(preserved, owner_user_id=owner_user_id)
+            removed = delete_empty_folders(owner_user_id=owner_user_id)
     except SQLAlchemyError:
         db.session.rollback()
         _LOG.error("CSV import failed due to database error.", exc_info=True)

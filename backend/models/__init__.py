@@ -17,7 +17,19 @@ from .folder import Folder, FolderShare  # type: ignore F401
 from .folder_role import FolderRole  # type: ignore F401
 from .deck_stats import DeckStats  # type: ignore F401
 from .wishlist import WishlistItem  # type: ignore F401
-from .user import User, AuditLog  # type: ignore F401
+from .user import User, AuditLog, UserFollow  # type: ignore F401
+from .friend import UserFriend, UserFriendRequest  # type: ignore F401
+from .game import (  # type: ignore F401
+    GameSession,
+    GameSeat,
+    GamePlayer,
+    GameDeck,
+    GameSeatAssignment,
+    GamePod,
+    GamePodMember,
+    GameRosterPlayer,
+    GameRosterDeck,
+)
 from .site_request import SiteRequest  # type: ignore F401
 from .user_setting import UserSetting  # type: ignore F401
 from .deck_tag import DeckTag, DeckTagMap  # type: ignore F401
@@ -63,6 +75,18 @@ __all__ = [
     "WishlistItem",
     "User",
     "AuditLog",
+    "UserFollow",
+    "UserFriend",
+    "UserFriendRequest",
+    "GameSession",
+    "GameSeat",
+    "GamePlayer",
+    "GameDeck",
+    "GameSeatAssignment",
+    "GamePod",
+    "GamePodMember",
+    "GameRosterPlayer",
+    "GameRosterDeck",
     "SiteRequest",
     "UserSetting",
     "DeckTag",

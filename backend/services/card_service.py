@@ -19,7 +19,7 @@ from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db
-from models import Card, Folder, FolderRole, FolderShare, User, UserSetting
+from models import Card, Folder, FolderRole, FolderShare, User, UserSetting, UserFriend, UserFriendRequest
 from models.role import Role, SubRole, CardRole, OracleCoreRoleTag, OracleEvergreenTag, OracleRole
 from services import scryfall_cache as sc
 from services.proxy_decks import fetch_proxy_deck, resolve_proxy_cards
@@ -363,15 +363,29 @@ def _token_stubs_from_oracle_text(text: str | None) -> list[dict]:
         return []
     lower = text.lower()
     found: list[dict] = []
+    def _lookup_token(label: str) -> dict | None:
+        if not label or label.lower() == "token":
+            return None
+        try:
+            matches = sc.search_tokens(label, limit=6) or []
+        except Exception:
+            return None
+        label_norm = label.strip().casefold()
+        for match in matches:
+            if (match.get("name") or "").strip().casefold() == label_norm:
+                return match
+        return matches[0] if matches else None
+
     if "token" in lower:
         for key, label in _COMMON_TOKEN_KINDS:
             if f"{key} token" in lower:
+                matched = _lookup_token(label)
                 found.append(
                     {
-                        "id": None,
-                        "name": label,
-                        "type_line": f"Token - {label}",
-                        "images": {"small": None, "normal": None, "large": None},
+                        "id": (matched or {}).get("id"),
+                        "name": (matched or {}).get("name") or label,
+                        "type_line": (matched or {}).get("type_line") or f"Token - {label}",
+                        "images": (matched or {}).get("images") or {"small": None, "normal": None, "large": None},
                     }
                 )
     if not found and RE_CREATE_TOKEN.search(text):
@@ -387,11 +401,23 @@ def _token_stubs_from_oracle_text(text: str | None) -> list[dict]:
 
 
 
-def _dashboard_card_stats(user_key: str, collection_ids: tuple[int, ...]) -> dict:
-    """Aggregate collection-wide stats."""
-    cache_key = ("dashboard_stats", user_key, collection_ids)
+def _dashboard_card_stats(
+    user_key: str,
+    folder_ids: tuple[int, ...],
+    collection_ids: tuple[int, ...],
+) -> dict:
+    """Aggregate per-user collection stats."""
+    cache_key = ("dashboard_stats", user_key, folder_ids, collection_ids)
 
     def _load() -> dict:
+        if not folder_ids:
+            return {
+                "rows": 0,
+                "qty": 0,
+                "unique_names": 0,
+                "sets": 0,
+                "collection_qty": 0,
+            }
         totals = (
             db.session.query(
                 func.count(Card.id),
@@ -399,6 +425,7 @@ def _dashboard_card_stats(user_key: str, collection_ids: tuple[int, ...]) -> dic
                 func.count(func.distinct(Card.name)),
                 func.count(func.distinct(func.lower(Card.set_code))),
             )
+            .filter(Card.folder_id.in_(folder_ids))
             .one()
         )
         total_rows, total_qty, unique_names, set_count = totals
@@ -1775,10 +1802,30 @@ def dashboard():
 
     mode = _load_dashboard_mode()
     mode_meta = _DASHBOARD_MODES.get(mode, _DASHBOARD_MODES[_DEFAULT_DASHBOARD_MODE])
-    collection_ids, _collection_names, _collection_lower = _collection_metadata()
+    owner_id = current_user.id if current_user and getattr(current_user, "is_authenticated", False) else None
+
+    folder_ids: list[int] = []
+    collection_ids: list[int] = []
+    if owner_id:
+        folder_ids = [
+            fid
+            for (fid,) in db.session.query(Folder.id)
+            .filter(Folder.owner_user_id == owner_id)
+            .all()
+        ]
+        collection_ids = [
+            fid
+            for (fid,) in db.session.query(Folder.id)
+            .join(FolderRole, FolderRole.folder_id == Folder.id)
+            .filter(
+                FolderRole.role == FolderRole.ROLE_COLLECTION,
+                Folder.owner_user_id == owner_id,
+            )
+            .all()
+        ]
 
     stats_key = str(session.get("_user_id") or "anon")
-    stats = _dashboard_card_stats(stats_key, tuple(sorted(collection_ids)))
+    stats = _dashboard_card_stats(stats_key, tuple(sorted(folder_ids)), tuple(sorted(collection_ids)))
     total_qty = stats["qty"]
     unique_names = stats["unique_names"]
     set_count = stats["sets"]
@@ -1794,6 +1841,8 @@ def dashboard():
         .outerjoin(Card, Card.folder_id == Folder.id)
         .filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
     )
+    if owner_id:
+        deck_query = deck_query.filter(Folder.owner_user_id == owner_id)
     deck_rows = (
         deck_query.group_by(Folder.id, Folder.name)
         .order_by(func.coalesce(func.sum(Card.quantity), 0).desc(), Folder.name.asc())
@@ -2254,6 +2303,11 @@ def list_cards():
 
     scope = (request.args.get("scope") or "").lower()
     collection_flag = (request.args.get("collection") == "1") or (scope == "collection")
+    is_authenticated = bool(current_user and getattr(current_user, "is_authenticated", False))
+    show_friends_arg = (request.args.get("show_friends") or "").strip().lower()
+    show_friends = show_friends_arg in {"1", "true", "yes", "on", "y"}
+    if not is_authenticated:
+        show_friends = False
 
     sort = (request.args.get("sort") or "name").lower()
     direction = (request.args.get("dir") or "asc").lower()
@@ -2280,6 +2334,22 @@ def list_cards():
 
     # Base query
     query = Card.query
+    if is_authenticated:
+        if show_friends:
+            friend_ids = (
+                db.session.query(UserFriend.friend_user_id)
+                .filter(UserFriend.user_id == current_user.id)
+            )
+            query = query.filter(
+                Card.folder.has(
+                    or_(
+                        Folder.owner_user_id == current_user.id,
+                        Folder.owner_user_id.in_(friend_ids),
+                    )
+                )
+            )
+        else:
+            query = query.filter(Card.folder.has(Folder.owner_user_id == current_user.id))
     if role_list:
         query = query.join(Card.roles).filter(Role.label.in_(role_list))
     if subrole_list:
@@ -2422,6 +2492,7 @@ def list_cards():
                 color_mode=color_mode,
                 type_mode=type_mode,
                 collection_flag=collection_flag,
+                show_friends=show_friends,
                 sort=sort,
                 direction=direction,
                 sets=sets,
@@ -2622,7 +2693,14 @@ def list_cards():
             page_cards = (
                 query.options(
                     load_only(*card_columns),
-                    selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
+                    selectinload(Card.folder).load_only(
+                        Folder.id,
+                        Folder.name,
+                        Folder.category,
+                        Folder.is_proxy,
+                        Folder.owner_user_id,
+                        Folder.owner,
+                    ),
                 )
                 .filter(Card.id.in_(page_ids))
                 .all()
@@ -2640,7 +2718,14 @@ def list_cards():
         cards = (
             query.options(
                 load_only(*card_columns),
-                selectinload(Card.folder).load_only(Folder.id, Folder.name, Folder.category, Folder.is_proxy),
+                selectinload(Card.folder).load_only(
+                    Folder.id,
+                    Folder.name,
+                    Folder.category,
+                    Folder.is_proxy,
+                    Folder.owner_user_id,
+                    Folder.owner,
+                ),
             )
             .order_by(order_expr, Card.id.asc())
             .limit(per)
@@ -2706,6 +2791,25 @@ def list_cards():
         price_text_map[c.id] = _format_exact_price(prices, bool(c.is_foil))
         price_value_map[c.id] = _price_value_from_prices(prices, bool(c.is_foil))
 
+    current_user_id = current_user.id if is_authenticated else None
+    owner_label_map: dict[int, str] = {}
+    owner_ids: set[int] = set()
+    for c in cards:
+        folder = getattr(c, "folder", None)
+        owner_id = getattr(folder, "owner_user_id", None)
+        if isinstance(owner_id, int):
+            owner_ids.add(owner_id)
+    if owner_ids:
+        owner_rows = (
+            db.session.query(User.id, User.display_name, User.username, User.email)
+            .filter(User.id.in_(owner_ids))
+            .all()
+        )
+        for uid, display_name, username, email in owner_rows:
+            label = display_name or username or email
+            if label:
+                owner_label_map[uid] = label
+
     def _rarity_badge_class(label: str | None) -> str | None:
         rl = (label or "").strip().lower()
         if rl == "common":
@@ -2742,8 +2846,16 @@ def list_cards():
             color_letters = ["C"]
         rarity_label = (c.rarity or "").capitalize() or None
         folder_ref = None
+        owner_label = None
         if getattr(c, "folder", None):
             folder_ref = FolderRefVM(id=c.folder.id, name=c.folder.name)
+            owner_id = getattr(c.folder, "owner_user_id", None)
+            if owner_id is not None:
+                if current_user_id and owner_id == current_user_id:
+                    owner_label = "You"
+                else:
+                    owner_label = owner_label_map.get(owner_id)
+            owner_label = owner_label or getattr(c.folder, "owner", None)
         cards_vm.append(
             CardListItemVM(
                 id=c.id,
@@ -2768,6 +2880,7 @@ def list_cards():
                 rarity_label=rarity_label,
                 rarity_badge_class=_rarity_badge_class(rarity_label),
                 price_text=price_text_map.get(c.id),
+                owner_label=owner_label,
             )
         )
 
@@ -2814,6 +2927,7 @@ def list_cards():
         color_mode=color_mode,
         type_mode=type_mode,
         collection_flag=collection_flag,
+        show_friends=show_friends,
         sort=sort,
         direction=direction,
         sets=sets,
@@ -2829,6 +2943,118 @@ def list_cards():
 
 
 def shared_folders():
+    category_labels = {
+        Folder.CATEGORY_DECK: "Deck",
+        Folder.CATEGORY_COLLECTION: "Collection",
+    }
+    friend_rows = (
+        UserFriend.query.options(selectinload(UserFriend.friend))
+        .join(User, User.id == UserFriend.friend_user_id)
+        .filter(UserFriend.user_id == current_user.id)
+        .order_by(func.lower(User.username))
+        .all()
+    )
+    friends = []
+    friend_ids: list[int] = []
+    for friendship in friend_rows:
+        user = friendship.friend
+        if not user:
+            continue
+        label = user.display_name or user.username or user.email
+        friends.append(
+            {
+                "user_id": user.id,
+                "label": label,
+                "email": user.email,
+            }
+        )
+        friend_ids.append(user.id)
+
+    incoming_rows = (
+        UserFriendRequest.query.options(selectinload(UserFriendRequest.requester))
+        .join(User, User.id == UserFriendRequest.requester_user_id)
+        .filter(UserFriendRequest.recipient_user_id == current_user.id)
+        .order_by(UserFriendRequest.created_at.desc())
+        .all()
+    )
+    incoming_requests = []
+    for req in incoming_rows:
+        user = req.requester
+        if not user:
+            continue
+        label = user.display_name or user.username or user.email
+        incoming_requests.append(
+            {
+                "id": req.id,
+                "user_id": user.id,
+                "label": label,
+                "email": user.email,
+            }
+        )
+
+    outgoing_rows = (
+        UserFriendRequest.query.options(selectinload(UserFriendRequest.recipient))
+        .join(User, User.id == UserFriendRequest.recipient_user_id)
+        .filter(UserFriendRequest.requester_user_id == current_user.id)
+        .order_by(UserFriendRequest.created_at.desc())
+        .all()
+    )
+    outgoing_requests = []
+    for req in outgoing_rows:
+        user = req.recipient
+        if not user:
+            continue
+        label = user.display_name or user.username or user.email
+        outgoing_requests.append(
+            {
+                "id": req.id,
+                "user_id": user.id,
+                "label": label,
+                "email": user.email,
+            }
+        )
+
+    friend_entries: list[SharedFolderEntryVM] = []
+    friend_folder_ids: set[int] = set()
+    if friend_ids:
+        friend_folders = (
+            Folder.query.options(selectinload(Folder.owner_user))
+            .filter(Folder.owner_user_id.in_(friend_ids))
+            .order_by(func.lower(Folder.name))
+            .all()
+        )
+        for folder in friend_folders:
+            owner_label = None
+            if folder.owner_user:
+                owner_label = folder.owner_user.username or folder.owner_user.email
+            owner_label = owner_label or folder.owner
+            folder_vm = FolderVM(
+                id=folder.id,
+                name=folder.name,
+                category=folder.category,
+                category_label=category_labels.get(folder.category or Folder.CATEGORY_DECK, "Deck"),
+                owner=folder.owner,
+                owner_label=owner_label,
+                owner_user_id=folder.owner_user_id,
+                is_collection=bool(folder.is_collection),
+                is_deck=bool(folder.is_deck),
+                is_proxy=bool(getattr(folder, "is_proxy", False)),
+                is_public=bool(getattr(folder, "is_public", False)),
+                deck_tag=folder.deck_tag,
+                deck_tag_label=folder.deck_tag,
+                commander_name=folder.commander_name,
+                commander_oracle_id=folder.commander_oracle_id,
+                commander_slot_count=len(folder.commander_name.split("//")) if folder.commander_name else 0,
+            )
+            friend_entries.append(
+                SharedFolderEntryVM(
+                    folder=folder_vm,
+                    owner_label=owner_label or "Unknown",
+                )
+            )
+            if folder.id is not None:
+                friend_folder_ids.add(folder.id)
+
     shared_rows = (
         FolderShare.query.options(
             selectinload(FolderShare.folder).selectinload(Folder.owner_user),
@@ -2839,12 +3065,10 @@ def shared_folders():
         .all()
     )
     shared_with_me = []
-    category_labels = {
-        Folder.CATEGORY_DECK: "Deck",
-        Folder.CATEGORY_COLLECTION: "Collection",
-    }
     for share in shared_rows:
         folder = share.folder
+        if folder and folder.id in friend_folder_ids:
+            continue
         owner_label = None
         if folder.owner_user:
             owner_label = folder.owner_user.username or folder.owner_user.email
@@ -2908,15 +3132,164 @@ def shared_folders():
         )
         if folder.owner_user_id == current_user.id:
             my_public.append(folder_vm)
-        elif folder.id not in shared_ids:
+        elif folder.id not in shared_ids and folder.id not in friend_folder_ids:
             other_public.append(folder_vm)
 
     return render_template(
         "cards/shared_folders.html",
         shared_with_me=shared_with_me,
+        friend_folders=friend_entries,
+        friends=friends,
+        incoming_requests=incoming_requests,
+        outgoing_requests=outgoing_requests,
         my_public_folders=my_public,
         other_public_folders=other_public,
     )
+
+
+def shared_follow():
+    action = (request.form.get("action") or "").strip().lower()
+    def _ensure_friendship(user_id: int, friend_id: int) -> None:
+        if not UserFriend.query.filter_by(user_id=user_id, friend_user_id=friend_id).first():
+            db.session.add(UserFriend(user_id=user_id, friend_user_id=friend_id))
+        if not UserFriend.query.filter_by(user_id=friend_id, friend_user_id=user_id).first():
+            db.session.add(UserFriend(user_id=friend_id, friend_user_id=user_id))
+
+    if action == "request":
+        identifier = (request.form.get("friend_identifier") or "").strip().lower()
+        if not identifier:
+            flash("Enter a username or email to send a request.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        target = (
+            User.query.filter(func.lower(User.username) == identifier).first()
+            or User.query.filter(func.lower(User.email) == identifier).first()
+        )
+        if not target:
+            flash("No user found with that username or email.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        if target.id == current_user.id:
+            flash("You cannot friend yourself.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        if UserFriend.query.filter_by(user_id=current_user.id, friend_user_id=target.id).first():
+            flash("You are already friends.", "info")
+            return redirect(url_for("views.shared_folders"))
+
+        incoming = UserFriendRequest.query.filter_by(
+            requester_user_id=target.id,
+            recipient_user_id=current_user.id,
+        ).first()
+        if incoming:
+            _ensure_friendship(target.id, current_user.id)
+            db.session.delete(incoming)
+            try:
+                db.session.commit()
+                flash(f"Friend request accepted for {target.username or target.email}.", "success")
+            except IntegrityError:
+                db.session.rollback()
+                flash("Unable to accept the friend request right now.", "danger")
+            return redirect(url_for("views.shared_folders"))
+
+        existing = UserFriendRequest.query.filter_by(
+            requester_user_id=current_user.id,
+            recipient_user_id=target.id,
+        ).first()
+        if existing:
+            flash("Friend request already sent.", "info")
+            return redirect(url_for("views.shared_folders"))
+
+        db.session.add(UserFriendRequest(requester_user_id=current_user.id, recipient_user_id=target.id))
+        try:
+            db.session.commit()
+            flash(f"Friend request sent to {target.username or target.email}.", "success")
+        except IntegrityError:
+            db.session.rollback()
+            flash("Unable to send that request right now.", "danger")
+        return redirect(url_for("views.shared_folders"))
+
+    if action == "accept":
+        request_id_raw = request.form.get("request_id")
+        try:
+            request_id = parse_positive_int(request_id_raw, field="request id")
+        except ValidationError as exc:
+            log_validation_error(exc, context="shared_friend_accept")
+            flash("Invalid request selection.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        req = UserFriendRequest.query.filter_by(
+            id=request_id,
+            recipient_user_id=current_user.id,
+        ).first()
+        if not req:
+            flash("Friend request not found.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        _ensure_friendship(req.requester_user_id, req.recipient_user_id)
+        db.session.delete(req)
+        try:
+            db.session.commit()
+            flash("Friend request accepted.", "success")
+        except IntegrityError:
+            db.session.rollback()
+            flash("Unable to accept that request right now.", "danger")
+        return redirect(url_for("views.shared_folders"))
+
+    if action == "reject":
+        request_id_raw = request.form.get("request_id")
+        try:
+            request_id = parse_positive_int(request_id_raw, field="request id")
+        except ValidationError as exc:
+            log_validation_error(exc, context="shared_friend_reject")
+            flash("Invalid request selection.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        req = UserFriendRequest.query.filter_by(
+            id=request_id,
+            recipient_user_id=current_user.id,
+        ).first()
+        if req:
+            db.session.delete(req)
+            db.session.commit()
+            flash("Friend request declined.", "info")
+        return redirect(url_for("views.shared_folders"))
+
+    if action == "cancel":
+        request_id_raw = request.form.get("request_id")
+        try:
+            request_id = parse_positive_int(request_id_raw, field="request id")
+        except ValidationError as exc:
+            log_validation_error(exc, context="shared_friend_cancel")
+            flash("Invalid request selection.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        req = UserFriendRequest.query.filter_by(
+            id=request_id,
+            requester_user_id=current_user.id,
+        ).first()
+        if req:
+            db.session.delete(req)
+            db.session.commit()
+            flash("Friend request canceled.", "info")
+        return redirect(url_for("views.shared_folders"))
+
+    if action == "remove":
+        friend_id_raw = request.form.get("friend_user_id")
+        try:
+            friend_id = parse_positive_int(friend_id_raw, field="friend id")
+        except ValidationError as exc:
+            log_validation_error(exc, context="shared_friend_remove")
+            flash("Invalid friend selection.", "warning")
+            return redirect(url_for("views.shared_folders"))
+        friendships = UserFriend.query.filter(
+            or_(
+                and_(UserFriend.user_id == current_user.id, UserFriend.friend_user_id == friend_id),
+                and_(UserFriend.user_id == friend_id, UserFriend.friend_user_id == current_user.id),
+            )
+        ).all()
+        if friendships:
+            for friendship in friendships:
+                db.session.delete(friendship)
+            db.session.commit()
+            flash("Friend removed.", "info")
+        return redirect(url_for("views.shared_folders"))
+
+    flash("Unknown friend action.", "warning")
+    return redirect(url_for("views.shared_folders"))
 
 
 def bulk_move_cards():
@@ -3577,6 +3950,12 @@ def decks_overview():
     sort = (request.args.get("sort") or "").strip().lower()
     direction = (request.args.get("dir") or "").strip().lower() or "desc"
     reverse = direction == "desc"
+    is_authenticated = bool(current_user and getattr(current_user, "is_authenticated", False))
+    scope = (request.args.get("scope") or ("mine" if is_authenticated else "all")).strip().lower()
+    if is_authenticated and scope not in {"mine", "friends"}:
+        scope = "mine"
+    if not is_authenticated:
+        scope = "all"
 
     allowed_per_page = (25, 50, 100)
     try:
@@ -3590,7 +3969,20 @@ def decks_overview():
     except Exception:
         page = 1
 
-    base_filter = Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
+    role_filter = Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
+    scope_filter = None
+    if is_authenticated:
+        if scope == "friends":
+            friend_ids = (
+                db.session.query(UserFriend.friend_user_id)
+                .filter(UserFriend.user_id == current_user.id)
+            )
+            scope_filter = Folder.owner_user_id.in_(friend_ids)
+        else:
+            scope_filter = Folder.owner_user_id == current_user.id
+    scoped_filters = [role_filter]
+    if scope_filter is not None:
+        scoped_filters.append(scope_filter)
     user_key = _user_cache_key()
 
     def _summary_payload():
@@ -3598,21 +3990,29 @@ def decks_overview():
             db.session.query(
                 Folder.id.label("folder_id"),
                 Folder.owner.label("owner"),
+                Folder.owner_user_id.label("owner_user_id"),
                 Folder.is_proxy.label("is_proxy"),
                 func.coalesce(func.sum(Card.quantity), 0).label("qty_sum"),
             )
             .outerjoin(Card, Card.folder_id == Folder.id)
-            .filter(base_filter)
-            .group_by(Folder.id, Folder.owner, Folder.is_proxy)
+            .filter(*scoped_filters)
+            .group_by(Folder.id, Folder.owner, Folder.owner_user_id, Folder.is_proxy)
             .subquery()
         )
         total_decks = db.session.query(func.count(base_counts.c.folder_id)).scalar() or 0
-        proxy_total = (
-            db.session.query(func.count(base_counts.c.folder_id))
-            .filter(base_counts.c.is_proxy.is_(True))
-            .scalar()
-            or 0
-        )
+        if is_authenticated and scope == "friends":
+            proxy_total = 0
+            owned_total = 0
+            friends_total = total_decks
+        else:
+            proxy_total = (
+                db.session.query(func.count(base_counts.c.folder_id))
+                .filter(base_counts.c.is_proxy.is_(True))
+                .scalar()
+                or 0
+            )
+            owned_total = total_decks - proxy_total
+            friends_total = 0
         owner_rows = db.session.query(base_counts.c.owner).group_by(base_counts.c.owner).all()
         owner_names = sorted(
             {
@@ -3621,16 +4021,18 @@ def decks_overview():
                 if isinstance(owner, str) and owner.strip()
             }
         )
-        return total_decks, proxy_total, owner_names
+        return total_decks, proxy_total, owned_total, friends_total, owner_names
 
-    summary_cache_key = f"deck_summary:{user_key}"
-    total_decks, proxy_total, owner_names = _cache_fetch(
+    summary_cache_key = f"deck_summary:{user_key}:{scope}"
+    total_decks, proxy_total, owned_total, friends_total, owner_names = _cache_fetch(
         summary_cache_key,
         120,
         _summary_payload,
     )
     total_decks = int(total_decks or 0)
     proxy_total = int(proxy_total or 0)
+    owned_total = int(owned_total or 0)
+    friends_total = int(friends_total or 0)
 
     pages = max(1, ceil(total_decks / per)) if per else 1
     page = min(page, pages)
@@ -3648,7 +4050,7 @@ def decks_overview():
             Folder.is_proxy,
         )
         .outerjoin(Card, Card.folder_id == Folder.id)
-        .filter(base_filter)
+        .filter(*scoped_filters)
     )
     grouped = deck_query.group_by(
         Folder.id,
@@ -4022,7 +4424,7 @@ def decks_overview():
     deck_tag_groups = get_deck_tag_groups()
 
     def _wizard_payload():
-        wizard_folders = (
+        wizard_query = (
             Folder.query.options(
                 load_only(
                     Folder.id,
@@ -4033,9 +4435,11 @@ def decks_overview():
                 ),
                 selectinload(Folder.role_entries),
             )
-            .filter(base_filter)
-            .all()
+            .filter(role_filter)
         )
+        if current_user and getattr(current_user, "is_authenticated", False):
+            wizard_query = wizard_query.filter(Folder.owner_user_id == current_user.id)
+        wizard_folders = wizard_query.all()
         return build_deck_metadata_wizard_payload(wizard_folders, tag_groups=deck_tag_groups)
 
     wizard_payload = _cache_fetch(f"deck_wizard:{user_key}", 120, _wizard_payload)
@@ -4057,7 +4461,11 @@ def decks_overview():
         owner_names=owner_names,
         proxy_count=sum(1 for deck in decks if deck.get("is_proxy")),
         proxy_total=proxy_total,
+        owned_total=owned_total,
+        friends_total=friends_total,
         total_decks=total_decks,
+        scope=scope,
+        show_scope_toggle=is_authenticated,
         page=page,
         pages=pages,
         per_page=per,
@@ -4359,6 +4767,35 @@ def deck_tokens_overview():
     """
     Aggregate all tokens produced by cards across every deck folder.
     """
+    def _normalize_token_name(name: str | None) -> str:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            return "token"
+        lowered = cleaned.lower()
+        if lowered.endswith(" token"):
+            lowered = lowered[:-6].strip()
+        return lowered or "token"
+
+    def _token_pt_key(token: dict) -> str | None:
+        power = token.get("power")
+        toughness = token.get("toughness")
+        if power is None or toughness is None:
+            return None
+        power_text = str(power).strip()
+        toughness_text = str(toughness).strip()
+        if not power_text or not toughness_text:
+            return None
+        return f"{power_text}/{toughness_text}"
+
+    def _tokens_are_generic(tokens: list[dict]) -> bool:
+        if not tokens:
+            return True
+        for token in tokens:
+            name = (token.get("name") or "").strip().lower()
+            if token.get("id") or (name and name != "token"):
+                return False
+        return True
+
     deck_rows = (
         Folder.query.filter(Folder.role_entries.any(FolderRole.role == FolderRole.ROLE_DECK))
         .order_by(Folder.name.asc())
@@ -4366,6 +4803,32 @@ def deck_tokens_overview():
     )
 
     deck_map = {deck.id: deck for deck in deck_rows}
+    owner_ids = {deck.owner_user_id for deck in deck_rows if deck.owner_user_id}
+    owner_label_map: dict[int, str] = {}
+    if owner_ids:
+        owner_rows = (
+            db.session.query(User.id, User.display_name, User.username, User.email)
+            .filter(User.id.in_(owner_ids))
+            .all()
+        )
+        for user_id, display_name, username, email in owner_rows:
+            label = display_name or username or email
+            if label:
+                owner_label_map[user_id] = label
+    owner_options_map: dict[str, str] = {}
+    deck_owner_key_map: dict[int, str] = {}
+    deck_owner_label_map: dict[int, str] = {}
+    for deck in deck_rows:
+        owner_id = deck.owner_user_id
+        if owner_id:
+            label = owner_label_map.get(owner_id) or deck.owner or f"User {owner_id}"
+            key = str(owner_id)
+        else:
+            label = (deck.owner or "").strip() or "Unknown"
+            key = "unknown"
+        owner_options_map.setdefault(key, label)
+        deck_owner_key_map[deck.id] = key
+        deck_owner_label_map[deck.id] = label
     deck_ids = list(deck_map.keys())
     deck_count = len(deck_ids)
 
@@ -4380,6 +4843,7 @@ def deck_tokens_overview():
             total_sources=0,
             total_qty=0,
             cache_epoch=cache_epoch(),
+            owner_options=[],
         )
 
     have_cache = _ensure_cache_ready()
@@ -4402,6 +4866,7 @@ def deck_tokens_overview():
     print_cache_by_oracle = {}
     print_cache_by_setcn = {}
     image_cache = {}
+    token_cache_by_oracle: dict[str, list[dict]] = {}
 
     tokens_by_key: Dict[str, dict] = {}
     deck_token_sets: defaultdict[int, set] = defaultdict(set)
@@ -4414,7 +4879,20 @@ def deck_tokens_overview():
         if not deck:
             continue
         text = oracle_text or _oracle_text_from_faces(faces_json)
-        tokens = _token_stubs_from_oracle_text(text)
+        tokens: list[dict] = []
+        if oracle_id:
+            cached = token_cache_by_oracle.get(oracle_id)
+            if cached is None:
+                try:
+                    cached = sc.tokens_from_oracle(oracle_id) or []
+                except Exception:
+                    cached = []
+                token_cache_by_oracle[oracle_id] = cached
+            tokens = cached
+        if _tokens_are_generic(tokens):
+            tokens = []
+        if not tokens:
+            tokens = _token_stubs_from_oracle_text(text)
         if not tokens:
             continue
 
@@ -4460,7 +4938,15 @@ def deck_tokens_overview():
             token_name = (token.get("name") or "Token").strip()
             token_type = (token.get("type_line") or "").strip()
             token_id = token.get("id")
-            token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+            is_creature_token = "creature" in token_type.lower()
+            if is_creature_token:
+                pt_key = _token_pt_key(token)
+                if pt_key:
+                    token_key = f"creature:{_normalize_token_name(token_name)}:{pt_key}"
+                else:
+                    token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+            else:
+                token_key = f"noncreature:{_normalize_token_name(token_name)}"
             imgs = token.get("images") or {}
 
             entry = tokens_by_key.setdefault(
@@ -4468,7 +4954,7 @@ def deck_tokens_overview():
                 {
                     "id": token_id,
                     "name": token_name,
-                    "type_line": token_type,
+                    "type_line": token_type or "Token",
                     "small": imgs.get("small"),
                     "normal": imgs.get("normal"),
                     "sources": [],
@@ -4476,6 +4962,17 @@ def deck_tokens_overview():
                     "total_qty": 0,
                 },
             )
+            if entry.get("id") is None and token_id:
+                entry["id"] = token_id
+            if not entry.get("small") and imgs.get("small"):
+                entry["small"] = imgs.get("small")
+            if not entry.get("normal") and imgs.get("normal"):
+                entry["normal"] = imgs.get("normal")
+            if (entry.get("name") or "").lower() == "token" and token_name.lower() != "token":
+                entry["name"] = token_name
+            if not entry.get("type_line") or entry.get("type_line") == "Token":
+                if token_type:
+                    entry["type_line"] = token_type
 
             source_entry = {
                 "card_id": cid,
@@ -4519,6 +5016,16 @@ def deck_tokens_overview():
         entry["sources"].sort(key=lambda src: ((src["deck_name"] or "").lower(), (src["name"] or "").lower()))
         entry["total_sources"] = len(entry["sources"])
         entry["image"] = entry.get("small") or entry.get("normal")
+        owner_keys = {
+            deck_owner_key_map.get(deck_info.get("deck_id") or 0, "unknown")
+            for deck_info in deck_groups
+        }
+        owner_labels = {
+            deck_owner_label_map.get(deck_info.get("deck_id") or 0, "Unknown")
+            for deck_info in deck_groups
+        }
+        entry["owner_ids_csv"] = ",".join(sorted(owner_keys))
+        entry["owner_labels"] = sorted(owner_labels, key=lambda label: label.lower())
         tokens_raw.append(entry)
 
     tokens_raw.sort(key=lambda tok: (tok["name"] or "").lower())
@@ -4531,7 +5038,11 @@ def deck_tokens_overview():
             for deck in entry.get("decks") or []
             if deck.get("deck_name")
         ]
-        search_key = f"{entry.get('name') or ''} {entry.get('type_line') or ''} {' '.join(deck_names)}".lower().strip()
+        owner_labels = entry.get("owner_labels") or []
+        search_key = (
+            f"{entry.get('name') or ''} {entry.get('type_line') or ''} "
+            f"{' '.join(deck_names)} {' '.join(owner_labels)}"
+        ).lower().strip()
         deck_vms = []
         for deck in entry.get("decks") or []:
             sources_vm = [
@@ -4563,6 +5074,7 @@ def deck_tokens_overview():
                 decks=deck_vms,
                 search_key=search_key,
                 deck_ids_csv=",".join(str(did) for did in deck_ids),
+                owner_ids_csv=entry.get("owner_ids_csv") or "",
             )
         )
 
@@ -4580,6 +5092,11 @@ def deck_tokens_overview():
     deck_summary_vms.sort(key=lambda item: (-item.token_count, (item.name or "").lower()))
 
     deck_with_tokens = sum(1 for summary in deck_summary_vms if summary.token_count)
+    owner_options = [
+        {"id": owner_id, "label": owner_options_map[owner_id]}
+        for owner_id in owner_options_map
+    ]
+    owner_options.sort(key=lambda item: (item["label"] or "").lower())
 
     return render_template(
         "decks/deck_tokens.html",
@@ -4591,6 +5108,7 @@ def deck_tokens_overview():
         total_sources=total_sources,
         total_qty=total_qty,
         cache_epoch=cache_epoch(),
+        owner_options=owner_options,
     )
 
 
@@ -5466,4 +5984,6 @@ __all__ = [
     "opening_hand_token_search",
     "decks_overview",
     "list_cards",
+    "shared_folders",
+    "shared_follow",
 ]

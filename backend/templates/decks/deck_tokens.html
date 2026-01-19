@@ -234,6 +234,35 @@
             </div>
           </div>
         {% endif %}
+        {% if owner_options %}
+          <div class="d-flex align-items-center gap-2">
+            <span class="small text-nowrap mb-0">Filter by owner</span>
+            <div class="dropdown dv-select dv-select-sm" data-dv-select="token-owner-filter" data-token-owner-filter>
+              <input type="hidden" data-dv-select-input value="">
+              <button
+                class="btn dv-select-toggle btn-sm d-inline-flex align-items-center gap-2"
+                type="button"
+                id="ownerFilterToggle"
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+                <span data-dv-select-label>All owners</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu dropdown-menu-end" aria-labelledby="ownerFilterToggle">
+                <li>
+                  <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="All owners">All owners</button>
+                </li>
+                {% for owner in owner_options %}
+                  <li>
+                    <button class="dropdown-item" type="button" data-dv-select-option data-value="{{ owner.id }}" data-label="{{ owner.label }}">
+                      {{ owner.label }}
+                    </button>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        {% endif %}
       </div>
       <div class="text-muted small">
         Showing <span id="tokenVisibleCount">{{ token_count|default(0) }}</span> of {{ token_count|default(0) }} tokens.
@@ -268,7 +297,8 @@
         {% for token in tokens %}
           <article class="deck-token-card"
                    data-search="{{ token.search_key }}"
-                   data-decks="{{ token.deck_ids_csv }}">
+                   data-decks="{{ token.deck_ids_csv }}"
+                   data-owners="{{ token.owner_ids_csv }}">
             <div class="deck-token-card-header">
               <div class="deck-token-thumb">
                 {% if token.image %}
@@ -331,7 +361,10 @@
   const visibleCount = document.getElementById('tokenVisibleCount');
   const deckFilter = document.querySelector('[data-token-deck-filter]');
   const deckFilterInput = deckFilter ? deckFilter.querySelector('[data-dv-select-input]') : null;
+  const ownerFilter = document.querySelector('[data-token-owner-filter]');
+  const ownerFilterInput = ownerFilter ? ownerFilter.querySelector('[data-dv-select-input]') : null;
   let selectedDeck = '';
+  let selectedOwner = '';
 
   if (!cards.length) {
     return;
@@ -346,9 +379,14 @@
         .split(',')
         .map((id) => id.trim())
         .filter(Boolean);
+      const owners = (card.dataset.owners || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
       const matchesText = !q || haystack.includes(q);
       const matchesDeck = !selectedDeck || decks.includes(selectedDeck);
-      const match = matchesText && matchesDeck;
+      const matchesOwner = !selectedOwner || owners.includes(selectedOwner);
+      const match = matchesText && matchesDeck && matchesOwner;
       card.classList.toggle('d-none', !match);
       if (match) {
         visible += 1;
@@ -369,6 +407,13 @@
     });
     selectedDeck = (deckFilterInput?.value || '').trim();
   }
+  if (ownerFilter) {
+    ownerFilter.addEventListener('dv-select:change', (event) => {
+      selectedOwner = (event.detail?.value ?? ownerFilterInput?.value ?? '').trim();
+      applyFilter();
+    });
+    selectedOwner = (ownerFilterInput?.value || '').trim();
+  }
   applyFilter();
   if (clearBtn && searchInput) {
     clearBtn.addEventListener('click', () => {
@@ -382,7 +427,16 @@
           deckFilterInput.value = '';
         }
       }
+      if (ownerFilter) {
+        const resetOption = ownerFilter.querySelector('[data-dv-select-option][data-value=""]');
+        if (resetOption) {
+          resetOption.click();
+        } else if (ownerFilterInput) {
+          ownerFilterInput.value = '';
+        }
+      }
       selectedDeck = '';
+      selectedOwner = '';
       applyFilter();
     });
   }

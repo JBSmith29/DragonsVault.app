@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+{% set is_edit = is_edit|default(false) %}
+{% set page_title = "Edit Commander Game" if is_edit else "Log Commander Game" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block content %}
+<style>
+  .seat-card { border: 1px solid var(--bs-border-color); border-radius: 0.8rem; padding: 1rem; background: rgba(255,255,255,0.02); }
+  .seat-card[data-hidden="true"] { display: none; }
+  .seat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  .seat-header .badge { font-size: 0.75rem; }
+  .inline-note { font-size: 0.8rem; color: var(--bs-secondary-color); }
+  .seat-field { display: flex; flex-direction: column; gap: 0.35rem; }
+  .seat-manual-deck-field { display: none; }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">{{ page_title }}</h1>
+      <p class="text-muted mb-0">Capture players, decks, turn order, and outcomes for analytics later.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_landing') }}">Back to Games</a>
+  </div>
+
+  <form method="post" action="{{ url_for('views.games_edit', game_id=game_id) if is_edit else url_for('views.games_new') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12 col-md-3">
+            <label class="form-label">Player count</label>
+            <div class="dropdown dv-select w-100" data-dv-select="seat-count">
+              <input type="hidden" id="seatCount" name="seat_count" data-dv-select-input value="{{ form_data.seat_count }}">
+              <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <span data-dv-select-label>{{ form_data.seat_count }} players</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100">
+                <li class="dv-select-search-wrapper">
+                  <input type="text"
+                         class="form-control form-control-sm dv-select-search"
+                         placeholder="Search player count"
+                         autocomplete="off"
+                         data-dv-select-search>
+                </li>
+                {% for n in [2, 3, 4] %}
+                  <li>
+                    <button class="dropdown-item{% if form_data.seat_count == n %} active{% endif %}" type="button" data-dv-select-option data-value="{{ n }}" data-label="{{ n }} players">{{ n }} players</button>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label">Pod</label>
+            <div class="dropdown dv-select w-100" data-dv-select="pod">
+              <input type="hidden" id="podId" name="pod_id" data-dv-select-input value="{{ form_data.pod_id or '' }}">
+              {% set pod_label = namespace(label='All players') %}
+              {% if form_data.pod_id %}
+                {% for pod in pods %}
+                  {% if pod.id == form_data.pod_id %}
+                    {% set pod_label.label = pod.name %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+              <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <span data-dv-select-label>{{ pod_label.label }}</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100">
+                <li class="dv-select-search-wrapper">
+                  <input type="text"
+                         class="form-control form-control-sm dv-select-search"
+                         placeholder="Search pods"
+                         autocomplete="off"
+                         data-dv-select-search>
+                </li>
+                <li>
+                  <button class="dropdown-item{% if not form_data.pod_id %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="All players">All players</button>
+                </li>
+                {% for pod in pods %}
+                  <li>
+                    <button class="dropdown-item{% if form_data.pod_id and form_data.pod_id|int == pod.id %} active{% endif %}" type="button" data-dv-select-option data-value="{{ pod.id }}" data-label="{{ pod.name }}">{{ pod.name }}</button>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="playedAt">Played on</label>
+            <input class="form-control" type="date" id="playedAt" name="played_at" value="{{ form_data.played_at }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="notes">Notes</label>
+            <input class="form-control" type="text" id="notes" name="notes" placeholder="Pod highlights, key plays..." value="{{ form_data.notes }}">
+          </div>
+        </div>
+        <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="comboWin" name="win_via_combo" {% if form_data.win_via_combo %}checked{% endif %}>
+            <label class="form-check-label" for="comboWin">Win via infinite combo</label>
+          </div>
+          <span class="inline-note">Select the winning seat below (optional).</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3" id="seatGrid">
+      {% for seat_number in [1,2,3,4] %}
+        {% set seat = form_data.seats.get(seat_number, {}) %}
+        {% set seat_type = seat.player_type or 'roster' %}
+        <div class="col-12 col-lg-6">
+          <div class="seat-card" data-seat="{{ seat_number }}">
+            <div class="seat-header">
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge text-bg-secondary">Seat {{ seat_number }}</span>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="winner_seat" id="winnerSeat{{ seat_number }}" value="{{ seat_number }}"
+                         {% if form_data.winner_seat == seat_number %}checked{% endif %}>
+                  <label class="form-check-label" for="winnerSeat{{ seat_number }}">Winner</label>
+                </div>
+              </div>
+              <div class="text-muted small">Turn order: Seat {{ seat_number }}</div>
+            </div>
+            <input type="hidden" name="seat_{{ seat_number }}_turn_order" value="{{ seat_number }}">
+            <div class="row g-2">
+              <div class="col-12 col-md-4 seat-field">
+                <label class="form-label">Player type</label>
+                <div class="dropdown dv-select w-100" data-dv-select="player-type" data-seat="{{ seat_number }}">
+                  <input type="hidden" name="seat_{{ seat_number }}_player_type" data-dv-select-input value="{{ seat_type }}">
+                  <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-dv-select-label>{{ 'Pod' if seat_type == 'roster' else 'Guest' }}</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu w-100">
+                    <li class="dv-select-search-wrapper">
+                      <input type="text"
+                             class="form-control form-control-sm dv-select-search"
+                             placeholder="Search player type"
+                             autocomplete="off"
+                             data-dv-select-search>
+                    </li>
+                    <li><button class="dropdown-item{% if seat_type == 'roster' %} active{% endif %}" type="button" data-dv-select-option data-value="roster" data-label="Pod">Pod</button></li>
+                    <li><button class="dropdown-item{% if seat_type != 'roster' %} active{% endif %}" type="button" data-dv-select-option data-value="guest" data-label="Guest">Guest</button></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-8 seat-field">
+                <label class="form-label">Pod player</label>
+                <div class="dropdown dv-select w-100 seat-roster-select" data-seat="{{ seat_number }}">
+                  <input type="hidden" name="seat_{{ seat_number }}_roster_id" data-dv-select-input value="{{ seat.roster_id or '' }}">
+                  <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-dv-select-label>Select a player</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu w-100">
+                    <li><button class="dropdown-item{% if not seat.roster_id %} active{% endif %}" type="button" data-dv-select-option data-value="" data-label="Select a player">Select a player</button></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="col-12 col-md-8 seat-field seat-guest-field">
+                <label class="form-label" for="seat{{ seat_number }}Guest">Guest name</label>
+                <input class="form-control seat-guest-input" type="text" id="seat{{ seat_number }}Guest"
+                       name="seat_{{ seat_number }}_guest_name" value="{{ seat.guest_name or '' }}"
+                       placeholder="Guest display name">
+              </div>
+
+              <div class="col-12 col-md-8 seat-field">
+                <label class="form-label">Deck</label>
+                <div class="dropdown dv-select w-100 seat-deck-select" data-seat="{{ seat_number }}">
+                  <input type="hidden" name="seat_{{ seat_number }}_deck_ref" data-game-select-input value="{{ seat.deck_ref or '' }}">
+                  <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-game-select-label>Select a deck</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu w-100">
+                    <li><button class="dropdown-item active" type="button" data-game-select-option data-value="" data-label="Select a deck">Select a deck</button></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="col-12 seat-field seat-manual-deck-field">
+                <label class="form-label" for="seat{{ seat_number }}ManualDeck">Manual deck name</label>
+                <input class="form-control seat-manual-input" type="text" id="seat{{ seat_number }}ManualDeck"
+                       name="seat_{{ seat_number }}_manual_deck_name" value="{{ seat.manual_deck_name or '' }}"
+                       placeholder="Enter a deck name">
+                <div class="inline-note">Use this when the deck is not listed.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <a class="btn btn-outline-secondary" href="{{ url_for('views.games_landing') }}">Cancel</a>
+      <button class="btn btn-primary" type="submit">{{ 'Save Changes' if is_edit else 'Save Game' }}</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    const seatCountEl = document.getElementById('seatCount');
+    const podInput = document.getElementById('podId');
+    const seatCards = Array.from(document.querySelectorAll('.seat-card'));
+    const rosterPlayers = {{ roster_players | tojson }};
+    const podMemberMap = {{ pod_member_map | tojson }};
+    const rosterDeckMap = {{ roster_deck_map | tojson }};
+    const guestDeckOptions = {{ guest_deck_options | tojson }};
+
+    const updateSeatVisibility = () => {
+      const seatCount = parseInt(seatCountEl.value || '4', 10);
+      seatCards.forEach((card) => {
+        const seatNumber = parseInt(card.dataset.seat || '0', 10);
+        card.dataset.hidden = seatNumber > seatCount ? 'true' : 'false';
+      });
+    };
+
+    seatCountEl?.addEventListener('change', updateSeatVisibility);
+    updateSeatVisibility();
+
+    const getRosterOptions = () => {
+      const podId = podInput?.value || '';
+      const allowedIds = podId ? new Set(podMemberMap[podId] || []) : null;
+      return rosterPlayers.filter((player) => !allowedIds || allowedIds.has(player.id));
+    };
+
+    const bindSearch = (wrapper, menu, optionSelector, placeholder) => {
+      if (!menu) return;
+      const searchItem = document.createElement('li');
+      searchItem.className = 'dv-select-search-wrapper';
+      const searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'form-control form-control-sm dv-select-search';
+      searchInput.placeholder = placeholder;
+      searchInput.autocomplete = 'off';
+      searchInput.dataset.dvSelectSearch = 'true';
+      searchItem.appendChild(searchInput);
+      menu.appendChild(searchItem);
+
+      const updateFilter = () => {
+        const q = searchInput.value.trim().toLowerCase();
+        const targets = Array.from(menu.querySelectorAll(optionSelector));
+        targets.forEach((btn) => {
+          const label = (btn.dataset.label || btn.textContent || '').toLowerCase();
+          const match = !q || label.includes(q);
+          const li = btn.closest('li');
+          if (li) {
+            li.style.display = match ? '' : 'none';
+          } else {
+            btn.style.display = match ? '' : 'none';
+          }
+        });
+      };
+      searchInput.addEventListener('input', updateFilter);
+      updateFilter();
+
+      if (!wrapper.dataset.searchBound) {
+        wrapper.addEventListener('shown.bs.dropdown', () => {
+          const input = wrapper.querySelector('.dv-select-search');
+          if (!input) return;
+          input.value = '';
+          input.dispatchEvent(new Event('input'));
+          setTimeout(() => input.focus(), 10);
+        });
+        wrapper.dataset.searchBound = 'true';
+      }
+    };
+
+    const buildRosterMenu = (wrapper, options, selectedValue) => {
+      const menu = wrapper.querySelector('.dv-select-menu');
+      const labelEl = wrapper.querySelector('[data-dv-select-label]');
+      const input = wrapper.querySelector('[data-dv-select-input]');
+      if (!menu || !labelEl || !input) return;
+      menu.innerHTML = '';
+      bindSearch(wrapper, menu, '[data-dv-select-option]', 'Search players');
+      const items = [{ id: '', label: 'Select a player' }];
+      if (options && options.length) {
+        items.push(...options);
+      }
+      let hasActive = false;
+      items.forEach((opt, index) => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dropdown-item';
+        btn.dataset.dvSelectOption = 'true';
+        btn.dataset.value = String(opt.id ?? '');
+        btn.dataset.label = opt.label;
+        btn.textContent = opt.label;
+        if (String(opt.id ?? '') === String(selectedValue || '') || (!selectedValue && index === 0)) {
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.id ?? '');
+          hasActive = true;
+        }
+        btn.addEventListener('click', () => {
+          menu.querySelectorAll('.dropdown-item').forEach((node) => node.classList.remove('active'));
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.id ?? '');
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        li.appendChild(btn);
+        menu.appendChild(li);
+      });
+      if (!items.length) {
+        labelEl.textContent = 'No players in pod';
+        input.value = '';
+      } else if (!hasActive && items.length) {
+        const firstButton = menu.querySelector('.dropdown-item');
+        if (firstButton) {
+          firstButton.classList.add('active');
+          labelEl.textContent = firstButton.dataset.label || firstButton.textContent.trim();
+          input.value = firstButton.dataset.value || '';
+        }
+      }
+    };
+
+    const buildDeckMenu = (wrapper, options, selectedValue) => {
+      const menu = wrapper.querySelector('.dv-select-menu');
+      const labelEl = wrapper.querySelector('[data-game-select-label]');
+      const input = wrapper.querySelector('[data-game-select-input]');
+      if (!menu || !labelEl || !input) return;
+      menu.innerHTML = '';
+      bindSearch(wrapper, menu, '[data-game-select-option]', 'Search decks');
+      const items = [{ ref: '', label: 'Select a deck' }, ...(options || [])];
+      let hasActive = false;
+      items.forEach((opt, index) => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dropdown-item';
+        btn.dataset.gameSelectOption = 'true';
+        btn.dataset.value = String(opt.ref ?? '');
+        btn.dataset.label = opt.label;
+        btn.textContent = opt.label;
+        if (String(opt.ref ?? '') === String(selectedValue || '') || (!selectedValue && index === 0)) {
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.ref ?? '');
+          hasActive = true;
+        }
+        btn.addEventListener('click', () => {
+          menu.querySelectorAll('.dropdown-item').forEach((node) => node.classList.remove('active'));
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.ref ?? '');
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        li.appendChild(btn);
+        menu.appendChild(li);
+      });
+      const divider = document.createElement('li');
+      divider.innerHTML = '<hr class="dropdown-divider">';
+      menu.appendChild(divider);
+      const manualLi = document.createElement('li');
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'dropdown-item';
+      manualBtn.dataset.gameSelectOption = 'true';
+      manualBtn.dataset.value = 'manual:new';
+      manualBtn.dataset.label = 'Manual deck';
+      manualBtn.textContent = 'Manual deck…';
+      if (String(selectedValue || '') === 'manual:new') {
+        manualBtn.classList.add('active');
+        labelEl.textContent = 'Manual deck';
+        input.value = 'manual:new';
+        hasActive = true;
+      }
+      manualBtn.addEventListener('click', () => {
+        menu.querySelectorAll('.dropdown-item').forEach((node) => node.classList.remove('active'));
+        manualBtn.classList.add('active');
+        labelEl.textContent = 'Manual deck';
+        input.value = 'manual:new';
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      manualLi.appendChild(manualBtn);
+      menu.appendChild(manualLi);
+      if (!hasActive && items.length) {
+        const firstButton = menu.querySelector('.dropdown-item');
+        if (firstButton) {
+          firstButton.classList.add('active');
+          labelEl.textContent = firstButton.dataset.label || firstButton.textContent.trim();
+          input.value = firstButton.dataset.value || '';
+        }
+      }
+    };
+
+    const refreshRosterMenus = () => {
+      const rosterOptions = getRosterOptions();
+      seatCards.forEach((card) => {
+        const rosterWrapper = card.querySelector('.seat-roster-select');
+        if (!rosterWrapper) return;
+        const rosterInput = rosterWrapper.querySelector('[data-dv-select-input]');
+        buildRosterMenu(rosterWrapper, rosterOptions, rosterInput?.value);
+      });
+    };
+
+    const updateSeat = (card) => {
+      const seat = card.dataset.seat;
+      const typeWrapper = card.querySelector('[data-dv-select="player-type"]');
+      const typeInput = typeWrapper ? typeWrapper.querySelector('[data-dv-select-input]') : null;
+      const rosterWrapper = card.querySelector('.seat-roster-select');
+      const rosterInput = rosterWrapper ? rosterWrapper.querySelector('[data-dv-select-input]') : null;
+      const guestField = card.querySelector('.seat-guest-field');
+      const deckWrapper = card.querySelector('.seat-deck-select');
+      const deckInput = deckWrapper ? deckWrapper.querySelector('[data-game-select-input]') : null;
+      const manualField = card.querySelector('.seat-manual-deck-field');
+      const manualInput = manualField ? manualField.querySelector('.seat-manual-input') : null;
+      if (!typeInput || !deckWrapper) return;
+
+      const typeValue = typeInput.value || 'roster';
+      if (typeValue === 'roster') {
+        if (rosterWrapper) rosterWrapper.style.display = '';
+        if (guestField) guestField.style.display = 'none';
+        const rosterId = rosterInput ? rosterInput.value : '';
+        const deckOptions = rosterDeckMap[rosterId]?.deck_options || [];
+        buildDeckMenu(deckWrapper, deckOptions, deckInput?.value);
+      } else {
+        if (rosterWrapper) rosterWrapper.style.display = 'none';
+        if (guestField) guestField.style.display = '';
+        buildDeckMenu(deckWrapper, guestDeckOptions, deckInput?.value);
+      }
+
+      if (manualField && deckInput) {
+        const showManual = deckInput.value === 'manual:new';
+        manualField.style.display = showManual ? '' : 'none';
+        if (!showManual && manualInput) {
+          manualInput.value = '';
+        }
+        if (showManual && manualInput) {
+          setTimeout(() => manualInput.focus(), 10);
+        }
+      }
+    };
+
+    refreshRosterMenus();
+    seatCards.forEach((card) => {
+      updateSeat(card);
+      const typeInput = card.querySelector('[data-dv-select="player-type"] [data-dv-select-input]');
+      const rosterInput = card.querySelector('.seat-roster-select [data-dv-select-input]');
+      const deckInput = card.querySelector('.seat-deck-select [data-game-select-input]');
+      typeInput?.addEventListener('change', () => updateSeat(card));
+      rosterInput?.addEventListener('change', () => updateSeat(card));
+      deckInput?.addEventListener('change', () => updateSeat(card));
+    });
+
+    podInput?.addEventListener('change', () => {
+      refreshRosterMenus();
+      seatCards.forEach((card) => updateSeat(card));
+    });
+  })();
+</script>
+{% endblock %}

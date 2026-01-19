@@ -10,7 +10,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func, or_
 
 from extensions import db
-from models import Card, Folder, FolderShare
+from models import Card, Folder, FolderShare, UserFriend
 from services.authz import ensure_folder_access
 from utils.db import get_or_404
 
@@ -92,13 +92,22 @@ def api_me():
 @login_required
 def api_folders():
     """List folders the current user can access (owner, shared, or public)."""
+    friend_ids = [
+        row[0]
+        for row in db.session.query(UserFriend.friend_user_id)
+        .filter(UserFriend.user_id == current_user.id)
+        .all()
+    ]
+    access_filters = [
+        Folder.owner_user_id == current_user.id,
+        Folder.is_public.is_(True),
+        Folder.shares.any(FolderShare.shared_user_id == current_user.id),
+    ]
+    if friend_ids:
+        access_filters.append(Folder.owner_user_id.in_(friend_ids))
     accessible_folders = (
         Folder.query.filter(
-            or_(
-                Folder.owner_user_id == current_user.id,
-                Folder.is_public.is_(True),
-                Folder.shares.any(FolderShare.shared_user_id == current_user.id),
-            )
+            or_(*access_filters)
         )
         .order_by(func.lower(Folder.name))
         .all()

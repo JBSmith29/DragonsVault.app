@@ -13,6 +13,7 @@ from . import (
     card_detail,    # noqa: F401
     cards,          # noqa: F401
     dashboard,      # noqa: F401
+    games,          # noqa: F401
     folders,        # noqa: F401
     importer,       # noqa: F401
     list_checker,   # noqa: F401

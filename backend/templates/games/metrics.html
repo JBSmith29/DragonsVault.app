@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Game Metrics{% endblock %}
+{% block content %}
+<style>
+  .metric-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .metric-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+  }
+  .metric-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .metric-list li:last-child { border-bottom: 0; }
+  .range-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Game Metrics</h1>
+      <p class="text-muted mb-0">Filter date ranges to inspect your Commander trends.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_landing') }}">Back to Landing</a>
+  </div>
+
+  <form class="range-card mb-4" method="get">
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-md-4">
+        <label class="form-label">Range</label>
+        <div class="dropdown dv-select w-100" data-game-select="range">
+          <input type="hidden" name="range" data-game-select-input value="{{ range_ctx.range_key }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label>{{ range_ctx.label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last30" data-label="Last 30 days">Last 30 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last90" data-label="Last 90 days">Last 90 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="ytd" data-label="Year to date">Year to date</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="year" data-label="Year">Year</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="custom" data-label="Custom range">Custom range</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="all" data-label="All time">All time</button></li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4" id="yearField">
+        <label class="form-label" for="rangeYear">Year</label>
+        <input class="form-control" type="number" min="1993" max="2100" id="rangeYear" name="year" value="{{ range_ctx.year_value }}">
+      </div>
+      <div class="col-12 col-md-4" id="customField">
+        <label class="form-label">Custom range</label>
+        <div class="d-flex gap-2">
+          <input class="form-control" type="date" name="start" value="{{ range_ctx.start_value }}">
+          <input class="form-control" type="date" name="end" value="{{ range_ctx.end_value }}">
+        </div>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Games</div>
+        <div class="metric-value">{{ metrics.total_games }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Combo wins</div>
+        <div class="metric-value">{{ metrics.combo_wins }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Avg players</div>
+        <div class="metric-value">{{ metrics.avg_players if metrics.avg_players is not none else '—' }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Unique players</div>
+        <div class="metric-value">{{ metrics.unique_players }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Top winners</div>
+        <ul class="metric-list">
+          {% if metrics.top_winners and metrics.top_winners|length %}
+            {% for row in metrics.top_winners %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Most played decks</div>
+        <ul class="metric-list">
+          {% if metrics.top_decks and metrics.top_decks|length %}
+            {% for row in metrics.top_decks %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Most played commanders</div>
+        <ul class="metric-list">
+          {% if metrics.top_commanders and metrics.top_commanders|length %}
+            {% for row in metrics.top_commanders %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const rangeWrapper = document.querySelector('[data-game-select="range"]');
+    if (!rangeWrapper) return;
+
+    const input = rangeWrapper.querySelector('[data-game-select-input]');
+    const labelEl = rangeWrapper.querySelector('[data-game-select-label]');
+    const options = Array.from(rangeWrapper.querySelectorAll('[data-game-select-option]'));
+    const yearField = document.getElementById('yearField');
+    const customField = document.getElementById('customField');
+
+    const updateVisibility = (value) => {
+      if (!yearField || !customField) return;
+      yearField.style.display = value === 'year' ? '' : 'none';
+      customField.style.display = value === 'custom' ? '' : 'none';
+    };
+
+    const setActive = (item) => {
+      const value = item.dataset.value || '';
+      const label = item.dataset.label || item.textContent.trim();
+      options.forEach(btn => btn.classList.toggle('active', btn === item));
+      if (labelEl) labelEl.textContent = label;
+      if (input) input.value = value;
+      updateVisibility(value);
+    };
+
+    options.forEach((btn) => {
+      btn.addEventListener('click', () => setActive(btn));
+      if (btn.dataset.value === input.value) {
+        setActive(btn);
+      }
+    });
+
+    updateVisibility(input.value || '');
+  })();
+</script>
+{% endblock %}

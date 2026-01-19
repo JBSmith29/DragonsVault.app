@@ -32,6 +32,22 @@ class User(UserMixin, db.Model):
 
     folders = db.relationship("Folder", back_populates="owner_user", lazy="dynamic")
     shared_folders = db.relationship("FolderShare", back_populates="shared_user", lazy="dynamic")
+    following = db.relationship(
+        "UserFollow",
+        foreign_keys="UserFollow.follower_user_id",
+        back_populates="follower",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    followers = db.relationship(
+        "UserFollow",
+        foreign_keys="UserFollow.followed_user_id",
+        back_populates="followed",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     audit_logs = db.relationship("AuditLog", back_populates="user", lazy="dynamic")
 
     def get_id(self) -> str:
@@ -88,3 +104,36 @@ class AuditLog(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
 
     user = db.relationship("User", back_populates="audit_logs")
+
+
+class UserFollow(db.Model):
+    __tablename__ = "user_follow"
+    __table_args__ = (
+        db.UniqueConstraint("follower_user_id", "followed_user_id", name="uq_user_follow_pair"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    follower_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    followed_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+
+    follower = db.relationship(
+        "User",
+        foreign_keys=[follower_user_id],
+        back_populates="following",
+    )
+    followed = db.relationship(
+        "User",
+        foreign_keys=[followed_user_id],
+        back_populates="followers",
+    )

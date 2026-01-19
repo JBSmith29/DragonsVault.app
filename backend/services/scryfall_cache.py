@@ -1616,13 +1616,29 @@ def tokens_from_print(print_obj):
         type_line = (tok or {}).get("type_line")
         imgs = _token_images_from_print(tok)
 
-        out.append({"id": tid, "name": name, "type_line": type_line, "images": imgs})
+        out.append({
+            "id": tid,
+            "name": name,
+            "type_line": type_line,
+            "power": (tok or {}).get("power"),
+            "toughness": (tok or {}).get("toughness"),
+            "images": imgs,
+        })
 
     # Heuristic fallback if no relationships but text mentions creating a token
     if not out:
         text = (print_obj.get("oracle_text") or "").lower()
         if "create" in text and "token" in text:
-            out.append({"id": None, "name": "Token", "type_line": None, "images": {"small": None, "normal": None}})
+            out.append(
+                {
+                    "id": None,
+                    "name": "Token",
+                    "type_line": None,
+                    "power": None,
+                    "toughness": None,
+                    "images": {"small": None, "normal": None},
+                }
+            )
 
     return out
 
@@ -1678,6 +1694,8 @@ def search_tokens(name_q: str | None = None, limit: int = 36) -> List[Dict[str, 
                 "id": pr.get("id"),
                 "name": name,
                 "type_line": type_line,
+                "power": pr.get("power"),
+                "toughness": pr.get("toughness"),
                 "images": images,
             }
         )
@@ -1695,6 +1713,8 @@ def _token_stub(name: str, type_line: Optional[str] = None) -> Dict[str, Any]:
             "id": p.get("id"),
             "name": p.get("name"),
             "type_line": p.get("type_line"),
+            "power": p.get("power"),
+            "toughness": p.get("toughness"),
             "scryfall_uri": p.get("scryfall_uri"),
             "images": {"small": iu.get("small"), "normal": iu.get("normal")}
         }
@@ -1703,6 +1723,8 @@ def _token_stub(name: str, type_line: Optional[str] = None) -> Dict[str, Any]:
         "id": None,
         "name": name,
         "type_line": type_line or "Token",
+        "power": None,
+        "toughness": None,
         "scryfall_uri": None,
         "images": {"small": None, "normal": None}
     }
@@ -1764,6 +1786,8 @@ def tokens_from_print(card_obj: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "id": tok_print.get("id"),
                     "name": tok_print.get("name"),
                     "type_line": tok_print.get("type_line"),
+                    "power": tok_print.get("power"),
+                    "toughness": tok_print.get("toughness"),
                     "scryfall_uri": tok_print.get("scryfall_uri"),
                     "images": {"small": iu.get("small"), "normal": iu.get("normal")}
                 })
@@ -1853,6 +1877,8 @@ def tokens_from_print(print_obj):
             "id": tid,
             "name": name,
             "type_line": type_line,
+            "power": (tok or {}).get("power"),
+            "toughness": (tok or {}).get("toughness"),
             "images": images,
         })
 
@@ -1865,6 +1891,8 @@ def tokens_from_print(print_obj):
                 "id": None,
                 "name": "Token",
                 "type_line": None,
+                "power": None,
+                "toughness": None,
                 "images": {"small": None, "normal": None},
             })
 
@@ -1914,12 +1942,30 @@ def tokens_from_print(print_obj):
         type_line = (tok or {}).get("type_line")
         imgs = _token_images_from_print(tok)
 
-        out.append({"id": tid, "name": name, "type_line": type_line, "images": imgs})
+        out.append(
+            {
+                "id": tid,
+                "name": name,
+                "type_line": type_line,
+                "power": (tok or {}).get("power"),
+                "toughness": (tok or {}).get("toughness"),
+                "images": imgs,
+            }
+        )
 
     # Heuristic fallback if no relationships but the text says "create ... token"
     if not out:
         text = (print_obj.get("oracle_text") or "").lower()
         if "create" in text and "token" in text:
-            out.append({"id": None, "name": "Token", "type_line": None, "images": {"small": None, "normal": None}})
+            out.append(
+                {
+                    "id": None,
+                    "name": "Token",
+                    "type_line": None,
+                    "power": None,
+                    "toughness": None,
+                    "images": {"small": None, "normal": None},
+                }
+            )
 
     return out

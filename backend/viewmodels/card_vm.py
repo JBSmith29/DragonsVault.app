@@ -44,6 +44,7 @@ class CardListItemVM:
     rarity_label: Optional[str] = None
     rarity_badge_class: Optional[str] = None
     price_text: Optional[str] = None
+    owner_label: Optional[str] = None
 
     @property
     def type_tokens_str(self) -> str:

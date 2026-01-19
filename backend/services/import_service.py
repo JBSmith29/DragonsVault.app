@@ -25,11 +25,11 @@ from flask import (
     url_for,
 )
 from flask_login import current_user
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from werkzeug.utils import secure_filename
 
 from extensions import db
-from models import Card, Folder
+from models import Card, Folder, UserFriend
 from services import ServiceResult
 from services.audit import record_audit_event
 from services.csv_importer import (
@@ -915,6 +915,11 @@ def export_cards() -> Response:
     lang = (request.args.get("lang") or "").strip().lower()
     foil_arg = (request.args.get("foil_only") or request.args.get("foil") or "").strip().lower()
     foil_only = foil_arg in {"1", "true", "yes", "on", "y"}
+    show_friends_arg = (request.args.get("show_friends") or "").strip().lower()
+    show_friends = show_friends_arg in {"1", "true", "yes", "on", "y"}
+    is_authenticated = bool(current_user and getattr(current_user, "is_authenticated", False))
+    if not is_authenticated:
+        show_friends = False
     folder_filters: set[int] = set()
     folder_args = request.args.getlist("folder_ids") or request.args.getlist("folders")
     try:
@@ -929,6 +934,22 @@ def export_cards() -> Response:
     include_all_folders = (request.args.get("all_folders") or "").strip().lower() in {"1", "true", "yes", "on"}
 
     query = Card.query
+    if is_authenticated:
+        if show_friends:
+            friend_ids = (
+                db.session.query(UserFriend.friend_user_id)
+                .filter(UserFriend.user_id == current_user.id)
+            )
+            query = query.filter(
+                Card.folder.has(
+                    or_(
+                        Folder.owner_user_id == current_user.id,
+                        Folder.owner_user_id.in_(friend_ids),
+                    )
+                )
+            )
+        else:
+            query = query.filter(Card.folder.has(Folder.owner_user_id == current_user.id))
     if q:
         for tok in [t for t in q.split() if t]:
             query = query.filter(Card.name.ilike(f"%{tok}%"))

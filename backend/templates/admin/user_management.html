@@ -92,6 +92,22 @@
                         </span>
                       {% endif %}
                     </form>
+                    {% set impersonate_disabled = (user.id == current_user_id) %}
+                    <form method="post" class="d-flex gap-2 align-items-center">
+                      <input type="hidden" name="action" value="impersonate_user">
+                      <input type="hidden" name="target_user_id" value="{{ user.id }}">
+                      <button
+                        class="btn btn-outline-warning btn-sm"
+                        type="submit"
+                        {% if impersonate_disabled %}disabled{% endif %}
+                        onclick="return confirm({{ ('Impersonate %s? You can return to admin from the banner.' % user.email)|tojson }});"
+                      >
+                        Impersonate
+                      </button>
+                      {% if impersonate_disabled %}
+                        <span class="small text-muted">Active session</span>
+                      {% endif %}
+                    </form>
                   </div>
                 </td>
               </tr>

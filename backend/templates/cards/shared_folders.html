@@ -9,6 +9,159 @@
     <a class="btn btn-outline-secondary" href="{{ url_for('views.list_cards') }}">Back to My Cards</a>
   </div>
 
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div>
+          <h2 class="h6 mb-1">Add a friend</h2>
+          <p class="text-muted small mb-0">Send a request to share read-only access to decks and collections.</p>
+          <p class="text-muted small mb-0">Friends automatically see all of your decks and collections.</p>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('views.shared_follow') }}" class="row g-2 align-items-end mt-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="request">
+        <div class="col-12 col-md-8">
+          <label class="form-label small text-muted" for="friendIdentifier">Username or email</label>
+          <input type="text" class="form-control" id="friendIdentifier" name="friend_identifier" placeholder="friend@example.com" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <button class="btn btn-primary w-100" type="submit">Send request</button>
+        </div>
+      </form>
+
+      {% if incoming_requests %}
+        <div class="mt-3">
+          <div class="text-muted small mb-2">Incoming requests</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for req in incoming_requests %}
+              <div class="card bg-body-secondary border-0">
+                <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+                  <div>
+                    <div class="fw-semibold small">{{ req.label }}</div>
+                    {% if req.email %}
+                      <div class="text-muted small">{{ req.email }}</div>
+                    {% endif %}
+                  </div>
+                  <div class="d-flex gap-2">
+                    <form method="post" action="{{ url_for('views.shared_follow') }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="accept">
+                      <input type="hidden" name="request_id" value="{{ req.id }}">
+                      <button class="btn btn-primary btn-sm" type="submit">Accept</button>
+                    </form>
+                    <form method="post" action="{{ url_for('views.shared_follow') }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="reject">
+                      <input type="hidden" name="request_id" value="{{ req.id }}">
+                      <button class="btn btn-outline-secondary btn-sm" type="submit">Decline</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if outgoing_requests %}
+        <div class="mt-3">
+          <div class="text-muted small mb-2">Outgoing requests</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for req in outgoing_requests %}
+              <div class="card bg-body-secondary border-0">
+                <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+                  <div>
+                    <div class="fw-semibold small">{{ req.label }}</div>
+                    {% if req.email %}
+                      <div class="text-muted small">{{ req.email }}</div>
+                    {% endif %}
+                  </div>
+                  <form method="post" action="{{ url_for('views.shared_follow') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="cancel">
+                    <input type="hidden" name="request_id" value="{{ req.id }}">
+                    <button class="btn btn-outline-secondary btn-sm" type="submit">Cancel</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if friends %}
+        <div class="mt-3">
+          <div class="text-muted small mb-2">Friends</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for friend in friends %}
+              <div class="card bg-body-secondary border-0">
+                <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+                  <div>
+                    <div class="fw-semibold small">{{ friend.label }}</div>
+                    {% if friend.email %}
+                      <div class="text-muted small">{{ friend.email }}</div>
+                    {% endif %}
+                  </div>
+                  <form method="post" action="{{ url_for('views.shared_follow') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="remove">
+                    <input type="hidden" name="friend_user_id" value="{{ friend.user_id }}">
+                    <button class="btn btn-outline-secondary btn-sm" type="submit">Remove</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+      <div>
+        <h2 class="h6 mb-1">Share your folders</h2>
+        <p class="text-muted small mb-0">Open a deck or collection to manage sharing and generate share links.</p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.decks_overview') }}">My Decks</a>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.collection_overview') }}">My Collection</a>
+      </div>
+    </div>
+  </div>
+
+  {% if friend_folders %}
+    <div class="mb-4">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-person-check-fill text-info"></i>
+        <h2 class="h5 mb-0">From friends</h2>
+      </div>
+      <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+        {% for entry in friend_folders %}
+          <div class="col">
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-body d-flex flex-column">
+                <div class="mb-2">
+                  <div class="fw-semibold">{{ entry.folder.name }}</div>
+                  <div class="text-muted small">Owner: {{ entry.owner_label }}</div>
+                </div>
+                <p class="small text-muted mb-4">
+                  Category: {{ entry.folder.category_label or 'Deck' }}
+                </p>
+                <div class="mt-auto d-flex gap-2">
+                  <a class="btn btn-primary btn-sm" href="{{ url_for('views.shared_folder_detail', folder_id=entry.folder.id) }}">
+                    View folder
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
   {% if shared_with_me %}
     <div class="mb-4">
       <div class="d-flex align-items-center gap-2 mb-3">
@@ -102,9 +255,9 @@
     </div>
   {% endif %}
 
-  {% if not shared_with_me and not my_public_folders and not other_public_folders %}
+  {% if not shared_with_me and not my_public_folders and not other_public_folders and not friend_folders %}
     <div class="alert alert-info mb-0">
-      No folders have been shared with you yet. Ask a friend to share one or mark your own folders public from the sharing settings.
+      No folders are available yet. Add a friend, ask someone to share a folder with you, or mark your own folders public from the sharing settings.
     </div>
   {% endif %}
 </div>

@@ -906,6 +906,16 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.games_landing', 'views.games_overview', 'views.games_new', 'views.games_detail', 'views.games_metrics', 'views.games_players'] %}active{% endif %}"
+               href="{{ url_for('views.games_landing') }}"
+               title="Games"
+               aria-label="Games"
+               data-endpoints="views.games_landing,views.games_overview,views.games_new,views.games_detail,views.games_metrics,views.games_players">
+              <i class="bi bi-dice-5" aria-hidden="true"></i>
+              <span class="sidebar-label">Games</span>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.build_landing', 'views.build_session'] %}active{% endif %}"
                href="{{ url_for('views.build_landing') }}"
                title="Build-A-Deck"
@@ -1000,6 +1010,17 @@
           data-active-endpoint="{{ current_endpoint }}"
           data-legal-visible="{{ '1' if legal_links_visible else '0' }}"
         >
+          {% if session is defined and session.get('impersonator_id') %}
+            <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div class="small">
+                Impersonating {{ user_display }}. Actions are recorded under this account.
+              </div>
+              <form method="post" action="{{ url_for('views.admin_impersonate_stop') }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-dark" type="submit">Return to Admin</button>
+              </form>
+            </div>
+          {% endif %}
           {# Render any flashed messages before the page-specific content block. #}
           {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}

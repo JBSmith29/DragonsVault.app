@@ -7,7 +7,7 @@ import hashlib
 from flask import abort
 from flask_login import current_user
 
-from models import FolderShare
+from models import FolderShare, UserFriend
 
 
 def require_admin() -> None:
@@ -46,6 +46,14 @@ def ensure_folder_access(folder, *, write: bool = False, allow_shared: bool = Fa
                     return
             except Exception:
                 pass
+
+    if owner_id:
+        friend = UserFriend.query.filter_by(
+            user_id=current_user.id,
+            friend_user_id=owner_id,
+        ).first()
+        if friend:
+            return
 
     share = (
         FolderShare.query.filter_by(folder_id=folder.id, shared_user_id=current_user.id).first()

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Commander Games{% endblock %}
+{% block content %}
+<style>
+  .game-stat-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .game-stat-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .game-stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+  }
+  .game-landing-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    background: rgba(255, 255, 255, 0.02);
+    height: 100%;
+  }
+  .game-landing-card h3 {
+    font-size: 1.05rem;
+  }
+  .game-seat-row {
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--bs-border-color);
+    background: rgba(255, 255, 255, 0.02);
+    margin-bottom: 0.6rem;
+  }
+  .game-seat-row:last-child { margin-bottom: 0; }
+  .offcanvas-end.w-500 { width: 520px; }
+  .game-action-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .game-action-buttons .btn {
+    min-width: 84px;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Commander Games</h1>
+      <p class="text-muted mb-0">Your hub for logging games, tracking pods, and diving into stats.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_new') }}">Log Game</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_overview') }}">View Logs</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="game-stat-card">
+        <div class="game-stat-label">Total games</div>
+        <div class="game-stat-value">{{ quick_all.total_games }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="game-stat-card">
+        <div class="game-stat-label">Last 30 days</div>
+        <div class="game-stat-value">{{ quick_30.total_games }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="game-stat-card">
+        <div class="game-stat-label">Combo wins</div>
+        <div class="game-stat-value">{{ quick_all.combo_wins }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="game-stat-card">
+        <div class="game-stat-label">Unique players</div>
+        <div class="game-stat-value">{{ quick_all.unique_players }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="game-landing-card">
+        <h3 class="mb-2">Metrics</h3>
+        <p class="text-muted small">Filter by date range and explore wins, pods, and deck usage.</p>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_metrics') }}">View Metrics</a>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="game-landing-card">
+        <h3 class="mb-2">Pod Management</h3>
+        <p class="text-muted small">Create pods, add players, and keep decks tied to each pod.</p>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_players') }}">Manage Pods</a>
+      </div>
+    </div>
+    <div class="col-12 col-xl-4">
+      <div class="game-landing-card">
+        <h3 class="mb-2">Game Logs</h3>
+        <p class="text-muted small">Review past pods, winners, and notes in one place.</p>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_overview') }}">Open Logs</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h2 class="h6 text-uppercase text-muted mb-0">Recent Games</h2>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('views.games_overview') }}">See all</a>
+  </div>
+
+  {% if recent_games and recent_games|length %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle cards-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th class="text-center">Players</th>
+            <th>Winner</th>
+            <th>Notes</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for game in recent_games %}
+            <tr>
+              <td class="text-nowrap">{{ game.played_at_label }}</td>
+              <td class="text-center">{{ game.seat_count }}</td>
+              <td>{{ game.winner_label or '—' }}</td>
+              <td class="text-muted">{{ game.notes|truncate(80) if game.notes else '—' }}</td>
+              <td class="text-end">
+                <div class="game-action-buttons justify-content-end">
+                  <button class="btn btn-outline-secondary btn-sm" type="button" data-game-preview data-game-id="{{ game.id }}">Preview</button>
+                  <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_detail', game_id=game.id) }}">View</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="alert alert-info mb-0">No games logged yet. Start by logging your first pod.</div>
+  {% endif %}
+</div>
+
+<div class="offcanvas offcanvas-end w-500" tabindex="-1" id="gameDrawer" aria-labelledby="gameDrawerLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="gameDrawerLabel">Game Details</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body" id="gameDrawerBody">
+    <div class="text-muted small">Select a game to preview details.</div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const drawerEl = document.getElementById('gameDrawer');
+    const bodyEl = document.getElementById('gameDrawerBody');
+    if (!drawerEl || !bodyEl) return;
+
+    const gameRows = {{ recent_games|tojson }};
+    const gameMap = new Map(gameRows.map(game => [String(game.id), game]));
+
+    const esc = (value) => {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
+    const renderSeat = (seat, winViaCombo) => {
+      const winnerBadge = seat.is_winner ? '<span class="badge text-bg-success">Winner</span>' : '';
+      const comboBadge = seat.is_winner && winViaCombo ? '<span class="badge text-bg-warning">Combo</span>' : '';
+      const bracket = seat.bracket_level ? `${esc(seat.bracket_level)}${seat.bracket_label ? ' · ' + esc(seat.bracket_label) : ''}` : '—';
+      return `
+        <div class="game-seat-row">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="badge text-bg-secondary">Seat ${esc(seat.seat_number)}</span>
+            <span class="text-muted small">Turn ${esc(seat.turn_order)}</span>
+            ${winnerBadge}
+            ${comboBadge}
+          </div>
+          <div class="fw-semibold">${esc(seat.player_label)}</div>
+          <div class="small text-muted">${esc(seat.deck_name)}${seat.commander_name ? ' · ' + esc(seat.commander_name) : ''}</div>
+          <div class="small text-muted">Bracket: ${bracket}</div>
+        </div>
+      `;
+    };
+
+    const renderGame = (game) => {
+      const seatsMarkup = (game.seats || []).map(seat => renderSeat(seat, game.win_via_combo)).join('');
+      const winnerLine = game.winner_label ? `<div><strong>Winner:</strong> ${esc(game.winner_label)}</div>` : '';
+      const notesLine = game.notes ? `<div class="mt-2"><strong>Notes:</strong> ${esc(game.notes)}</div>` : '';
+      return `
+        <div class="mb-3">
+          <div class="fw-semibold">Played</div>
+          <div class="text-muted">${esc(game.played_at_label)}</div>
+          ${winnerLine}
+          ${notesLine}
+        </div>
+        <div>
+          <div class="fw-semibold mb-2">Seats</div>
+          ${seatsMarkup || '<div class="text-muted small">No seats recorded.</div>'}
+        </div>
+      `;
+    };
+
+    let drawerInstance = null;
+    const openDrawer = (gameId) => {
+      const game = gameMap.get(String(gameId));
+      if (!game) return;
+      bodyEl.innerHTML = renderGame(game);
+      if (!drawerInstance && window.bootstrap) {
+        drawerInstance = new bootstrap.Offcanvas(drawerEl, { backdrop: false, scroll: true });
+      }
+      if (drawerInstance) {
+        drawerInstance.show();
+      } else {
+        drawerEl.classList.add('show');
+        drawerEl.style.visibility = 'visible';
+      }
+    };
+
+    document.querySelectorAll('[data-game-preview]').forEach((btn) => {
+      btn.addEventListener('click', () => openDrawer(btn.dataset.gameId));
+    });
+  })();
+</script>
+{% endblock %}

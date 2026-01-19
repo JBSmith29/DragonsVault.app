@@ -41,6 +41,12 @@ def shared_folders():
     return card_service.shared_folders()
 
 
+@views.post("/cards/shared/follow")
+@login_required
+def shared_follow():
+    return card_service.shared_follow()
+
+
 @views.post("/cards/bulk-move")
 @login_required
 def bulk_move_cards():
@@ -133,4 +139,6 @@ __all__ = [
     "opening_hand_token_search",
     "decks_overview",
     "list_cards",
+    "shared_folders",
+    "shared_follow",
 ]

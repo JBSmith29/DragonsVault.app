@@ -72,6 +72,7 @@ class DeckTokenVM:
     decks: list[DeckTokenDeckVM] = field(default_factory=list)
     search_key: str = ""
     deck_ids_csv: str = ""
+    owner_ids_csv: str = ""
 
 
 @dataclass(slots=True)

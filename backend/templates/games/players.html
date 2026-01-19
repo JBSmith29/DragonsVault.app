@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}Pod Management{% endblock %}
+{% block content %}
+<style>
+  .player-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .player-row {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.8rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .player-row:last-child { margin-bottom: 0; }
+  .assignment-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0.5rem;
+  }
+  .assignment-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .assignment-list li:last-child { border-bottom: 0; }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Pod Management</h1>
+      <p class="text-muted mb-0">Create pods, add players, and keep deck assignments ready for logging games.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_landing') }}">Back to Landing</a>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="player-card mb-3">
+        <h2 class="h6 text-uppercase text-muted mb-3">Create Pod</h2>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="create_pod">
+          <div class="mb-3">
+            <label class="form-label" for="podName">Pod name</label>
+            <input class="form-control" type="text" id="podName" name="pod_name" placeholder="e.g. Friday Night Pod">
+          </div>
+          <button class="btn btn-outline-primary btn-sm" type="submit">Create Pod</button>
+        </form>
+      </div>
+      <div class="player-card">
+        <h2 class="h6 text-uppercase text-muted mb-3">Add Player</h2>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="add_player">
+          {% if roster_owner_options and roster_owner_options|length > 1 %}
+            <div class="mb-3">
+              <label class="form-label">Roster owner</label>
+              <div class="dropdown dv-select w-100" data-dv-select="roster-owner">
+                <input type="hidden" name="roster_owner_id" data-dv-select-input value="{{ current_owner_id }}">
+                {% set owner_label = namespace(label='Select owner') %}
+                {% for owner in roster_owner_options %}
+                  {% if owner.id == current_owner_id %}
+                    {% set owner_label.label = owner.label %}
+                  {% endif %}
+                {% endfor %}
+                <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span data-dv-select-label>{{ owner_label.label }}</span>
+                  <i class="bi bi-chevron-down"></i>
+                </button>
+                <ul class="dropdown-menu dv-select-menu w-100">
+                  {% for owner in roster_owner_options %}
+                    <li><button class="dropdown-item{% if owner.id == current_owner_id %} active{% endif %}" type="button" data-dv-select-option data-value="{{ owner.id }}" data-label="{{ owner.label }}">{{ owner.label }}</button></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          {% else %}
+            <input type="hidden" name="roster_owner_id" value="{{ current_owner_id }}">
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label">Player type</label>
+            <div class="dropdown dv-select w-100" data-dv-select="player-kind">
+              <input type="hidden" name="player_kind" data-dv-select-input value="guest">
+              <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <span data-dv-select-label>Guest</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100">
+                <li><button class="dropdown-item" type="button" data-dv-select-option data-value="guest" data-label="Guest">Guest</button></li>
+                <li><button class="dropdown-item" type="button" data-dv-select-option data-value="user" data-label="Registered user">Registered user</button></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="mb-3" id="playerIdentifierField">
+            <label class="form-label" for="playerIdentifier">Username or email</label>
+            <input class="form-control" type="text" id="playerIdentifier" name="player_identifier" placeholder="friend@example.com">
+            <div class="form-text">Link a registered user to this player profile.</div>
+          </div>
+
+          <div class="mb-3" id="playerDisplayField">
+            <label class="form-label" for="playerDisplay">Display name</label>
+            <input class="form-control" type="text" id="playerDisplay" name="display_name" placeholder="Player name">
+          </div>
+
+          <button class="btn btn-primary btn-sm" type="submit">Add Player</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+      <div class="player-card mb-3">
+        <h2 class="h6 text-uppercase text-muted mb-3">Pods</h2>
+        {% if pods and pods|length %}
+          {% for pod in pods %}
+            <div class="player-row">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div>
+                  <div class="fw-semibold">{{ pod.name }}</div>
+                  {% if not pod.is_owner %}
+                    <div class="text-muted small">Shared by {{ pod.owner_label }}</div>
+                  {% endif %}
+                </div>
+                {% if pod.is_owner %}
+                  <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="remove_pod">
+                    <input type="hidden" name="pod_id" value="{{ pod.id }}">
+                    <button class="btn btn-outline-danger btn-sm" type="submit">Remove Pod</button>
+                  </form>
+                {% elif pod.self_member_id %}
+                  <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="remove_pod_member">
+                    <input type="hidden" name="member_id" value="{{ pod.self_member_id }}">
+                    <button class="btn btn-outline-secondary btn-sm" type="submit">Leave Pod</button>
+                  </form>
+                {% endif %}
+              </div>
+              <div class="mb-2">
+                <div class="text-muted small mb-2">Players</div>
+                {% if pod.members and pod.members|length %}
+                  <ul class="assignment-list">
+                    {% for member in pod.members %}
+                      <li>
+                        <span>{{ member.label }}</span>
+                        {% if pod.can_manage %}
+                          <form method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="remove_pod_member">
+                            <input type="hidden" name="member_id" value="{{ member.member_id }}">
+                            <button class="btn btn-outline-secondary btn-sm" type="submit">Remove</button>
+                          </form>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <div class="text-muted small">No players added yet.</div>
+                {% endif %}
+              </div>
+              {% if pod.can_manage %}
+                <form method="post" class="row g-2 align-items-end">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="action" value="add_pod_member">
+                  <input type="hidden" name="pod_id" value="{{ pod.id }}">
+                  <div class="col-12 col-md-8">
+                    <label class="form-label small">Add player</label>
+                    <div class="dropdown dv-select w-100" data-dv-select="pod-member-{{ pod.id }}">
+                      <input type="hidden" name="roster_player_id" data-dv-select-input value="">
+                      <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span data-dv-select-label>Select a player</span>
+                        <i class="bi bi-chevron-down"></i>
+                      </button>
+                      <ul class="dropdown-menu dv-select-menu w-100">
+                        <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a player">Select a player</button></li>
+                        {% for player in pod.roster_options %}
+                          <li><button class="dropdown-item" type="button" data-dv-select-option data-value="{{ player.id }}" data-label="{{ player.label }}">{{ player.label }}</button></li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <button class="btn btn-outline-primary w-100" type="submit">Add</button>
+                  </div>
+                </form>
+              {% endif %}
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="text-muted small">No pods yet. Create one and add players.</div>
+        {% endif %}
+      </div>
+
+      <div class="player-card">
+        <h2 class="h6 text-uppercase text-muted mb-3">Players &amp; Decks</h2>
+        {% if has_roster_players %}
+          {% for group in roster_groups %}
+            {% if roster_groups|length > 1 %}
+              <div class="text-muted small mb-2">
+                Roster: {{ group.owner_label }}
+                {% if group.is_owner %}
+                  <span class="badge text-bg-secondary ms-2">You</span>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if group.players and group.players|length %}
+              {% for player in group.players %}
+                <div class="player-row">
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <div>
+                      <div class="fw-semibold">{{ player.label }}</div>
+                      {% if player.user_label %}
+                        <div class="text-muted small">{{ player.user_label }}</div>
+                      {% endif %}
+                    </div>
+                    <form method="post">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="remove_player">
+                      <input type="hidden" name="roster_player_id" value="{{ player.id }}">
+                      <button class="btn btn-outline-danger btn-sm" type="submit">Remove Player</button>
+                    </form>
+                  </div>
+
+                  <div class="mb-2">
+                    <div class="text-muted small mb-2">Assigned decks</div>
+                    {% if player.deck_assignments and player.deck_assignments|length %}
+                      <ul class="assignment-list">
+                        {% for deck in player.deck_assignments %}
+                          <li>
+                            <span>
+                              {{ deck.label }}
+                              {% if deck.is_manual %}
+                                <span class="badge text-bg-secondary ms-2">Manual</span>
+                              {% endif %}
+                            </span>
+                            <form method="post">
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                              <input type="hidden" name="action" value="remove_deck">
+                              <input type="hidden" name="assignment_id" value="{{ deck.assignment_id }}">
+                              <button class="btn btn-outline-secondary btn-sm" type="submit">Remove</button>
+                            </form>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <div class="text-muted small">No decks assigned yet.</div>
+                    {% endif %}
+                  </div>
+
+                  <form method="post" class="row g-2 align-items-end">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="assign_deck">
+                    <input type="hidden" name="roster_player_id" value="{{ player.id }}">
+                    <div class="col-12 col-md-7">
+                      <label class="form-label small">Assign deck</label>
+                      <div class="dropdown dv-select w-100" data-dv-select="assign-deck-{{ player.id }}">
+                        <input type="hidden" name="deck_id" data-dv-select-input value="">
+                        <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          <span data-dv-select-label>Select a deck</span>
+                          <i class="bi bi-chevron-down"></i>
+                        </button>
+                        <ul class="dropdown-menu dv-select-menu w-100">
+                          <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a deck">Select a deck</button></li>
+                          {% for deck in group.deck_options %}
+                            <li><button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck.id }}" data-label="{{ deck.label }}">{{ deck.label }}</button></li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-5">
+                      <label class="form-label small" for="manualDeck{{ player.id }}">Manual deck name</label>
+                      <input class="form-control" type="text" id="manualDeck{{ player.id }}" name="manual_deck_name" placeholder="Custom deck name">
+                    </div>
+                    <div class="col-12">
+                      <button class="btn btn-outline-primary w-100" type="submit">Assign</button>
+                    </div>
+                  </form>
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <div class="text-muted small">No players yet. Add one to start assigning decks.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const kindWrapper = document.querySelector('[data-dv-select="player-kind"]');
+    if (!kindWrapper) return;
+    const input = kindWrapper.querySelector('[data-dv-select-input]');
+    const identifierField = document.getElementById('playerIdentifierField');
+    const displayField = document.getElementById('playerDisplayField');
+
+    const updateFields = () => {
+      const value = input?.value || 'guest';
+      if (identifierField) identifierField.style.display = value === 'user' ? '' : 'none';
+      if (displayField) displayField.style.display = value === 'user' ? '' : '';
+    };
+
+    if (input) {
+      input.addEventListener('change', updateFields);
+      updateFields();
+    }
+  })();
+</script>
+{% endblock %}

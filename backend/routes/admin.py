@@ -12,8 +12,8 @@ from math import ceil
 from pathlib import Path
 from typing import List, Optional, Set
 
-from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
-from flask_login import current_user, login_required
+from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import current_user, login_required, login_user
 from sqlalchemy import func, or_, text
 
 from extensions import db, limiter
@@ -278,6 +278,7 @@ def _folder_categories_page(admin_mode: bool):
         updated_owner_links = 0
         updated_proxies = 0
         updated_notes = 0
+        updated_public = 0
         allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}
         for folder in folders:
             submitted = request.form.get(f"category-{folder.id}", Folder.CATEGORY_DECK)
@@ -306,6 +307,13 @@ def _folder_categories_page(admin_mode: bool):
                 folder.is_proxy = proxy_value
                 updated_proxies += 1
 
+            public_raw = request.form.get(f"public-{folder.id}")
+            if public_raw is not None:
+                public_value = public_raw in {"1", "on", "true", "yes"}
+                if folder.is_public != public_value:
+                    folder.is_public = public_value
+                    updated_public += 1
+
             notes_value = (request.form.get(f"notes-{folder.id}") or "").strip() or None
             if (folder.notes or None) != notes_value:
                 folder.notes = notes_value
@@ -321,6 +329,8 @@ def _folder_categories_page(admin_mode: bool):
             changes.append(f"{updated_owners} owner field{'s' if updated_owners != 1 else ''}")
         if updated_owner_links:
             changes.append(f"{updated_owner_links} owner assignment{'s' if updated_owner_links != 1 else ''}")
+        if updated_public:
+            changes.append(f"{updated_public} public flag{'s' if updated_public != 1 else ''}")
         if updated_notes:
             changes.append(f"{updated_notes} note{'s' if updated_notes != 1 else ''}")
         if changes:
@@ -334,6 +344,7 @@ def _folder_categories_page(admin_mode: bool):
                 "owners": updated_owners,
                 "owner_links": updated_owner_links,
                 "proxies": updated_proxies,
+                "public": updated_public,
                 "notes": updated_notes,
             },
         )
@@ -357,6 +368,7 @@ def _folder_categories_page(admin_mode: bool):
         show_owner_field=True,
         allow_delete=True,
         allow_share_controls=not admin_mode,
+        show_public_toggle=admin_mode,
         back_url=url_for("views.admin_console") if admin_mode else url_for("views.account_center"),
         page_title="Folder Categories" if admin_mode else "My Folders",
     )
@@ -756,6 +768,48 @@ def _handle_delete_user(target_endpoint: str):
     else:
         flash(f"Deleted user {removed_email}.", "success")
     return redirect(redirect_target)
+
+
+def _handle_impersonate_user(target_endpoint: str):
+    """Start an admin impersonation session for a target user."""
+    redirect_target = url_for(target_endpoint)
+    target_user_raw = request.form.get("target_user_id")
+    if not target_user_raw:
+        flash("Select a user to impersonate.", "warning")
+        return redirect(redirect_target)
+    try:
+        target_user_id = parse_positive_int(target_user_raw, field="user id")
+    except ValidationError as exc:
+        log_validation_error(exc, context="admin_impersonate")
+        flash("Invalid user id.", "danger")
+        return redirect(redirect_target)
+    if current_user.is_authenticated and target_user_id == current_user.id:
+        flash("You are already signed in as this user.", "info")
+        return redirect(redirect_target)
+    if session.get("impersonator_id"):
+        flash("Stop the current impersonation before starting another.", "warning")
+        return redirect(redirect_target)
+    target_user = db.session.get(User, target_user_id)
+    if not target_user:
+        flash("User not found.", "warning")
+        return redirect(redirect_target)
+
+    session["impersonator_id"] = current_user.id if current_user.is_authenticated else None
+    session["impersonated_user_id"] = target_user.id
+
+    record_audit_event(
+        "admin_impersonate_start",
+        {
+            "admin_id": current_user.id if current_user.is_authenticated else None,
+            "target_id": target_user.id,
+            "target_email": target_user.email,
+            "target_username": target_user.username,
+        },
+    )
+    login_user(target_user, remember=False, fresh=True)
+    session["user_is_admin"] = bool(target_user.is_admin)
+    flash(f"Now impersonating {target_user.username or target_user.email}.", "info")
+    return redirect(url_for("views.dashboard"))
 
 
 @views.route("/admin/folder-categories", methods=["GET", "POST"])
@@ -1869,6 +1923,8 @@ def admin_manage_users():
             return _handle_reset_user_password("views.admin_manage_users")
         if action == "delete_user":
             return _handle_delete_user("views.admin_manage_users")
+        if action == "impersonate_user":
+            return _handle_impersonate_user("views.admin_manage_users")
     context = _user_management_context(include_users=True)
     return render_template(
         "admin/user_management.html",
@@ -1878,6 +1934,36 @@ def admin_manage_users():
         min_password_length=MIN_PASSWORD_LENGTH,
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
+
+
+@views.post("/admin/impersonate/stop")
+@login_required
+def admin_impersonate_stop():
+    impersonator_id = session.get("impersonator_id")
+    impersonated_id = session.get("impersonated_user_id")
+    if not impersonator_id:
+        flash("No impersonation session is active.", "info")
+        return redirect(url_for("views.dashboard"))
+    admin_user = db.session.get(User, impersonator_id)
+    if not admin_user or not admin_user.is_admin:
+        session.pop("impersonator_id", None)
+        session.pop("impersonated_user_id", None)
+        flash("Impersonation ended. Admin account unavailable.", "warning")
+        return redirect(url_for("views.dashboard"))
+
+    login_user(admin_user, remember=False, fresh=True)
+    session["user_is_admin"] = bool(admin_user.is_admin)
+    session.pop("impersonator_id", None)
+    session.pop("impersonated_user_id", None)
+    record_audit_event(
+        "admin_impersonate_stop",
+        {
+            "admin_id": admin_user.id,
+            "impersonated_id": impersonated_id,
+        },
+    )
+    flash("Returned to your admin session.", "success")
+    return redirect(url_for("views.admin_manage_users"))
 
 
 @views.route("/admin/requests", methods=["GET", "POST"])
@@ -1997,4 +2083,10 @@ def legacy_imports_ws():
     )
 
 
-__all__ = ["admin_console", "admin_folder_categories", "admin_manage_users", "admin_requests"]
+__all__ = [
+    "admin_console",
+    "admin_folder_categories",
+    "admin_manage_users",
+    "admin_impersonate_stop",
+    "admin_requests",
+]

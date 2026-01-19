@@ -12,7 +12,7 @@ from flask_login import current_user
 from sqlalchemy import func, or_
 
 from extensions import db
-from models import Card, Folder, FolderShare
+from models import Card, Folder, FolderShare, UserFriend
 from services.scryfall_cache import ensure_cache_loaded
 from services.deck_utils import BASIC_LANDS
 
@@ -68,6 +68,13 @@ def _accessible_folder_ids() -> set[int]:
     ids.update(fid for fid, in shared)
     public = db.session.query(Folder.id).filter(Folder.is_public.is_(True)).all()
     ids.update(fid for fid, in public)
+    friends = (
+        db.session.query(Folder.id)
+        .join(UserFriend, UserFriend.friend_user_id == Folder.owner_user_id)
+        .filter(UserFriend.user_id == current_user.id)
+        .all()
+    )
+    ids.update(fid for fid, in friends)
     return ids
 
 

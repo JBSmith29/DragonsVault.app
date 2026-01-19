@@ -44,6 +44,33 @@ def ensure_fts() -> None:
             END;
         """))
 
+        if "game_sessions" in insp.get_table_names():
+            conn.execute(text("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS game_sessions_fts
+                USING fts5(
+                    notes,
+                    content='game_sessions', content_rowid='id'
+                );
+            """))
+            conn.execute(text("""
+                CREATE TRIGGER IF NOT EXISTS game_sessions_ai AFTER INSERT ON game_sessions BEGIN
+                  INSERT INTO game_sessions_fts(rowid, notes)
+                  VALUES (new.id, lower(coalesce(new.notes, '')));
+                END;
+            """))
+            conn.execute(text("""
+                CREATE TRIGGER IF NOT EXISTS game_sessions_ad AFTER DELETE ON game_sessions BEGIN
+                  DELETE FROM game_sessions_fts WHERE rowid = old.id;
+                END;
+            """))
+            conn.execute(text("""
+                CREATE TRIGGER IF NOT EXISTS game_sessions_au AFTER UPDATE ON game_sessions BEGIN
+                  DELETE FROM game_sessions_fts WHERE rowid = old.id;
+                  INSERT INTO game_sessions_fts(rowid, notes)
+                  VALUES (new.id, lower(coalesce(new.notes, '')));
+                END;
+            """))
+
 def reindex_fts() -> None:
     """Rebuild/populate the FTS index from current cards content."""
     if db.engine.dialect.name != "sqlite":

@@ -85,6 +85,16 @@ def _type_group_label(type_line: str) -> str:
             return label
     return "Other"
 
+
+def _clear_deck_metadata_wizard_cache() -> None:
+    user_id = getattr(current_user, "id", None)
+    if not user_id:
+        return
+    try:
+        cache.delete(f"deck_wizard:{user_id}")
+    except Exception:
+        pass
+
 def _folder_name_exists_excluding(name: str, exclude_id: int | None = None) -> bool:
     normalized = (name or "").strip().lower()
     if not normalized:
@@ -338,20 +348,63 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         ("powerstone", "Powerstone"),
     ]
 
+    def _normalize_token_name(name: str | None) -> str:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            return "token"
+        lowered = cleaned.lower()
+        if lowered.endswith(" token"):
+            lowered = lowered[:-6].strip()
+        return lowered or "token"
+
+    def _token_pt_key(token: dict) -> str | None:
+        power = token.get("power")
+        toughness = token.get("toughness")
+        if power is None or toughness is None:
+            return None
+        power_text = str(power).strip()
+        toughness_text = str(toughness).strip()
+        if not power_text or not toughness_text:
+            return None
+        return f"{power_text}/{toughness_text}"
+
+    def _tokens_are_generic(tokens: list[dict]) -> bool:
+        if not tokens:
+            return True
+        for token in tokens:
+            name = (token.get("name") or "").strip().lower()
+            if token.get("id") or (name and name != "token"):
+                return False
+        return True
+
     def _token_stubs_from_oracle_text(text: str | None) -> list[dict]:
         if not text:
             return []
         lower = text.lower()
         found: list[dict] = []
+        def _lookup_token(label: str) -> dict | None:
+            if not label or label.lower() == "token":
+                return None
+            try:
+                matches = sc.search_tokens(label, limit=6) or []
+            except Exception:
+                return None
+            label_norm = label.strip().casefold()
+            for match in matches:
+                if (match.get("name") or "").strip().casefold() == label_norm:
+                    return match
+            return matches[0] if matches else None
+
         if "token" in lower:
             for key, label in _common_token_kinds:
                 if f"{key} token" in lower:
+                    matched = _lookup_token(label)
                     found.append(
                         {
-                            "id": None,
-                            "name": label,
-                            "type_line": f"Token - {label}",
-                            "images": {"small": None, "normal": None},
+                            "id": (matched or {}).get("id"),
+                            "name": (matched or {}).get("name") or label,
+                            "type_line": (matched or {}).get("type_line") or f"Token - {label}",
+                            "images": (matched or {}).get("images") or {"small": None, "normal": None},
                         }
                     )
         if not found and re.search(r"\bcreate\b.*\btoken\b", text, flags=re.IGNORECASE | re.DOTALL):
@@ -366,6 +419,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         return found
 
     bracket_cards: List[Dict[str, Any]] = []
+    token_cache_by_oracle: dict[str, list[dict]] = {}
 
     for cid, name, scode, cn, oid, lang, is_foil, fid, qty, type_line, oracle_text, mana_value, faces_json in rows:
         qty = int(qty or 0) or 1
@@ -393,7 +447,20 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         for bt in parse_base_types(tline):
             type_counts[bt] += qty
 
-        toks = _token_stubs_from_oracle_text(text)
+        toks: list[dict] = []
+        if oid:
+            cached = token_cache_by_oracle.get(oid)
+            if cached is None:
+                try:
+                    cached = sc.tokens_from_oracle(oid) or []
+                except Exception:
+                    cached = []
+                token_cache_by_oracle[oid] = cached
+            toks = cached
+        if _tokens_are_generic(toks):
+            toks = []
+        if not toks:
+            toks = _token_stubs_from_oracle_text(text)
         if not toks:
             continue
 
@@ -402,24 +469,42 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         for token in toks:
             t_name = (token.get("name") or "Token").strip()
             t_line = (token.get("type_line") or "") or ""
-            is_creature_token = "Creature" in t_line
+            is_creature_token = "creature" in t_line.lower()
             if is_creature_token:
-                base_id = token.get("id") or t_name.lower()
-                key = ("crea_per_source", cid, base_id)
+                pt_key = _token_pt_key(token)
+                if pt_key:
+                    key = ("crea_by_pt", _normalize_token_name(t_name), pt_key)
+                else:
+                    base_id = token.get("id") or f"{t_name.lower()}|{t_line.lower()}"
+                    key = ("crea_per_source", cid, base_id)
             else:
-                key = ("noncrea_by_name", t_name.lower())
+                key = ("noncrea_by_name", _normalize_token_name(t_name))
 
             if key not in tokens_by_key:
                 imgs = token.get("images") or {}
                 tokens_by_key[key] = {
                     "id": token.get("id"),
                     "name": t_name,
-                    "type_line": t_line,
+                    "type_line": t_line or "Token",
                     "small": imgs.get("small"),
                     "normal": imgs.get("normal"),
                     "count": 0,
                     "sources": {},
                 }
+            else:
+                imgs = token.get("images") or {}
+                entry = tokens_by_key[key]
+                if entry.get("id") is None and token.get("id"):
+                    entry["id"] = token.get("id")
+                if not entry.get("small") and imgs.get("small"):
+                    entry["small"] = imgs.get("small")
+                if not entry.get("normal") and imgs.get("normal"):
+                    entry["normal"] = imgs.get("normal")
+                if (entry.get("name") or "").lower() == "token" and t_name.lower() != "token":
+                    entry["name"] = t_name
+                if not entry.get("type_line") or entry.get("type_line") == "Token":
+                    if t_line:
+                        entry["type_line"] = t_line
             tokens_by_key[key]["count"] += qty
             srcs = tokens_by_key[key]["sources"]
             if cid not in srcs:
@@ -1197,6 +1282,7 @@ def set_folder_tag(folder_id: int):
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
     _safe_commit()
+    _clear_deck_metadata_wizard_cache()
 
     category = get_deck_tag_category(tag_entry.name if tag_entry else tag)
     if request.is_json:
@@ -1218,6 +1304,7 @@ def clear_folder_tag(folder_id: int):
 
     clear_folder_deck_tags(folder)
     _safe_commit()
+    _clear_deck_metadata_wizard_cache()
 
     if request.is_json:
         return jsonify({"ok": True})
@@ -1458,6 +1545,7 @@ def clear_folder_commander(folder_id: int):
     folder.commander_oracle_id = None
     folder.commander_name = None
     _safe_commit()
+    _clear_deck_metadata_wizard_cache()
     flash(f'Cleared commander for "{folder.name}".', "success")
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
@@ -1530,6 +1618,7 @@ def set_commander(folder_id):
         return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
     _safe_commit()
+    _clear_deck_metadata_wizard_cache()
 
     if request.is_json:
         return jsonify({"ok": True, "name": folder.commander_name})
@@ -1551,6 +1640,7 @@ def clear_commander(folder_id):
     folder.commander_name = None
     folder.commander_oracle_id = None
     _safe_commit()
+    _clear_deck_metadata_wizard_cache()
     if request.is_json:
         return jsonify({"ok": True})
     flash("Commander cleared.", "info")
