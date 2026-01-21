@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Game Log Deck Wizard{% endblock %}
+{% block content %}
+<style>
+  .wizard-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .wizard-meta {
+    font-size: 0.85rem;
+    color: var(--bs-secondary-color);
+  }
+  .wizard-seat {
+    min-width: 180px;
+  }
+  .wizard-notes {
+    max-width: 520px;
+  }
+  .wizard-badge {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .wizard-select .dropdown-menu {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Game Log Deck Wizard</h1>
+      <p class="text-muted mb-0">Map manual decks to registered decks with commander data.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_console') }}">Back to Admin</a>
+      {% if prev_id %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_game_deck_mapping', game_id=prev_id) }}">Prev</a>
+      {% endif %}
+      {% if next_id %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.admin_game_deck_mapping', game_id=next_id) }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not game %}
+    <div class="alert alert-secondary">No manual decks to map right now.</div>
+  {% else %}
+    <div class="wizard-card p-3 mb-4">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+          <div class="fw-semibold">Game #{{ game.id }}</div>
+          <div class="wizard-meta">Played {{ game.played_at }} · {% if game.winner_label %}Winner: {{ game.winner_label }}{% else %}No winner recorded{% endif %}</div>
+        </div>
+        <div class="wizard-meta">Game {{ current_index }} of {{ total_games }}</div>
+      </div>
+      {% if game.notes %}
+        <div class="wizard-meta mt-2 wizard-notes">Notes: {{ game.notes }}</div>
+      {% endif %}
+    </div>
+
+    <form method="post" class="wizard-card p-3">
+      <input type="hidden" name="game_id" value="{{ game.id }}">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="wizard-seat">Seat</th>
+              <th>Player</th>
+              <th>Played Deck</th>
+              <th>Commander</th>
+              <th>Map to Registered Deck</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for seat in game.seats %}
+              <tr>
+                <td class="wizard-seat">
+                  Seat {{ seat.seat_number }}
+                  <div class="wizard-meta">Turn {{ seat.turn_order }}</div>
+                </td>
+                <td>{{ seat.player_label }}</td>
+                <td>
+                  <div class="fw-semibold">{{ seat.deck_name }}</div>
+                  {% if seat.is_manual %}
+                    <span class="badge text-bg-warning-subtle text-warning wizard-badge">Manual</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary wizard-badge">Registered</span>
+                  {% endif %}
+                </td>
+                <td>{{ seat.commander_name or '—' }}</td>
+                <td>
+                  {% if seat.is_manual and seat.deck_id %}
+                    <div class="dropdown dv-select w-100 wizard-select deck-map-select" data-deck-id="{{ seat.deck_id }}">
+                      <input type="hidden" name="deck_map_{{ seat.deck_id }}" data-deck-map-input value="">
+                      <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span data-deck-map-label>Select registered deck</span>
+                        <i class="bi bi-chevron-down"></i>
+                      </button>
+                      <ul class="dropdown-menu dv-select-menu w-100" data-deck-map-menu></ul>
+                    </div>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
+        <button class="btn btn-outline-secondary btn-sm" type="submit" name="action" value="save">Save</button>
+        <button class="btn btn-primary btn-sm" type="submit" name="action" value="save_next">Save &amp; Next</button>
+      </div>
+    </form>
+  {% endif %}
+</div>
+
+<script>
+  (function () {
+    const deckOptions = {{ deck_options | tojson }};
+    const wrappers = Array.from(document.querySelectorAll('.deck-map-select'));
+
+    const bindSearch = (menu) => {
+      const searchItem = document.createElement('li');
+      searchItem.className = 'dv-select-search-wrapper';
+      const searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'form-control form-control-sm dv-select-search';
+      searchInput.placeholder = 'Search decks';
+      searchInput.autocomplete = 'off';
+      searchItem.appendChild(searchInput);
+      menu.appendChild(searchItem);
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.trim().toLowerCase();
+        const options = menu.querySelectorAll('[data-deck-map-option]');
+        options.forEach((item) => {
+          const label = (item.dataset.label || '').toLowerCase();
+          item.parentElement.style.display = label.includes(query) ? '' : 'none';
+        });
+      });
+    };
+
+    const buildMenu = (wrapper, options) => {
+      const input = wrapper.querySelector('[data-deck-map-input]');
+      const labelEl = wrapper.querySelector('[data-deck-map-label]');
+      const menu = wrapper.querySelector('[data-deck-map-menu]');
+      if (!input || !labelEl || !menu) return;
+      menu.innerHTML = '';
+      bindSearch(menu);
+      const items = [{ id: '', label: 'No change' }, ...(options || [])];
+      items.forEach((opt, idx) => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dropdown-item';
+        btn.dataset.deckMapOption = 'true';
+        btn.dataset.value = String(opt.id || '');
+        btn.dataset.label = opt.label;
+        btn.textContent = opt.label;
+        if (!input.value && idx === 0) {
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+        }
+        btn.addEventListener('click', () => {
+          menu.querySelectorAll('.dropdown-item').forEach((node) => node.classList.remove('active'));
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.id || '');
+        });
+        li.appendChild(btn);
+        menu.appendChild(li);
+      });
+    };
+
+    wrappers.forEach((wrapper) => buildMenu(wrapper, deckOptions));
+  })();
+</script>
+{% endblock %}

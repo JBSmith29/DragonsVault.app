@@ -42,23 +42,36 @@ else:
 SECRET_KEY_VALUE = _load_secret_key()
 
 class BaseConfig:
-    # Flask basics
+    # Flask basics - ensure secure defaults
     SECRET_KEY = SECRET_KEY_VALUE or "dev"  # override in prod!
     TEMPLATES_AUTO_RELOAD = False
-
+    
+    # Security headers
+    SEND_FILE_MAX_AGE_DEFAULT = 86400
+    PERMANENT_SESSION_LIFETIME = 3600  # 1 hour session timeout
+    
     # Database (absolute sqlite path; forward slashes are fine on Windows)
     DEFAULT_SQLITE = f"sqlite:///{(INSTANCE_DIR / 'database.db').as_posix()}"
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", DEFAULT_SQLITE)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 3600,
+        'connect_args': {'check_same_thread': False} if 'sqlite' in os.getenv("DATABASE_URL", DEFAULT_SQLITE) else {}
+    }
 
-    # Uploads / responses
+    # Uploads / responses with security limits
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 64 * 1024 * 1024))
-    SEND_FILE_MAX_AGE_DEFAULT = 86400
-
-    # Cookie security
+    
+    # Cookie security - secure by default
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "0").lower() in {"1","true","yes","on"}
+    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "1").lower() in {"1","true","yes","on"}
+    
+    # CSRF Protection
+    WTF_CSRF_ENABLED = True
+    WTF_CSRF_TIME_LIMIT = 3600  # 1 hour
+    WTF_CSRF_SSL_STRICT = os.getenv("WTF_CSRF_SSL_STRICT", "1").lower() in {"1","true","yes","on"}
 
     # Dev-only convenience
     ALLOW_RUNTIME_INDEX_BOOTSTRAP = os.getenv("ALLOW_RUNTIME_INDEX_BOOTSTRAP", "0").lower() in {"1","true","yes","on"}

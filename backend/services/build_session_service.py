@@ -142,6 +142,14 @@ def start_build_session():
         tags_json=tags or None,
     )
     db.session.add(session)
+    if commander_oracle_id:
+        db.session.add(
+            BuildSessionCard(
+                session=session,
+                card_oracle_id=commander_oracle_id,
+                quantity=1,
+            )
+        )
     try:
         db.session.commit()
     except Exception as exc:

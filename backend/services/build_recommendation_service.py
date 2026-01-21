@@ -8,6 +8,7 @@ from extensions import db
 from models import OracleCoreRoleTag
 from services import scryfall_cache as sc
 from services.edhrec_cache_service import get_commander_category_groups, get_commander_synergy
+from services.pricing import oracle_price_lookup, format_price_text
 
 
 def get_edhrec_recommendations(
@@ -56,6 +57,7 @@ def get_edhrec_recommendations(
             "inclusion_percent": rec.get("inclusion_percent"),
             "synergy_rank": rec.get("synergy_rank"),
             "reasons": reasons,
+            "price_text": payload.get("price_text"),
         }
 
     ordered = list(filtered.values())
@@ -157,11 +159,17 @@ def _card_payload(oracle_id: str) -> dict | None:
     image = image_uris.get("normal") or image_uris.get("large") or image_uris.get("small")
     lowered = type_line.lower()
     is_basic_land = "land" in lowered and "basic" in lowered
+    
+    # Add pricing information
+    prices = oracle_price_lookup(oracle_id)
+    price_text = format_price_text(prices)
+    
     return {
         "name": name or oracle_id,
         "image": image,
         "type_line": type_line,
         "is_basic_land": is_basic_land,
+        "price_text": price_text,
     }
 
 
@@ -221,6 +229,7 @@ def _edhrec_card_payload(
         "role_score": len(roles),
         "need_score": len(needed_roles),
         "reasons": reasons,
+        "price_text": payload.get("price_text"),
     }
 
 

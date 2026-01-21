@@ -239,6 +239,197 @@ html[data-bs-theme="light"] input[type="password"]:focus {
   background-clip: text;
 }
 
+/* Mobile responsiveness */
+@media (max-width: 991.98px) {
+  .container,
+  .container-fluid {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .cards-table {
+    font-size: 0.92rem;
+  }
+
+  .cards-table > :not(caption) > * > * {
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .build-breakdown-fab {
+    right: 1rem;
+    bottom: 1rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  :root {
+    --app-header-h: 72px;
+  }
+
+  body {
+    height: auto;
+    min-height: 100vh;
+    padding-top: var(--app-header-h);
+  }
+
+  .app-header {
+    display: flex !important;
+    padding: 0.75rem 1rem;
+    gap: 1rem;
+  }
+
+  .app-header__title {
+    font-size: 1.35rem;
+  }
+
+  .app-header__motto {
+    display: none;
+  }
+
+  .layout-shell {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto 1fr;
+    height: auto;
+    min-height: calc(100vh - var(--app-header-h));
+  }
+
+  #sidebar {
+    position: sticky;
+    top: var(--app-header-h);
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    padding: 0.5rem 0.75rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--dv-border);
+    flex-direction: column;
+  }
+
+  #sidebar .sidebar-header,
+  #sidebar hr {
+    display: none;
+  }
+
+  #sidebar .nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0.5rem;
+    padding-bottom: 0.35rem;
+  }
+
+  #sidebar .nav-item {
+    flex: 0 0 auto;
+  }
+
+  #sidebar .nav-link {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.75rem;
+    flex-direction: column;
+    align-items: center;
+    min-width: 68px;
+    text-align: center;
+  }
+
+  #sidebar .nav-link i {
+    font-size: 1rem;
+  }
+
+  #sidebar .sidebar-label {
+    display: block !important;
+    font-size: 0.65rem;
+  }
+
+  #content {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+    height: auto;
+  }
+
+  #content > main {
+    overflow: visible;
+    padding-bottom: 2rem;
+  }
+
+  .card-hover-preview {
+    display: none !important;
+  }
+
+  .dv-select-menu {
+    min-width: 200px;
+    max-height: 260px;
+  }
+
+  .table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table thead,
+  .table tbody,
+  .table tr,
+  .table th,
+  .table td {
+    white-space: nowrap;
+  }
+
+  .deck-drawer-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  .build-rec-list {
+    gap: 1rem;
+  }
+
+  .build-rec-section {
+    padding: 0.65rem 0.75rem 0.85rem;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .offcanvas-end.w-500 {
+    width: 100% !important;
+  }
+
+  .offcanvas,
+  .modal-dialog {
+    margin: 0.5rem;
+  }
+
+  .btn,
+  .btn-sm {
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+
+  .game-action-buttons .btn {
+    min-width: 0 !important;
+  }
+
+  .form-control,
+  .form-select,
+  .input-group,
+  .input-group > .form-control,
+  .input-group > .form-select,
+  .input-group > .input-group-text,
+  .input-group > .btn {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .input-group {
+    flex-wrap: wrap;
+  }
+
+  .input-group > .form-control,
+  .input-group > .form-select {
+    flex: 1 1 100%;
+  }
+}
+
 html[data-bs-theme="light"] .text-gradient {
   background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
   -webkit-background-clip: text;

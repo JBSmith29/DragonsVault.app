@@ -45,6 +45,11 @@
   .game-action-buttons .btn {
     min-width: 84px;
   }
+  .commander-hover {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
 </style>
 
 <div class="container py-4">
@@ -56,6 +61,10 @@
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_new') }}">Log Game</a>
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_overview') }}">View Logs</a>
+      <a class="btn btn-outline-info btn-sm" href="{{ url_for('views.games_dashboard') }}">New Dashboard</a>
+      {% if current_user.is_admin %}
+        <a class="btn btn-outline-warning btn-sm" href="{{ url_for('views.games_admin') }}">Admin Panel</a>
+      {% endif %}
     </div>
   </div>
 
@@ -183,6 +192,10 @@
       const winnerBadge = seat.is_winner ? '<span class="badge text-bg-success">Winner</span>' : '';
       const comboBadge = seat.is_winner && winViaCombo ? '<span class="badge text-bg-warning">Combo</span>' : '';
       const bracket = seat.bracket_level ? `${esc(seat.bracket_level)}${seat.bracket_label ? ' · ' + esc(seat.bracket_label) : ''}` : '—';
+      const commanderAttr = seat.commander_image ? ` data-hover-src="${esc(seat.commander_image)}"` : '';
+      const commander = seat.commander_name
+        ? ` · <span class="commander-hover"${commanderAttr} data-card-name="${esc(seat.commander_name)}">${esc(seat.commander_name)}</span>`
+        : '';
       return `
         <div class="game-seat-row">
           <div class="d-flex align-items-center gap-2 mb-2">
@@ -192,7 +205,7 @@
             ${comboBadge}
           </div>
           <div class="fw-semibold">${esc(seat.player_label)}</div>
-          <div class="small text-muted">${esc(seat.deck_name)}${seat.commander_name ? ' · ' + esc(seat.commander_name) : ''}</div>
+          <div class="small text-muted">${esc(seat.deck_name)}${commander}</div>
           <div class="small text-muted">Bracket: ${bracket}</div>
         </div>
       `;

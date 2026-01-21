@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+{% block title %}Games Dashboard{% endblock %}
+{% block content %}
+<style>
+  .metric-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.02);
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .metric-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    transform: translateY(-1px);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .metric-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+  }
+  .quick-action-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    background: rgba(255, 255, 255, 0.02);
+    height: 100%;
+    transition: all 0.2s ease;
+  }
+  .quick-action-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    transform: translateY(-1px);
+  }
+  .admin-panel {
+    background: linear-gradient(135deg, rgba(var(--bs-warning-rgb), 0.1), rgba(var(--bs-info-rgb), 0.1));
+    border: 1px solid rgba(var(--bs-warning-rgb), 0.3);
+    border-radius: 1rem;
+    padding: 1.5rem;
+  }
+  .recent-games-table {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0.9rem;
+    border: 1px solid var(--bs-border-color);
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Games Dashboard</h1>
+      <p class="text-muted mb-0">Your central hub for Commander game tracking and analytics.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_quick_log') }}">
+        <i class="bi bi-lightning-charge me-1"></i>Quick Log
+      </a>
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_new') }}">
+        <i class="bi bi-plus-circle me-1"></i>Advanced Log
+      </a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_overview') }}">
+        <i class="bi bi-list-ul me-1"></i>View All Logs
+      </a>
+    </div>
+  </div>
+
+  <!-- Quick Metrics Row -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="metric-card" onclick="window.location.href='{{ url_for('views.games_overview') }}'">
+        <div class="metric-label">Total Games</div>
+        <div class="metric-value">{{ quick_all.total_games }}</div>
+        <div class="small text-muted mt-1">All time</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card" onclick="window.location.href='{{ url_for('views.games_metrics', range='last30') }}'">
+        <div class="metric-label">Recent Activity</div>
+        <div class="metric-value">{{ quick_30.total_games }}</div>
+        <div class="small text-muted mt-1">Last 30 days</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card" onclick="window.location.href='{{ url_for('views.games_metrics') }}#combo-stats'">
+        <div class="metric-label">Combo Wins</div>
+        <div class="metric-value">{{ quick_all.combo_wins }}</div>
+        <div class="small text-muted mt-1">{{ ((quick_all.combo_wins / quick_all.total_games * 100) | round(1)) if quick_all.total_games > 0 else 0 }}% rate</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card" onclick="window.location.href='{{ url_for('views.games_players') }}'">
+        <div class="metric-label">Active Players</div>
+        <div class="metric-value">{{ quick_all.unique_players }}</div>
+        <div class="small text-muted mt-1">In your pods</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Panel (only for admins) -->
+  {% if current_user.is_admin %}
+  <div class="admin-panel mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h3 class="h5 mb-1">
+          <i class="bi bi-shield-check text-warning me-2"></i>Admin Controls
+        </h3>
+        <p class="text-muted small mb-0">Manage game logs and system metrics</p>
+      </div>
+      <span class="badge text-bg-warning">Admin</span>
+    </div>
+    <div class="row g-2">
+      <div class="col-auto">
+        <button class="btn btn-outline-warning btn-sm" onclick="refreshMetrics()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh Metrics
+        </button>
+      </div>
+      <div class="col-auto">
+        <a class="btn btn-outline-info btn-sm" href="{{ url_for('views.games_export') }}">
+          <i class="bi bi-download me-1"></i>Export All Logs
+        </a>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-outline-secondary btn-sm" onclick="showSystemStats()">
+          <i class="bi bi-graph-up me-1"></i>System Stats
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Actions -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-3">
+      <div class="quick-action-card">
+        <h3 class="h6 mb-2">
+          <i class="bi bi-bar-chart text-primary me-2"></i>Analytics
+        </h3>
+        <p class="text-muted small mb-3">Dive deep into win rates, deck performance, and player statistics.</p>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_metrics') }}">View Metrics</a>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+      <div class="quick-action-card">
+        <h3 class="h6 mb-2">
+          <i class="bi bi-people text-success me-2"></i>Pod Management
+        </h3>
+        <p class="text-muted small mb-3">Create and manage player pods with streamlined tools.</p>
+        <div class="d-flex gap-1">
+          <a class="btn btn-outline-success btn-sm" href="{{ url_for('views.games_players_streamlined') }}">Quick Setup</a>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_players') }}">Advanced</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+      <div class="quick-action-card">
+        <h3 class="h6 mb-2">
+          <i class="bi bi-upload text-info me-2"></i>Import/Export
+        </h3>
+        <p class="text-muted small mb-3">Import game logs from CSV or export your data for backup.</p>
+        <button class="btn btn-outline-info btn-sm" onclick="showImportModal()">Import Logs</button>
+      </div>
+    </div>
+    <div class="col-12 col-xl-3">
+      <div class="quick-action-card">
+        <h3 class="h6 mb-2">
+          <i class="bi bi-trophy text-warning me-2"></i>Leaderboards
+        </h3>
+        <p class="text-muted small mb-3">See top performers, most active players, and winning decks.</p>
+        <a class="btn btn-outline-warning btn-sm" href="{{ url_for('views.games_metrics') }}#leaderboards">View Leaders</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Games -->
+  <div class="recent-games-table p-3">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h2 class="h6 text-uppercase text-muted mb-0">Recent Games</h2>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('views.games_overview') }}">
+        See all <i class="bi bi-arrow-right ms-1"></i>
+      </a>
+    </div>
+
+    {% if recent_games and recent_games|length %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="text-center">Players</th>
+              <th>Winner</th>
+              <th>Result</th>
+              <th>Notes</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for game in recent_games %}
+              <tr>
+                <td class="text-nowrap">{{ game.played_at_label }}</td>
+                <td class="text-center">
+                  <span class="badge text-bg-secondary">{{ game.seat_count }}</span>
+                </td>
+                <td>
+                  {% if game.winner_label %}
+                    <span class="fw-semibold">{{ game.winner_label }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if game.win_via_combo %}
+                    <span class="badge text-bg-warning">Combo</span>
+                  {% else %}
+                    <span class="text-muted">Regular</span>
+                  {% endif %}
+                </td>
+                <td class="text-muted">{{ game.notes|truncate(50) if game.notes else '—' }}</td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" type="button" data-game-preview data-game-id="{{ game.id }}">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                    <a class="btn btn-primary" href="{{ url_for('views.games_detail', game_id=game.id) }}">
+                      <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-center py-4">
+        <i class="bi bi-controller display-4 text-muted mb-3"></i>
+        <h4>No games logged yet</h4>
+        <p class="text-muted mb-3">Start tracking your Commander games to see analytics and trends.</p>
+        <a class="btn btn-primary" href="{{ url_for('views.games_new') }}">Log Your First Game</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('views.games_import') }}" enctype="multipart/form-data">
+        <div class="modal-header">
+          <h5 class="modal-title">Import Game Logs</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label">CSV File</label>
+            <input class="form-control" type="file" name="import_file" accept=".csv">
+            <div class="form-text">Upload a CSV file with game log data.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Or Paste CSV Data</label>
+            <textarea class="form-control" name="import_csv" rows="6" placeholder="played_at,notes,winner_seat,seat_count,..."></textarea>
+          </div>
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <a href="{{ url_for('views.games_import_template') }}" class="alert-link">Download template</a> to see the expected format.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Game Preview Drawer -->
+<div class="offcanvas offcanvas-end" style="width: 520px;" tabindex="-1" id="gameDrawer">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title">Game Details</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body" id="gameDrawerBody">
+    <div class="text-muted">Select a game to preview details.</div>
+  </div>
+</div>
+
+<script>
+// Import modal
+function showImportModal() {
+  new bootstrap.Modal(document.getElementById('importModal')).show();
+}
+
+// Admin functions
+function refreshMetrics() {
+  // Show loading state
+  const btn = event.target;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Refreshing...';
+  btn.disabled = true;
+  
+  // Simulate refresh (replace with actual API call)
+  setTimeout(() => {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+    // Show success message
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-bg-success border-0 position-fixed top-0 end-0 m-3';
+    toast.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">Metrics refreshed successfully!</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    `;
+    document.body.appendChild(toast);
+    new bootstrap.Toast(toast).show();
+    setTimeout(() => toast.remove(), 5000);
+  }, 2000);
+}
+
+function showSystemStats() {
+  // This would show a modal with system-wide statistics
+  alert('System stats modal would open here');
+}
+
+// Game preview functionality
+(function() {
+  const drawerEl = document.getElementById('gameDrawer');
+  const bodyEl = document.getElementById('gameDrawerBody');
+  if (!drawerEl || !bodyEl) return;
+
+  const gameRows = {{ recent_games|tojson }};
+  const gameMap = new Map(gameRows.map(game => [String(game.id), game]));
+
+  const esc = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const renderGame = (game) => {
+    const seatsMarkup = (game.seats || []).map(seat => `
+      <div class="border rounded p-2 mb-2">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="badge text-bg-secondary">Seat ${seat.seat_number}</span>
+          ${seat.is_winner ? '<span class="badge text-bg-success">Winner</span>' : ''}
+          ${seat.is_winner && game.win_via_combo ? '<span class="badge text-bg-warning">Combo</span>' : ''}
+        </div>
+        <div class="fw-semibold">${esc(seat.player_label)}</div>
+        <div class="small text-muted">${esc(seat.deck_name)}</div>
+        ${seat.commander_name ? `<div class="small text-muted">Commander: ${esc(seat.commander_name)}</div>` : ''}
+      </div>
+    `).join('');
+
+    return `
+      <div class="mb-3">
+        <h6>Game Summary</h6>
+        <div><strong>Date:</strong> ${esc(game.played_at_label)}</div>
+        <div><strong>Players:</strong> ${game.seat_count}</div>
+        ${game.winner_label ? `<div><strong>Winner:</strong> ${esc(game.winner_label)}</div>` : ''}
+        ${game.notes ? `<div class="mt-2"><strong>Notes:</strong> ${esc(game.notes)}</div>` : ''}
+      </div>
+      <div>
+        <h6>Seats</h6>
+        ${seatsMarkup || '<div class="text-muted">No seat data available.</div>'}
+      </div>
+    `;
+  };
+
+  let drawerInstance = null;
+  const openDrawer = (gameId) => {
+    const game = gameMap.get(String(gameId));
+    if (!game) return;
+    bodyEl.innerHTML = renderGame(game);
+    if (!drawerInstance) {
+      drawerInstance = new bootstrap.Offcanvas(drawerEl);
+    }
+    drawerInstance.show();
+  };
+
+  document.querySelectorAll('[data-game-preview]').forEach((btn) => {
+    btn.addEventListener('click', () => openDrawer(btn.dataset.gameId));
+  });
+})();
+
+// Add spinning animation for refresh button
+const style = document.createElement('style');
+style.textContent = `
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

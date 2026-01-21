@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block title %}User Metrics{% endblock %}
+{% block content %}
+<style>
+  .metric-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .metric-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+  }
+  .metric-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .metric-list li:last-child { border-bottom: 0; }
+  .range-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .metric-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .metric-chart-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+  .metric-chart-label {
+    font-weight: 600;
+  }
+  .metric-chart-bar {
+    height: 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+  .metric-chart-bar span {
+    display: block;
+    height: 100%;
+    background: var(--bs-primary);
+    box-shadow: 0 0 12px rgba(var(--bs-primary-rgb), 0.35);
+  }
+  .metric-chart-value {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">User Metrics</h1>
+      <p class="text-muted mb-0">Analyze player performance and activity patterns.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_metrics') }}">All Metrics</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_metrics_pods') }}">Pod Metrics</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_metrics_decks') }}">Deck Metrics</a>
+    </div>
+  </div>
+
+  <form class="range-card mb-4" method="get">
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-md-6">
+        <label class="form-label">Pod Filter</label>
+        <div class="dropdown dv-select w-100" data-game-select="pod">
+          <input type="hidden" name="pod" data-game-select-input value="{{ selected_pod_id or '' }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label">{% if selected_pod_id %}{{ pod_options|selectattr('id', 'equalto', selected_pod_id)|map(attribute='label')|first }}{% else %}All pods{% endif %}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item{% if not selected_pod_id %} active{% endif %}" type="button" data-game-select-option data-value="" data-label="All pods">All pods</button></li>
+            {% for pod in pod_options %}
+              <li><button class="dropdown-item{% if selected_pod_id and selected_pod_id == pod.id %} active{% endif %}" type="button" data-game-select-option data-value="{{ pod.id }}" data-label="{{ pod.label }}">{{ pod.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Range</label>
+        <div class="dropdown dv-select w-100" data-game-select="range">
+          <input type="hidden" name="range" data-game-select-input value="{{ range_ctx.range_key }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label">{{ range_ctx.label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last30" data-label="Last 30 days">Last 30 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last90" data-label="Last 90 days">Last 90 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="ytd" data-label="Year to date">Year to date</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="year" data-label="Year">Year</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="custom" data-label="Custom range">Custom range</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="all" data-label="All time">All time</button></li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4" id="yearField">
+        <label class="form-label" for="rangeYear">Year</label>
+        <div class="dropdown dv-select w-100" data-game-select="year">
+          <input type="hidden" id="rangeYear" name="year" data-game-select-input value="{{ range_ctx.year_value }}">
+          {% set selected_year = range_ctx.year_value if range_ctx.year_value else '' %}
+          {% set year_label = selected_year if selected_year else 'Select year' %}
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label">{{ year_label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            {% for year in year_options %}
+              <li><button class="dropdown-item{% if selected_year and selected_year|int == year %} active{% endif %}" type="button" data-game-select-option data-value="{{ year }}" data-label="{{ year }}">{{ year }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4" id="customField">
+        <label class="form-label">Custom range</label>
+        <div class="d-flex gap-2">
+          <input class="form-control" type="date" name="start" value="{{ range_ctx.start_value }}">
+          <input class="form-control" type="date" name="end" value="{{ range_ctx.end_value }}">
+        </div>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Total Games</div>
+        <div class="metric-value">{{ metrics.total_games }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Unique Players</div>
+        <div class="metric-value">{{ metrics.unique_players }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Combo Wins</div>
+        <div class="metric-value">{{ metrics.combo_wins }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Avg Players</div>
+        <div class="metric-value">{{ metrics.avg_players if metrics.avg_players is not none else '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Most Active Players</div>
+        <ul class="metric-list">
+          {% if top_players and top_players|length %}
+            {% for row in top_players %}
+              <li>
+                <span>
+                  {% if row.key %}
+                    <a class="text-decoration-none" href="{{ url_for('views.games_metrics_player', player=row.key, **range_params) }}">{{ row.label }}</a>
+                  {% else %}
+                    {{ row.label }}
+                  {% endif %}
+                </span>
+                <span>{{ row.count }} games</span>
+              </li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Top Winners</div>
+        <ul class="metric-list">
+          {% if metrics.top_winners and metrics.top_winners|length %}
+            {% for row in metrics.top_winners %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }} wins</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Combo Win Leaders</div>
+        <ul class="metric-list">
+          {% if combo_winners and combo_winners|length %}
+            {% for row in combo_winners %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }} combo wins</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Player Win Rates</div>
+        {% if player_win_rates and player_win_rates|length %}
+          <div class="metric-chart">
+            {% for row in player_win_rates %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">
+                  {% if row.key %}
+                    <a class="text-decoration-none" href="{{ url_for('views.games_metrics_player', player=row.key, **range_params) }}">{{ row.label }}</a>
+                  {% else %}
+                    {{ row.label }}
+                  {% endif %}
+                  ({{ row.plays }} games, {{ row.wins }} wins)
+                </div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No win rate data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mt-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+          <div class="metric-label">Player Directory</div>
+          <div class="fw-semibold">{{ player_options|length }} player{{ 's' if player_options|length != 1 else '' }}</div>
+        </div>
+      </div>
+      {% if player_options and player_options|length %}
+        <div class="row g-2">
+          {% for player in player_options %}
+            <div class="col-12 col-md-6 col-lg-4">
+              <div class="d-flex justify-content-between align-items-center p-2 border rounded">
+                <span>{{ player.label }}</span>
+                {% if player.key %}
+                  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_metrics_player', player=player.key, **range_params) }}">View Stats</a>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted small">No players found for this filter.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const podWrapper = document.querySelector('[data-game-select="pod"]');
+    const rangeWrapper = document.querySelector('[data-game-select="range"]');
+    const yearWrapper = document.querySelector('[data-game-select="year"]');
+    const yearField = document.getElementById('yearField');
+    const customField = document.getElementById('customField');
+    const formEl = rangeWrapper ? rangeWrapper.closest('form') : null;
+
+    const submitForm = () => {
+      if (!formEl) return;
+      const formData = new FormData(formEl);
+      const params = new URLSearchParams();
+      for (const [key, value] of formData.entries()) {
+        if (value) params.set(key, value);
+      }
+      const url = new URL(window.location);
+      url.search = params.toString();
+      window.location.href = url.toString();
+    };
+
+    const bindSelect = (wrapper, onChange) => {
+      if (!wrapper) return;
+      const input = wrapper.querySelector('[data-game-select-input]');
+      const labelEl = wrapper.querySelector('[data-game-select-label]');
+      const options = Array.from(wrapper.querySelectorAll('[data-game-select-option]'));
+      if (!input || !labelEl || !options.length) return;
+
+      const setActive = (item, fromUser = false) => {
+        const value = item.dataset.value || '';
+        const label = item.dataset.label || item.textContent.trim();
+        options.forEach(btn => btn.classList.toggle('active', btn === item));
+        labelEl.textContent = label;
+        input.value = value;
+        if (onChange) onChange(value, fromUser);
+      };
+
+      options.forEach((btn) => {
+        btn.addEventListener('click', () => setActive(btn, true));
+        if (btn.dataset.value === input.value) {
+          setActive(btn, false);
+        }
+      });
+
+      if (onChange) onChange(input.value || '', false);
+    };
+
+    const updateVisibility = (value, fromUser) => {
+      if (!yearField || !customField) return;
+      yearField.style.display = value === 'year' ? '' : 'none';
+      customField.style.display = value === 'custom' ? '' : 'none';
+      if (!fromUser) return;
+      if (value === 'custom') return;
+      if (value === 'year') {
+        const yearInput = yearField.querySelector('[data-game-select-input]');
+        if (yearInput && yearInput.value) {
+          submitForm();
+        }
+        return;
+      }
+      submitForm();
+    };
+
+    bindSelect(podWrapper, (value, fromUser) => {
+      if (!fromUser) return;
+      submitForm();
+    });
+    bindSelect(rangeWrapper, updateVisibility);
+    bindSelect(yearWrapper, (value, fromUser) => {
+      if (!fromUser) return;
+      submitForm();
+    });
+  })();
+</script>
+{% endblock %}

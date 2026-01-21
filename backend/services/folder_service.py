@@ -1439,9 +1439,12 @@ def send_to_build(folder_id: int):
         .all()
     )
     added = 0
+    commander_present = False
     for oracle_id, qty in rows:
         if not oracle_id:
             continue
+        if commander_oracle_id and str(oracle_id) == str(commander_oracle_id):
+            commander_present = True
         qty = int(qty or 0)
         if qty <= 0:
             continue
@@ -1453,6 +1456,16 @@ def send_to_build(folder_id: int):
             )
         )
         added += qty
+
+    if commander_oracle_id and not commander_present:
+        db.session.add(
+            BuildSessionCard(
+                session_id=session.id,
+                card_oracle_id=str(commander_oracle_id),
+                quantity=1,
+            )
+        )
+        added += 1
 
     try:
         db.session.commit()

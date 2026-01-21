@@ -40,6 +40,48 @@
   .game-action-buttons .btn {
     min-width: 84px;
   }
+  .game-action-buttons form {
+    margin: 0;
+  }
+  .game-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--bs-border-color);
+    background: rgba(255, 255, 255, 0.03);
+    margin-bottom: 0.75rem;
+  }
+  .game-bulk-bar.d-none {
+    display: none;
+  }
+  .game-select-col {
+    width: 36px;
+  }
+  .commander-hover {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+  th[data-sort-type] {
+    cursor: pointer;
+    user-select: none;
+  }
+  th[data-sort-type] .sort-indicator {
+    margin-left: 0.35rem;
+    font-size: 0.7rem;
+    opacity: 0.6;
+  }
+  th[aria-sort="ascending"] .sort-indicator::after {
+    content: "▲";
+  }
+  th[aria-sort="descending"] .sort-indicator::after {
+    content: "▼";
+  }
+  th[data-sort-type]:not([aria-sort]) .sort-indicator::after {
+    content: "↕";
+  }
 </style>
 
 <div class="container py-4">
@@ -53,7 +95,7 @@
         <input class="form-control form-control-sm" type="search" name="q" placeholder="Search notes" value="{{ search_query or '' }}">
         <button class="btn btn-outline-secondary btn-sm" type="submit">Search</button>
       </form>
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_export') }}">Export</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_export') }}" data-hx-boost="false">Export</a>
       <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#gameImportModal">Import</button>
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_landing') }}">Back to Landing</a>
       <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_new') }}">Log Game</a>
@@ -66,38 +108,69 @@
   </div>
 
   {% if games and games|length %}
+    {% set editable_games = games|selectattr('can_edit')|list %}
+    {% set has_editable = editable_games|length > 0 %}
+    {% if has_editable %}
+      <form id="gameBulkForm" method="post" action="{{ url_for('views.games_bulk_delete') }}" onsubmit="return confirm('Delete the selected game logs?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="game_ids" id="gameBulkIds" value="">
+        <div class="game-bulk-bar d-none" id="gameBulkBar">
+          <div class="text-muted small">Selected <span id="gameBulkCount">0</span> games</div>
+          <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="gameBulkClear">Clear</button>
+            <button class="btn btn-outline-danger btn-sm" type="submit" id="gameBulkDelete" disabled>Delete selected</button>
+          </div>
+        </div>
+      </form>
+    {% endif %}
     <div class="table-responsive">
-      <table class="table table-sm align-middle cards-table">
+      <table class="table table-sm align-middle cards-table" id="gameLogsTable">
         <thead>
           <tr>
-            <th>Date</th>
-            <th class="text-center">Players</th>
-            <th>Winner</th>
-            <th>Result</th>
-            <th>Notes</th>
+            <th class="text-center game-select-col">
+              {% if has_editable %}
+                <input class="form-check-input" type="checkbox" id="gameSelectAll" aria-label="Select all games">
+              {% endif %}
+            </th>
+            <th data-sort-type="date">Date<span class="sort-indicator"></span></th>
+            <th class="text-center" data-sort-type="number">Players<span class="sort-indicator"></span></th>
+            <th data-sort-type="text">Winner<span class="sort-indicator"></span></th>
+            <th data-sort-type="number">Result<span class="sort-indicator"></span></th>
+            <th data-sort-type="text">Notes<span class="sort-indicator"></span></th>
             <th class="text-end">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for game in games %}
             <tr>
-              <td class="text-nowrap">{{ game.played_at_label }}</td>
-              <td class="text-center">{{ game.seat_count }}</td>
-              <td>{{ game.winner_label or '—' }}</td>
-              <td>
+              <td class="text-center">
+                {% if game.can_edit %}
+                  <input class="form-check-input" type="checkbox" data-game-select value="{{ game.id }}" aria-label="Select game {{ game.id }}">
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-nowrap" data-sort-value="{{ game.played_at_iso or '' }}">{{ game.played_at_label }}</td>
+              <td class="text-center" data-sort-value="{{ game.seat_count }}">{{ game.seat_count }}</td>
+              <td data-sort-value="{{ game.winner_label or '' }}">{{ game.winner_label or '—' }}</td>
+              <td data-sort-value="{{ '1' if game.win_via_combo else '0' }}">
                 {% if game.win_via_combo %}
                   <span class="badge text-bg-warning">Combo win</span>
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="text-muted">{{ game.notes|truncate(80) if game.notes else '—' }}</td>
+              <td class="text-muted" data-sort-value="{{ game.notes or '' }}">{{ game.notes|truncate(80) if game.notes else '—' }}</td>
               <td class="text-end">
                 <div class="game-action-buttons justify-content-end">
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-game-preview data-game-id="{{ game.id }}">Preview</button>
                   <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_detail', game_id=game.id) }}">View</a>
                   {% if game.can_edit %}
                     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_edit', game_id=game.id) }}">Edit</a>
+                    <form method="post" action="{{ url_for('views.games_delete', game_id=game.id) }}" onsubmit="return confirm('Delete this game log?');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+                    </form>
                   {% endif %}
                 </div>
               </td>
@@ -127,11 +200,14 @@
             <label class="form-label" for="gameImportFile">Game log CSV file</label>
             <input class="form-control" type="file" id="gameImportFile" name="import_file" accept=".csv,text/csv">
             <div class="form-text">Exported game logs from DragonsVault can be imported here.</div>
+            <div class="mt-2">
+              <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_import_template') }}" data-hx-boost="false">Download CSV template</a>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label" for="gameImportText">Or paste CSV</label>
-            <textarea class="form-control" id="gameImportText" name="import_csv" rows="6" placeholder="game_id,played_at,notes,win_via_combo,winner_seat,seat_number,..."></textarea>
-            <div class="form-text">Decks missing from your account are stored as manual snapshots.</div>
+            <textarea class="form-control" id="gameImportText" name="import_csv" rows="6" placeholder="played_at,notes,win_via_combo,winner_seat,seat_count,seat_1_player_name,seat_1_deck_name,..."></textarea>
+            <div class="form-text">Decks missing from your account are stored as manual snapshots. Dates should be YYYY-MM-DD.</div>
           </div>
         </div>
         <div class="modal-footer">
@@ -176,6 +252,10 @@
       const winnerBadge = seat.is_winner ? '<span class="badge text-bg-success">Winner</span>' : '';
       const comboBadge = seat.is_winner && winViaCombo ? '<span class="badge text-bg-warning">Combo</span>' : '';
       const bracket = seat.bracket_level ? `${esc(seat.bracket_level)}${seat.bracket_label ? ' · ' + esc(seat.bracket_label) : ''}` : '—';
+      const commanderAttr = seat.commander_image ? ` data-hover-src="${esc(seat.commander_image)}"` : '';
+      const commander = seat.commander_name
+        ? ` · <span class="commander-hover"${commanderAttr} data-card-name="${esc(seat.commander_name)}">${esc(seat.commander_name)}</span>`
+        : '';
       return `
         <div class="game-seat-row">
           <div class="game-seat-meta">
@@ -185,7 +265,7 @@
             ${comboBadge}
           </div>
           <div class="fw-semibold">${esc(seat.player_label)}</div>
-          <div class="small text-muted">${esc(seat.deck_name)}${seat.commander_name ? ' · ' + esc(seat.commander_name) : ''}</div>
+          <div class="small text-muted">${esc(seat.deck_name)}${commander}</div>
           <div class="small text-muted">Bracket: ${bracket}</div>
         </div>
       `;
@@ -227,6 +307,106 @@
 
     document.querySelectorAll('[data-game-preview]').forEach((btn) => {
       btn.addEventListener('click', () => openDrawer(btn.dataset.gameId));
+    });
+  })();
+</script>
+<script>
+  (function () {
+    const bulkBar = document.getElementById('gameBulkBar');
+    const bulkCount = document.getElementById('gameBulkCount');
+    const bulkIdsInput = document.getElementById('gameBulkIds');
+    const bulkDelete = document.getElementById('gameBulkDelete');
+    const bulkClear = document.getElementById('gameBulkClear');
+    const selectAll = document.getElementById('gameSelectAll');
+    const checkboxes = Array.from(document.querySelectorAll('[data-game-select]'));
+
+    if (!bulkBar || !bulkCount || !bulkIdsInput || !bulkDelete || !checkboxes.length) {
+      return;
+    }
+
+    const updateBulk = () => {
+      const selected = checkboxes.filter((cb) => cb.checked).map((cb) => cb.value);
+      bulkIdsInput.value = selected.join(',');
+      bulkCount.textContent = String(selected.length);
+      bulkBar.classList.toggle('d-none', selected.length === 0);
+      bulkDelete.disabled = selected.length === 0;
+      if (selectAll) {
+        selectAll.checked = selected.length > 0 && selected.length === checkboxes.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
+      }
+    };
+
+    checkboxes.forEach((cb) => cb.addEventListener('change', updateBulk));
+    selectAll?.addEventListener('change', () => {
+      const checked = selectAll.checked;
+      checkboxes.forEach((cb) => {
+        cb.checked = checked;
+      });
+      updateBulk();
+    });
+    bulkClear?.addEventListener('click', () => {
+      checkboxes.forEach((cb) => {
+        cb.checked = false;
+      });
+      if (selectAll) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+      }
+      updateBulk();
+    });
+  })();
+</script>
+<script>
+  (function () {
+    const table = document.getElementById('gameLogsTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    const headers = Array.from(table.querySelectorAll('th[data-sort-type]'));
+    if (!tbody || !headers.length) return;
+
+    const getCellValue = (row, index) => {
+      const cell = row.children[index];
+      if (!cell) return '';
+      if (cell.dataset && cell.dataset.sortValue !== undefined) {
+        return cell.dataset.sortValue;
+      }
+      return (cell.textContent || '').trim();
+    };
+
+    const parseValue = (value, type) => {
+      if (type === 'number') {
+        const parsed = parseFloat(value);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      }
+      if (type === 'date') {
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      }
+      return (value || '').toString().toLowerCase();
+    };
+
+    const sortRows = (index, type, direction) => {
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const aVal = parseValue(getCellValue(a, index), type);
+        const bVal = parseValue(getCellValue(b, index), type);
+        if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+      rows.forEach(row => tbody.appendChild(row));
+    };
+
+    headers.forEach((th) => {
+      th.addEventListener('click', () => {
+        const index = th.cellIndex;
+        const type = th.dataset.sortType || 'text';
+        const current = th.getAttribute('aria-sort');
+        const nextDirection = current === 'ascending' ? 'desc' : 'asc';
+        headers.forEach((header) => header.removeAttribute('aria-sort'));
+        th.setAttribute('aria-sort', nextDirection === 'asc' ? 'ascending' : 'descending');
+        sortRows(index, type, nextDirection);
+      });
     });
   })();
 </script>

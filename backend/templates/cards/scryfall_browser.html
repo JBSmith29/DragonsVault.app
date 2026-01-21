@@ -815,11 +815,26 @@
     }
     autoFilterTimer = setTimeout(() => {
       autoFilterTimer = null;
-      if (typeof form.requestSubmit === "function") {
-        form.requestSubmit();
-      } else {
-        form.submit();
+      
+      // Build clean URL using URLSearchParams
+      const formData = new FormData(form);
+      const params = new URLSearchParams();
+      
+      // Add each form field to params (automatically handles duplicates)
+      for (const [key, value] of formData.entries()) {
+        if (value && value.toString().trim()) {
+          params.set(key, value.toString().trim());
+        }
       }
+      
+      // Build the target URL
+      const action = form.getAttribute('action') || window.location.pathname;
+      const targetUrl = params.toString() 
+        ? `${action}?${params.toString()}`
+        : action;
+      
+      // Navigate to the clean URL
+      window.location.href = targetUrl;
     }, 150);
   }
 

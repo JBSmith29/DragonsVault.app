@@ -336,6 +336,7 @@
         <div class="btn-group btn-group-sm" role="group" aria-label="Deck view scope">
           <a class="btn btn-outline-primary {% if scope == 'mine' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='mine') }}">My Decks</a>
           <a class="btn btn-outline-primary {% if scope == 'friends' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='friends') }}">Friends</a>
+          <a class="btn btn-outline-primary {% if scope == 'all' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='all') }}">All Decks</a>
         </div>
       {% endif %}
       <a class="btn btn-outline-theme btn-sm" href="{{ url_for('views.deck_tokens_overview') }}">
@@ -388,12 +389,13 @@
   {% endif %}
 
   {% if decks and decks|length %}
-  {% if scope == 'mine' %}
-    <div class="d-flex justify-content-start mb-2">
-      <button class="btn btn-outline-info btn-sm" type="button" id="deckMetadataWizardBtn">
-        Finish Deck Setup
-      </button>
-    </div>
+    {% if scope == 'mine' %}
+      <div class="d-flex justify-content-start mb-2">
+        <button class="btn btn-outline-info btn-sm" type="button" id="deckMetadataWizardBtn">
+          Finish Deck Setup
+        </button>
+      </div>
+    {% endif %}
     <div class="table-responsive">
       <table class="table table-sm align-middle cards-table">
         {# Determine the next direction for each sortable column link #}
@@ -419,6 +421,8 @@
         </thead>
         <tbody>
           {% for d in decks %}
+            {% set can_edit = d.is_owner %}
+            {% set deck_href = url_for('views.folder_detail', folder_id=d.id) if can_edit else url_for('views.shared_folder_detail', folder_id=d.id) %}
             {# Commander preview information (thumbnail + hover image) #}
             {% set cmd = d.commander %}
             {% set cmd_small = cmd.small if cmd else None %}
@@ -437,48 +441,71 @@
               <!-- Deck cell with commander thumb (owned print) + deck/commander names -->
               <td class="deck-name-cell">
                 <div class="d-flex align-items-center gap-2">
-                  <button
-                    type="button"
-                    class="cmdr-thumb-wrap btn p-0 border-0 bg-transparent"
-                    data-commander-trigger="true"
-                    data-folder-id="{{ d.id }}"
-                    data-deck-name="{{ d.name }}"
-                    data-set-url="{{ set_url }}"
-                    data-clear-url="{{ clear_url }}"
-                    data-candidate-url="{{ candidate_url }}"
-                    {% if cmd_name %}data-commander-name="{{ cmd_name }}"{% endif %}
-                    {% if cmd_large %}data-hover-src="{{ cmd_large }}"{% endif %}>
-                    {% if cmd_small %}
-                      <img class="cmdr-thumb" src="{{ cmd_small }}" alt="{{ cmd_alt }}">
-                    {% else %}
-                      <div class="cmdr-thumb-placeholder">
-                        <span>Set Commander</span>
-                      </div>
-                    {% endif %}
-                  </button>
+                  {% if can_edit %}
+                    <button
+                      type="button"
+                      class="cmdr-thumb-wrap btn p-0 border-0 bg-transparent"
+                      data-commander-trigger="true"
+                      data-folder-id="{{ d.id }}"
+                      data-deck-name="{{ d.name }}"
+                      data-set-url="{{ set_url }}"
+                      data-clear-url="{{ clear_url }}"
+                      data-candidate-url="{{ candidate_url }}"
+                      {% if cmd_name %}data-commander-name="{{ cmd_name }}"{% endif %}
+                      {% if cmd_large %}data-hover-src="{{ cmd_large }}"{% endif %}>
+                      {% if cmd_small %}
+                        <img class="cmdr-thumb" src="{{ cmd_small }}" alt="{{ cmd_alt }}">
+                      {% else %}
+                        <div class="cmdr-thumb-placeholder">
+                          <span>Set Commander</span>
+                        </div>
+                      {% endif %}
+                    </button>
+                  {% else %}
+                    <a
+                      class="cmdr-thumb-wrap btn p-0 border-0 bg-transparent"
+                      href="{{ deck_href }}"
+                      {% if cmd_large %}data-hover-src="{{ cmd_large }}"{% endif %}>
+                      {% if cmd_small %}
+                        <img class="cmdr-thumb" src="{{ cmd_small }}" alt="{{ cmd_alt }}">
+                      {% else %}
+                        <div class="cmdr-thumb-placeholder">
+                          <span>Commander</span>
+                        </div>
+                      {% endif %}
+                    </a>
+                  {% endif %}
                   <div class="meta min-w-0">
                     <div class="fw-semibold text-truncate d-flex align-items-center gap-2">
-                      <a href="{{ url_for('views.folder_detail', folder_id=d.id) }}">{{ d.name }}</a>
+                      <a href="{{ deck_href }}">{{ d.name }}</a>
                       {% if d.is_proxy %}
                         <span class="proxy-badge">Proxy</span>
                       {% endif %}
                     </div>
                     <div class="small text-muted text-truncate d-flex align-items-center gap-3 flex-wrap">
-                      <button type="button"
-                              class="commander-set-link"
-                              data-commander-trigger="true"
-                              data-folder-id="{{ d.id }}"
-                              data-deck-name="{{ d.name }}"
-                              data-commander-name="{{ cmd_name or '' }}"
-                              data-set-url="{{ set_url }}"
-                              data-clear-url="{{ clear_url }}"
-                              data-candidate-url="{{ candidate_url }}">
+                      {% if can_edit %}
+                        <button type="button"
+                                class="commander-set-link"
+                                data-commander-trigger="true"
+                                data-folder-id="{{ d.id }}"
+                                data-deck-name="{{ d.name }}"
+                                data-commander-name="{{ cmd_name or '' }}"
+                                data-set-url="{{ set_url }}"
+                                data-clear-url="{{ clear_url }}"
+                                data-candidate-url="{{ candidate_url }}">
+                          {% if cmd_name %}
+                            Commander: {{ cmd_name }}
+                          {% else %}
+                            Click here to set commander
+                          {% endif %}
+                        </button>
+                      {% else %}
                         {% if cmd_name %}
-                          Commander: {{ cmd_name }}
+                          <span>Commander: {{ cmd_name }}</span>
                         {% else %}
-                          Click here to set commander
+                          <span class="text-muted">Commander: —</span>
                         {% endif %}
-                      </button>
+                      {% endif %}
                     </div>
                   </div>
                 </div>
@@ -486,18 +513,26 @@
 
               <td class="text-truncate">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    class="btn btn-outline-primary btn-sm deck-tag-trigger"
-                    data-folder-id="{{ d.id }}"
-                    data-deck-name="{{ d.name }}"
-                    data-current-tag="{{ d.tag or '' }}"
-                    data-current-label="{{ d.tag_label or d.tag or '' }}"
-                    data-tag-source="manual"
-                    title="{{ 'Manual deck tag' if d.tag_label else 'Set a manual deck tag' }}"
-                  >
-                    {{ d.tag_label or 'Set tag' }}
-                  </button>
+                  {% if can_edit %}
+                    <button
+                      type="button"
+                      class="btn btn-outline-primary btn-sm deck-tag-trigger"
+                      data-folder-id="{{ d.id }}"
+                      data-deck-name="{{ d.name }}"
+                      data-current-tag="{{ d.tag or '' }}"
+                      data-current-label="{{ d.tag_label or d.tag or '' }}"
+                      data-tag-source="manual"
+                      title="{{ 'Manual deck tag' if d.tag_label else 'Set a manual deck tag' }}"
+                    >
+                      {{ d.tag_label or 'Set tag' }}
+                    </button>
+                  {% else %}
+                    {% if d.tag_label %}
+                      <span class="text-muted">{{ d.tag_label }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  {% endif %}
                 </div>
               </td>
 
@@ -541,10 +576,17 @@
               <!-- Action -->
               <td class="text-end">
                 <div class="d-flex flex-column align-items-end gap-1">
-                  <a class="btn btn-sm btn-primary"
-                     href="{{ url_for('views.list_cards', folder=d.id) }}">
-                    Show Cards
-                  </a>
+                  {% if can_edit %}
+                    <a class="btn btn-sm btn-primary"
+                       href="{{ url_for('views.list_cards', folder=d.id) }}">
+                      Show Cards
+                    </a>
+                  {% else %}
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="{{ deck_href }}">
+                      View
+                    </a>
+                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -569,61 +611,6 @@
         <div class="text-center small text-muted">Select a deck row to preview details.</div>
       </div>
     </div>
-  {% else %}
-    <div class="table-responsive">
-      <table class="table table-sm align-middle cards-table">
-        <thead>
-          <tr>
-            <th>Deck</th>
-            <th class="owner-cell">Owner</th>
-            <th>Commander</th>
-            <th>Color Identity</th>
-            <th class="text-end">Qty</th>
-            <th class="text-end">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for d in decks %}
-            {% set cmd = d.commander %}
-            <tr>
-              <td class="deck-name-cell">
-                <a href="{{ url_for('views.shared_folder_detail', folder_id=d.id) }}">{{ d.name }}</a>
-              </td>
-              <td class="owner-cell text-truncate">
-                {% if d.owner %}
-                  {{ d.owner }}
-                {% else %}
-                  <span class="text-muted">&mdash;</span>
-                {% endif %}
-              </td>
-              <td class="text-truncate">
-                {% if cmd and cmd.name %}
-                  {{ cmd.name }}
-                {% else %}
-                  <span class="text-muted">&mdash;</span>
-                {% endif %}
-              </td>
-              <td class="text-nowrap">{{ d.ci_name }}</td>
-              <td class="text-end">{{ '{:,}'.format(d.qty or 0) }}</td>
-              <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('views.shared_folder_detail', folder_id=d.id) }}">
-                  View
-                </a>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if pages is defined and pages > 1 %}
-      {% from "shared/components/pagination.html" import render_pagination %}
-      <div class="d-flex justify-content-center mt-3">
-        {% call(p) render_pagination(page=page, pages=pages, classes="pagination pagination-sm flex-wrap") %}
-          {{ page_url_map.get(p) if page_url_map is defined else "#" }}
-        {% endcall %}
-      </div>
-    {% endif %}
-  {% endif %}
   {% else %}
     {# Empty state when no decks exist #}
     <div class="alert alert-secondary">

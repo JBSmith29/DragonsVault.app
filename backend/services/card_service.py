@@ -11,6 +11,7 @@ import time
 from collections import defaultdict
 from math import ceil
 from typing import Dict, Iterable, List, Optional, Set
+from urllib.parse import quote
 from sqlalchemy.exc import IntegrityError
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
@@ -121,6 +122,7 @@ def _user_cache_key() -> str:
 
 
 def _cache_fetch(key: str, ttl_seconds: int, factory):
+    """Enhanced cache fetch with memory management."""
     if not cache:
         return factory()
     try:
@@ -129,9 +131,15 @@ def _cache_fetch(key: str, ttl_seconds: int, factory):
         cached = None
     if cached is not None:
         return cached
+    
     value = factory()
+    
+    # Implement cache size limits to prevent memory issues
     try:
-        cache.set(key, value, timeout=ttl_seconds)
+        # Only cache if value is reasonable size (< 1MB serialized)
+        import sys
+        if sys.getsizeof(value) < 1024 * 1024:
+            cache.set(key, value, timeout=ttl_seconds)
     except Exception:
         pass
     return value
@@ -406,7 +414,7 @@ def _dashboard_card_stats(
     folder_ids: tuple[int, ...],
     collection_ids: tuple[int, ...],
 ) -> dict:
-    """Aggregate per-user collection stats."""
+    """Aggregate per-user collection stats with optimized queries."""
     cache_key = ("dashboard_stats", user_key, folder_ids, collection_ids)
 
     def _load() -> dict:
@@ -418,6 +426,8 @@ def _dashboard_card_stats(
                 "sets": 0,
                 "collection_qty": 0,
             }
+        
+        # Use single optimized query without load_only for aggregate queries
         totals = (
             db.session.query(
                 func.count(Card.id),
@@ -1984,6 +1994,7 @@ def dashboard():
                     owner=getattr(f, "owner", None) if f else None,
                     owner_key=(getattr(f, "owner", None) or "").strip().lower() if f else "",
                     is_proxy=bool(getattr(f, "is_proxy", False)) if f else False,
+                    is_owner=bool(f and current_user and getattr(current_user, "is_authenticated", False) and f.owner_user_id == current_user.id),
                     tag=getattr(f, "deck_tag", None) if f else None,
                     tag_label=getattr(f, "deck_tag", None) if f else None,
                     ci_name=color_identity_name(letters),
@@ -3952,18 +3963,21 @@ def decks_overview():
     reverse = direction == "desc"
     is_authenticated = bool(current_user and getattr(current_user, "is_authenticated", False))
     scope = (request.args.get("scope") or ("mine" if is_authenticated else "all")).strip().lower()
-    if is_authenticated and scope not in {"mine", "friends"}:
+    if is_authenticated and scope not in {"mine", "friends", "all"}:
         scope = "mine"
     if not is_authenticated:
         scope = "all"
 
-    allowed_per_page = (25, 50, 100)
-    try:
-        per = int(request.args.get("per", request.args.get("per_page", 25)))
-    except Exception:
-        per = 25
-    if per not in allowed_per_page:
-        per = 25
+    per_raw = (request.args.get("per") or request.args.get("per_page") or "").strip().lower()
+    allowed_per_page = (25, 50, 100, 250, 500)
+    per = None
+    if per_raw and per_raw not in {"all", "0", "-1"}:
+        try:
+            per = int(per_raw)
+        except Exception:
+            per = None
+        if per not in allowed_per_page:
+            per = None
     try:
         page = max(int(request.args.get("page", 1)), 1)
     except Exception:
@@ -3972,12 +3986,14 @@ def decks_overview():
     role_filter = Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
     scope_filter = None
     if is_authenticated:
+        friend_ids = (
+            db.session.query(UserFriend.friend_user_id)
+            .filter(UserFriend.user_id == current_user.id)
+        )
         if scope == "friends":
-            friend_ids = (
-                db.session.query(UserFriend.friend_user_id)
-                .filter(UserFriend.user_id == current_user.id)
-            )
             scope_filter = Folder.owner_user_id.in_(friend_ids)
+        elif scope == "all":
+            scope_filter = or_(Folder.owner_user_id == current_user.id, Folder.owner_user_id.in_(friend_ids))
         else:
             scope_filter = Folder.owner_user_id == current_user.id
     scoped_filters = [role_filter]
@@ -4004,6 +4020,26 @@ def decks_overview():
             proxy_total = 0
             owned_total = 0
             friends_total = total_decks
+        elif is_authenticated and scope == "all":
+            proxy_total = (
+                db.session.query(func.count(base_counts.c.folder_id))
+                .filter(
+                    base_counts.c.owner_user_id == current_user.id,
+                    base_counts.c.is_proxy.is_(True),
+                )
+                .scalar()
+                or 0
+            )
+            owned_total = (
+                db.session.query(func.count(base_counts.c.folder_id))
+                .filter(
+                    base_counts.c.owner_user_id == current_user.id,
+                    base_counts.c.is_proxy.is_(False),
+                )
+                .scalar()
+                or 0
+            )
+            friends_total = total_decks - owned_total - proxy_total
         else:
             proxy_total = (
                 db.session.query(func.count(base_counts.c.folder_id))
@@ -4034,6 +4070,8 @@ def decks_overview():
     owned_total = int(owned_total or 0)
     friends_total = int(friends_total or 0)
 
+    if per is None:
+        per = total_decks if total_decks else 1
     pages = max(1, ceil(total_decks / per)) if per else 1
     page = min(page, pages)
     offset = (page - 1) * per
@@ -4047,6 +4085,7 @@ def decks_overview():
             Folder.commander_oracle_id,
             Folder.commander_name,
             Folder.owner,
+            Folder.owner_user_id,
             Folder.is_proxy,
         )
         .outerjoin(Card, Card.folder_id == Folder.id)
@@ -4058,6 +4097,7 @@ def decks_overview():
         Folder.commander_oracle_id,
         Folder.commander_name,
         Folder.owner,
+        Folder.owner_user_id,
         Folder.is_proxy,
     )
 
@@ -4083,7 +4123,7 @@ def decks_overview():
 
     # normalize for the template
     decks = []
-    for fid, name, _rows, qty, cmd_oid, cmd_name, owner, is_proxy in rows:
+    for fid, name, _rows, qty, cmd_oid, cmd_name, owner, owner_user_id, is_proxy in rows:
         decks.append({
             "id": fid,
             "name": name,
@@ -4091,6 +4131,7 @@ def decks_overview():
             "commander_oid": cmd_oid,
             "commander_name": cmd_name,
             "owner": owner,
+            "owner_user_id": owner_user_id,
             "is_proxy": bool(is_proxy),
             "bracket": {},
             "tag": None,
@@ -4220,7 +4261,7 @@ def decks_overview():
     deck_cmdr = {}
     placeholder_thumb = static_url("img/card-placeholder.svg")
 
-    for (fid, _name, _rows, _qty, cmd_oid, cmd_name, _owner, _is_proxy) in rows:
+    for (fid, _name, _rows, _qty, cmd_oid, cmd_name, _owner, _owner_user_id, _is_proxy) in rows:
         # -- color identity for the deck
         letters, label = compute_folder_color_identity(fid)
         letters = letters or ["C"]
@@ -4410,6 +4451,11 @@ def decks_overview():
                 owner=deck.get("owner"),
                 owner_key=(deck.get("owner") or "").strip().lower(),
                 is_proxy=bool(deck.get("is_proxy")),
+                is_owner=bool(
+                    current_user
+                    and getattr(current_user, "is_authenticated", False)
+                    and deck.get("owner_user_id") == current_user.id
+                ),
                 tag=deck.get("tag"),
                 tag_label=deck.get("tag_label"),
                 ci_name=deck_ci_name.get(fid) or "Colorless",
@@ -4931,9 +4977,15 @@ def deck_tokens_overview():
                 except Exception:
                     src_img_url = None
                 image_cache[img_key] = src_img_url
+        if not src_img_url and name:
+            src_img_url = (
+                "https://api.scryfall.com/cards/named?format=image&version=normal&exact="
+                + quote(name)
+            )
 
         deck_name = deck.name or f"Deck {folder_id}"
 
+        seen_token_keys: set[str] = set()
         for token in tokens:
             token_name = (token.get("name") or "Token").strip()
             token_type = (token.get("type_line") or "").strip()
@@ -4947,6 +4999,9 @@ def deck_tokens_overview():
                     token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
             else:
                 token_key = f"noncreature:{_normalize_token_name(token_name)}"
+            if token_key in seen_token_keys:
+                continue
+            seen_token_keys.add(token_key)
             imgs = token.get("images") or {}
 
             entry = tokens_by_key.setdefault(

@@ -25,6 +25,7 @@ class DeckVM:
     owner: Optional[str]
     owner_key: str
     is_proxy: bool
+    is_owner: bool
     tag: Optional[str]
     tag_label: Optional[str]
     ci_name: str

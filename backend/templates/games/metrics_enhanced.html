@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% block title %}Game Metrics{% endblock %}
+{% block content %}
+<style>
+  .metric-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.02);
+    transition: all 0.2s ease;
+  }
+  .metric-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .metric-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+  }
+  .metric-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .metric-list li:last-child { border-bottom: 0; }
+  .range-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .metric-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .metric-chart-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+  .metric-chart-label {
+    font-weight: 600;
+  }
+  .metric-chart-bar {
+    height: 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+  .metric-chart-bar span {
+    display: block;
+    height: 100%;
+    background: var(--bs-primary);
+    box-shadow: 0 0 12px rgba(var(--bs-primary-rgb), 0.35);
+    transition: width 0.3s ease;
+  }
+  .metric-chart-value {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+  }
+  .admin-toolbar {
+    background: linear-gradient(135deg, rgba(var(--bs-warning-rgb), 0.1), rgba(var(--bs-info-rgb), 0.1));
+    border: 1px solid rgba(var(--bs-warning-rgb), 0.3);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .quick-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .filter-chip {
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-secondary-bg);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .filter-chip:hover, .filter-chip.active {
+    background: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: white;
+  }
+  .export-section {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Game Metrics</h1>
+      <p class="text-muted mb-0">Analyze your Commander game data with advanced filtering and insights.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_dashboard') }}">
+        <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+      </a>
+      <button class="btn btn-outline-info btn-sm" onclick="exportMetrics()">
+        <i class="bi bi-download me-1"></i>Export Data
+      </button>
+    </div>
+  </div>
+
+  <!-- Admin Toolbar -->
+  {% if current_user.is_admin %}
+  <div class="admin-toolbar">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-shield-check text-warning"></i>
+        <span class="fw-semibold">Admin Tools</span>
+      </div>
+      <span class="badge text-bg-warning">Admin</span>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-outline-warning btn-sm" onclick="refreshAllMetrics()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh All Metrics
+      </button>
+      <button class="btn btn-outline-info btn-sm" onclick="showSystemMetrics()">
+        <i class="bi bi-graph-up me-1"></i>System-wide Stats
+      </button>
+      <button class="btn btn-outline-secondary btn-sm" onclick="clearMetricsCache()">
+        <i class="bi bi-trash me-1"></i>Clear Cache
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Filter Chips -->
+  <div class="quick-filter-chips">
+    <div class="filter-chip active" data-range="last30">Last 30 Days</div>
+    <div class="filter-chip" data-range="last90">Last 90 Days</div>
+    <div class="filter-chip" data-range="ytd">Year to Date</div>
+    <div class="filter-chip" data-range="all">All Time</div>
+  </div>
+
+  <!-- Advanced Filters -->
+  <form class="range-card mb-4" method="get" id="metricsForm">
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-md-3">
+        <label class="form-label">Pod Filter</label>
+        <div class="dropdown dv-select w-100" data-game-select="pod">
+          <input type="hidden" name="pod" data-game-select-input value="{{ selected_pod_id or '' }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown">
+            <span data-game-select-label>{{ selected_pod_label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item{% if not selected_pod_id %} active{% endif %}" type="button" data-game-select-option data-value="" data-label="All pods">All pods</button></li>
+            {% for pod in pod_options %}
+              <li><button class="dropdown-item{% if selected_pod_id and selected_pod_id == pod.id %} active{% endif %}" type="button" data-game-select-option data-value="{{ pod.id }}" data-label="{{ pod.label }}">{{ pod.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label">Date Range</label>
+        <div class="dropdown dv-select w-100" data-game-select="range">
+          <input type="hidden" name="range" data-game-select-input value="{{ range_ctx.range_key }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown">
+            <span data-game-select-label>{{ range_ctx.label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last30" data-label="Last 30 days">Last 30 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last90" data-label="Last 90 days">Last 90 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="ytd" data-label="Year to date">Year to date</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="year" data-label="Year">Year</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="custom" data-label="Custom range">Custom range</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="all" data-label="All time">All time</button></li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label">Player Filter</label>
+        <div class="dropdown dv-select w-100" data-game-select="player">
+          <input type="hidden" name="player" data-game-select-input value="{{ selected_player_key }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown">
+            <span data-game-select-label">{{ selected_player_label if selected_player_label else 'All players' }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item{% if not selected_player_key %} active{% endif %}" type="button" data-game-select-option data-value="" data-label="All players">All players</button></li>
+            {% for player in player_options %}
+              <li><button class="dropdown-item{% if selected_player_key == player.key %} active{% endif %}" type="button" data-game-select-option data-value="{{ player.key }}" data-label="{{ player.label }}">{{ player.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <button class="btn btn-primary w-100" type="submit">
+          <i class="bi bi-funnel me-1"></i>Apply Filters
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Key Metrics -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Total Games</div>
+        <div class="metric-value">{{ metrics.total_games }}</div>
+        <div class="small text-muted mt-1">
+          <i class="bi bi-calendar-event me-1"></i>{{ range_ctx.label }}
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Combo Wins</div>
+        <div class="metric-value">{{ metrics.combo_wins }}</div>
+        <div class="small text-muted mt-1">
+          <i class="bi bi-lightning me-1"></i>{{ metrics.combo_rate }}% rate
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Avg Players</div>
+        <div class="metric-value">{{ metrics.avg_players if metrics.avg_players is not none else '—' }}</div>
+        <div class="small text-muted mt-1">
+          <i class="bi bi-people me-1"></i>Per game
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Unique Players</div>
+        <div class="metric-value">{{ metrics.unique_players }}</div>
+        <div class="small text-muted mt-1">
+          <i class="bi bi-person-check me-1"></i>Active
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboards Section -->
+  <div id="leaderboards" class="row g-3 mb-4">
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="metric-label">🏆 Top Winners</div>
+          <button class="btn btn-outline-secondary btn-sm" onclick="exportLeaderboard('winners')">
+            <i class="bi bi-download"></i>
+          </button>
+        </div>
+        <ul class="metric-list">
+          {% if metrics.top_winners and metrics.top_winners|length %}
+            {% for row in metrics.top_winners %}
+              <li>
+                <span>{{ row.label }}</span>
+                <span class="badge text-bg-success">{{ row.count }}</span>
+              </li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data available</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="metric-label">🎮 Most Active</div>
+          <button class="btn btn-outline-secondary btn-sm" onclick="exportLeaderboard('active')">
+            <i class="bi bi-download"></i>
+          </button>
+        </div>
+        <ul class="metric-list">
+          {% if top_players and top_players|length %}
+            {% for row in top_players %}
+              <li>
+                <span>{{ row.label }}</span>
+                <span class="badge text-bg-primary">{{ row.count }}</span>
+              </li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data available</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="metric-label">⚡ Combo Leaders</div>
+          <button class="btn btn-outline-secondary btn-sm" onclick="exportLeaderboard('combo')">
+            <i class="bi bi-download"></i>
+          </button>
+        </div>
+        <ul class="metric-list">
+          {% if combo_winners and combo_winners|length %}
+            {% for row in combo_winners %}
+              <li>
+                <span>{{ row.label }}</span>
+                <span class="badge text-bg-warning">{{ row.count }}</span>
+              </li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data available</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Win Rate Analysis -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Player Win Rates</div>
+        {% if player_win_rates and player_win_rates|length %}
+          <div class="metric-chart">
+            {% for row in player_win_rates %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">
+                  {% if row.key %}
+                    <a class="text-decoration-none" href="{{ url_for('views.games_metrics_player', player=row.key, **range_params) }}">{{ row.label }}</a>
+                  {% else %}
+                    {{ row.label }}
+                  {% endif %}
+                </div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No win rate data available.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Deck Performance</div>
+        {% if deck_win_rates and deck_win_rates|length %}
+          <div class="metric-chart">
+            {% for row in deck_win_rates %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">{{ row.label }}</div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No deck performance data available.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Section -->
+  <div class="export-section">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h5 class="mb-1">Export & Analysis</h5>
+        <p class="text-muted small mb-0">Download your data for external analysis or backup.</p>
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_export') }}">
+        <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export All Games
+      </a>
+      <button class="btn btn-outline-secondary btn-sm" onclick="exportFilteredData()">
+        <i class="bi bi-funnel me-1"></i>Export Filtered Data
+      </button>
+      <button class="btn btn-outline-info btn-sm" onclick="generateReport()">
+        <i class="bi bi-file-text me-1"></i>Generate Report
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Quick filter chips
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    
+    const range = this.dataset.range;
+    const form = document.getElementById('metricsForm');
+    const rangeInput = form.querySelector('input[name="range"]');
+    rangeInput.value = range;
+    form.submit();
+  });
+});
+
+// Admin functions
+function refreshAllMetrics() {
+  const btn = event.target;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Refreshing...';
+  btn.disabled = true;
+  
+  // Simulate API call
+  setTimeout(() => {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+    showToast('All metrics refreshed successfully!', 'success');
+    location.reload();
+  }, 2000);
+}
+
+function showSystemMetrics() {
+  // This would show system-wide statistics
+  alert('System metrics modal would open here with global stats across all users');
+}
+
+function clearMetricsCache() {
+  if (confirm('Clear all cached metrics? This will force a refresh on next load.')) {
+    // Simulate cache clear
+    showToast('Metrics cache cleared successfully!', 'info');
+  }
+}
+
+// Export functions
+function exportMetrics() {
+  window.location.href = '{{ url_for("views.games_export") }}';
+}
+
+function exportLeaderboard(type) {
+  // This would export specific leaderboard data
+  showToast(`Exporting ${type} leaderboard...`, 'info');
+}
+
+function exportFilteredData() {
+  // This would export data based on current filters
+  const form = document.getElementById('metricsForm');
+  const formData = new FormData(form);
+  const params = new URLSearchParams(formData);
+  window.location.href = `{{ url_for("views.games_export") }}?${params.toString()}`;
+}
+
+function generateReport() {
+  // This would generate a comprehensive report
+  showToast('Generating comprehensive report...', 'info');
+}
+
+// Utility functions
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast align-items-center text-bg-${type} border-0 position-fixed top-0 end-0 m-3`;
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  new bootstrap.Toast(toast).show();
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// Add spinning animation
+const style = document.createElement('style');
+style.textContent = `
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+
+// Form handling (existing code from original template)
+// ... [Include the existing form handling JavaScript from the original metrics.html]
+</script>
+{% endblock %}

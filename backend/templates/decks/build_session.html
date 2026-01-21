@@ -460,6 +460,9 @@
                                     {% endif %}
                                   </div>
                                 {% endif %}
+                                {% if rec.price_text %}
+                                  <div class="text-muted small mt-1">{{ rec.price_text }}</div>
+                                {% endif %}
                                 {% if rec.reasons %}
                                   <div class="d-flex flex-wrap gap-1 mt-2">
                                     {% for reason in rec.reasons %}

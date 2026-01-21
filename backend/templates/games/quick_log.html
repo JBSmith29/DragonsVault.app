@@ -1,0 +1,605 @@
+{% extends "base.html" %}
+{% block title %}Quick Game Log{% endblock %}
+{% block content %}
+<style>
+  .game-form-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .player-slot {
+    border: 2px dashed var(--bs-border-color);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.01);
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .player-slot.filled {
+    border-style: solid;
+    background: rgba(var(--bs-success-rgb), 0.1);
+    border-color: var(--bs-success);
+  }
+  .player-slot.winner {
+    background: rgba(var(--bs-warning-rgb), 0.15);
+    border-color: var(--bs-warning);
+  }
+  .player-slot:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .quick-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .quick-select-item {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 999px;
+    background: var(--bs-secondary-bg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+  }
+  .quick-select-item:hover, .quick-select-item.active {
+    background: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: white;
+  }
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+  }
+  .step.active {
+    background: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: white;
+  }
+  .step.completed {
+    background: var(--bs-success);
+    border-color: var(--bs-success);
+    color: white;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Quick Game Log</h1>
+      <p class="text-muted mb-0">Log your Commander game in 3 simple steps.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-info btn-sm" onclick="showAdvancedMode()">
+        <i class="bi bi-gear me-1"></i>Advanced Mode
+      </button>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_dashboard') }}">
+        <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+      </a>
+    </div>
+  </div>
+
+  <!-- Step Indicator -->
+  <div class="step-indicator">
+    <div class="step active" id="step1">
+      <i class="bi bi-people"></i>
+      <span>1. Players</span>
+    </div>
+    <div class="step" id="step2">
+      <i class="bi bi-collection"></i>
+      <span>2. Decks</span>
+    </div>
+    <div class="step" id="step3">
+      <i class="bi bi-trophy"></i>
+      <span>3. Results</span>
+    </div>
+  </div>
+
+  <form id="quickGameForm">
+    <!-- Step 1: Players -->
+    <div class="game-form-card mb-4" id="playersStep">
+      <h4 class="mb-3">Who played?</h4>
+      
+      <!-- Quick Pod Selection -->
+      <div class="mb-4">
+        <label class="form-label">Quick Select from Pod</label>
+        <div class="quick-select">
+          {% for pod in pods %}
+          <div class="quick-select-item" onclick="selectPod({{ pod.id }}, '{{ pod.name }}', {{ pod.members|tojson|e }})">
+            <i class="bi bi-people me-1"></i>{{ pod.name }} ({{ pod.members|length }})
+          </div>
+          {% endfor %}
+          <div class="quick-select-item" onclick="clearPodSelection()">
+            <i class="bi bi-x-circle me-1"></i>Manual Entry
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Slots -->
+      <div class="row g-3" id="playerSlots">
+        {% for i in range(1, 5) %}
+        <div class="col-12 col-md-6">
+          <div class="player-slot" data-seat="{{ i }}" onclick="editPlayer({{ i }})">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="fw-semibold">Seat {{ i }}</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation(); removePlayer({{ i }})">
+                <i class="bi bi-x"></i>
+              </button>
+            </div>
+            <div class="player-info" id="playerInfo{{ i }}">
+              <div class="text-muted">Click to add player</div>
+            </div>
+            <input type="hidden" name="seat_{{ i }}_player" id="seat{{ i }}Player">
+            <input type="hidden" name="seat_{{ i }}_deck" id="seat{{ i }}Deck">
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex justify-content-end mt-3">
+        <button type="button" class="btn btn-primary" onclick="nextStep(2)" id="playersNext" disabled>
+          Next: Select Decks <i class="bi bi-arrow-right ms-1"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Decks -->
+    <div class="game-form-card mb-4 d-none" id="decksStep">
+      <h4 class="mb-3">What decks were played?</h4>
+      
+      <div class="mb-3">
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="autoAssignDecks()">
+          <i class="bi bi-magic me-1"></i>Auto-Assign Decks
+        </button>
+        <span class="text-muted small ms-2">We'll match decks to players automatically</span>
+      </div>
+
+      <div id="deckAssignments">
+        <!-- Dynamic content populated by JavaScript -->
+      </div>
+
+      <div class="d-flex justify-content-between mt-3">
+        <button type="button" class="btn btn-outline-secondary" onclick="prevStep(1)">
+          <i class="bi bi-arrow-left me-1"></i>Back to Players
+        </button>
+        <button type="button" class="btn btn-primary" onclick="nextStep(3)" id="decksNext" disabled>
+          Next: Game Results <i class="bi bi-arrow-right ms-1"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3: Results -->
+    <div class="game-form-card mb-4 d-none" id="resultsStep">
+      <h4 class="mb-3">How did the game end?</h4>
+      
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Game Date</label>
+          <input type="date" class="form-control" name="played_at" id="playedAt">
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Winner</label>
+          <select class="form-select" name="winner_seat" id="winnerSeat">
+            <option value="">No winner / Draw</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="win_via_combo" id="winViaCombo">
+          <label class="form-check-label" for="winViaCombo">
+            Win achieved via infinite combo
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Game Notes (Optional)</label>
+        <textarea class="form-control" name="notes" rows="3" 
+                  placeholder="Key plays, memorable moments, or other notes..."></textarea>
+      </div>
+
+      <div class="d-flex justify-content-between">
+        <button type="button" class="btn btn-outline-secondary" onclick="prevStep(2)">
+          <i class="bi bi-arrow-left me-1"></i>Back to Decks
+        </button>
+        <button type="submit" class="btn btn-success" id="saveGame">
+          <i class="bi bi-check-circle me-1"></i>Save Game
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Player Edit Modal -->
+<div class="modal fade" id="playerEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Player</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Player Name</label>
+          <input type="text" class="form-control" id="playerNameInput" placeholder="Enter player name">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quick Select</label>
+          <div class="quick-select" id="playerQuickSelect">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="savePlayer()">Add Player</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Deck Edit Modal -->
+<div class="modal fade" id="deckEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Select Deck</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Deck Name</label>
+          <input type="text" class="form-control" id="deckNameInput" placeholder="Enter deck name">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Commander (Optional)</label>
+          <input type="text" class="form-control" id="commanderInput" placeholder="Commander name">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quick Select from Collection</label>
+          <div class="quick-select" id="deckQuickSelect">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveDeck()">Select Deck</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentStep = 1;
+let currentEditingSeat = null;
+let gameData = {
+  players: {},
+  decks: {},
+  pods: {{ pods|tojson }},
+  availableDecks: {{ guest_deck_options|tojson }}
+};
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+  // Set today's date
+  document.getElementById('playedAt').value = new Date().toISOString().split('T')[0];
+  
+  // Populate player quick select
+  populatePlayerQuickSelect();
+});
+
+// Step Navigation
+function nextStep(step) {
+  if (step === 2 && !validatePlayers()) return;
+  if (step === 3 && !validateDecks()) return;
+  
+  // Hide current step
+  document.querySelectorAll('.game-form-card').forEach(card => card.classList.add('d-none'));
+  
+  // Show target step
+  const stepMap = { 1: 'playersStep', 2: 'decksStep', 3: 'resultsStep' };
+  document.getElementById(stepMap[step]).classList.remove('d-none');
+  
+  // Update step indicators
+  updateStepIndicators(step);
+  
+  if (step === 2) {
+    populateDeckAssignments();
+  } else if (step === 3) {
+    populateWinnerSelect();
+  }
+  
+  currentStep = step;
+}
+
+function prevStep(step) {
+  nextStep(step);
+}
+
+function updateStepIndicators(activeStep) {
+  for (let i = 1; i <= 3; i++) {
+    const stepEl = document.getElementById(`step${i}`);
+    stepEl.classList.remove('active', 'completed');
+    
+    if (i < activeStep) {
+      stepEl.classList.add('completed');
+    } else if (i === activeStep) {
+      stepEl.classList.add('active');
+    }
+  }
+}
+
+// Pod Selection
+function selectPod(podId, podName, members) {
+  // Clear existing players
+  for (let i = 1; i <= 4; i++) {
+    removePlayer(i);
+  }
+  
+  // Add pod members
+  members.forEach((member, index) => {
+    if (index < 4) {
+      const seat = index + 1;
+      gameData.players[seat] = {
+        name: member.label,
+        id: member.roster_id,
+        type: 'roster'
+      };
+      updatePlayerSlot(seat);
+    }
+  });
+  
+  validatePlayers();
+  showToast(`Selected ${podName} with ${members.length} players`, 'success');
+}
+
+function clearPodSelection() {
+  for (let i = 1; i <= 4; i++) {
+    removePlayer(i);
+  }
+  showToast('Cleared pod selection. Add players manually.', 'info');
+}
+
+// Player Management
+function editPlayer(seat) {
+  currentEditingSeat = seat;
+  document.getElementById('playerNameInput').value = gameData.players[seat]?.name || '';
+  new bootstrap.Modal(document.getElementById('playerEditModal')).show();
+}
+
+function savePlayer() {
+  const name = document.getElementById('playerNameInput').value.trim();
+  if (!name) return;
+  
+  gameData.players[currentEditingSeat] = {
+    name: name,
+    type: 'guest'
+  };
+  
+  updatePlayerSlot(currentEditingSeat);
+  validatePlayers();
+  bootstrap.Modal.getInstance(document.getElementById('playerEditModal')).hide();
+}
+
+function removePlayer(seat) {
+  delete gameData.players[seat];
+  delete gameData.decks[seat];
+  updatePlayerSlot(seat);
+  validatePlayers();
+}
+
+function updatePlayerSlot(seat) {
+  const slot = document.querySelector(`[data-seat="${seat}"]`);
+  const info = document.getElementById(`playerInfo${seat}`);
+  const player = gameData.players[seat];
+  
+  if (player) {
+    slot.classList.add('filled');
+    info.innerHTML = `
+      <div class="fw-semibold">${player.name}</div>
+      <div class="text-muted small">${player.type === 'roster' ? 'Pod Member' : 'Guest'}</div>
+    `;
+  } else {
+    slot.classList.remove('filled', 'winner');
+    info.innerHTML = '<div class="text-muted">Click to add player</div>';
+  }
+}
+
+function validatePlayers() {
+  const playerCount = Object.keys(gameData.players).length;
+  const isValid = playerCount >= 2;
+  document.getElementById('playersNext').disabled = !isValid;
+  return isValid;
+}
+
+// Deck Management
+function populateDeckAssignments() {
+  const container = document.getElementById('deckAssignments');
+  container.innerHTML = '';
+  
+  Object.keys(gameData.players).forEach(seat => {
+    const player = gameData.players[seat];
+    const deck = gameData.decks[seat];
+    
+    const deckCard = document.createElement('div');
+    deckCard.className = 'card mb-3';
+    deckCard.innerHTML = `
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="mb-1">${player.name}</h6>
+            <div class="text-muted small">Seat ${seat}</div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <div class="deck-info">
+              ${deck ? `<span class="badge text-bg-success">${deck.name}</span>` : '<span class="text-muted">No deck selected</span>'}
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="editDeck(${seat})">
+              ${deck ? 'Change' : 'Select'} Deck
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(deckCard);
+  });
+}
+
+function editDeck(seat) {
+  currentEditingSeat = seat;
+  const deck = gameData.decks[seat];
+  document.getElementById('deckNameInput').value = deck?.name || '';
+  document.getElementById('commanderInput').value = deck?.commander || '';
+  populateDeckQuickSelect();
+  new bootstrap.Modal(document.getElementById('deckEditModal')).show();
+}
+
+function saveDeck() {
+  const name = document.getElementById('deckNameInput').value.trim();
+  const commander = document.getElementById('commanderInput').value.trim();
+  
+  if (!name) return;
+  
+  gameData.decks[currentEditingSeat] = {
+    name: name,
+    commander: commander
+  };
+  
+  populateDeckAssignments();
+  validateDecks();
+  bootstrap.Modal.getInstance(document.getElementById('deckEditModal')).hide();
+}
+
+function autoAssignDecks() {
+  showToast('Auto-assigning decks...', 'info');
+  
+  // Simulate auto-assignment
+  setTimeout(() => {
+    Object.keys(gameData.players).forEach(seat => {
+      if (!gameData.decks[seat]) {
+        const randomDeck = gameData.availableDecks[Math.floor(Math.random() * gameData.availableDecks.length)];
+        if (randomDeck) {
+          gameData.decks[seat] = {
+            name: randomDeck.label,
+            commander: 'Auto-assigned'
+          };
+        }
+      }
+    });
+    
+    populateDeckAssignments();
+    validateDecks();
+    showToast('Decks auto-assigned successfully!', 'success');
+  }, 1500);
+}
+
+function validateDecks() {
+  const playerCount = Object.keys(gameData.players).length;
+  const deckCount = Object.keys(gameData.decks).length;
+  const isValid = deckCount >= playerCount;
+  document.getElementById('decksNext').disabled = !isValid;
+  return isValid;
+}
+
+// Results Management
+function populateWinnerSelect() {
+  const select = document.getElementById('winnerSeat');
+  select.innerHTML = '<option value="">No winner / Draw</option>';
+  
+  Object.keys(gameData.players).forEach(seat => {
+    const player = gameData.players[seat];
+    const option = document.createElement('option');
+    option.value = seat;
+    option.textContent = `${player.name} (Seat ${seat})`;
+    select.appendChild(option);
+  });
+}
+
+// Quick Select Population
+function populatePlayerQuickSelect() {
+  // This would be populated with recent players, pod members, etc.
+}
+
+function populateDeckQuickSelect() {
+  const container = document.getElementById('deckQuickSelect');
+  container.innerHTML = '';
+  
+  gameData.availableDecks.slice(0, 6).forEach(deck => {
+    const item = document.createElement('div');
+    item.className = 'quick-select-item';
+    item.textContent = deck.label;
+    item.onclick = () => {
+      document.getElementById('deckNameInput').value = deck.label;
+      document.getElementById('commanderInput').value = deck.commander || '';
+    };
+    container.appendChild(item);
+  });
+}
+
+// Form Submission
+document.getElementById('quickGameForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const submitBtn = document.getElementById('saveGame');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Saving...';
+  submitBtn.disabled = true;
+  
+  // Simulate save
+  setTimeout(() => {
+    submitBtn.innerHTML = originalText;
+    submitBtn.disabled = false;
+    showToast('Game logged successfully!', 'success');
+    setTimeout(() => {
+      window.location.href = '/games/dashboard';
+    }, 1500);
+  }, 2000);
+});
+
+// Advanced Mode
+function showAdvancedMode() {
+  if (confirm('Switch to advanced mode? You\'ll have access to all game logging options.')) {
+    window.location.href = '/games/new';
+  }
+}
+
+// Utility Functions
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast align-items-center text-bg-${type} border-0 position-fixed top-0 end-0 m-3`;
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  new bootstrap.Toast(toast).show();
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// Add spinning animation
+const style = document.createElement('style');
+style.textContent = `
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

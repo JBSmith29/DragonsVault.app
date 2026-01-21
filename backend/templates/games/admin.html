@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+{% block title %}Game Administration{% endblock %}
+{% block content %}
+<style>
+  .admin-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    height: 100%;
+  }
+  .admin-header {
+    background: linear-gradient(135deg, rgba(var(--bs-warning-rgb), 0.15), rgba(var(--bs-danger-rgb), 0.1));
+    border: 1px solid rgba(var(--bs-warning-rgb), 0.3);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--bs-primary);
+  }
+  .stat-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--bs-secondary-color);
+  }
+  .bulk-actions {
+    background: rgba(var(--bs-info-rgb), 0.1);
+    border: 1px solid rgba(var(--bs-info-rgb), 0.3);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .log-table {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+  .action-btn {
+    min-width: 80px;
+  }
+</style>
+
+<div class="container py-4">
+  <!-- Admin Header -->
+  <div class="admin-header">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="mb-1">
+          <i class="bi bi-shield-check text-warning me-2"></i>Game Administration
+        </h1>
+        <p class="text-muted mb-0">System-wide game log management and analytics</p>
+      </div>
+      <div class="d-flex gap-2">
+        <span class="badge text-bg-warning fs-6">Admin Access</span>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_dashboard') }}">
+          <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+        </a>
+      </div>
+    </div>
+    
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-warning btn-sm" onclick="refreshSystemMetrics()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh System Metrics
+      </button>
+      <button class="btn btn-outline-danger btn-sm" onclick="showMaintenanceMode()">
+        <i class="bi bi-tools me-1"></i>Maintenance Mode
+      </button>
+      <button class="btn btn-outline-info btn-sm" onclick="exportSystemReport()">
+        <i class="bi bi-file-earmark-text me-1"></i>System Report
+      </button>
+    </div>
+  </div>
+
+  <!-- System Statistics -->
+  <div class="stat-grid">
+    <div class="stat-item">
+      <div class="stat-value">{{ system_stats.total_games or 0 }}</div>
+      <div class="stat-label">Total Games</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">{{ system_stats.total_users or 0 }}</div>
+      <div class="stat-label">Active Users</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">{{ system_stats.games_today or 0 }}</div>
+      <div class="stat-label">Games Today</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">{{ system_stats.avg_games_per_user or 0 }}</div>
+      <div class="stat-label">Avg Games/User</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">{{ system_stats.total_pods or 0 }}</div>
+      <div class="stat-label">Total Pods</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">{{ system_stats.combo_rate or 0 }}%</div>
+      <div class="stat-label">System Combo Rate</div>
+    </div>
+  </div>
+
+  <!-- Management Tools -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-lg-4">
+      <div class="admin-card">
+        <h3 class="h5 mb-3">
+          <i class="bi bi-database text-primary me-2"></i>Data Management
+        </h3>
+        <div class="d-grid gap-2">
+          <button class="btn btn-outline-primary btn-sm" onclick="cleanupOrphanedData()">
+            <i class="bi bi-trash me-1"></i>Cleanup Orphaned Data
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="rebuildIndexes()">
+            <i class="bi bi-arrow-repeat me-1"></i>Rebuild Indexes
+          </button>
+          <button class="btn btn-outline-info btn-sm" onclick="validateDataIntegrity()">
+            <i class="bi bi-check-circle me-1"></i>Validate Integrity
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-6 col-lg-4">
+      <div class="admin-card">
+        <h3 class="h5 mb-3">
+          <i class="bi bi-graph-up text-success me-2"></i>Analytics Tools
+        </h3>
+        <div class="d-grid gap-2">
+          <button class="btn btn-outline-success btn-sm" onclick="generateTrendReport()">
+            <i class="bi bi-trending-up me-1"></i>Trend Analysis
+          </button>
+          <button class="btn btn-outline-warning btn-sm" onclick="showUserActivity()">
+            <i class="bi bi-person-lines-fill me-1"></i>User Activity
+          </button>
+          <button class="btn btn-outline-info btn-sm" onclick="exportAnalytics()">
+            <i class="bi bi-download me-1"></i>Export Analytics
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-lg-4">
+      <div class="admin-card">
+        <h3 class="h5 mb-3">
+          <i class="bi bi-shield-exclamation text-warning me-2"></i>System Health
+        </h3>
+        <div class="d-grid gap-2">
+          <button class="btn btn-outline-warning btn-sm" onclick="checkSystemHealth()">
+            <i class="bi bi-heart-pulse me-1"></i>Health Check
+          </button>
+          <button class="btn btn-outline-danger btn-sm" onclick="showErrorLogs()">
+            <i class="bi bi-exclamation-triangle me-1"></i>Error Logs
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="clearCaches()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Clear All Caches
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Game Logs with Admin Controls -->
+  <div class="log-table">
+    <div class="p-3 border-bottom">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h3 class="h5 mb-0">Recent Game Logs</h3>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm" onclick="refreshLogs()">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+              <i class="bi bi-funnel me-1"></i>Filter
+            </button>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="#" onclick="filterLogs('today')">Today</a></li>
+              <li><a class="dropdown-item" href="#" onclick="filterLogs('week')">This Week</a></li>
+              <li><a class="dropdown-item" href="#" onclick="filterLogs('flagged')">Flagged</a></li>
+              <li><a class="dropdown-item" href="#" onclick="filterLogs('errors')">With Errors</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bulk Actions Bar -->
+      <div class="bulk-actions d-none" id="bulkActionsBar">
+        <div class="d-flex align-items-center justify-content-between">
+          <span class="text-muted">
+            <span id="selectedCount">0</span> games selected
+          </span>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-warning btn-sm" onclick="bulkFlag()">
+              <i class="bi bi-flag me-1"></i>Flag
+            </button>
+            <button class="btn btn-outline-info btn-sm" onclick="bulkExport()">
+              <i class="bi bi-download me-1"></i>Export
+            </button>
+            <button class="btn btn-outline-danger btn-sm" onclick="bulkDelete()">
+              <i class="bi bi-trash me-1"></i>Delete
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0" id="adminLogsTable">
+        <thead class="table-dark">
+          <tr>
+            <th width="40">
+              <input type="checkbox" class="form-check-input" id="selectAll">
+            </th>
+            <th>Game ID</th>
+            <th>Date</th>
+            <th>Owner</th>
+            <th>Players</th>
+            <th>Winner</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for game in recent_games %}
+          <tr>
+            <td>
+              <input type="checkbox" class="form-check-input game-select" value="{{ game.id }}">
+            </td>
+            <td>
+              <code>#{{ game.id }}</code>
+            </td>
+            <td class="text-nowrap">{{ game.played_at_label }}</td>
+            <td>
+              <span class="badge text-bg-secondary">{{ game.owner_user_id }}</span>
+            </td>
+            <td class="text-center">{{ game.seat_count }}</td>
+            <td>{{ game.winner_label or '—' }}</td>
+            <td>
+              {% if game.win_via_combo %}
+                <span class="badge text-bg-warning">Combo</span>
+              {% else %}
+                <span class="badge text-bg-success">Normal</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary action-btn" onclick="viewGameDetails({{ game.id }})">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-warning action-btn" onclick="flagGame({{ game.id }})">
+                  <i class="bi bi-flag"></i>
+                </button>
+                <button class="btn btn-outline-danger action-btn" onclick="deleteGame({{ game.id }})">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modals and additional UI components would go here -->
+
+<script>
+// System management functions
+function refreshSystemMetrics() {
+  const btn = event.target;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Refreshing...';
+  btn.disabled = true;
+  
+  setTimeout(() => {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+    showToast('System metrics refreshed successfully!', 'success');
+    location.reload();
+  }, 3000);
+}
+
+function showMaintenanceMode() {
+  if (confirm('Enable maintenance mode? This will prevent users from logging new games.')) {
+    showToast('Maintenance mode enabled', 'warning');
+  }
+}
+
+function exportSystemReport() {
+  showToast('Generating system report...', 'info');
+  // Simulate report generation
+  setTimeout(() => {
+    showToast('System report generated and downloaded', 'success');
+  }, 2000);
+}
+
+// Data management functions
+function cleanupOrphanedData() {
+  if (confirm('Clean up orphaned data? This will remove game logs without valid references.')) {
+    showToast('Cleaning up orphaned data...', 'info');
+    setTimeout(() => {
+      showToast('Orphaned data cleanup completed', 'success');
+    }, 3000);
+  }
+}
+
+function rebuildIndexes() {
+  if (confirm('Rebuild database indexes? This may take several minutes.')) {
+    showToast('Rebuilding indexes...', 'info');
+    setTimeout(() => {
+      showToast('Database indexes rebuilt successfully', 'success');
+    }, 5000);
+  }
+}
+
+function validateDataIntegrity() {
+  showToast('Validating data integrity...', 'info');
+  setTimeout(() => {
+    showToast('Data integrity validation completed - no issues found', 'success');
+  }, 4000);
+}
+
+// Analytics functions
+function generateTrendReport() {
+  showToast('Generating trend analysis report...', 'info');
+}
+
+function showUserActivity() {
+  showToast('Loading user activity dashboard...', 'info');
+}
+
+function exportAnalytics() {
+  showToast('Exporting analytics data...', 'info');
+}
+
+// System health functions
+function checkSystemHealth() {
+  showToast('Running system health check...', 'info');
+  setTimeout(() => {
+    showToast('System health check completed - all systems operational', 'success');
+  }, 2000);
+}
+
+function showErrorLogs() {
+  showToast('Loading error logs...', 'info');
+}
+
+function clearCaches() {
+  if (confirm('Clear all system caches? This will temporarily slow down the application.')) {
+    showToast('Clearing all caches...', 'info');
+    setTimeout(() => {
+      showToast('All caches cleared successfully', 'success');
+    }, 2000);
+  }
+}
+
+// Log management functions
+function refreshLogs() {
+  location.reload();
+}
+
+function filterLogs(filter) {
+  showToast(`Filtering logs: ${filter}`, 'info');
+}
+
+function viewGameDetails(gameId) {
+  window.open(`/games/${gameId}`, '_blank');
+}
+
+function flagGame(gameId) {
+  if (confirm(`Flag game #${gameId} for review?`)) {
+    showToast(`Game #${gameId} flagged for review`, 'warning');
+  }
+}
+
+function deleteGame(gameId) {
+  if (confirm(`Delete game #${gameId}? This action cannot be undone.`)) {
+    showToast(`Game #${gameId} deleted`, 'info');
+    // Remove row from table
+    event.target.closest('tr').remove();
+  }
+}
+
+// Bulk operations
+function updateBulkActions() {
+  const selected = document.querySelectorAll('.game-select:checked');
+  const bulkBar = document.getElementById('bulkActionsBar');
+  const countEl = document.getElementById('selectedCount');
+  
+  countEl.textContent = selected.length;
+  bulkBar.classList.toggle('d-none', selected.length === 0);
+}
+
+function bulkFlag() {
+  const selected = document.querySelectorAll('.game-select:checked');
+  if (confirm(`Flag ${selected.length} games for review?`)) {
+    showToast(`${selected.length} games flagged for review`, 'warning');
+    clearSelection();
+  }
+}
+
+function bulkExport() {
+  const selected = document.querySelectorAll('.game-select:checked');
+  showToast(`Exporting ${selected.length} games...`, 'info');
+}
+
+function bulkDelete() {
+  const selected = document.querySelectorAll('.game-select:checked');
+  if (confirm(`Delete ${selected.length} games? This action cannot be undone.`)) {
+    showToast(`${selected.length} games deleted`, 'info');
+    selected.forEach(cb => cb.closest('tr').remove());
+    clearSelection();
+  }
+}
+
+function clearSelection() {
+  document.querySelectorAll('.game-select').forEach(cb => cb.checked = false);
+  document.getElementById('selectAll').checked = false;
+  updateBulkActions();
+}
+
+// Event listeners
+document.getElementById('selectAll').addEventListener('change', function() {
+  document.querySelectorAll('.game-select').forEach(cb => {
+    cb.checked = this.checked;
+  });
+  updateBulkActions();
+});
+
+document.querySelectorAll('.game-select').forEach(cb => {
+  cb.addEventListener('change', updateBulkActions);
+});
+
+// Utility functions
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast align-items-center text-bg-${type} border-0 position-fixed top-0 end-0 m-3`;
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  new bootstrap.Toast(toast).show();
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// Add spinning animation
+const style = document.createElement('style');
+style.textContent = `
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

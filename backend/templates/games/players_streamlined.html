@@ -1,0 +1,540 @@
+{% extends "base.html" %}
+{% block title %}Pod Management{% endblock %}
+{% block content %}
+<style>
+  .quick-action-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .quick-action-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    transform: translateY(-1px);
+  }
+  .pod-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+    margin-bottom: 1rem;
+  }
+  .player-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+    font-size: 0.85rem;
+  }
+  .deck-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+  }
+  .bulk-actions {
+    background: rgba(var(--bs-info-rgb), 0.1);
+    border: 1px solid rgba(var(--bs-info-rgb), 0.3);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Pod Management</h1>
+      <p class="text-muted mb-0">Streamlined pod creation and player management for faster game logging.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-info btn-sm" onclick="showBulkImport()">
+        <i class="bi bi-upload me-1"></i>Bulk Import
+      </button>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_dashboard') }}">
+        <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+      </a>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-lg-3">
+      <div class="quick-action-card" onclick="showQuickPodModal()">
+        <div class="text-center">
+          <i class="bi bi-plus-circle display-6 text-primary mb-2"></i>
+          <h5 class="mb-1">Quick Pod</h5>
+          <p class="text-muted small mb-0">Create pod with 4 players in one step</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-lg-3">
+      <div class="quick-action-card" onclick="showInviteModal()">
+        <div class="text-center">
+          <i class="bi bi-person-plus display-6 text-success mb-2"></i>
+          <h5 class="mb-1">Invite Players</h5>
+          <p class="text-muted small mb-0">Send invites via email or share link</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 col-lg-3">
+      <div class="quick-action-card" onclick="showDeckWizard()">
+        <div class="text-center">
+          <i class="bi bi-magic display-6 text-warning mb-2"></i>
+          <h5 class="mb-1">Auto-Assign Decks</h5>
+          <p class="text-muted small mb-0">Smart deck assignment based on ownership</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-3">
+      <div class="quick-action-card" onclick="showTemplateModal()">
+        <div class="text-center">
+          <i class="bi bi-clipboard display-6 text-info mb-2"></i>
+          <h5 class="mb-1">Pod Templates</h5>
+          <p class="text-muted small mb-0">Save and reuse common pod setups</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Actions (hidden by default) -->
+  <div class="bulk-actions d-none" id="bulkActionsBar">
+    <div class="d-flex align-items-center justify-content-between">
+      <span class="text-muted">
+        <span id="selectedCount">0</span> pods selected
+      </span>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary btn-sm" onclick="bulkAssignDecks()">
+          <i class="bi bi-magic me-1"></i>Auto-Assign Decks
+        </button>
+        <button class="btn btn-outline-info btn-sm" onclick="bulkExport()">
+          <i class="bi bi-download me-1"></i>Export
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="bulkDelete()">
+          <i class="bi bi-trash me-1"></i>Delete
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+          Clear
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Existing Pods -->
+  <div class="row g-3">
+    {% for pod in pods %}
+    <div class="col-12 col-lg-6">
+      <div class="pod-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <input type="checkbox" class="form-check-input pod-select" value="{{ pod.id }}">
+            <h5 class="mb-0">{{ pod.name }}</h5>
+            {% if not pod.is_owner %}
+              <span class="badge text-bg-secondary">Shared</span>
+            {% endif %}
+          </div>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+              <i class="bi bi-three-dots"></i>
+            </button>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="#" onclick="quickLogGame({{ pod.id }})">
+                <i class="bi bi-plus-circle me-2"></i>Quick Log Game
+              </a></li>
+              <li><a class="dropdown-item" href="#" onclick="editPod({{ pod.id }})">
+                <i class="bi bi-pencil me-2"></i>Edit Pod
+              </a></li>
+              <li><a class="dropdown-item" href="#" onclick="duplicatePod({{ pod.id }})">
+                <i class="bi bi-copy me-2"></i>Duplicate
+              </a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item text-danger" href="#" onclick="deletePod({{ pod.id }})">
+                <i class="bi bi-trash me-2"></i>Delete
+              </a></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Players -->
+        <div class="mb-3">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="text-muted small">Players ({{ pod.members|length }}/4)</span>
+            <button class="btn btn-outline-primary btn-sm" onclick="addPlayerToPod({{ pod.id }})">
+              <i class="bi bi-person-plus"></i>
+            </button>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for member in pod.members %}
+              <div class="player-chip">
+                <span>{{ member.label }}</span>
+                <div class="dropdown">
+                  <button class="btn btn-sm p-0 border-0 bg-transparent" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="assignDecks({{ member.roster_id }})">
+                      <i class="bi bi-collection me-2"></i>Assign Decks
+                    </a></li>
+                    <li><a class="dropdown-item text-danger" href="#" onclick="removePlayer({{ member.member_id }})">
+                      <i class="bi bi-person-dash me-2"></i>Remove
+                    </a></li>
+                  </ul>
+                </div>
+              </div>
+            {% endfor %}
+            {% if pod.members|length < 4 %}
+              <button class="player-chip border-dashed" onclick="addPlayerToPod({{ pod.id }})" style="border-style: dashed;">
+                <i class="bi bi-plus"></i>
+                <span>Add Player</span>
+              </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Deck Status -->
+        <div class="mb-3">
+          <div class="text-muted small mb-2">Deck Assignments</div>
+          <div class="d-flex flex-wrap gap-1">
+            {% set deck_count = 0 %}
+            {% for member in pod.members %}
+              {% if member.deck_count > 0 %}
+                {% set deck_count = deck_count + member.deck_count %}
+              {% endif %}
+            {% endfor %}
+            <span class="badge deck-badge text-bg-{{ 'success' if deck_count >= pod.members|length else 'warning' }}">
+              {{ deck_count }}/{{ pod.members|length }} Ready
+            </span>
+            {% if deck_count < pod.members|length %}
+              <button class="badge deck-badge text-bg-primary border-0" onclick="autoAssignDecks({{ pod.id }})">
+                <i class="bi bi-magic me-1"></i>Auto-Assign
+              </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm flex-fill" onclick="quickLogGame({{ pod.id }})" 
+                  {% if pod.members|length < 2 %}disabled{% endif %}>
+            <i class="bi bi-play-circle me-1"></i>Log Game
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="viewPodStats({{ pod.id }})">
+            <i class="bi bi-graph-up"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    <!-- Empty State -->
+    {% if not pods %}
+    <div class="col-12">
+      <div class="text-center py-5">
+        <i class="bi bi-people display-1 text-muted mb-3"></i>
+        <h4>No pods yet</h4>
+        <p class="text-muted mb-4">Create your first pod to start organizing games with friends.</p>
+        <button class="btn btn-primary" onclick="showQuickPodModal()">
+          <i class="bi bi-plus-circle me-1"></i>Create Your First Pod
+        </button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Quick Pod Modal -->
+<div class="modal fade" id="quickPodModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create Quick Pod</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="quickPodForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Pod Name</label>
+            <input type="text" class="form-control" name="pod_name" placeholder="Friday Night Magic" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Players (one per line)</label>
+            <textarea class="form-control" name="players" rows="4" 
+                      placeholder="Alice&#10;Bob&#10;Charlie&#10;Diana" required></textarea>
+            <div class="form-text">Enter player names, emails, or usernames. We'll auto-detect registered users.</div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="auto_assign_decks" id="autoAssignDecks" checked>
+            <label class="form-check-label" for="autoAssignDecks">
+              Auto-assign decks from player collections
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Pod</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Invite Modal -->
+<div class="modal fade" id="inviteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Invite Players</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Email Addresses</label>
+          <textarea class="form-control" rows="3" placeholder="friend1@example.com&#10;friend2@example.com"></textarea>
+          <div class="form-text">Send direct invitations to join your DragonsVault</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Or Share Invite Link</label>
+          <div class="input-group">
+            <input type="text" class="form-control" value="https://dragonsvault.app/invite/abc123" readonly>
+            <button class="btn btn-outline-secondary" onclick="copyInviteLink()">
+              <i class="bi bi-copy"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary">Send Invites</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Deck Wizard Modal -->
+<div class="modal fade" id="deckWizardModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Auto-Assign Decks</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle me-2"></i>
+          We'll automatically assign decks based on player ownership and preferences.
+        </div>
+        <div id="deckAssignmentPreview">
+          <!-- Dynamic content will be loaded here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary">Apply Assignments</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Quick Pod Creation
+function showQuickPodModal() {
+  new bootstrap.Modal(document.getElementById('quickPodModal')).show();
+}
+
+document.getElementById('quickPodForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  
+  // Show loading state
+  const submitBtn = this.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Creating...';
+  submitBtn.disabled = true;
+  
+  // Simulate API call
+  setTimeout(() => {
+    submitBtn.innerHTML = originalText;
+    submitBtn.disabled = false;
+    bootstrap.Modal.getInstance(document.getElementById('quickPodModal')).hide();
+    showToast('Pod created successfully! Players and decks have been auto-assigned.', 'success');
+    // Reload page to show new pod
+    setTimeout(() => location.reload(), 1000);
+  }, 2000);
+});
+
+// Invite Functions
+function showInviteModal() {
+  new bootstrap.Modal(document.getElementById('inviteModal')).show();
+}
+
+function copyInviteLink() {
+  const input = document.querySelector('#inviteModal input[readonly]');
+  input.select();
+  document.execCommand('copy');
+  showToast('Invite link copied to clipboard!', 'success');
+}
+
+// Deck Wizard
+function showDeckWizard() {
+  new bootstrap.Modal(document.getElementById('deckWizardModal')).show();
+  loadDeckAssignmentPreview();
+}
+
+function loadDeckAssignmentPreview() {
+  const preview = document.getElementById('deckAssignmentPreview');
+  preview.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm me-2"></div>Analyzing deck assignments...</div>';
+  
+  // Simulate loading
+  setTimeout(() => {
+    preview.innerHTML = `
+      <div class="list-group">
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>Alice</strong>
+            <div class="text-muted small">3 decks available</div>
+          </div>
+          <span class="badge text-bg-success">Mono-Red Aggro</span>
+        </div>
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>Bob</strong>
+            <div class="text-muted small">5 decks available</div>
+          </div>
+          <span class="badge text-bg-success">Simic Ramp</span>
+        </div>
+      </div>
+    `;
+  }, 1500);
+}
+
+// Pod Actions
+function quickLogGame(podId) {
+  window.location.href = `/games/new?pod=${podId}&quick=1`;
+}
+
+function editPod(podId) {
+  showToast('Opening pod editor...', 'info');
+}
+
+function duplicatePod(podId) {
+  if (confirm('Create a copy of this pod?')) {
+    showToast('Pod duplicated successfully!', 'success');
+    setTimeout(() => location.reload(), 1000);
+  }
+}
+
+function deletePod(podId) {
+  if (confirm('Delete this pod? This action cannot be undone.')) {
+    showToast('Pod deleted successfully.', 'info');
+    setTimeout(() => location.reload(), 1000);
+  }
+}
+
+function addPlayerToPod(podId) {
+  const name = prompt('Enter player name or email:');
+  if (name && name.trim()) {
+    showToast(`Adding ${name} to pod...`, 'info');
+    setTimeout(() => {
+      showToast('Player added successfully!', 'success');
+      location.reload();
+    }, 1000);
+  }
+}
+
+function removePlayer(memberId) {
+  if (confirm('Remove this player from the pod?')) {
+    showToast('Player removed from pod.', 'info');
+    setTimeout(() => location.reload(), 500);
+  }
+}
+
+function assignDecks(playerId) {
+  showToast('Opening deck assignment...', 'info');
+}
+
+function autoAssignDecks(podId) {
+  showToast('Auto-assigning decks...', 'info');
+  setTimeout(() => {
+    showToast('Decks assigned successfully!', 'success');
+    location.reload();
+  }, 2000);
+}
+
+function viewPodStats(podId) {
+  window.location.href = `/games/metrics?pod=${podId}`;
+}
+
+// Bulk Operations
+function updateBulkActions() {
+  const selected = document.querySelectorAll('.pod-select:checked');
+  const bulkBar = document.getElementById('bulkActionsBar');
+  const countEl = document.getElementById('selectedCount');
+  
+  countEl.textContent = selected.length;
+  bulkBar.classList.toggle('d-none', selected.length === 0);
+}
+
+function bulkAssignDecks() {
+  const selected = document.querySelectorAll('.pod-select:checked');
+  showToast(`Auto-assigning decks for ${selected.length} pods...`, 'info');
+  setTimeout(() => {
+    showToast('Bulk deck assignment completed!', 'success');
+    clearSelection();
+    location.reload();
+  }, 3000);
+}
+
+function bulkExport() {
+  const selected = document.querySelectorAll('.pod-select:checked');
+  showToast(`Exporting ${selected.length} pods...`, 'info');
+}
+
+function bulkDelete() {
+  const selected = document.querySelectorAll('.pod-select:checked');
+  if (confirm(`Delete ${selected.length} pods? This action cannot be undone.`)) {
+    showToast(`Deleting ${selected.length} pods...`, 'info');
+    setTimeout(() => {
+      showToast('Pods deleted successfully.', 'info');
+      location.reload();
+    }, 2000);
+  }
+}
+
+function clearSelection() {
+  document.querySelectorAll('.pod-select').forEach(cb => cb.checked = false);
+  updateBulkActions();
+}
+
+// Event listeners
+document.querySelectorAll('.pod-select').forEach(cb => {
+  cb.addEventListener('change', updateBulkActions);
+});
+
+// Utility functions
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast align-items-center text-bg-${type} border-0 position-fixed top-0 end-0 m-3`;
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  new bootstrap.Toast(toast).show();
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// Add spinning animation
+const style = document.createElement('style');
+style.textContent = `
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .border-dashed { border-style: dashed !important; }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

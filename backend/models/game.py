@@ -120,7 +120,7 @@ class GameDeck(db.Model):
     folder_id = db.Column(db.Integer, db.ForeignKey("folder.id", ondelete="SET NULL"), nullable=True, index=True)
     deck_name = db.Column(db.String(200), nullable=False)
     commander_name = db.Column(db.String(200), nullable=True)
-    commander_oracle_id = db.Column(db.String(64), nullable=True)
+    commander_oracle_id = db.Column(db.String(128), nullable=True)
     bracket_level = db.Column(db.String(16), nullable=True)
     bracket_label = db.Column(db.String(120), nullable=True)
     bracket_score = db.Column(db.Float, nullable=True)

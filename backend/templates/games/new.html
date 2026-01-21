@@ -11,6 +11,8 @@
   .inline-note { font-size: 0.8rem; color: var(--bs-secondary-color); }
   .seat-field { display: flex; flex-direction: column; gap: 0.35rem; }
   .seat-manual-deck-field { display: none; }
+  .seat-manual-commander-field { display: none; }
+  .seat-manual-link-field { display: none; }
 </style>
 
 <div class="container py-4">
@@ -188,6 +190,25 @@
                        placeholder="Enter a deck name">
                 <div class="inline-note">Use this when the deck is not listed.</div>
               </div>
+              <div class="col-12 seat-field seat-manual-link-field">
+                <label class="form-label">Registered commander (optional)</label>
+                <div class="dropdown dv-select w-100 seat-manual-link-select" data-seat="{{ seat_number }}">
+                  <input type="hidden" name="seat_{{ seat_number }}_manual_link_ref" data-manual-link-input value="{{ seat.manual_link_ref or '' }}">
+                  <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span data-dv-select-label>Link a deck for commander data</span>
+                    <i class="bi bi-chevron-down"></i>
+                  </button>
+                  <ul class="dropdown-menu dv-select-menu w-100"></ul>
+                </div>
+                <div class="inline-note">Keeps the manual deck name while pulling commander data from a registered deck.</div>
+              </div>
+              <div class="col-12 seat-field seat-manual-commander-field">
+                <label class="form-label" for="seat{{ seat_number }}ManualCommander">Commander name</label>
+                <input class="form-control seat-commander-input" type="text" id="seat{{ seat_number }}ManualCommander"
+                       name="seat_{{ seat_number }}_manual_commander_name" value="{{ seat.manual_commander_name or '' }}"
+                       placeholder="Enter the commander name">
+                <div class="inline-note">Helps attach commander data for manual decks.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -210,6 +231,8 @@
     const podMemberMap = {{ pod_member_map | tojson }};
     const rosterDeckMap = {{ roster_deck_map | tojson }};
     const guestDeckOptions = {{ guest_deck_options | tojson }};
+    const manualLinkOptions = {{ manual_link_options | tojson }};
+    const manualLinkChoices = (manualLinkOptions || []).filter((opt) => String(opt.ref || '').startsWith('folder:'));
 
     const updateSeatVisibility = () => {
       const seatCount = parseInt(seatCountEl.value || '4', 10);
@@ -320,7 +343,7 @@
       }
     };
 
-    const buildDeckMenu = (wrapper, options, selectedValue) => {
+    const buildDeckMenu = (wrapper, options, selectedValue, extraOptions) => {
       const menu = wrapper.querySelector('.dv-select-menu');
       const labelEl = wrapper.querySelector('[data-game-select-label]');
       const input = wrapper.querySelector('[data-game-select-input]');
@@ -329,6 +352,7 @@
       bindSearch(wrapper, menu, '[data-game-select-option]', 'Search decks');
       const items = [{ ref: '', label: 'Select a deck' }, ...(options || [])];
       let hasActive = false;
+      const baseRefs = new Set(items.map((item) => String(item.ref ?? '')));
       items.forEach((opt, index) => {
         const li = document.createElement('li');
         const btn = document.createElement('button');
@@ -354,6 +378,44 @@
         li.appendChild(btn);
         menu.appendChild(li);
       });
+      const extraItems = (extraOptions || []).filter((opt) => {
+        const ref = String(opt.ref ?? '');
+        return ref && !baseRefs.has(ref);
+      });
+      if (extraItems.length) {
+        const divider = document.createElement('li');
+        divider.innerHTML = '<hr class="dropdown-divider">';
+        menu.appendChild(divider);
+        const header = document.createElement('li');
+        header.className = 'dropdown-header text-muted small';
+        header.textContent = 'All owned decks';
+        menu.appendChild(header);
+        extraItems.forEach((opt) => {
+          const li = document.createElement('li');
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'dropdown-item';
+          btn.dataset.gameSelectOption = 'true';
+          btn.dataset.value = String(opt.ref ?? '');
+          btn.dataset.label = opt.label;
+          btn.textContent = opt.label;
+          if (String(opt.ref ?? '') === String(selectedValue || '')) {
+            btn.classList.add('active');
+            labelEl.textContent = opt.label;
+            input.value = String(opt.ref ?? '');
+            hasActive = true;
+          }
+          btn.addEventListener('click', () => {
+            menu.querySelectorAll('.dropdown-item').forEach((node) => node.classList.remove('active'));
+            btn.classList.add('active');
+            labelEl.textContent = opt.label;
+            input.value = String(opt.ref ?? '');
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+          li.appendChild(btn);
+          menu.appendChild(li);
+        });
+      }
       const divider = document.createElement('li');
       divider.innerHTML = '<hr class="dropdown-divider">';
       menu.appendChild(divider);
@@ -390,6 +452,50 @@
       }
     };
 
+    const buildManualLinkMenu = (wrapper, options, selectedValue) => {
+      const menu = wrapper.querySelector('.dv-select-menu');
+      const labelEl = wrapper.querySelector('[data-dv-select-label]');
+      const input = wrapper.querySelector('[data-manual-link-input]');
+      if (!menu || !labelEl || !input) return;
+      menu.innerHTML = '';
+      bindSearch(wrapper, menu, '[data-dv-select-option]', 'Search decks');
+      const items = [{ ref: '', label: 'No linked commander' }, ...(options || [])];
+      let hasActive = false;
+      items.forEach((opt, index) => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dropdown-item';
+        btn.dataset.dvSelectOption = 'true';
+        btn.dataset.value = String(opt.ref ?? '');
+        btn.dataset.label = opt.label;
+        btn.textContent = opt.label;
+        if (String(opt.ref ?? '') === String(selectedValue || '') || (!selectedValue && index === 0)) {
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.ref ?? '');
+          hasActive = true;
+        }
+        btn.addEventListener('click', () => {
+          menu.querySelectorAll('.dropdown-item').forEach((node) => node.classList.remove('active'));
+          btn.classList.add('active');
+          labelEl.textContent = opt.label;
+          input.value = String(opt.ref ?? '');
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        li.appendChild(btn);
+        menu.appendChild(li);
+      });
+      if (!hasActive && items.length) {
+        const firstButton = menu.querySelector('.dropdown-item');
+        if (firstButton) {
+          firstButton.classList.add('active');
+          labelEl.textContent = firstButton.dataset.label || firstButton.textContent.trim();
+          input.value = firstButton.dataset.value || '';
+        }
+      }
+    };
+
     const refreshRosterMenus = () => {
       const rosterOptions = getRosterOptions();
       seatCards.forEach((card) => {
@@ -411,6 +517,11 @@
       const deckInput = deckWrapper ? deckWrapper.querySelector('[data-game-select-input]') : null;
       const manualField = card.querySelector('.seat-manual-deck-field');
       const manualInput = manualField ? manualField.querySelector('.seat-manual-input') : null;
+      const commanderField = card.querySelector('.seat-manual-commander-field');
+      const commanderInput = commanderField ? commanderField.querySelector('.seat-commander-input') : null;
+      const manualLinkField = card.querySelector('.seat-manual-link-field');
+      const manualLinkWrapper = manualLinkField ? manualLinkField.querySelector('.seat-manual-link-select') : null;
+      const manualLinkInput = manualLinkWrapper ? manualLinkWrapper.querySelector('[data-manual-link-input]') : null;
       if (!typeInput || !deckWrapper) return;
 
       const typeValue = typeInput.value || 'roster';
@@ -419,21 +530,37 @@
         if (guestField) guestField.style.display = 'none';
         const rosterId = rosterInput ? rosterInput.value : '';
         const deckOptions = rosterDeckMap[rosterId]?.deck_options || [];
-        buildDeckMenu(deckWrapper, deckOptions, deckInput?.value);
+        buildDeckMenu(deckWrapper, deckOptions, deckInput?.value, guestDeckOptions);
       } else {
         if (rosterWrapper) rosterWrapper.style.display = 'none';
         if (guestField) guestField.style.display = '';
         buildDeckMenu(deckWrapper, guestDeckOptions, deckInput?.value);
       }
 
-      if (manualField && deckInput) {
-        const showManual = deckInput.value === 'manual:new';
-        manualField.style.display = showManual ? '' : 'none';
-        if (!showManual && manualInput) {
+      if (deckInput) {
+        const deckValue = deckInput.value || '';
+        const isManualDeck = deckValue === 'manual:new' || deckValue.startsWith('manual:');
+        const hasManualName = Boolean(manualInput && manualInput.value.trim());
+        const hasManualLinkValue = Boolean(manualLinkInput && manualLinkInput.value.trim());
+        const showManualName = deckValue === 'manual:new' || hasManualName;
+        const showManualExtras = isManualDeck || hasManualName || hasManualLinkValue;
+        if (manualField) manualField.style.display = showManualName ? 'flex' : 'none';
+        if (commanderField) commanderField.style.display = showManualExtras ? 'flex' : 'none';
+        if (manualLinkField) manualLinkField.style.display = showManualExtras ? 'flex' : 'none';
+        if (!showManualName && manualInput) {
           manualInput.value = '';
         }
-        if (showManual && manualInput) {
+        if (!showManualExtras && commanderInput) {
+          commanderInput.value = '';
+        }
+        if (!showManualExtras && manualLinkInput) {
+          manualLinkInput.value = '';
+        }
+        if (showManualName && manualInput) {
           setTimeout(() => manualInput.focus(), 10);
+        }
+        if (showManualExtras && manualLinkWrapper) {
+          buildManualLinkMenu(manualLinkWrapper, manualLinkChoices, manualLinkInput?.value);
         }
       }
     };

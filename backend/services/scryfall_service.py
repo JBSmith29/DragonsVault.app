@@ -15,7 +15,7 @@ from sqlalchemy import func, or_
 
 from extensions import db
 from models import Card, Folder
-from models.role import OracleCoreRoleTag, OracleEvergreenTag
+from models.role import OracleCoreRoleTag, OracleEvergreenTag, OracleRole
 from services import scryfall_cache as sc
 from services.scryfall_cache import (
     all_set_codes,
@@ -29,7 +29,7 @@ from services.scryfall_cache import (
 from services.scryfall_search import build_query, search_cards
 from services.symbols_cache import colors_to_icons, ensure_symbols_cache, render_mana_html, render_oracle_html
 from services.request_cache import request_cached
-from viewmodels.card_vm import ScryfallCardVM, SetGalleryCardVM
+from viewmodels.card_vm import ScryfallCardVM, SetGalleryCardVM, format_role_label
 from viewmodels.set_vm import SetSummaryVM
 
 from routes.base import (
@@ -84,6 +84,69 @@ def _price_lines(prices: dict | None) -> list[str]:
     if prices.get("usd_etched"):
         lines.append(f"USD Etched {prices['usd_etched']}")
     return lines
+
+
+def _request_cached_evergreen_labels(oracle_id: str | None) -> list[str]:
+    if not oracle_id:
+        return []
+    key = ("card_view", "evergreen", oracle_id)
+
+    def _load() -> list[str]:
+        return [
+            row[0]
+            for row in (
+                db.session.query(OracleEvergreenTag.keyword)
+                .filter(OracleEvergreenTag.oracle_id == oracle_id)
+                .order_by(OracleEvergreenTag.keyword.asc())
+                .all()
+            )
+            if row and row[0]
+        ]
+
+    return request_cached(key, _load)
+
+
+def _request_cached_core_role_labels(oracle_id: str | None) -> list[str]:
+    if not oracle_id:
+        return []
+    key = ("card_view", "core_roles", oracle_id)
+
+    def _load() -> list[str]:
+        rows = (
+            db.session.query(OracleCoreRoleTag.role)
+            .filter(OracleCoreRoleTag.oracle_id == oracle_id)
+            .order_by(OracleCoreRoleTag.role.asc())
+            .all()
+        )
+        labels: list[str] = []
+        for row in rows:
+            role = row[0] if row else None
+            if not role:
+                continue
+            label = format_role_label(role)
+            if label not in labels:
+                labels.append(label)
+        return labels
+
+    return request_cached(key, _load)
+
+
+def _request_cached_primary_oracle_role_label(oracle_id: str | None) -> str | None:
+    if not oracle_id:
+        return None
+    key = ("card_view", "primary_oracle_role", oracle_id)
+
+    def _load() -> str | None:
+        row = (
+            db.session.query(OracleRole.primary_role)
+            .filter(OracleRole.oracle_id == oracle_id)
+            .first()
+        )
+        if not row or not row[0]:
+            return None
+        return format_role_label(str(row[0]))
+
+    return request_cached(key, _load)
 
 
 def scryfall_browser():
@@ -975,17 +1038,19 @@ def scryfall_print_detail(sid):
     ensure_symbols_cache(force=False)
     raw_mana = pr.get("mana_cost")
     raw_text = _oracle_text(pr)
+    mana_cost_html = render_mana_html(raw_mana, use_local=False)
+    oracle_text_html = render_oracle_html(raw_text, use_local=False)
     info = {
         "name": pr.get("name"),
-        "mana_cost_html": render_mana_html(raw_mana, use_local=False),
+        "mana_cost_html": mana_cost_html,
         "cmc": pr.get("cmc"),
         "type_line": pr.get("type_line"),
         "oracle_text": raw_text,
-        "oracle_text_html": render_oracle_html(raw_text, use_local=False),
+        "oracle_text_html": oracle_text_html,
         "colors": pr.get("colors") or [],
         "color_identity": pr.get("color_identity") or [],
         "rarity": pr.get("rarity"),
-        "set": pr.get("set"),
+        "set_code": pr.get("set"),
         "set_name": pr.get("set_name") or (set_name_for_code(pr.get("set")) if set_name_for_code else None),
         "collector_number": pr.get("collector_number"),
         "lang": pr.get("lang"),
@@ -997,12 +1062,46 @@ def scryfall_print_detail(sid):
     }
 
     all_leg = pr.get("legalities") or {}
-    info["legalities"] = all_leg
-    info["commander_legality"] = all_leg.get("commander")
+    commander_legality = all_leg.get("commander")
 
     purchase_uris = pr.get("purchase_uris") or {}
+    tcgplayer_url = purchase_uris.get("tcgplayer") or (pr.get("related_uris") or {}).get("tcgplayer")
+    prices = _prices_for_print(pr)
+    price_text = _format_price_text(prices)
+
+    commander_label = None
+    commander_class = None
+    if commander_legality:
+        leg_norm = str(commander_legality)
+        commander_label = "Not legal" if leg_norm == "not_legal" else leg_norm.replace("_", " ").capitalize()
+        if leg_norm == "legal":
+            commander_class = "bg-success"
+        elif leg_norm == "banned":
+            commander_class = "bg-danger"
+        elif leg_norm == "restricted":
+            commander_class = "bg-warning text-dark"
+        else:
+            commander_class = "bg-secondary"
+
+    prices_json = json.dumps(prices or {}, ensure_ascii=True)
+    has_oracle_text = bool(raw_text)
+    has_mana_cost = bool(mana_cost_html)
+
+    info["legalities"] = all_leg
+    info["commander_legality"] = commander_legality
+    info["commander_legality_label"] = commander_label
+    info["commander_legality_class"] = commander_class
+    info["has_commander_legality"] = bool(commander_label)
     info["purchase_uris"] = purchase_uris
-    info["tcgplayer_url"] = purchase_uris.get("tcgplayer") or (pr.get("related_uris") or {}).get("tcgplayer")
+    info["tcgplayer_url"] = tcgplayer_url
+    info["prices"] = prices
+    info["price_text"] = price_text
+    info["prices_json"] = prices_json
+    info["has_prices"] = bool(prices)
+    info["has_oracle_text"] = has_oracle_text
+    info["has_mana_cost"] = has_mana_cost
+    info["has_scryfall_uri"] = bool(info.get("scryfall_uri"))
+    info["has_scryfall_set_uri"] = bool(info.get("scryfall_set_uri"))
 
     rulings = request_cached(("card_view", "rulings", oid), lambda: rulings_for_oracle(oid) or []) if oid else []
     color_pips = colors_to_icons(info.get("color_identity") or info.get("colors"), use_local=True)
@@ -1010,7 +1109,7 @@ def scryfall_print_detail(sid):
     card_stub = SimpleNamespace(
         id=None,
         name=info.get("name"),
-        set_code=info.get("set"),
+        set_code=info.get("set_code"),
         collector_number=info.get("collector_number"),
         lang=info.get("lang"),
         is_foil=False,
@@ -1036,18 +1135,63 @@ def scryfall_print_detail(sid):
     except Exception:
         owned_folders = []
 
-    prices = _prices_for_print(pr)
-    price_text = _format_price_text(prices)
+    primary_role_label = _request_cached_primary_oracle_role_label(oid) if oid else None
+    role_labels = _request_cached_core_role_labels(oid) if oid else []
+    evergreen_labels = _request_cached_evergreen_labels(oid) if oid else []
+    subrole_labels: list[str] = []
+
+    print_images = []
+    if variants:
+        ordered_prints = []
+        if pr:
+            ordered_prints.append(pr)
+        ordered_prints.extend([variant for variant in variants if variant is not pr])
+        seen_prints: set[str] = set()
+        for variant in ordered_prints:
+            pid = variant.get("id") or ""
+            if pid and pid in seen_prints:
+                continue
+            if pid:
+                seen_prints.add(pid)
+            img_pack = _img(variant)
+            if not (img_pack.get("small") or img_pack.get("normal") or img_pack.get("large")):
+                continue
+            set_code = (variant.get("set") or "").upper()
+            collector_number = str(variant.get("collector_number") or "")
+            lang_code = str(variant.get("lang") or "").upper()
+            label_bits = [val for val in (set_code, collector_number, lang_code) if val]
+            label = " · ".join(label_bits) if label_bits else (variant.get("name") or pr.get("name"))
+            prices = variant.get("prices") or {}
+            purchase = variant.get("purchase_uris") or {}
+            related = variant.get("related_uris") or {}
+            set_name = variant.get("set_name") or (set_name_for_code(variant.get("set")) if variant.get("set") else "")
+            print_images.append(
+                {
+                    "id": pid,
+                    "set": set_code,
+                    "setName": set_name or "",
+                    "collectorNumber": collector_number,
+                    "lang": lang_code,
+                    "rarity": variant.get("rarity") or "",
+                    "prices": prices or {},
+                    "name": variant.get("name") or pr.get("name"),
+                    "scryUri": variant.get("scryfall_uri") or "",
+                    "tcgUri": purchase.get("tcgplayer") or related.get("tcgplayer") or "",
+                    "releasedAt": variant.get("released_at") or "",
+                    "small": img_pack.get("small") or img_pack.get("normal") or img_pack.get("large"),
+                    "normal": img_pack.get("normal") or img_pack.get("large") or img_pack.get("small"),
+                    "large": img_pack.get("large") or img_pack.get("normal") or img_pack.get("small"),
+                    "label": label,
+                }
+            )
+    print_images_json = json.dumps(print_images, ensure_ascii=True)
 
     return render_template(
         "cards/card_detail.html",
         card=card_stub,
-        info={
-            **info,
-            "prices": prices,
-            "price_text": price_text,
-        },
+        info=info,
         images=images,
+        print_images_json=print_images_json,
         rulings=rulings,
         color_pips=color_pips,
         tokens_created=sc.tokens_from_print(pr) if hasattr(sc, "tokens_from_print") else [],
@@ -1058,10 +1202,10 @@ def scryfall_print_detail(sid):
         collection_folders=collection_folder_names,
         owned_folders=owned_folders,
         return_to=request.args.get("return_to"),
-        primary_role_label=None,
-        role_labels=[],
-        subrole_labels=[],
-        evergreen_labels=[],
+        primary_role_label=primary_role_label,
+        role_labels=role_labels,
+        subrole_labels=subrole_labels,
+        evergreen_labels=evergreen_labels,
     )
 
 
