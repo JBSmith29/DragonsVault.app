@@ -110,7 +110,7 @@ BRACKET_LABELS: Dict[int, str] = {
 
 
 
-BRACKET_RULESET_EPOCH = 6
+BRACKET_RULESET_EPOCH = 8
 
 BRACKET_RULESET_PATH = Path(__file__).resolve().parents[1] / "commander-brackets" / "commander_brackets_ruleset.json"
 
@@ -960,7 +960,7 @@ SIGNAL_REASON_LABELS: Dict[str, str] = {
 SCORE_OVERVIEW_TEXT = (
     "We apply hard bracket gates first (Game Changers, mass land denial, extra turns, fast mana, "
     "instant-win lines, and Commander Spellbook combos). The score then places decks into coarse "
-    "bands, but the hard gate always wins."
+    "bands and applies a final Bracket 5 check (12+ promotes; 11.9 or lower demotes)."
 )
 
 SCORE_OVERVIEW_GUIDANCE: Tuple[str, ...] = (
@@ -978,6 +978,9 @@ SCORE_BANDS: Tuple[Tuple[float, int], ...] = (
     (24.0, 4),
     (math.inf, 5),
 )
+
+BRACKET5_SCORE_PROMOTION = 12.0
+BRACKET5_SCORE_DEMOTION = 11.9
 
 AVG_CMC_BENEFITS = [
     (2.0, 3.5),
@@ -2197,7 +2200,8 @@ def evaluate_commander_bracket(
     instant_floor = int(combo_cfg.get("instant_win_floor") or 5)
     three_card_floor = int(combo_cfg.get("three_card_floor") or 4)
     three_card_min = int(combo_cfg.get("three_card_min") or 2)
-    if instant_win_combo_count:
+    instant_win_with_fast_mana = instant_win_combo_count > 0 and early_game_count > 0
+    if instant_win_with_fast_mana:
         combo_floor = max(combo_floor, instant_floor)
     if three_card_combo_count >= three_card_min:
         combo_floor = max(combo_floor, three_card_floor)
@@ -2236,7 +2240,7 @@ def evaluate_commander_bracket(
     }
     if ruleset_metrics:
         score_methodology["guidance"].append(
-            "Wizard signals set the hard bracket floor; score provides additional context."
+            "Wizard signals and ruleset metrics set the hard bracket floor; score can still promote to Bracket 5 at 12+ or demote Bracket 5 at 11.9 or lower."
         )
 
     def add_component(key: str, value: float, reason: str) -> None:
@@ -2430,7 +2434,7 @@ def evaluate_commander_bracket(
     cedh_adjacent = False
 
     if ruleset_metrics:
-        ruleset_floor_val = wizard_bracket_floor or 1
+        ruleset_floor_val = max(wizard_bracket_floor or 1, ruleset_floor or 1)
         min_signals_for_bump = int(ruleset_reinforcement.get("min_signals_for_bump") or 2)
         min_floor_for_bump = int(ruleset_reinforcement.get("min_floor_for_bump") or 2)
         max_bracket = int(ruleset_reinforcement.get("max_bracket") or 4)
@@ -2441,6 +2445,7 @@ def evaluate_commander_bracket(
         ruleset_reinforced = ruleset_floor_val
         if ruleset_floor_val >= min_floor_for_bump and signals_at_floor >= min_signals_for_bump:
             ruleset_reinforced = min(ruleset_floor_val + 1, max_bracket)
+        ruleset_reinforced = max(ruleset_reinforced, ruleset_floor_val)
         ruleset_level = ruleset_reinforced
 
         b5_weights = ruleset_bracket5.get("weights") if isinstance(ruleset_bracket5, dict) else {}
@@ -2449,9 +2454,7 @@ def evaluate_commander_bracket(
         b5_thresholds = ruleset_bracket5.get("thresholds") if isinstance(ruleset_bracket5, dict) else {}
         if not isinstance(b5_thresholds, dict):
             b5_thresholds = {}
-        promote_to_5 = float(b5_thresholds.get("promote_to_5") or 0)
         remain_at_4 = float(b5_thresholds.get("remain_at_4") or 0)
-        soft_score_threshold = float(b5_thresholds.get("soft_score_threshold") or 4.6)
         min_signals_for_5 = int(b5_thresholds.get("min_signals_for_5") or 2)
         bracket5_score = 0.0
         bracket5_signals = 0
@@ -2462,18 +2465,11 @@ def evaluate_commander_bracket(
                 bracket5_signals += 1
         if ruleset_floor_val >= 5:
             ruleset_level = 5
-        elif score >= soft_score_threshold:
-            ruleset_level = 5
-        elif promote_to_5 and bracket5_score >= promote_to_5 and bracket5_signals >= min_signals_for_5:
-            ruleset_level = 5
         elif remain_at_4 and bracket5_score >= remain_at_4 and bracket5_signals >= min_signals_for_5:
             ruleset_level = max(ruleset_level or 0, 4)
             cedh_adjacent = True
 
         level = ruleset_level or ruleset_floor_val
-        if score < soft_score_threshold and level > 4:
-            level = 4
-            ruleset_level = 4
         bracket1_ok = ruleset_floor_val == 1
         bracket2_ok = ruleset_floor_val <= 2
         bracket3_ok = ruleset_floor_val <= 3
@@ -2513,6 +2509,11 @@ def evaluate_commander_bracket(
 
         score_band = _score_to_band(score)
         level = max(hard_floor, score_band)
+
+    if score >= BRACKET5_SCORE_PROMOTION:
+        level = 5
+    elif level == 5 and score <= BRACKET5_SCORE_DEMOTION:
+        level = 4
 
     label = BRACKET_LABELS.get(level, "Unknown")
 
@@ -2606,7 +2607,8 @@ def evaluate_commander_bracket(
     if ruleset_metrics:
         score_methodology["ruleset"] = {
             "version": ruleset.get("version"),
-            "floor": ruleset_floor,
+            "floor": ruleset_floor_val,
+            "metric_floor": ruleset_floor,
             "reinforced": ruleset_reinforced,
             "wizard_bracket_floor": wizard_bracket_floor,
             "metric_brackets": ruleset_metric_brackets,

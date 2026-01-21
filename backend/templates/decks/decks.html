@@ -664,7 +664,7 @@
 <div class="modal fade" id="bulkProxyModal" tabindex="-1" aria-labelledby="bulkProxyModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
-      <form method="post" action="{{ url_for('views.create_proxy_deck_bulk') }}">
+      <form method="post" action="{{ url_for('views.create_proxy_deck_bulk') }}" data-hx-boost="false">
         <div class="modal-header">
           <h5 class="modal-title" id="bulkProxyModalLabel">Bulk Import Proxy Decks</h5>
           {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
@@ -695,7 +695,7 @@
 <div class="modal fade" id="proxyDeckModal" tabindex="-1" aria-labelledby="proxyDeckModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
-      <form id="proxyDeckForm" method="post" action="{{ url_for('views.create_proxy_deck') }}">
+      <form id="proxyDeckForm" method="post" action="{{ url_for('views.create_proxy_deck') }}" data-hx-boost="false">
         <div class="modal-header">
           <h5 class="modal-title" id="proxyDeckModalLabel">Import Proxy Deck</h5>
           {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}

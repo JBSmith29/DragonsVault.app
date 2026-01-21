@@ -82,7 +82,7 @@
     </div>
   </div>
 
-  <form class="range-card mb-4" method="get">
+  <form class="range-card mb-4" method="get" action="{{ url_for('views.games_metrics_decks') }}">
     <div class="row g-3 align-items-end">
       <div class="col-12 col-md-6">
         <label class="form-label">Pod Filter</label>
@@ -322,11 +322,29 @@
       const formData = new FormData(formEl);
       const params = new URLSearchParams();
       for (const [key, value] of formData.entries()) {
-        if (value) params.set(key, value);
+        if (value && value.toString().trim()) {
+          params.set(key, value.toString().trim());
+        }
       }
-      const url = new URL(window.location);
-      url.search = params.toString();
-      window.location.href = url.toString();
+      const action = formEl.getAttribute('action') || window.location.pathname;
+      const targetUrl = params.toString()
+        ? `${action}?${params.toString()}`
+        : action;
+      window.location.href = targetUrl;
+    };
+
+    const setRangeValue = (value) => {
+      if (!rangeWrapper) return;
+      const input = rangeWrapper.querySelector('[data-game-select-input]');
+      const labelEl = rangeWrapper.querySelector('[data-game-select-label]');
+      const options = Array.from(rangeWrapper.querySelectorAll('[data-game-select-option]'));
+      if (!input || !labelEl) return;
+      const match = options.find((opt) => opt.dataset.value === value);
+      options.forEach((btn) => btn.classList.toggle('active', btn === match));
+      if (match) {
+        labelEl.textContent = match.dataset.label || match.textContent.trim();
+      }
+      input.value = value;
     };
 
     const bindSelect = (wrapper, onChange) => {
@@ -378,6 +396,8 @@
     bindSelect(rangeWrapper, updateVisibility);
     bindSelect(yearWrapper, (value, fromUser) => {
       if (!fromUser) return;
+      setRangeValue('year');
+      updateVisibility('year', false);
       submitForm();
     });
   })();

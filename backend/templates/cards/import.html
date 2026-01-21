@@ -315,7 +315,7 @@
             <p class="text-muted mb-3">
               Paste a public MTGGoldfish or Moxfield deck link and we’ll pull the list directly into a new deck folder.
             </p>
-            <form class="row gy-3 gx-3 align-items-end" method="post" action="{{ url_for('views.create_proxy_deck') }}" id="proxyDeckImportForm">
+            <form class="row gy-3 gx-3 align-items-end" method="post" action="{{ url_for('views.create_proxy_deck') }}" id="proxyDeckImportForm" data-hx-boost="false">
               <div class="col-12">
                 <label for="deck_url" class="form-label">Deck URL</label>
                 <input type="url" class="form-control" id="deck_url" name="deck_url" placeholder="https://www.mtggoldfish.com/deck/1234 or https://moxfield.com/decks/ABC123" required>

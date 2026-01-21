@@ -42,16 +42,20 @@ def _accessible_deck_options(owner_user_id: int | None = None) -> list[dict[str,
             Folder.name,
             Folder.commander_name,
             Folder.owner,
+            Folder.is_proxy,
         )
-        .join(FolderRole, FolderRole.folder_id == Folder.id)
+        .outerjoin(FolderRole, FolderRole.folder_id == Folder.id)
         .filter(
-            FolderRole.role.in_(FolderRole.DECK_ROLES),
+            or_(
+                FolderRole.role.in_(FolderRole.DECK_ROLES),
+                Folder.category == Folder.CATEGORY_DECK,
+            )
         )
     )
     if owner_user_id is not None:
         query = query.filter(Folder.owner_user_id == owner_user_id)
     rows = (
-        query.group_by(Folder.id, Folder.name, Folder.commander_name, Folder.owner)
+        query.group_by(Folder.id, Folder.name, Folder.commander_name, Folder.owner, Folder.is_proxy)
         .order_by(func.lower(Folder.name))
         .all()
     )
@@ -62,6 +66,8 @@ def _accessible_deck_options(owner_user_id: int | None = None) -> list[dict[str,
             label = f"{label} · {row.commander_name}"
         if row.owner:
             label = f"{label} · {row.owner}"
+        if row.is_proxy:
+            label = f"{label} · Proxy"
         options.append({"id": row.id, "label": label, "ref": f"folder:{row.id}"})
     return options
 
@@ -1505,8 +1511,8 @@ def _player_stats(
             wins_expr,
             combo_expr,
         )
+        .join(GameSeatAssignment, GameSeatAssignment.session_id == GameSession.id)
         .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
-        .join(GameSession, GameSession.id == GameSeat.session_id)
         .join(GamePlayer, GamePlayer.id == GameSeatAssignment.player_id)
         .filter(*filters, player_filter)
         .one()
