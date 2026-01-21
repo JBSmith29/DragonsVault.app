@@ -1,17 +1,3 @@
-"""Set view models for template rendering."""
+"""Legacy re-export for set view models."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Optional
-
-
-@dataclass(slots=True)
-class SetSummaryVM:
-    """Presentation-ready set summary row."""
-    set_code: str
-    set_name: str
-    rows: int
-    qty: int
-    release_iso: Optional[str]
-    release_display: Optional[str]
+from core.domains.cards.viewmodels.set_vm import *  # noqa: F401,F403

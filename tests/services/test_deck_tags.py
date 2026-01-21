@@ -1,4 +1,4 @@
-from services.deck_tags import resolve_deck_tag_from_slug
+from core.domains.decks.services.deck_tags import resolve_deck_tag_from_slug
 
 
 def test_resolve_deck_tag_direct_match():

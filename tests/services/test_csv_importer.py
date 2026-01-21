@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from models import Card, Folder
-from services import csv_importer
+from core.domains.cards.services import csv_importer
 
 
 def _write_csv(tmp_path, name: str, rows: str) -> Path:

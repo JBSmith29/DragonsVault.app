@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services import spellbook_sync
+from core.domains.decks.services import spellbook_sync
 
 
 def test_generate_spellbook_combo_dataset_categorises_variants(monkeypatch):

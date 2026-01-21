@@ -1,6 +1,6 @@
 import pytest
 
-from services import scryfall_cache as sc
+from core.domains.cards.services import scryfall_cache as sc
 
 
 @pytest.fixture(autouse=True)

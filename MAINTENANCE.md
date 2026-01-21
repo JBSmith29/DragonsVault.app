@@ -126,12 +126,12 @@ Run inside the web container:
 
 Inline helpers (copy/paste as shown):
 - `docker compose exec web flask shell <<'PY'`  
-  `from services.jobs import run_scryfall_refresh_inline`  
+  `from shared.jobs.jobs import run_scryfall_refresh_inline`  
   `run_scryfall_refresh_inline('rulings')`  
   `exit()`  
   `PY`
 - `docker compose exec web flask shell <<'PY'`  
-  `from services.symbols_cache import ensure_symbols_cache`  
+  `from core.shared.utils.symbols_cache import ensure_symbols_cache`  
   `ensure_symbols_cache(force=True)`  
   `exit()`  
   `PY`

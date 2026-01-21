@@ -1,4 +1,4 @@
-from services import commander_brackets as cb
+from core.domains.decks.services import commander_brackets as cb
 
 
 def test_bracket_one_allows_two_nonland_tutors(monkeypatch):

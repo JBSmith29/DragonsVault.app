@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+{% block title %}Game Metrics{% endblock %}
+{% block content %}
+<style>
+  .metric-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .metric-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+  }
+  .metric-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .metric-list li:last-child { border-bottom: 0; }
+  .range-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .metric-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .metric-chart-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+  .metric-chart-label {
+    font-weight: 600;
+  }
+  .metric-chart-bar {
+    height: 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+  .metric-chart-bar span {
+    display: block;
+    height: 100%;
+    background: var(--bs-primary);
+    box-shadow: 0 0 12px rgba(var(--bs-primary-rgb), 0.35);
+  }
+  .metric-chart-value {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+  }
+  .game-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .game-breakdown-seat {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+  }
+  .game-breakdown-seat .badge {
+    font-size: 0.7rem;
+  }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1">Game Metrics</h1>
+      <p class="text-muted mb-0">Filter date ranges to inspect your Commander trends.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_metrics_pods') }}">Pod Metrics</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_metrics_users') }}">User Metrics</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_metrics_decks') }}">Deck Metrics</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_landing') }}">Back to Landing</a>
+    </div>
+  </div>
+
+  <form class="range-card mb-4" method="get" data-game-metrics-form>
+    <div class="row g-3 align-items-end">
+      <div class="col-12">
+        <div class="text-muted small">Start by choosing a pod to focus your metrics. All pods shows every game you can see.</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Pod</label>
+        <div class="dropdown dv-select w-100" data-game-select="pod">
+          <input type="hidden" name="pod" data-game-select-input value="{{ selected_pod_id or '' }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label>{{ selected_pod_label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item{% if not selected_pod_id %} active{% endif %}" type="button" data-game-select-option data-value="" data-label="All pods">All pods</button></li>
+            {% for pod in pod_options %}
+              <li><button class="dropdown-item{% if selected_pod_id and selected_pod_id == pod.id %} active{% endif %}" type="button" data-game-select-option data-value="{{ pod.id }}" data-label="{{ pod.label }}">{{ pod.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Range</label>
+        <div class="dropdown dv-select w-100" data-game-select="range">
+          <input type="hidden" name="range" data-game-select-input value="{{ range_ctx.range_key }}">
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label>{{ range_ctx.label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last30" data-label="Last 30 days">Last 30 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="last90" data-label="Last 90 days">Last 90 days</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="ytd" data-label="Year to date">Year to date</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="year" data-label="Year">Year</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="custom" data-label="Custom range">Custom range</button></li>
+            <li><button class="dropdown-item" type="button" data-game-select-option data-value="all" data-label="All time">All time</button></li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4" id="yearField">
+        <label class="form-label" for="rangeYear">Year</label>
+        <div class="dropdown dv-select w-100" data-game-select="year">
+          <input type="hidden" id="rangeYear" name="year" data-game-select-input value="{{ range_ctx.year_value }}">
+          {% set selected_year = range_ctx.year_value if range_ctx.year_value else '' %}
+          {% set year_label = selected_year if selected_year else 'Select year' %}
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label>{{ year_label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            {% for year in year_options %}
+              <li><button class="dropdown-item{% if selected_year and selected_year|int == year %} active{% endif %}" type="button" data-game-select-option data-value="{{ year }}" data-label="{{ year }}">{{ year }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4" id="customField">
+        <label class="form-label">Custom range</label>
+        <div class="d-flex gap-2">
+          <input class="form-control" type="date" name="start" value="{{ range_ctx.start_value }}">
+          <input class="form-control" type="date" name="end" value="{{ range_ctx.end_value }}">
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Player filter</label>
+        <div class="dropdown dv-select w-100" data-game-select="player">
+          <input type="hidden" name="player" data-game-select-input value="{{ selected_player_key }}">
+          {% set player_label = selected_player_label if selected_player_label else 'All players' %}
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label>{{ player_label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li class="dv-select-search-wrapper">
+              <input type="text"
+                     class="form-control form-control-sm dv-select-search"
+                     placeholder="Search players"
+                     autocomplete="off"
+                     data-dv-select-search>
+            </li>
+            <li><button class="dropdown-item{% if not selected_player_key %} active{% endif %}" type="button" data-game-select-option data-value="" data-label="All players">All players</button></li>
+            {% for player in player_options %}
+              <li><button class="dropdown-item{% if selected_player_key == player.key %} active{% endif %}" type="button" data-game-select-option data-value="{{ player.key }}" data-label="{{ player.label }}">{{ player.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Deck filter</label>
+        <div class="dropdown dv-select w-100" data-game-select="deck">
+          <input type="hidden" name="deck" data-game-select-input value="{{ selected_deck_key }}">
+          {% set deck_label = selected_deck_label if selected_deck_label else 'All decks' %}
+          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span data-game-select-label>{{ deck_label }}</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100">
+            <li class="dv-select-search-wrapper">
+              <input type="text"
+                     class="form-control form-control-sm dv-select-search"
+                     placeholder="Search decks"
+                     autocomplete="off"
+                     data-dv-select-search>
+            </li>
+            <li><button class="dropdown-item{% if not selected_deck_key %} active{% endif %}" type="button" data-game-select-option data-value="" data-label="All decks">All decks</button></li>
+            {% for deck in deck_options %}
+              <li><button class="dropdown-item{% if selected_deck_key == deck.key %} active{% endif %}" type="button" data-game-select-option data-value="{{ deck.key }}" data-label="{{ deck.label }}">{{ deck.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      {% if player_filter_active %}
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.games_metrics_player', player=selected_player_key, **range_params) }}">Open player detail</a>
+        </div>
+      {% endif %}
+      <div class="col-12">
+        <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Games</div>
+        <div class="metric-value">{{ metrics.total_games }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Combo wins</div>
+        <div class="metric-value">{{ metrics.combo_wins }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Combo rate</div>
+        <div class="metric-value">{{ metrics.combo_rate }}%</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-label">Avg players</div>
+        <div class="metric-value">{{ metrics.avg_players if metrics.avg_players is not none else '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Top winners</div>
+        <ul class="metric-list">
+          {% if metrics.top_winners and metrics.top_winners|length %}
+            {% for row in metrics.top_winners %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Most active players</div>
+        <ul class="metric-list">
+          {% if top_players and top_players|length %}
+            {% for row in top_players %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">{% if player_filter_active %}Most played decks ({{ selected_player_label }}){% else %}Most played decks{% endif %}</div>
+        <ul class="metric-list">
+          {% if deck_usage and deck_usage|length %}
+            {% for row in deck_usage %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Combo win leaders</div>
+        <ul class="metric-list">
+          {% if combo_winners and combo_winners|length %}
+            {% for row in combo_winners %}
+              <li><span>{{ row.label }}</span><span>{{ row.count }}</span></li>
+            {% endfor %}
+          {% else %}
+            <li><span class="text-muted">No data yet.</span><span>—</span></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  {% if player_metrics %}
+    <div class="row g-3 mt-1">
+      <div class="col-12">
+        <div class="metric-card">
+          <div class="metric-label mb-2">Player focus</div>
+          <div class="d-flex flex-wrap gap-3">
+            <div><span class="text-muted small">Games</span><div class="fw-semibold">{{ player_metrics.games_played }}</div></div>
+            <div><span class="text-muted small">Wins</span><div class="fw-semibold">{{ player_metrics.wins }}</div></div>
+            <div><span class="text-muted small">Win rate</span><div class="fw-semibold">{{ player_metrics.win_rate }}%</div></div>
+            <div><span class="text-muted small">Combo wins</span><div class="fw-semibold">{{ player_metrics.combo_wins }}</div></div>
+          </div>
+          <div class="mt-3">
+            <div class="metric-label mb-2">Player deck win rates</div>
+            {% if player_metrics.deck_stats and player_metrics.deck_stats|length %}
+              <div class="metric-chart">
+                {% for row in player_metrics.deck_stats %}
+                  <div class="metric-chart-row">
+                    <div class="metric-chart-label">{{ row.label }}</div>
+                    <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                    <div class="metric-chart-value">{{ row.win_rate }}%</div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted small">No deck data for this player yet.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-lg-6">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Player win rates</div>
+        {% if player_win_rates and player_win_rates|length %}
+          <div class="metric-chart">
+            {% for row in player_win_rates %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">
+                  {% if row.key %}
+                    <a class="text-decoration-none" href="{{ url_for('views.games_metrics_player', player=row.key, **range_params) }}">{{ row.label }}</a>
+                  {% else %}
+                    {{ row.label }}
+                  {% endif %}
+                  ({{ row.wins }} win{{ 's' if row.wins != 1 else '' }})
+                </div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No win rate data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">{% if player_filter_active %}Deck win rates ({{ selected_player_label }}){% else %}Deck win rates{% endif %}</div>
+        {% if deck_win_rates and deck_win_rates|length %}
+          <div class="metric-chart">
+            {% for row in deck_win_rates %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">{{ row.label }}</div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No win rate data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">{% if player_filter_active %}Bracket win rates ({{ selected_player_label }}){% else %}Bracket win rates{% endif %}</div>
+        {% if bracket_stats and bracket_stats|length %}
+          <div class="metric-chart">
+            {% for row in bracket_stats %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">{{ row.label }}</div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No bracket data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-lg-6">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Turn order wins (3 players)</div>
+        {% if turn_order_metrics.three_player and turn_order_metrics.three_player|length %}
+          <div class="metric-chart">
+            {% for row in turn_order_metrics.three_player %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">Turn {{ row.turn_order }}</div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No 3-player data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="metric-card h-100">
+        <div class="metric-label mb-2">Turn order wins (4 players)</div>
+        {% if turn_order_metrics.four_player and turn_order_metrics.four_player|length %}
+          <div class="metric-chart">
+            {% for row in turn_order_metrics.four_player %}
+              <div class="metric-chart-row">
+                <div class="metric-chart-label">Turn {{ row.turn_order }}</div>
+                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                <div class="metric-chart-value">{{ row.win_rate }}%</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted small">No 4-player data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mt-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+          <div class="metric-label">Games for {{ selected_pod_label }}</div>
+          <div class="fw-semibold">{{ games|length }} game{{ 's' if games|length != 1 else '' }}</div>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_overview') }}">Open logs</a>
+      </div>
+      {% if games and games|length %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Seats</th>
+                <th>Winner</th>
+                <th>Result</th>
+                <th class="text-end">Game</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for game in games %}
+                <tr>
+                  <td class="text-nowrap">{{ game.played_at_label }}</td>
+                  <td>
+                    <div class="game-breakdown-list">
+                      {% for seat in game.seats %}
+                        <div class="game-breakdown-seat">
+                          <span class="badge text-bg-secondary">Seat {{ seat.seat_number }}</span>
+                          <span class="fw-semibold">{{ seat.player_label }}</span>
+                          <span class="text-muted">· {{ seat.deck_name }}{% if seat.commander_name %} · {{ seat.commander_name }}{% endif %}</span>
+                          {% if seat.is_winner %}
+                            <span class="badge text-bg-success">Winner</span>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </td>
+                  <td>{{ game.winner_label or '—' }}</td>
+                  <td>
+                    {% if game.win_via_combo %}
+                      <span class="badge text-bg-warning">Combo win</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('views.games_detail', game_id=game.id) }}">View</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted small">No games match this filter yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

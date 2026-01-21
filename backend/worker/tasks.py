@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from services.background.oracle_recompute import (
+from shared.jobs.background.oracle_recompute import (
     recompute_all_roles,
     recompute_oracle_roles,
     recompute_deck_tag_synergies,

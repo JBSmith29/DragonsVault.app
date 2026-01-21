@@ -1,4 +1,4 @@
-from services.proxy_decks import (
+from core.domains.decks.services.proxy_decks import (
     fetch_goldfish_deck,
     _normalize_goldfish_url,
 )
@@ -19,7 +19,7 @@ def test_fetch_goldfish_deck_rejects_untrusted_host(monkeypatch):
     def _should_not_be_called(*args, **kwargs):  # pragma: no cover - defensive
         raise AssertionError("External request attempted for hostile host")
 
-    monkeypatch.setattr("services.proxy_decks.requests.get", _should_not_be_called)
+    monkeypatch.setattr("core.domains.decks.services.proxy_decks.requests.get", _should_not_be_called)
 
     deck_name, owner, commander, lines, errors = fetch_goldfish_deck("https://example.com/deck/123")
 
@@ -34,7 +34,7 @@ def test_fetch_goldfish_deck_rejects_untrusted_port(monkeypatch):
     def _should_not_be_called(*args, **kwargs):  # pragma: no cover - defensive
         raise AssertionError("External request attempted for hostile port")
 
-    monkeypatch.setattr("services.proxy_decks.requests.get", _should_not_be_called)
+    monkeypatch.setattr("core.domains.decks.services.proxy_decks.requests.get", _should_not_be_called)
 
     _, _, _, lines, errors = fetch_goldfish_deck("https://www.mtggoldfish.com:444/deck/123")
 

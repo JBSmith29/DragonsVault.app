@@ -4,7 +4,7 @@ from queue import Empty
 
 import pytest
 
-from services import live_updates
+from shared.events import live_updates
 
 
 def test_emit_import_event_reaches_subscribers():

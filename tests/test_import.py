@@ -1,7 +1,7 @@
 import io
 
 from models import Card, Folder
-from services.csv_importer import process_csv
+from core.domains.cards.services.csv_importer import process_csv
 
 
 def test_import_csv_upload(client, create_user):

@@ -19,6 +19,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     Talisman = None  # type: ignore
     _talisman_available = False
+from jinja2 import ChoiceLoader, FileSystemLoader
 from jinja2.bccache import FileSystemBytecodeCache
 from sqlalchemy import event, exists, func, inspect, text, or_
 from sqlalchemy.engine import Engine
@@ -30,25 +31,26 @@ from dotenv import load_dotenv; load_dotenv()
 from config import Config, INSTANCE_DIR as CONFIG_INSTANCE_DIR
 from extensions import db, migrate, cache, csrf, limiter, login_manager, generate_csrf
 from flask_login import current_user
-from utils.time import utcnow
-from utils.assets import static_url
+from core.shared.utils.time import utcnow
+from core.shared.utils.assets import static_url
+from shared.error_handlers import register_error_handlers
 
 # Scryfall helpers
-from services import scryfall_cache as sc
-from services.scryfall_cache import (
+from core.domains.cards.services import scryfall_cache as sc
+from core.domains.cards.services.scryfall_cache import (
     ensure_cache_loaded,
     cache_exists, load_cache, find_by_set_cn,
     candidates_by_set_and_name, find_by_set_cn_loose,
     normalize_set_code, unique_oracle_by_name,
 )
-from services.deck_utils import BASIC_LANDS
+from core.domains.decks.services.deck_utils import BASIC_LANDS
 
 # FTS helpers
-from services.fts import ensure_fts, reindex_fts
+from shared.database.fts import ensure_fts, reindex_fts
 
 # Optional compat shim (ignore if missing)
 try:
-    import services.scryfall_cache_compat  # noqa: F401
+    import core.domains.cards.services.scryfall_cache_compat  # noqa: F401
 except Exception:
     pass
 
@@ -615,6 +617,20 @@ def create_app():
     _configure_logging(app)
     app.jinja_env.globals["static_url"] = static_url
 
+    # Add future template roots for staged domain migration.
+    extra_template_dirs = [
+        Path(app.root_path) / "core" / "templates",
+        Path(app.root_path) / "core" / "domains" / "cards" / "templates",
+        Path(app.root_path) / "core" / "domains" / "games" / "templates",
+        Path(app.root_path) / "core" / "domains" / "decks" / "templates",
+        Path(app.root_path) / "core" / "domains" / "users" / "templates",
+    ]
+    loaders = []
+    if app.jinja_loader:
+        loaders.append(app.jinja_loader)
+    loaders.append(FileSystemLoader([str(path) for path in extra_template_dirs]))
+    app.jinja_loader = ChoiceLoader(loaders)
+
     # Honor X-Forwarded-* headers from our reverse proxy (nginx/Cloudflare).
     # This prevents Flask-Talisman from forcing HTTPS redirects on plain HTTP health checks.
     from werkzeug.middleware.proxy_fix import ProxyFix
@@ -792,8 +808,8 @@ def create_app():
 
         # Import models after db is bound
         from models import Card, Folder, WishlistItem  # noqa: F401
-        from services.deck_service import register_deck_stats_listeners
-        from services.request_cache import register_request_cache_listeners
+        from core.domains.decks.services.deck_service import register_deck_stats_listeners
+        from shared.cache.request_cache import register_request_cache_listeners
         _register_visibility_filters(Card, Folder)
         register_deck_stats_listeners()
         register_request_cache_listeners()
@@ -826,10 +842,12 @@ def create_app():
         ensure_fts()
 
     # Blueprints
-    from routes import views, api_bp
-    from routes.games_api import register_games_api
+    from core.routes import views, api_bp, register_routes
+    from core.domains.games.routes.games_api import register_games_api
+    register_routes()
     app.register_blueprint(views)
     app.register_blueprint(api_bp)
+    app.register_blueprint(api_bp, url_prefix="/api/v1", name="api_v1")
     register_games_api(app)
 
     @app.context_processor
@@ -844,8 +862,8 @@ def create_app():
     # CLI COMMANDS
     # ------------------------------------------------------------------
     from models import Card, Folder, User  # local scope for CLI
-    from services.csv_importer import process_csv, HeaderValidationError
-    from services.spellbook_sync import (
+    from core.domains.cards.services.csv_importer import process_csv, HeaderValidationError
+    from core.domains.decks.services.spellbook_sync import (
         EARLY_MANA_VALUE_THRESHOLD,
         LATE_MANA_VALUE_THRESHOLD,
         DEFAULT_SPELLBOOK_CONCURRENCY,
@@ -930,7 +948,7 @@ def create_app():
     def rq_worker(queue):
         """Run an RQ worker that processes background jobs."""
         from rq import Worker
-        from services.task_queue import get_queue
+        from shared.jobs.task_queue import get_queue
 
         q = get_queue(queue)
         worker = Worker([q], connection=q.connection)
@@ -1651,16 +1669,7 @@ def create_app():
         click.echo("New API token (store securely; shown once):")
         click.echo(token)
 
-    @app.errorhandler(404)
-    def not_found(e):
-        """Render a friendly 404 page while keeping the error for debugging."""
-        return render_template("shared/system/404.html", e=e), 404
-
-    @app.errorhandler(500)
-    def internal(e):
-        """Roll back broken transactions and return the standard 500 view."""
-        db.session.rollback()
-        return render_template("shared/system/500.html", e=e, message="A database error occurred. Please try again."), 500
+    register_error_handlers(app)
 
     @app.before_request
     def assign_request_id():

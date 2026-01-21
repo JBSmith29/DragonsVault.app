@@ -1,6 +1,6 @@
 import requests
 
-from services import pricing
+from core.domains.cards.services import pricing
 
 
 class _FakeResponse:

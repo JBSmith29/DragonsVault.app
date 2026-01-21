@@ -1,4 +1,4 @@
-from services.oracle_tagging import derive_deck_tags, derive_evergreen_keywords, ensure_fallback_tag
+from core.domains.decks.services.oracle_tagging import derive_deck_tags, derive_evergreen_keywords, ensure_fallback_tag
 
 
 def test_derive_evergreen_keywords_from_keywords():

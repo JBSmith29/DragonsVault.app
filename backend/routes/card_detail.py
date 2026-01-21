@@ -1,19 +1,6 @@
-"""Owned card detail views."""
+"""Legacy shim for card detail routes."""
 
-from __future__ import annotations
+from core.domains.cards.routes import card_detail as _card_detail  # noqa: F401
+from core.domains.cards.routes.card_detail import *  # noqa: F401,F403
 
-from services import card_service
-from .base import views
-
-
-@views.route("/cards/<int:card_id>")
-def card_detail(card_id):
-    return card_service.card_detail(card_id)
-
-
-@views.route("/cards/<id_or_sid>")
-def smart_card_detail(id_or_sid):
-    return card_service.smart_card_detail(id_or_sid)
-
-
-__all__ = ["card_detail", "smart_card_detail"]
+__all__ = getattr(_card_detail, "__all__", [])

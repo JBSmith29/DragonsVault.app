@@ -84,12 +84,12 @@ Run the following commands against your running DragonsVault instance using `doc
    docker compose exec web flask fetch-scryfall-bulk --progress
    docker compose exec web flask refresh-scryfall
    docker compose exec web flask shell <<'PY'
-   from services.jobs import run_scryfall_refresh_inline
+   from shared.jobs.jobs import run_scryfall_refresh_inline
    run_scryfall_refresh_inline('rulings')
    exit()
    PY
    docker compose exec web flask shell <<'PY'
-   from services.symbols_cache import ensure_symbols_cache
+   from core.shared.utils.symbols_cache import ensure_symbols_cache
    ensure_symbols_cache(force=True)
    exit()
    PY
@@ -160,8 +160,8 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 | `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {delta,new_only}]` | CLI importer mirroring the web importer. |
 | `flask fetch-scryfall-bulk [--progress]` | Download the Scryfall `default_cards` bulk file. |
 | `flask refresh-scryfall` | Load the downloaded bulk file into memory and build indexes. |
-| `flask shell -c "from services.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"` | Download rulings bulk data (inline helper). |
-| `flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` | Refresh mana symbol JSON/SVGs. |
+| `flask shell -c "from shared.jobs.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"` | Download rulings bulk data (inline helper). |
+| `flask shell -c "from core.shared.utils.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` | Refresh mana symbol JSON/SVGs. |
 | `flask sync-spellbook-combos [--card-count N ...]` | Pull Commander Spellbook combos into `data/spellbook_combos.json`. |
 | `flask repair-oracle-ids-advanced [--dry-run]` | Fill missing `oracle_id` values via Scryfall cache lookups. |
 | `flask dedupe-cards` | Detect duplicate prints within folders. |
@@ -261,7 +261,7 @@ The Django + DRF service runs alongside Flask at `/api-next`. It currently requi
 | - | - |
 | OperationalError: no such column: folder.category | Run `flask db upgrade`. If upgrading from a very old DB, stamp to the latest seen revision before running upgrade. |
 | Scryfall-owned counts show zero | Ensure collection folders are marked as `collection` in Admin ? Folder Categories. |
-| Mana symbols missing from card text | Run `flask shell -c "from services.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` or use the Admin button to re-fetch symbology. |
+| Mana symbols missing from card text | Run `flask shell -c "from core.shared.utils.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` or use the Admin button to re-fetch symbology. |
 | Migration history references missing revisions | The repo is rebased to a single `0001_initial` migration. Delete your local DB (`instance/*.db`) and rerun `docker compose run --rm web ./backend/scripts/bootstrap.sh` (or `flask db upgrade`). |
 | Gunicorn worker timeout on startup | Pre-warm inside a container: `docker compose run --rm web ./backend/scripts/bootstrap.sh`. If still slow, raise `WEB_TIMEOUT` (default 300) before `docker compose up`. |
 | CSV import fails with Unsupported file type | Confirm the file is `.csv`, `.xlsx`, or `.xlsm`. The importer checks extensions. |

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services import edhrec_client as edhrec
+from core.domains.decks.services import edhrec_client as edhrec
 
 
 def test_slugify_commander_handles_split_and_accents():

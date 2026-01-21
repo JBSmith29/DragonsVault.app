@@ -1,25 +1,6 @@
-"""Set overview, gallery, and detail routes."""
+"""Legacy shim for set browsing routes."""
 
-from __future__ import annotations
+from core.domains.cards.routes import sets as _sets  # noqa: F401
+from core.domains.cards.routes.sets import *  # noqa: F401,F403
 
-from services import scryfall_service
-from .base import views
-
-
-@views.route("/sets")
-def sets_overview():
-    return scryfall_service.sets_overview()
-
-
-@views.route("/sets/<set_code>/gallery")
-def set_gallery(set_code):
-    return scryfall_service.set_gallery(set_code)
-
-
-@views.route("/sets/<set_code>")
-def set_detail(set_code):
-    """Legacy route retained for compatibility; redirect to the gallery view."""
-    return scryfall_service.set_detail(set_code)
-
-
-__all__ = ["set_detail", "set_gallery", "sets_overview"]
+__all__ = getattr(_sets, "__all__", [])
