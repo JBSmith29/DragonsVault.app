@@ -1878,7 +1878,7 @@
   </div>
 </div>
 
-<script data-hx-preserve="true">
+<script nonce="{{ csp_nonce() }}" data-hx-preserve="true">
 (function () {
   if (typeof bootstrap === 'undefined') {
     console.warn('Bootstrap JS not found. Include bootstrap.bundle.min.js in base.html.');
@@ -2769,7 +2769,7 @@
 })();
 </script>
 
-<script data-hx-preserve="true">
+<script nonce="{{ csp_nonce() }}" data-hx-preserve="true">
 /* Commander picker: client-side name filter + robust image fallback */
 (function(){
   const inp = document.getElementById('cmdrFilter');
@@ -2895,7 +2895,7 @@
 </div>
 {% endcall %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Automatically adjust modal bottom margin based on Bulk bar height
 (function () {
   const bar = document.getElementById('folderActionBar');
@@ -2913,7 +2913,7 @@
 })();
 </script>
 
-<script data-hx-preserve="true">
+<script nonce="{{ csp_nonce() }}" data-hx-preserve="true">
 /* Deck tag picker: quick filter + reset on close */
 (function(){
   const modal = document.getElementById('tagPickerModal');

@@ -190,7 +190,7 @@
               </div>
               <div class="collapse {% if selected_mode == 'purge' %}show{% endif %}" id="purge-warning">
                 <div class="form-text text-warning">
-                  Warning: this deletes all existing cards before importing; only use when this file is your complete collection.
+                  Warning: this deletes all existing non-proxy cards before importing; only use when this file is your complete collection.
                 </div>
               </div>
             </div>
@@ -575,7 +575,7 @@
 </div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function () {
     const form = document.getElementById("import-form");
     const btn = document.getElementById("btn-import");
@@ -1168,7 +1168,7 @@
 </script>
 
 {% if folder_export_options %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const modalEl = document.getElementById('postImportFolderModal');
   if (!modalEl) return;
@@ -1257,7 +1257,7 @@
 </script>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function () {
     const form = document.getElementById("proxyDeckImportForm");
     if (!form) return;

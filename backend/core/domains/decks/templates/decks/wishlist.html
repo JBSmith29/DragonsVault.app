@@ -541,7 +541,7 @@
   .wl-select { cursor: pointer; }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   const FALLBACK_IMG = "{{ static_url('img/card-back-placeholder.png') }}";
 

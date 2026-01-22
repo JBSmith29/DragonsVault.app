@@ -8,6 +8,10 @@ from core.shared.utils.time import utcnow
 
 class GameSession(db.Model):
     __tablename__ = "game_sessions"
+    __table_args__ = (
+        db.Index("ix_game_sessions_owner_played_at", "owner_user_id", "played_at"),
+        db.Index("ix_game_sessions_owner_created_at", "owner_user_id", "created_at"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     owner_user_id = db.Column(
@@ -140,6 +144,8 @@ class GameSeatAssignment(db.Model):
     __tablename__ = "game_seat_assignments"
     __table_args__ = (
         db.UniqueConstraint("seat_id", name="uq_game_seat_assignment_seat"),
+        db.Index("ix_game_seat_assignment_player_session", "player_id", "session_id"),
+        db.Index("ix_game_seat_assignment_deck_session", "deck_id", "session_id"),
     )
 
     id = db.Column(db.Integer, primary_key=True)

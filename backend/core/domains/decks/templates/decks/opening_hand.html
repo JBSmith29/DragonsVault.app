@@ -864,7 +864,7 @@
 </div>
 {% endcall %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   const deckListInput = document.getElementById('deckListInput');
   const commanderInput = document.getElementById('commanderInput');

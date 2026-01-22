@@ -6,7 +6,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       // Provide a global CSRF token helper for all inline scripts
       (function(){
         const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -28,7 +28,7 @@
   {# Progressive enhancement scripts (instant page for prefetching). #}
   <!-- Perf helpers -->
   <script defer type="module" src="https://instant.page/5.2.0"></script>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function(){
       document.addEventListener('htmx:afterOnLoad', function (evt) {
         const xhr = evt.detail && evt.detail.xhr;
@@ -655,7 +655,7 @@
   
 
   <!-- Keep these tiny HTMX helpers early so they always bind -->
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Clean up Bootstrap overlays + image tooltips before HTMX swaps / requests
     (function () {
       function cleanupOverlays() {
@@ -1111,7 +1111,7 @@
     </div>
 
     {% block scripts %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         const header = document.querySelector(".app-header");
         if (!header) return;
@@ -1166,7 +1166,7 @@
         });
       })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         const regions = Array.from(document.querySelectorAll(".dv-scroll-region"));
         if (!regions.length) return;
@@ -1209,7 +1209,7 @@
       })();
     </script>
 
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         const token = document.querySelector('meta[name="csrf-token"]')?.content;
         if (!token) return;
@@ -1241,7 +1241,7 @@
             crossorigin="anonymous"></script>
 
     <!-- Sidebar toggle logic (independent from Bootstrap) -->
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         const STORAGE_KEY = 'dv:sidebar-collapsed';
         const body = document.body;
@@ -1284,7 +1284,7 @@
       })();
     </script>
 
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         const body = document.body;
         const sidebar = document.getElementById('sidebar');
@@ -1381,7 +1381,7 @@
       })();
     </script>
 
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         function resetScroll(target) {
           if (!target) return;
@@ -1400,7 +1400,7 @@
       })();
     </script>
 
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         function normalizePath(path) {
           try {
@@ -1457,12 +1457,12 @@
 
     {% if session.get("force_full_refresh") %}
       {% set _ = session.pop("force_full_refresh", None) %}
-      <script>
+      <script nonce="{{ csp_nonce() }}">
         // Force a hard reload after login so layout + permissions refresh everywhere
         window.location.replace(window.location.href);
       </script>
     {% endif %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         const footer = document.querySelector(".app-footer");
         const updateFooterVisibility = () => {
@@ -1479,7 +1479,7 @@
         });
       })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       window.CARD_BACK_PLACEHOLDER = "{{ static_url('img/card-back-placeholder.png') }}";
     </script>
 
@@ -1496,7 +1496,7 @@
     <script src="{{ static_url('js/card-hover.js') }}" defer></script>
     
     <!-- Global form parameter cleanup -->
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function() {
         // Global form submission handler to prevent URL parameter duplication
         document.addEventListener('submit', function(event) {

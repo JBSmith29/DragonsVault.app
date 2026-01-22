@@ -50,8 +50,25 @@
     <div class="d-flex flex-wrap align-items-center gap-2">
       <span class="stat-chip">Unique Cards <strong>{{ '{:,}'.format(total_rows or 0) }}</strong></span>
       <span class="stat-chip">Total Qty <strong>{{ '{:,}'.format(total_qty or 0) }}</strong></span>
+      {% if current_user.is_authenticated %}
+        <form class="d-flex align-items-center" method="get">
+          {% for k, v in request.args.items() if k != 'show_friends' %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}">
+          {% endfor %}
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input"
+                   type="checkbox"
+                   id="collectionShowFriends"
+                   name="show_friends"
+                   value="1"
+                   {% if show_friends %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <label class="form-check-label" for="collectionShowFriends">Show friends</label>
+          </div>
+        </form>
+      {% endif %}
       <a class="btn btn-primary"
-         href="{{ url_for('views.list_cards', collection=1) }}">
+         href="{{ url_for('views.list_cards', collection=1, show_friends=1 if show_friends else None) }}">
         See All Collection
       </a>
     </div>
@@ -64,6 +81,7 @@
       <thead>
         <tr>
           <th>Folder</th>
+          <th>Owner</th>
           <th class="text-end">Unique Cards</th>
           <th class="text-end">Qty</th>
           <th class="text-end">Actions</th>
@@ -80,13 +98,20 @@
                   {{ b.label }}
                 {% endif %}
               </td>
+              <td>
+                {% if b.owner_label %}
+                  {{ b.owner_label }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
               <td class="text-end">{{ '{:,}'.format(b.rows or 0) }}</td>
               <td class="text-end">{{ '{:,}'.format(b.qty or 0) }}</td>
               <td class="text-end">
                 <div class="d-flex flex-column align-items-end gap-1">
                   {% if b.folder %}
                     <a class="btn btn-sm btn-primary"
-                       href="{{ url_for('views.list_cards', folder=b.folder.id) }}">
+                       href="{{ url_for('views.list_cards', folder=b.folder.id, show_friends=1 if show_friends else None) }}">
                       Show Cards
                     </a>
                   {% else %}
@@ -97,7 +122,7 @@
             </tr>
           {% endfor %}
         {% else %}
-          <tr><td colspan="4" class="text-muted">No folders found in the collection.</td></tr>
+          <tr><td colspan="5" class="text-muted">No folders found in the collection.</td></tr>
         {% endif %}
       </tbody>
     </table>

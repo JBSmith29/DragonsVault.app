@@ -222,7 +222,7 @@
   </form>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function () {
     const seatCountEl = document.getElementById('seatCount');
     const podInput = document.getElementById('podId');

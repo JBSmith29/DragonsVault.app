@@ -45,6 +45,7 @@ class BaseConfig:
     CACHE_REDIS_PORT = int(os.getenv("CACHE_REDIS_PORT", 6379))
     CACHE_REDIS_DB = int(os.getenv("CACHE_REDIS_DB", 0))
     CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL") or os.getenv("REDIS_URL")
+    CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX")
     RATELIMIT_STORAGE_URI = os.getenv(
         "RATELIMIT_STORAGE_URI",
         os.getenv("RATELIMIT_REDIS_URI") or os.getenv("REDIS_URL") or "memory://",
@@ -66,6 +67,8 @@ class BaseConfig:
         "default-src": "'self'",
         "img-src": "'self' data: https://c1.scryfall.com https://cards.scryfall.io https://svgs.scryfall.io",
         "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://instant.page https://js.hcaptcha.com",
+        "script-src-elem": "'self' https://cdn.jsdelivr.net https://unpkg.com https://instant.page https://js.hcaptcha.com",
+        "script-src-attr": "'unsafe-inline'",
         "style-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net",
         "connect-src": "'self' https://api.scryfall.com https://js.hcaptcha.com",
         "font-src": "'self' data: https://cdn.jsdelivr.net",

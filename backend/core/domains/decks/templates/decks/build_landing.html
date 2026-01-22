@@ -325,7 +325,7 @@
   <div class="offcanvas-body" id="buildDrawerBody"></div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const drawerEl = document.getElementById('buildDrawer');
   const bodyEl = document.getElementById('buildDrawerBody');

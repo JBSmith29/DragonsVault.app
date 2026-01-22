@@ -20,6 +20,8 @@ services:
       context: ./frontend
     command: npm run dev -- --host 0.0.0.0 --port 5173
     restart: unless-stopped
+    profiles:
+      - dev
     environment:
       VITE_API_BASE_URL: /api
     volumes:
@@ -41,6 +43,11 @@ services:
       --threads ${USER_MANAGER_THREADS:-2}
       --worker-class gthread
       --timeout ${USER_MANAGER_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "app:create_app()"
     restart: unless-stopped
     environment:
@@ -49,7 +56,14 @@ services:
       SERVICE_NAME: user-manager
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       DATABASE_SCHEMA: user_manager
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_DEFAULT_TIMEOUT: "600"
+      CACHE_KEY_PREFIX: dv:user-manager
     depends_on:
+      - redis
       - postgres
       - pgbouncer
     healthcheck:
@@ -70,6 +84,11 @@ services:
       --threads ${CARD_DATA_THREADS:-2}
       --worker-class gthread
       --timeout ${CARD_DATA_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "app:create_app()"
     restart: unless-stopped
     environment:
@@ -78,11 +97,18 @@ services:
       SERVICE_NAME: card-data
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       DATABASE_SCHEMA: card_data
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_DEFAULT_TIMEOUT: "600"
+      CACHE_KEY_PREFIX: dv:card-data
       SCRYFALL_DATA_DIR: /tmp/scryfall
       SCRYFALL_UA: "DragonsVault/6 (+https://dragonsvault.app)"
       SCRYFALL_TIMEOUT: "180"
       SCRYFALL_KEEP_DOWNLOADS: "0"
     depends_on:
+      - redis
       - postgres
       - pgbouncer
     healthcheck:
@@ -103,6 +129,11 @@ services:
       --threads ${FOLDER_SERVICE_THREADS:-2}
       --worker-class gthread
       --timeout ${FOLDER_SERVICE_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "app:create_app()"
     restart: unless-stopped
     environment:
@@ -111,7 +142,14 @@ services:
       SERVICE_NAME: folder-service
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       DATABASE_SCHEMA: folder_service
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_DEFAULT_TIMEOUT: "600"
+      CACHE_KEY_PREFIX: dv:folder-service
     depends_on:
+      - redis
       - postgres
       - pgbouncer
     healthcheck:
@@ -132,6 +170,11 @@ services:
       --threads ${PRICE_SERVICE_THREADS:-2}
       --worker-class gthread
       --timeout ${PRICE_SERVICE_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "app:create_app()"
     restart: unless-stopped
     environment:
@@ -140,6 +183,12 @@ services:
       SERVICE_NAME: price-service
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       DATABASE_SCHEMA: price_service
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_DEFAULT_TIMEOUT: "600"
+      CACHE_KEY_PREFIX: dv:price-service
       MTGJSON_GRAPHQL_URL: ${MTGJSON_GRAPHQL_URL:-https://graphql.mtgjson.com/}
       MTGJSON_API_TOKEN: ${MTGJSON_API_TOKEN:-}
       PRICE_CACHE_TTL: ${PRICE_CACHE_TTL:-43200}
@@ -147,6 +196,7 @@ services:
       PRICE_PROVIDER_PREFERENCE: ${PRICE_PROVIDER_PREFERENCE:-tcgplayer,cardmarket,cardkingdom,mtgstocks}
       PRICE_LISTTYPE_PREFERENCE: ${PRICE_LISTTYPE_PREFERENCE:-retail,market}
     depends_on:
+      - redis
       - postgres
       - pgbouncer
     healthcheck:
@@ -167,6 +217,11 @@ services:
       --threads ${EDHREC_SERVICE_THREADS:-2}
       --worker-class gthread
       --timeout ${EDHREC_SERVICE_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "app:create_app()"
     restart: unless-stopped
     environment:
@@ -175,12 +230,19 @@ services:
       SERVICE_NAME: edhrec-service
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       DATABASE_SCHEMA: edhrec_service
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CACHE_TYPE: RedisCache
+      CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_DEFAULT_TIMEOUT: "600"
+      CACHE_KEY_PREFIX: dv:edhrec-service
       EDHREC_CACHE_TTL_HOURS: ${EDHREC_CACHE_TTL_HOURS:-72}
       EDHREC_REQUEST_TIMEOUT: ${EDHREC_REQUEST_TIMEOUT:-30}
       EDHREC_REQUEST_DELAY: ${EDHREC_REQUEST_DELAY:-1.5}
       EDHREC_HTTP_RETRIES: ${EDHREC_HTTP_RETRIES:-2}
       EDHREC_REFRESH_CONCURRENCY: ${EDHREC_REFRESH_CONCURRENCY:-4}
     depends_on:
+      - redis
       - postgres
       - pgbouncer
     healthcheck:
@@ -202,6 +264,8 @@ services:
       --worker-class gthread
       --worker-tmp-dir /dev/shm
       --timeout ${WEB_TIMEOUT:-300}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
       --access-logfile -
       --error-logfile -
       --log-level info
@@ -217,6 +281,7 @@ services:
       CACHE_DEFAULT_TIMEOUT: "600"
       CACHE_TYPE: RedisCache
       CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_KEY_PREFIX: dv:web
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       PRICE_SERVICE_URL: http://price-service:5000
@@ -271,20 +336,27 @@ services:
       --threads ${DJANGO_API_THREADS:-2}
       --worker-class gthread
       --timeout ${DJANGO_API_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
       "dvapi.wsgi:application"
     restart: unless-stopped
     environment:
       PYTHONPATH: /app/backend/django_api
       DJANGO_SETTINGS_MODULE: dvapi.settings
       DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set_in_env_file}
+      DJANGO_SECRET_KEY_FILE: ${DJANGO_SECRET_KEY_FILE:-/run/secrets/django_secret_key}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?set_in_env_file}
       INSTANCE_DIR: /app/instance
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
-      SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
     volumes:
       - .:/app
     secrets:
-      - flask_secret_key
+      - django_secret_key
     depends_on:
       - postgres
       - pgbouncer
@@ -296,9 +368,12 @@ services:
       start_period: 20s
 
   nginx:
-    image: nginx:1.26-alpine
+    build:
+      context: .
+      dockerfile: infra/nginx.Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
     depends_on:
-      - ui
       - user-manager
       - card-data
       - folder-service
@@ -308,9 +383,6 @@ services:
       - django-api
     ports:
       - "80:80"
-    volumes:
-      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./backend/static:/app/backend/static:ro
     restart: unless-stopped
 
   worker:
@@ -333,6 +405,7 @@ services:
       SECRET_KEY_FILE: ${SECRET_KEY_FILE:-/run/secrets/flask_secret_key}
       CACHE_TYPE: RedisCache
       CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_KEY_PREFIX: dv:worker
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       PRICE_SERVICE_URL: http://price-service:5000
@@ -376,6 +449,7 @@ services:
       RATELIMIT_STORAGE_URI: redis://redis:6379/1
       CACHE_TYPE: RedisCache
       CACHE_REDIS_URL: redis://redis:6379/2
+      CACHE_KEY_PREFIX: dv:scheduler
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
       EDHREC_SERVICE_URL: http://edhrec-service:5000
@@ -461,6 +535,8 @@ services:
 secrets:
   flask_secret_key:
     file: ./.secrets/secret_key
+  django_secret_key:
+    file: ./.secrets/django_secret_key
 
 volumes:
   redis-data:

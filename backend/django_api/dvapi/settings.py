@@ -11,15 +11,17 @@ INSTANCE_DIR = Path(os.getenv("INSTANCE_DIR", BASE_DIR / "instance")).resolve()
 
 
 def _load_secret_key() -> str | None:
-    secret = os.getenv("DJANGO_SECRET_KEY") or os.getenv("SECRET_KEY")
-    if secret:
-        return secret
     secret_file = os.getenv("DJANGO_SECRET_KEY_FILE") or os.getenv("SECRET_KEY_FILE")
     if secret_file:
         try:
-            return Path(secret_file).read_text(encoding="utf-8").strip()
+            secret = Path(secret_file).read_text(encoding="utf-8").strip()
+            if secret:
+                return secret
         except OSError:
-            return None
+            pass
+    secret = os.getenv("DJANGO_SECRET_KEY") or os.getenv("SECRET_KEY")
+    if secret:
+        return secret
     return None
 
 
@@ -52,9 +54,25 @@ def _database_from_url(url: str | None) -> dict[str, str] | None:
 SECRET_KEY = _load_secret_key() or "dev"
 DEBUG = os.getenv("DJANGO_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
 
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "1").lower() in {"1", "true", "yes", "on"} and not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "31536000")) if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if host.strip()]
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["*"]
+
+if not DEBUG:
+    if not SECRET_KEY or SECRET_KEY == "dev":
+        raise RuntimeError("DJANGO_SECRET_KEY must be set in production.")
+    if "*" in ALLOWED_HOSTS:
+        raise RuntimeError("DJANGO_ALLOWED_HOSTS must be set in production.")
 
 INSTALLED_APPS = [
     "django.contrib.auth",

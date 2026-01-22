@@ -16,7 +16,7 @@
     {% if messages %}
       {% for cat, msg in messages %}
         <div class="alert alert-{{ 'warning' if cat=='message' else cat }} alert-dismissible fade show" role="alert">
-          {{ msg|safe }}
+          {{ msg }}
           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
       {% endfor %}
@@ -405,7 +405,7 @@
 </div>
 {% endcall %}
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce() }}">
   (() => {
     const selectAll = document.getElementById("select-all-folders");
     const getCheckboxes = () => Array.from(document.querySelectorAll(".folder-select"));

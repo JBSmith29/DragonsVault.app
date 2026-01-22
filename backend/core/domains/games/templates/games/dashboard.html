@@ -290,7 +290,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Import modal
 function showImportModal() {
   new bootstrap.Modal(document.getElementById('importModal')).show();

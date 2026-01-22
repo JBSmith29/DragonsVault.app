@@ -19,7 +19,13 @@ def purge_cards_preserve_commanders(
     if owner_user_id is None:
         current_app.logger.warning("Import purge skipped: missing owner_user_id.")
         return {}
-    folders = Folder.query.filter(Folder.owner_user_id == owner_user_id).all()
+    folders = (
+        Folder.query.filter(
+            Folder.owner_user_id == owner_user_id,
+            Folder.is_proxy.is_(False),
+        )
+        .all()
+    )
     preserved = {
         f.id: {
             "commander_oracle_id": f.commander_oracle_id,

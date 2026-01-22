@@ -71,6 +71,7 @@ class CollectionBucketVM:
     folder: Optional[FolderOptionVM]
     rows: int
     qty: int
+    owner_label: Optional[str] = None
 
 
 @dataclass(slots=True)

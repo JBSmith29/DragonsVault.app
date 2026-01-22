@@ -522,6 +522,7 @@
           {% set col_dir  = 'asc' if sort!='colors' or direction=='desc' else 'desc' %}
           {% set rar_dir  = 'asc' if sort!='rar'  or direction=='desc' else 'desc' %}
           {% set fol_dir  = 'asc' if sort!='folder' or direction=='desc' else 'desc' %}
+          {% set owner_dir  = 'asc' if sort!='owner' or direction=='desc' else 'desc' %}
           {% set set_dir  = 'asc' if sort!='set'  or direction=='desc' else 'desc' %}
           {% set cn_dir   = 'asc' if sort!='cn'   or direction=='desc' else 'desc' %}
           {% set qty_dir  = 'asc' if sort!='qty'  or direction=='desc' else 'desc' %}
@@ -562,7 +563,7 @@
             <th class="col-tags" data-col="core_role"><a href="{{ keep_params('core_role', core_dir) }}">Core Role</a></th>
             <th class="col-tags" data-col="evergreen"><a href="{{ keep_params('evergreen', evergreen_dir) }}">Evergreen</a></th>
             <th data-col="folder"><a href="{{ keep_params('folder', fol_dir) }}">Folder</a></th>
-            <th data-col="owner">Owner</th>
+            <th data-col="owner"><a href="{{ keep_params('owner', owner_dir) }}">Owner</a></th>
             <th data-col="set"><a href="{{ keep_params('set', set_dir) }}">Set</a></th>
             <th class="text-end" data-col="qty"><a href="{{ keep_params('qty', qty_dir) }}">Qty</a></th>
             <th class="text-end" data-col="price"><a href="{{ keep_params('price', price_dir) }}">Price</a></th>
@@ -854,7 +855,7 @@
 </div>
 {% endcall %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   // --- Ensure 'Contains' ships type_any (not type) ---
   const form = document.getElementById('cardsFilterForm');

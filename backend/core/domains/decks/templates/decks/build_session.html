@@ -1029,7 +1029,7 @@
 
 {% block scripts %}
   {{ super() }}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
   const tableBody = document.getElementById('buildSessionTable');
   if (!tableBody) return;

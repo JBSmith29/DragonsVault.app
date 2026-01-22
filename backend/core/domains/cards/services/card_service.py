@@ -2642,6 +2642,18 @@ def list_cards():
     elif sort == "folder":
         query = query.outerjoin(Folder, Folder.id == Card.folder_id)
         order_col = func.lower(Folder.name)
+    elif sort == "owner":
+        query = query.outerjoin(Folder, Folder.id == Card.folder_id)
+        query = query.outerjoin(User, User.id == Folder.owner_user_id)
+        order_col = func.lower(
+            func.coalesce(
+                User.display_name,
+                User.username,
+                User.email,
+                Folder.owner,
+                "",
+            )
+        )
     else:
         order_col = func.lower(Card.name)
 
@@ -3785,7 +3797,23 @@ def api_update_card_printing(card_id: int):
 
 def collection_overview():
     """Overview of collection buckets, with cached stats and simple visuals."""
-    collection_rows = _collection_rows_with_fallback()
+    is_authenticated = bool(current_user and getattr(current_user, "is_authenticated", False))
+    show_friends_arg = (request.args.get("show_friends") or "").strip().lower()
+    show_friends = show_friends_arg in {"1", "true", "yes", "on", "y"}
+    if not is_authenticated:
+        show_friends = False
+    owner_ids: list[int] = []
+    if is_authenticated:
+        owner_ids.append(current_user.id)
+        if show_friends:
+            friend_ids = (
+                db.session.query(UserFriend.friend_user_id)
+                .filter(UserFriend.user_id == current_user.id)
+                .all()
+            )
+            owner_ids.extend([friend_id for (friend_id,) in friend_ids if friend_id])
+
+    collection_rows = _collection_rows_with_fallback(owner_user_ids=owner_ids or None)
     folder_ids = [fid for fid, _ in collection_rows if fid is not None]
     user_key = _user_cache_key()
 
@@ -3795,12 +3823,45 @@ def collection_overview():
         folders = []
 
     folder_by_id = {f.id: f for f in folders}
+    owner_label_map: dict[int, str] = {}
+    owner_ids_for_label = {
+        folder.owner_user_id
+        for folder in folders
+        if isinstance(folder.owner_user_id, int)
+    }
+    if owner_ids_for_label:
+        owner_rows = (
+            db.session.query(User.id, User.display_name, User.username, User.email)
+            .filter(User.id.in_(owner_ids_for_label))
+            .all()
+        )
+        for uid, display_name, username, email in owner_rows:
+            label = display_name or username or email
+            if label:
+                owner_label_map[uid] = label
+
     buckets: list[CollectionBucketVM] = []
     for fid, name in collection_rows:
         folder = folder_by_id.get(fid)
         label = folder.name if folder else (name or "Collection")
         folder_option = FolderOptionVM(id=folder.id, name=folder.name) if folder else None
-        buckets.append(CollectionBucketVM(label=label, folder=folder_option, rows=0, qty=0))
+        owner_label = None
+        if folder:
+            owner_id = folder.owner_user_id
+            if is_authenticated and owner_id == current_user.id:
+                owner_label = "You"
+            else:
+                owner_label = owner_label_map.get(owner_id)
+            owner_label = owner_label or folder.owner or "Unknown"
+        buckets.append(
+            CollectionBucketVM(
+                label=label,
+                folder=folder_option,
+                owner_label=owner_label,
+                rows=0,
+                qty=0,
+            )
+        )
 
     filters = {}
     if request.args.get("lang"):
@@ -3930,7 +3991,12 @@ def collection_overview():
             count=int(count or 0),
             icon_class=type_icon_classes.get(label),
             icon_letter=label[0] if label else None,
-            url=url_for("views.list_cards", type=label.lower(), collection=1),
+            url=url_for(
+                "views.list_cards",
+                type=label.lower(),
+                collection=1,
+                show_friends=1 if show_friends else None,
+            ),
         )
         for label, count in type_breakdown
         if count
@@ -3946,6 +4012,7 @@ def collection_overview():
         sets_with_names=sets_with_names,
         type_breakdown=type_breakdown_vms,
         collection_folders=collection_names_for_template,
+        show_friends=show_friends,
     )
 
 

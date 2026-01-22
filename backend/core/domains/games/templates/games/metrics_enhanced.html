@@ -395,7 +395,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Quick filter chips
 document.querySelectorAll('.filter-chip').forEach(chip => {
   chip.addEventListener('click', function() {

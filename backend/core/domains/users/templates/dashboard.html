@@ -101,7 +101,7 @@
   {% include dashboard.content_partial %}
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   const modeForm = document.getElementById('dashboardModeForm');
   if (modeForm) {

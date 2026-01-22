@@ -338,7 +338,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Quick Pod Creation
 function showQuickPodModal() {
   new bootstrap.Modal(document.getElementById('quickPodModal')).show();

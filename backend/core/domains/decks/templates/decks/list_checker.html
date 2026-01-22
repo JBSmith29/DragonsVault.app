@@ -213,7 +213,7 @@
   .checker-card-thumb img { object-fit: cover; width: 100%; height: 100%; }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   // --- Persistence keys ---
   const KEY_TEXT = 'dv_list_checker_text';

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
+from typing import Iterable
 from functools import lru_cache
 import time
 from urllib.parse import urlsplit
@@ -74,17 +75,21 @@ def _safe_next_url(target: str | None) -> str | None:
 # Collection helpers
 # ---------------------------------------------------------------------------
 
-def _collection_rows_with_fallback() -> list[tuple[int | None, str | None]]:
+def _collection_rows_with_fallback(
+    owner_user_ids: Iterable[int] | None = None,
+) -> list[tuple[int | None, str | None]]:
     """Return (id, name) tuples for folders that represent collection buckets."""
     rows: list[tuple[int | None, str | None]] = []
+    owner_ids = [oid for oid in (owner_user_ids or []) if oid is not None]
     try:
-        rows = (
+        query = (
             db.session.query(Folder.id, Folder.name)
             .join(FolderRole, FolderRole.folder_id == Folder.id)
             .filter(FolderRole.role == FolderRole.ROLE_COLLECTION)
-            .order_by(func.lower(Folder.name))
-            .all()
         )
+        if owner_ids:
+            query = query.filter(Folder.owner_user_id.in_(owner_ids))
+        rows = query.order_by(func.lower(Folder.name)).all()
     except SQLAlchemyError:
         current_app.logger.exception("Failed to load collection folders (primary query)")
         db.session.rollback()
@@ -92,7 +97,10 @@ def _collection_rows_with_fallback() -> list[tuple[int | None, str | None]]:
     if rows:
         return rows
     try:
-        has_folders = db.session.query(Folder.id).limit(1).first()
+        has_folders_query = db.session.query(Folder.id)
+        if owner_ids:
+            has_folders_query = has_folders_query.filter(Folder.owner_user_id.in_(owner_ids))
+        has_folders = has_folders_query.limit(1).first()
     except SQLAlchemyError:
         current_app.logger.exception("Failed to check folder existence (collection fallback)")
         db.session.rollback()

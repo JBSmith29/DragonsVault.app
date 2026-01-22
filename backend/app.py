@@ -777,12 +777,16 @@ def create_app():
         Talisman(
             app,
             content_security_policy=csp,
+            content_security_policy_nonce_in=["script-src", "script-src-elem"],
             force_https=app.config.get("TALISMAN_FORCE_HTTPS", not app.debug),
             session_cookie_secure=app.config.get("SESSION_COOKIE_SECURE", True),
             session_cookie_samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
         )
     elif not _talisman_available and app.config.get("ENABLE_TALISMAN", True):
         app.logger.warning("Flask-Talisman not installed; CSP/HSTS disabled.")
+
+    if "csp_nonce" not in app.jinja_env.globals:
+        app.jinja_env.globals["csp_nonce"] = lambda: ""
 
     # --- Jinja bytecode cache (safe on Windows) ---
     try:

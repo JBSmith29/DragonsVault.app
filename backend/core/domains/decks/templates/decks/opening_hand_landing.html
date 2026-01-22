@@ -69,7 +69,7 @@
   </form>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   const deckSelectWrapper = document.querySelector('[data-dv-select="opening-deck"]');
   const deckSelectInput = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-input]') : null;

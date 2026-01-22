@@ -509,6 +509,51 @@ def _games_summary(user_id: int) -> dict[str, int]:
     return {"total_games": int(total or 0), "combo_wins": int(combo_wins or 0)}
 
 
+def _manual_deck_summary(owner_user_id: int) -> list[dict[str, Any]]:
+    played_expr = func.coalesce(GameSession.played_at, GameSession.created_at)
+    rows = (
+        db.session.query(
+            GameDeck.deck_name,
+            GameDeck.commander_name,
+            func.count(GameDeck.id).label("instances"),
+            func.count(func.distinct(GameSession.id)).label("games"),
+            func.max(played_expr).label("last_played"),
+            func.max(GameDeck.bracket_level).label("bracket_level"),
+            func.max(GameDeck.bracket_label).label("bracket_label"),
+            func.max(GameDeck.bracket_score).label("bracket_score"),
+        )
+        .join(GameSession, GameSession.id == GameDeck.session_id)
+        .filter(
+            GameSession.owner_user_id == owner_user_id,
+            GameDeck.folder_id.is_(None),
+            GameDeck.deck_name.isnot(None),
+        )
+        .group_by(GameDeck.deck_name, GameDeck.commander_name)
+        .order_by(func.count(GameDeck.id).desc(), func.lower(GameDeck.deck_name))
+        .all()
+    )
+    manual_decks: list[dict[str, Any]] = []
+    for row in rows:
+        deck_name = (row.deck_name or "").strip()
+        if not deck_name:
+            continue
+        commander_name = (row.commander_name or "").strip()
+        last_played = row.last_played.date().isoformat() if row.last_played else ""
+        manual_decks.append(
+            {
+                "deck_name": deck_name,
+                "commander_name": commander_name,
+                "instances": int(row.instances or 0),
+                "games": int(row.games or 0),
+                "last_played": last_played,
+                "bracket_level": row.bracket_level,
+                "bracket_label": row.bracket_label,
+                "bracket_score": float(row.bracket_score) if row.bracket_score is not None else None,
+            }
+        )
+    return manual_decks
+
+
 def _available_years(user_id: int, scope: dict[str, Any] | None = None) -> list[int]:
     visibility_filter = _session_visibility_filter(user_id)
     if db.engine.dialect.name == "sqlite":
@@ -861,6 +906,26 @@ def _range_query_params(range_ctx: dict[str, Any]) -> dict[str, str]:
     return params
 
 
+def _metrics_cache_key(
+    user_id: int,
+    range_ctx: dict[str, Any],
+    *,
+    pod_id: int | None = None,
+    player_key: str | None = None,
+    deck_key: str | None = None,
+    suffix: str = "payload",
+) -> str:
+    range_key = range_ctx.get("range_key") or ""
+    start_value = range_ctx.get("start_value") or ""
+    end_value = range_ctx.get("end_value") or ""
+    year_value = range_ctx.get("year_value") or ""
+    return (
+        f"metrics_{suffix}_{user_id}_{pod_id or 'all'}_"
+        f"{player_key or 'all'}_{deck_key or 'all'}_"
+        f"{range_key}_{start_value}_{end_value}_{year_value}"
+    )
+
+
 def _metrics_payload(
     user_id: int,
     start_at: datetime | None = None,
@@ -976,14 +1041,19 @@ def _metrics_payload(
     }
 
 
+METRICS_GAMES_LIMIT = 200
+POD_METRICS_GAMES_LIMIT = 10
+
+
 def _metrics_games(
     user_id: int,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     scope: dict[str, Any] | None = None,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     filters = _session_filters(user_id, start_at, end_at, scope=scope)
-    sessions = (
+    query = (
         GameSession.query.options(
             selectinload(GameSession.seats)
             .selectinload(GameSeat.assignment)
@@ -994,8 +1064,10 @@ def _metrics_games(
         )
         .filter(*filters)
         .order_by(GameSession.played_at.desc().nullslast(), GameSession.created_at.desc())
-        .all()
     )
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+    sessions = query.all()
     return [_game_session_payload(session, user_id) for session in sessions]
 
 
@@ -1869,12 +1941,140 @@ def games_overview():
     sessions = query.order_by(GameSession.played_at.desc().nullslast(), GameSession.created_at.desc()).all()
     games = [_game_session_payload(session, current_user.id) for session in sessions]
     summary = _games_summary(current_user.id)
+    manual_decks = _manual_deck_summary(current_user.id)
+    registered_deck_options = _accessible_deck_options(current_user.id) if manual_decks else []
     return render_template(
         "games/logs.html",
         games=games,
         summary=summary,
         search_query=q,
+        manual_decks=manual_decks,
+        registered_deck_options=registered_deck_options,
     )
+
+
+def games_manual_deck_update():
+    source_deck_name = (request.form.get("source_deck_name") or "").strip()
+    source_commander_name = (request.form.get("source_commander_name") or "").strip()
+    action = (request.form.get("action") or "").strip().lower()
+
+    if not source_deck_name:
+        flash("Select a manual deck to update.", "warning")
+        return redirect(url_for("views.games_overview"))
+
+    deck_query = (
+        GameDeck.query.join(GameSession, GameSession.id == GameDeck.session_id)
+        .filter(
+            GameSession.owner_user_id == current_user.id,
+            GameDeck.folder_id.is_(None),
+            func.lower(func.trim(GameDeck.deck_name)) == source_deck_name.lower(),
+        )
+    )
+    if source_commander_name:
+        deck_query = deck_query.filter(
+            func.lower(func.trim(func.coalesce(GameDeck.commander_name, ""))) == source_commander_name.lower()
+        )
+    else:
+        deck_query = deck_query.filter(
+            or_(GameDeck.commander_name.is_(None), func.trim(GameDeck.commander_name) == "")
+        )
+
+    decks = deck_query.all()
+    if not decks:
+        flash("Manual deck not found or already linked.", "warning")
+        return redirect(url_for("views.games_overview"))
+
+    if action == "link":
+        deck_id_raw = (request.form.get("link_folder_id") or "").strip()
+        if not deck_id_raw:
+            flash("Select a registered deck to link.", "warning")
+            return redirect(url_for("views.games_overview"))
+        try:
+            deck_id = parse_positive_int(deck_id_raw, field="deck", min_value=1)
+        except ValidationError as exc:
+            log_validation_error(exc, context="game_manual_link")
+            flash("Select a valid registered deck.", "danger")
+            return redirect(url_for("views.games_overview"))
+
+        folder = Folder.query.filter_by(id=deck_id, owner_user_id=current_user.id).first()
+        if not folder:
+            flash("Registered deck not found.", "warning")
+            return redirect(url_for("views.games_overview"))
+
+        snapshot = _snapshot_deck(folder)
+        folder_label = snapshot.get("deck_name") or folder.name or f"Deck {folder.id}"
+        commander_name = snapshot.get("commander_name") or _oracle_name_from_id(
+            snapshot.get("commander_oracle_id")
+        )
+        commander_oracle_id = snapshot.get("commander_oracle_id")
+
+        for deck in decks:
+            deck.folder_id = folder.id
+            deck.deck_name = folder_label
+            if commander_name:
+                deck.commander_name = commander_name
+            if commander_oracle_id:
+                deck.commander_oracle_id = commander_oracle_id
+            if snapshot.get("bracket_level") is not None:
+                deck.bracket_level = snapshot.get("bracket_level")
+            if snapshot.get("bracket_label") is not None:
+                deck.bracket_label = snapshot.get("bracket_label")
+            if snapshot.get("bracket_score") is not None:
+                deck.bracket_score = snapshot.get("bracket_score")
+                deck.power_score = snapshot.get("power_score")
+            if snapshot.get("power_score") is not None:
+                deck.power_score = snapshot.get("power_score")
+
+        db.session.commit()
+        flash(f"Linked {len(decks)} log entries to {folder_label}.", "success")
+        return redirect(url_for("views.games_overview"))
+
+    commander_name_input = (request.form.get("commander_name") or "").strip()
+    bracket_level = (request.form.get("bracket_level") or "").strip()
+    bracket_label = (request.form.get("bracket_label") or "").strip()
+    bracket_score_raw = (request.form.get("bracket_score") or "").strip()
+
+    has_updates = False
+    commander_oracle_id = None
+    if commander_name_input:
+        try:
+            sc.ensure_cache_loaded()
+            commander_oracle_id = sc.unique_oracle_by_name(commander_name_input)
+        except Exception:
+            commander_oracle_id = None
+        has_updates = True
+
+    bracket_score = None
+    if bracket_score_raw:
+        try:
+            bracket_score = float(bracket_score_raw)
+            has_updates = True
+        except ValueError:
+            flash("Bracket score must be a number.", "warning")
+            return redirect(url_for("views.games_overview"))
+
+    if bracket_level or bracket_label:
+        has_updates = True
+
+    if not has_updates:
+        flash("Add bracket or commander details before updating.", "warning")
+        return redirect(url_for("views.games_overview"))
+
+    for deck in decks:
+        if commander_name_input:
+            deck.commander_name = commander_name_input
+            deck.commander_oracle_id = commander_oracle_id
+        if bracket_level:
+            deck.bracket_level = bracket_level
+        if bracket_label:
+            deck.bracket_label = bracket_label
+        if bracket_score is not None:
+            deck.bracket_score = bracket_score
+            deck.power_score = bracket_score
+
+    db.session.commit()
+    flash(f"Updated {len(decks)} log entries.", "success")
+    return redirect(url_for("views.games_overview"))
 
 
 def games_export():
@@ -2498,7 +2698,23 @@ def games_metrics():
     player_scope = _merge_scope_filters(base_scope, [deck_session_filter])
     deck_scope = _merge_scope_filters(base_scope, [player_session_filter])
 
-    metrics = _metrics_payload(current_user.id, range_ctx["start_at"], range_ctx["end_at"], scope=metrics_scope)
+    from extensions import cache
+    metrics_cache_key = _metrics_cache_key(
+        current_user.id,
+        range_ctx,
+        pod_id=selected_pod_id,
+        player_key=player_key,
+        deck_key=deck_key,
+    )
+    metrics = cache.get(metrics_cache_key)
+    if metrics is None:
+        metrics = _metrics_payload(
+            current_user.id,
+            range_ctx["start_at"],
+            range_ctx["end_at"],
+            scope=metrics_scope,
+        )
+        cache.set(metrics_cache_key, metrics, timeout=300)
     year_options = _available_years(current_user.id, scope=base_scope)
     range_params = _range_query_params(range_ctx)
     range_params = dict(range_params)
@@ -2587,6 +2803,7 @@ def games_metrics():
         range_ctx["start_at"],
         range_ctx["end_at"],
         scope=metrics_scope,
+        limit=METRICS_GAMES_LIMIT,
     )
     return render_template(
         "games/metrics.html",
@@ -3994,23 +4211,54 @@ def games_metrics_pods():
     if selected_pod_id and base_scope is None:
         base_scope = {"session_filter": text("1 = 0")}
 
-    metrics = _metrics_payload(current_user.id, range_ctx["start_at"], range_ctx["end_at"], scope=base_scope)
+    from extensions import cache
+    metrics_cache_key = _metrics_cache_key(
+        current_user.id,
+        range_ctx,
+        pod_id=selected_pod_id,
+    )
+    metrics = cache.get(metrics_cache_key)
+    if metrics is None:
+        metrics = _metrics_payload(
+            current_user.id,
+            range_ctx["start_at"],
+            range_ctx["end_at"],
+            scope=base_scope,
+        )
+        cache.set(metrics_cache_key, metrics, timeout=300)
     year_options = _available_years(current_user.id, scope=base_scope)
     range_params = _range_query_params(range_ctx)
     range_params = dict(range_params)
     if selected_pod_id:
         range_params["pod"] = str(selected_pod_id)
 
-    # Pod-specific metrics
+    # Pod-specific metrics (cached per pod/range)
     pod_breakdown = []
-    for pod in pod_options:
-        pod_scope = _pod_metrics_scope(current_user.id, pod["id"])
-        if pod_scope:
-            pod_metrics = _metrics_payload(current_user.id, range_ctx["start_at"], range_ctx["end_at"], scope=pod_scope)
+    if not selected_pod_id:
+        cache_ttl = 300
+        range_key = range_ctx.get("range_key") or ""
+        start_value = range_ctx.get("start_value") or ""
+        end_value = range_ctx.get("end_value") or ""
+        for pod in pod_options:
+            cache_key = (
+                f"pod_metrics_{current_user.id}_{pod['id']}_{range_key}_{start_value}_{end_value}"
+            )
+            pod_metrics = cache.get(cache_key)
+            if pod_metrics is None:
+                pod_scope = _pod_metrics_scope(current_user.id, pod["id"])
+                if not pod_scope:
+                    continue
+                pod_metrics = _metrics_payload(
+                    current_user.id,
+                    range_ctx["start_at"],
+                    range_ctx["end_at"],
+                    scope=pod_scope,
+                )
+                cache.set(cache_key, pod_metrics, timeout=cache_ttl)
             pod_breakdown.append({
                 "id": pod["id"],
                 "label": pod["label"],
-                "metrics": pod_metrics
+                "metrics": pod_metrics,
             })
 
     games = _metrics_games(
@@ -4018,6 +4266,7 @@ def games_metrics_pods():
         range_ctx["start_at"],
         range_ctx["end_at"],
         scope=base_scope,
+        limit=POD_METRICS_GAMES_LIMIT,
     )
 
     return render_template(
@@ -4054,7 +4303,21 @@ def games_metrics_users():
     if selected_pod_id and base_scope is None:
         base_scope = {"session_filter": text("1 = 0")}
 
-    metrics = _metrics_payload(current_user.id, range_ctx["start_at"], range_ctx["end_at"], scope=base_scope)
+    from extensions import cache
+    metrics_cache_key = _metrics_cache_key(
+        current_user.id,
+        range_ctx,
+        pod_id=selected_pod_id,
+    )
+    metrics = cache.get(metrics_cache_key)
+    if metrics is None:
+        metrics = _metrics_payload(
+            current_user.id,
+            range_ctx["start_at"],
+            range_ctx["end_at"],
+            scope=base_scope,
+        )
+        cache.set(metrics_cache_key, metrics, timeout=300)
     year_options = _available_years(current_user.id, scope=base_scope)
     range_params = _range_query_params(range_ctx)
     range_params = dict(range_params)
@@ -4128,7 +4391,21 @@ def games_metrics_decks():
     if selected_pod_id and base_scope is None:
         base_scope = {"session_filter": text("1 = 0")}
 
-    metrics = _metrics_payload(current_user.id, range_ctx["start_at"], range_ctx["end_at"], scope=base_scope)
+    from extensions import cache
+    metrics_cache_key = _metrics_cache_key(
+        current_user.id,
+        range_ctx,
+        pod_id=selected_pod_id,
+    )
+    metrics = cache.get(metrics_cache_key)
+    if metrics is None:
+        metrics = _metrics_payload(
+            current_user.id,
+            range_ctx["start_at"],
+            range_ctx["end_at"],
+            scope=base_scope,
+        )
+        cache.set(metrics_cache_key, metrics, timeout=300)
     year_options = _available_years(current_user.id, scope=base_scope)
     range_params = _range_query_params(range_ctx)
     range_params = dict(range_params)

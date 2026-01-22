@@ -62,6 +62,14 @@
     font-weight: 700;
     color: var(--bs-secondary);
   }
+  .set-browse-actions {
+    display: inline-flex;
+    gap: .35rem;
+  }
+  .set-browse-actions .btn {
+    padding: .35rem .8rem;
+    line-height: 1.15;
+  }
 
 </style>
 
@@ -165,12 +173,12 @@
               <td class="text-end col-count">{{ s.rows }}</td>
               <td class="text-end col-count">{{ s.qty }}</td>
               <td class="text-end col-actions">
-                <div class="btn-group btn-group-sm">
-                  <a class="btn btn-outline-primary"
+                <div class="set-browse-actions">
+                  <a class="btn btn-outline-primary btn-sm"
                      href="{{ url_for('views.set_gallery', set_code=s.set_code) }}">
                     All Prints
                   </a>
-                  <a class="btn btn-primary"
+                  <a class="btn btn-primary btn-sm"
                      href="{{ url_for('views.list_cards', set=s.set_code) }}">
                     My Cards
                   </a>

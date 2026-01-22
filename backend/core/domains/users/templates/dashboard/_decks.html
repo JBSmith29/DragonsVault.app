@@ -73,7 +73,7 @@
   </div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   const input = document.getElementById('deckFilter');
   if (!input) {

@@ -432,7 +432,7 @@
   {% endif %}
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const columnTable = document.querySelector('[data-columns-table="scryfall"]');
   const columnToggles = Array.from(document.querySelectorAll('[data-columns-toggle="scryfall"]'));
@@ -533,7 +533,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const drawerEl = document.getElementById('sfbDrawer');
   if (!drawerEl || !window.bootstrap) return;
@@ -652,7 +652,7 @@
 })();
 </script>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const KEY_URL = 'sfb:lastURL';
   const pathRoot = "{{ url_for('views.scryfall_browser') }}";
@@ -681,7 +681,7 @@
 })();
 </script>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const perForm = document.getElementById('sfbPerForm');
   const perSelect = document.getElementById('sfbPerSelect');
@@ -692,7 +692,7 @@
 })();
 </script>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   const form = document.getElementById('sfbForm');
   if (!form || !window.localStorage) return;
