@@ -222,12 +222,14 @@
                         <div class="text-muted small">{{ player.user_label }}</div>
                       {% endif %}
                     </div>
-                    <form method="post">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <input type="hidden" name="action" value="remove_player">
-                      <input type="hidden" name="roster_player_id" value="{{ player.id }}">
-                      <button class="btn btn-outline-danger btn-sm" type="submit">Remove Player</button>
-                    </form>
+                    {% if group.is_owner %}
+                      <form method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="remove_player">
+                        <input type="hidden" name="roster_player_id" value="{{ player.id }}">
+                        <button class="btn btn-outline-danger btn-sm" type="submit">Remove Player</button>
+                      </form>
+                    {% endif %}
                   </div>
 
                   <div class="mb-2">
@@ -242,12 +244,14 @@
                                 <span class="badge text-bg-secondary ms-2">Manual</span>
                               {% endif %}
                             </span>
-                            <form method="post">
-                              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                              <input type="hidden" name="action" value="remove_deck">
-                              <input type="hidden" name="assignment_id" value="{{ deck.assignment_id }}">
-                              <button class="btn btn-outline-secondary btn-sm" type="submit">Remove</button>
-                            </form>
+                            {% if group.is_owner %}
+                              <form method="post">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="action" value="remove_deck">
+                                <input type="hidden" name="assignment_id" value="{{ deck.assignment_id }}">
+                                <button class="btn btn-outline-secondary btn-sm" type="submit">Remove</button>
+                              </form>
+                            {% endif %}
                           </li>
                         {% endfor %}
                       </ul>
@@ -256,34 +260,36 @@
                     {% endif %}
                   </div>
 
-                  <form method="post" class="row g-2 align-items-end">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="assign_deck">
-                    <input type="hidden" name="roster_player_id" value="{{ player.id }}">
-                    <div class="col-12 col-md-7">
-                      <label class="form-label small">Assign deck</label>
-                      <div class="dropdown dv-select w-100" data-dv-select="assign-deck-{{ player.id }}">
-                        <input type="hidden" name="deck_id" data-dv-select-input value="">
-                        <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                          <span data-dv-select-label>Select a deck</span>
-                          <i class="bi bi-chevron-down"></i>
-                        </button>
-                        <ul class="dropdown-menu dv-select-menu w-100">
-                          <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a deck">Select a deck</button></li>
-                          {% for deck in group.deck_options %}
-                            <li><button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck.id }}" data-label="{{ deck.label }}">{{ deck.label }}</button></li>
-                          {% endfor %}
-                        </ul>
+                  {% if group.is_owner %}
+                    <form method="post" class="row g-2 align-items-end">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="assign_deck">
+                      <input type="hidden" name="roster_player_id" value="{{ player.id }}">
+                      <div class="col-12 col-md-7">
+                        <label class="form-label small">Assign deck</label>
+                        <div class="dropdown dv-select w-100" data-dv-select="assign-deck-{{ player.id }}">
+                          <input type="hidden" name="deck_id" data-dv-select-input value="">
+                          <button class="btn dv-select-toggle w-100 justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span data-dv-select-label>Select a deck</span>
+                            <i class="bi bi-chevron-down"></i>
+                          </button>
+                          <ul class="dropdown-menu dv-select-menu w-100">
+                            <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a deck">Select a deck</button></li>
+                            {% for deck in group.deck_options %}
+                              <li><button class="dropdown-item" type="button" data-dv-select-option data-value="{{ deck.id }}" data-label="{{ deck.label }}">{{ deck.label }}</button></li>
+                            {% endfor %}
+                          </ul>
+                        </div>
                       </div>
-                    </div>
-                    <div class="col-12 col-md-5">
-                      <label class="form-label small" for="manualDeck{{ player.id }}">Manual deck name</label>
-                      <input class="form-control" type="text" id="manualDeck{{ player.id }}" name="manual_deck_name" placeholder="Custom deck name">
-                    </div>
-                    <div class="col-12">
-                      <button class="btn btn-outline-primary w-100" type="submit">Assign</button>
-                    </div>
-                  </form>
+                      <div class="col-12 col-md-5">
+                        <label class="form-label small" for="manualDeck{{ player.id }}">Manual deck name</label>
+                        <input class="form-control" type="text" id="manualDeck{{ player.id }}" name="manual_deck_name" placeholder="Custom deck name">
+                      </div>
+                      <div class="col-12">
+                        <button class="btn btn-outline-primary w-100" type="submit">Assign</button>
+                      </div>
+                    </form>
+                  {% endif %}
                 </div>
               {% endfor %}
             {% endif %}

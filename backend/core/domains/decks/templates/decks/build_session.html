@@ -89,18 +89,19 @@
     .build-session .build-edhrec-progress{ min-width: 220px; max-width: 320px; }
     .build-session .build-list-grid{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      gap: 0.85rem;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.6rem;
       align-items: start;
     }
     .build-session .build-list-card{
       border: 1px solid rgba(148, 163, 184, 0.25);
       border-radius: 0.75rem;
-      padding: 0.6rem 0.8rem;
+      padding: 0.55rem 0.8rem;
       background: rgba(15, 23, 42, 0.25);
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 0.6rem 1rem;
     }
     .build-session .build-list-main{
       display: flex;
@@ -117,27 +118,45 @@
       font-weight: 600;
       min-width: 0;
       line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .build-session .build-list-meta{
       display: flex;
       align-items: center;
-      gap: 0.6rem 0.8rem;
-      flex-wrap: wrap;
-      padding-top: 0.35rem;
-      border-top: 1px dashed rgba(148, 163, 184, 0.2);
+      gap: 0.5rem;
+      flex-wrap: nowrap;
+      padding-top: 0;
+      border-top: 0;
     }
     .build-session .build-list-meta form{ margin: 0; }
-    .build-session .build-list-qty input[type="number"]{ width: 64px; }
+    .build-session .build-list-qty input[type="number"]{ width: 56px; }
     .build-session .build-list-price{
       min-width: 3.5rem;
       text-align: right;
-      margin-left: auto;
+      font-variant-numeric: tabular-nums;
     }
     .build-session .build-list-remove{ margin-left: 0; }
     .build-session .build-gallery-img{
       height: 200px;
       object-fit: contain;
       background: rgba(0, 0, 0, 0.08);
+    }
+    @media (max-width: 991.98px){
+      .build-session .build-list-card{
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
+      .build-session .build-list-meta{
+        flex-wrap: wrap;
+        gap: 0.4rem 0.6rem;
+        padding-top: 0.35rem;
+        border-top: 1px dashed rgba(148, 163, 184, 0.2);
+      }
+      .build-session .build-list-price{
+        margin-left: auto;
+      }
     }
     #main[data-active-endpoint="views.build_session"]{
       scrollbar-gutter: stable;
@@ -426,7 +445,7 @@
                       {% endif %}
                       <div class="row g-3">
                         {% for rec in section.cards %}
-                          <div class="col-6 col-md-4 col-xxl-3">
+                          <div class="col-6 col-md-4 col-lg-3 col-xl-2">
                             <div class="card h-100 build-rec-card">
                               <span class="build-proxy-badge">proxy</span>
                               {% if rec.image %}
@@ -531,7 +550,7 @@
                       </summary>
                       <div class="row g-3 mt-1">
                         {% for rec in section.cards %}
-                          <div class="col-6 col-md-4 col-xxl-3">
+                          <div class="col-6 col-md-4 col-lg-3 col-xl-2">
                             <div class="card h-100 build-rec-card">
                               <span class="build-proxy-badge">proxy</span>
                               {% if rec.image %}
@@ -701,17 +720,33 @@
         </div>
       </div>
 
-      <div class="card border-0 shadow-sm build-panel" id="buildCurrent" data-nav-section data-nav-label="Current Build" data-nav-level="1">
+      <div class="card border-0 shadow-sm build-panel" id="buildCurrent" data-build-view-initial="{{ build_view or '' }}" data-nav-section data-nav-label="Current Build" data-nav-level="1">
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div class="d-flex align-items-center gap-2">
               <h5 class="card-title mb-0">Current Build</h5>
               <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">Proxy</span>
             </div>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Current build view">
-              <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="list" aria-pressed="false">List</button>
-              <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="gallery" aria-pressed="false">Gallery</button>
-              <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="type" aria-pressed="false">Type</button>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              {% set list_lines = [] %}
+              {% for card in session_cards %}
+                {% if card.name %}
+                  {% set qty = card.quantity if card.quantity and card.quantity > 1 else 1 %}
+                  {% set _ = list_lines.append(qty ~ ' ' ~ card.name) %}
+                {% endif %}
+              {% endfor %}
+              <form method="post" action="{{ url_for('views.list_checker') }}" class="d-inline" data-hx-boost="false">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <textarea name="card_list" hidden>{{ list_lines | join('\n') }}</textarea>
+                <button class="btn btn-sm btn-outline-primary" type="submit" {% if not session_cards %}disabled{% endif %}>
+                  Send to List Checker
+                </button>
+              </form>
+              <div class="btn-group btn-group-sm" role="group" aria-label="Current build view">
+                <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="list" aria-pressed="false">List</button>
+                <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="gallery" aria-pressed="false">Gallery</button>
+                <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="type" aria-pressed="false">Type</button>
+              </div>
             </div>
           </div>
           {% if session_cards %}
@@ -1025,386 +1060,4 @@
     </div>
   </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-  {{ super() }}
-<script nonce="{{ csp_nonce() }}">
-(() => {
-  const tableBody = document.getElementById('buildSessionTable');
-  if (!tableBody) return;
-  let rows = Array.from(tableBody.querySelectorAll('.build-row'));
-  const typePills = Array.from(document.querySelectorAll('.type-pill'));
-  const cmcButtons = Array.from(document.querySelectorAll('.curve-bar-btn'));
-  const typeHint = document.getElementById('typeFilterHint');
-  const typeHintLabel = typeHint ? typeHint.querySelector('[data-type-name]') : null;
-  const typeClearBtn = document.getElementById('typeFilterClear');
-  const cmcHint = document.getElementById('cmcFilterHint');
-  const cmcHintLabel = cmcHint ? cmcHint.querySelector('[data-cmc-label]') : null;
-  const cmcClearBtn = document.getElementById('cmcFilterClear');
-  let activeType = '';
-  let activeCmc = '';
-
-  function updateTypeUI() {
-    typePills.forEach(btn => {
-      const value = (btn.dataset.type || '').toLowerCase();
-      const isActive = activeType && activeType === value;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    if (typeHint) {
-      const show = !!activeType;
-      typeHint.classList.toggle('d-none', !show);
-      if (show && typeHintLabel) {
-        const pill = typePills.find(btn => (btn.dataset.type || '').toLowerCase() === activeType);
-        typeHintLabel.textContent = pill ? (pill.dataset.typeLabel || pill.textContent || activeType) : activeType;
-      }
-    }
-    applyFilters();
-  }
-
-  function updateCmcUI() {
-    cmcButtons.forEach(btn => {
-      const value = btn.dataset.cmcBucket || '';
-      const isActive = activeCmc && activeCmc === value;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    if (cmcHint) {
-      const show = !!activeCmc;
-      cmcHint.classList.toggle('d-none', !show);
-      if (show && cmcHintLabel) {
-        const btn = cmcButtons.find(el => (el.dataset.cmcBucket || '') === activeCmc);
-        cmcHintLabel.textContent = btn ? (btn.dataset.cmcLabel || btn.dataset.cmcBucket || activeCmc) : activeCmc;
-      }
-    }
-    applyFilters();
-  }
-
-  function applyFilters() {
-    rows = Array.from(tableBody.querySelectorAll('.build-row')).filter(r => r.isConnected);
-    rows.forEach(row => {
-      const types = (row.getAttribute('data-type') || '').toLowerCase();
-      const cmcBucket = row.getAttribute('data-cmc-bucket') || '';
-      const typeMatch = !activeType || types.includes(activeType);
-      const cmcMatch = !activeCmc || cmcBucket === activeCmc;
-      row.classList.toggle('d-none', !(typeMatch && cmcMatch));
-    });
-  }
-
-  if (typePills.length) {
-    typePills.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const value = (btn.dataset.type || '').toLowerCase();
-        activeType = activeType === value ? '' : value;
-        updateTypeUI();
-      });
-    });
-  }
-  if (typeClearBtn) {
-    typeClearBtn.addEventListener('click', () => {
-      activeType = '';
-      updateTypeUI();
-    });
-  }
-
-  if (cmcButtons.length) {
-    cmcButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const value = btn.dataset.cmcBucket || '';
-        activeCmc = activeCmc === value ? '' : value;
-        updateCmcUI();
-      });
-    });
-  }
-  if (cmcClearBtn) {
-    cmcClearBtn.addEventListener('click', () => {
-      activeCmc = '';
-      updateCmcUI();
-    });
-  }
-
-  applyFilters();
-})();
-
-(() => {
-  const toggles = Array.from(document.querySelectorAll('[data-build-view-toggle]'));
-  const views = Array.from(document.querySelectorAll('[data-build-view]'));
-  if (!toggles.length || !views.length) return;
-  const storageKey = 'buildSessionView:{{ build_session.id }}';
-  let currentView = '';
-  const viewInputs = () => Array.from(document.querySelectorAll('input[name="build_view"]'));
-
-  function setView(name, persist = true) {
-    const target = name || 'list';
-    currentView = target;
-    views.forEach(view => {
-      view.classList.toggle('d-none', view.dataset.buildView !== target);
-    });
-    toggles.forEach(btn => {
-      const isActive = btn.dataset.view === target;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    viewInputs().forEach(input => {
-      input.value = target;
-    });
-    if (persist && window.sessionStorage) {
-      sessionStorage.setItem(storageKey, target);
-    }
-  }
-
-  toggles.forEach(btn => {
-    btn.addEventListener('click', () => setView(btn.dataset.view));
-  });
-
-  const initialFromServer = "{{ build_view or '' }}";
-  let initial = initialFromServer || 'list';
-  if (window.sessionStorage) {
-    initial = sessionStorage.getItem(storageKey) || initial;
-  }
-  setView(initial, false);
-
-  document.addEventListener('submit', event => {
-    if (!(event.target instanceof HTMLFormElement)) return;
-    let input = event.target.querySelector('input[name="build_view"]');
-    if (!input) {
-      input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'build_view';
-      event.target.appendChild(input);
-    }
-    input.value = currentView || initial || 'list';
-    if (window.sessionStorage) {
-      sessionStorage.setItem(storageKey, input.value);
-    }
-  }, true);
-})();
-
-(() => {
-  const form = document.getElementById('buildEdhrecForm');
-  const progressWrap = document.getElementById('buildEdhrecProgress');
-  const progressBar = progressWrap ? progressWrap.querySelector('.progress-bar') : null;
-  const etaLabel = document.getElementById('buildEdhrecEta');
-  if (!form || !progressWrap || !progressBar) return;
-
-  const statusEndpoint = (form.dataset.statusEndpoint || '').trim();
-  const storageKey = `dv-build-edhrec:${form.dataset.sessionId || '0'}`;
-  let activeJobId = (form.dataset.jobId || '').trim();
-  if (!activeJobId && window.sessionStorage) {
-    activeJobId = sessionStorage.getItem(storageKey) || '';
-  }
-  if (activeJobId && window.sessionStorage) {
-    sessionStorage.setItem(storageKey, activeJobId);
-  }
-
-  let timerId = null;
-  let pollTimer = null;
-  let startTime = 0;
-  const estimatedSeconds = parseInt(form.dataset.estimateSeconds || '20', 10);
-  const durationMs = Math.max(5, estimatedSeconds) * 1000;
-
-  function clearTimers() {
-    if (timerId) {
-      window.clearInterval(timerId);
-      timerId = null;
-    }
-    if (pollTimer) {
-      window.clearTimeout(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  function cleanUrl() {
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('edhrec_job_id');
-      window.history.replaceState({}, '', url.toString());
-      return url.toString();
-    } catch (err) {
-      return window.location.href;
-    }
-  }
-
-  function startProgress(label) {
-    if (!progressWrap.classList.contains('is-active')) {
-      progressWrap.classList.remove('d-none');
-      progressWrap.classList.add('is-active');
-      progressBar.style.width = '5%';
-      progressBar.setAttribute('aria-valuenow', '5');
-    }
-    if (etaLabel) {
-      etaLabel.textContent = label || `Estimated time: ~${estimatedSeconds}s`;
-    }
-    startTime = Date.now();
-    if (!timerId) {
-      timerId = window.setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const ratio = Math.min(elapsed / durationMs, 1);
-        const pct = Math.min(95, Math.round(5 + ratio * 90));
-        progressBar.style.width = `${pct}%`;
-        progressBar.setAttribute('aria-valuenow', String(pct));
-        if (etaLabel) {
-          const remaining = Math.max(1, Math.ceil((durationMs - elapsed) / 1000));
-          etaLabel.textContent = elapsed >= durationMs
-            ? 'Finalizing...'
-            : `Estimated time: ~${remaining}s`;
-        }
-      }, 500);
-    }
-  }
-
-  function finishProgress(message, reload) {
-    clearTimers();
-    progressWrap.classList.remove('d-none');
-    progressWrap.classList.add('is-active');
-    progressBar.style.width = '100%';
-    progressBar.setAttribute('aria-valuenow', '100');
-    if (etaLabel) {
-      etaLabel.textContent = message || 'EDHREC refresh completed.';
-    }
-    if (window.sessionStorage) {
-      sessionStorage.removeItem(storageKey);
-    }
-    activeJobId = '';
-    if (reload) {
-      const target = cleanUrl();
-      window.setTimeout(() => {
-        window.location.assign(target);
-      }, 600);
-    } else {
-      cleanUrl();
-    }
-  }
-
-  function applyEvent(event) {
-    if (!event) return false;
-    const type = event.type || '';
-    if (type === 'queued') {
-      startProgress('Queued...');
-      return false;
-    }
-    if (type === 'started') {
-      startProgress('Loading EDHREC data...');
-      return false;
-    }
-    if (type === 'completed') {
-      finishProgress(event.message || 'EDHREC refresh completed.', true);
-      return true;
-    }
-    if (type === 'failed') {
-      finishProgress(event.error || 'EDHREC refresh failed.', false);
-      return true;
-    }
-    return false;
-  }
-
-  function pollStatus() {
-    if (!activeJobId || !statusEndpoint) return;
-    const url = `${statusEndpoint}?job_id=${encodeURIComponent(activeJobId)}`;
-    fetch(url, { headers: { Accept: 'application/json' } })
-      .then((resp) => {
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return resp.json();
-      })
-      .then((data) => {
-        const events = Array.isArray(data.events) ? data.events : [];
-        if (!events.length) {
-          pollTimer = window.setTimeout(pollStatus, 1500);
-          return;
-        }
-        const latest = events[events.length - 1];
-        const done = applyEvent(latest);
-        if (!done) {
-          pollTimer = window.setTimeout(pollStatus, 1500);
-        }
-      })
-      .catch(() => {
-        pollTimer = window.setTimeout(pollStatus, 2500);
-      });
-  }
-
-  if (activeJobId) {
-    startProgress('Queued...');
-    pollStatus();
-  }
-})();
-
-(() => {
-  function collectSections() {
-    const items = [];
-    const allowedLabels = new Set(['commander', 'recommendations', 'current build']);
-    document.querySelectorAll('[data-nav-section]').forEach(section => {
-      if (section.classList.contains('d-none')) return;
-      if (section.closest('.d-none')) return;
-      if (section.closest('.build-rec-source.d-none')) return;
-      const label = (section.getAttribute('data-nav-label') || '').trim();
-      const level = (section.getAttribute('data-nav-level') || '1').trim();
-      const id = section.getAttribute('id');
-      if (!label || !id) return;
-      const isTop = level === '1';
-      if (isTop && !allowedLabels.has(label.toLowerCase())) return;
-      items.push({ id, label, level });
-    });
-    return items;
-  }
-
-  function renderLinks(dropdownMenu, toggleBtn) {
-    if (!dropdownMenu || !toggleBtn) return;
-    const dropdown = typeof bootstrap !== 'undefined' && bootstrap.Dropdown
-      ? bootstrap.Dropdown.getOrCreateInstance(toggleBtn)
-      : null;
-    dropdownMenu.innerHTML = '';
-    const items = collectSections();
-    if (!items.length) {
-      const empty = document.createElement('span');
-      empty.className = 'dropdown-item text-muted small';
-      empty.textContent = 'No sections available';
-      dropdownMenu.appendChild(empty);
-      return;
-    }
-    items.forEach(item => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'dropdown-item build-nav-link';
-      btn.textContent = item.label;
-      btn.dataset.level = item.level;
-      btn.addEventListener('click', () => {
-        const target = document.getElementById(item.id);
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        if (dropdown) {
-          dropdown.hide();
-        }
-      });
-      dropdownMenu.appendChild(btn);
-    });
-  }
-
-  function setupBuildNav() {
-    const dropdownMenu = document.querySelector('[data-build-nav-links]');
-    const toggleBtn = document.querySelector('.build-nav-dropdown .build-nav-toggle');
-    if (!dropdownMenu || !toggleBtn) return;
-    if (toggleBtn.dataset.navBound !== '1') {
-      toggleBtn.dataset.navBound = '1';
-      toggleBtn.addEventListener('click', () => renderLinks(dropdownMenu, toggleBtn));
-      toggleBtn.addEventListener('show.bs.dropdown', () => renderLinks(dropdownMenu, toggleBtn));
-    }
-    renderLinks(dropdownMenu, toggleBtn);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupBuildNav, { once: true });
-  } else {
-    setupBuildNav();
-  }
-  document.addEventListener('build-nav-refresh', setupBuildNav);
-  document.addEventListener('htmx:afterSwap', (event) => {
-    if (event.target && event.target.id === 'main') {
-      setupBuildNav();
-    }
-  });
-})();
-</script>
 {% endblock %}

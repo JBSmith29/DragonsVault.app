@@ -20,7 +20,7 @@ from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db
-from models import Card, Folder, FolderRole, FolderShare, User, UserSetting, UserFriend, UserFriendRequest
+from models import BuildSession, BuildSessionCard, Card, Folder, FolderRole, FolderShare, User, UserSetting, UserFriend, UserFriendRequest
 from models.role import Role, SubRole, CardRole, OracleCoreRoleTag, OracleEvergreenTag, OracleRole
 from core.domains.cards.services import scryfall_cache as sc
 from core.domains.decks.services.proxy_decks import fetch_proxy_deck, resolve_proxy_cards
@@ -850,6 +850,103 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
         warnings.append("No drawable cards found in this deck.")
 
     commander_cards = _commander_card_payloads(folder.commander_name, folder.commander_oracle_id)
+
+    return deck_name, entries, warnings, commander_cards
+
+
+def _opening_hand_build_key(session_id: int) -> str:
+    return f"build:{session_id}"
+
+
+def _opening_hand_deck_key(source: str, deck_id: int) -> str:
+    if source == "build":
+        return _opening_hand_build_key(deck_id)
+    return str(deck_id)
+
+
+def _opening_hand_build_label(session: BuildSession) -> str:
+    base = session.build_name or session.commander_name or f"Build {session.id}"
+    return f"Proxy Build - {base}"
+
+
+def _parse_opening_hand_deck_ref(raw_value) -> tuple[str, int] | None:
+    if raw_value is None:
+        return None
+    text = str(raw_value).strip()
+    if not text:
+        return None
+    if text.startswith("build:"):
+        suffix = text.split(":", 1)[1].strip()
+        deck_id = parse_positive_int(suffix, field="build session id")
+        return "build", deck_id
+    deck_id = parse_positive_int(text, field="deck id")
+    return "folder", deck_id
+
+
+def _build_session_commander_filters(session: BuildSession) -> tuple[set[str], set[str]]:
+    oracle_ids = {oid for oid in split_commander_oracle_ids(session.commander_oracle_id) if oid}
+    names = {name.strip().lower() for name in split_commander_names(session.commander_name) if name}
+    return oracle_ids, names
+
+
+def _deck_entries_from_build_session(session_id: int) -> tuple[Optional[str], list[dict], list[str], list[dict]]:
+    if not current_user.is_authenticated:
+        return None, [], ["Deck not found."], []
+    session = BuildSession.query.filter_by(id=session_id, owner_user_id=current_user.id, status="active").first()
+    if not session:
+        return None, [], ["Deck not found."], []
+
+    _ensure_cache_ready()
+
+    commander_oracle_ids, commander_names = _build_session_commander_filters(session)
+
+    entries: list[dict] = []
+    warnings: list[str] = []
+    deck_name = _opening_hand_build_label(session)
+
+    for entry in session.cards:
+        oracle_id = (entry.card_oracle_id or "").strip()
+        qty = int(entry.quantity or 0)
+        if not oracle_id or qty <= 0:
+            continue
+        if oracle_id in commander_oracle_ids:
+            continue
+
+        pr = None
+        try:
+            prints = prints_for_oracle(oracle_id) or []
+        except Exception:
+            prints = []
+        if prints:
+            pr = next((p for p in prints if not p.get("digital")), prints[0])
+        card_name = (pr or {}).get("name") or "Card"
+        if commander_names and card_name.strip().lower() in commander_names:
+            continue
+        imgs = _image_from_print(pr)
+        back_imgs = _back_image_from_print(pr)
+
+        entries.append(
+            {
+                "name": card_name,
+                "qty": qty,
+                "card_id": None,
+                "oracle_id": oracle_id,
+                "small": imgs.get("small"),
+                "normal": imgs.get("normal"),
+                "large": imgs.get("large"),
+                "back_small": back_imgs.get("small"),
+                "back_normal": back_imgs.get("normal"),
+                "back_large": back_imgs.get("large"),
+                "detail_url": None,
+                "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
+                "type_line": (pr or {}).get("type_line") or "",
+            }
+        )
+
+    if not entries:
+        warnings.append("No drawable cards found in this build.")
+
+    commander_cards = _commander_card_payloads(session.commander_name, session.commander_oracle_id)
 
     return deck_name, entries, warnings, commander_cards
 
@@ -4052,17 +4149,28 @@ def decks_overview():
 
     role_filter = Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
     scope_filter = None
+    shared_ids = None
+    shared_filter = None
     if is_authenticated:
         friend_ids = (
             db.session.query(UserFriend.friend_user_id)
             .filter(UserFriend.user_id == current_user.id)
         )
+        shared_ids = (
+            db.session.query(FolderShare.folder_id)
+            .filter(FolderShare.shared_user_id == current_user.id)
+        )
+        shared_filter = Folder.id.in_(shared_ids)
         if scope == "friends":
             scope_filter = Folder.owner_user_id.in_(friend_ids)
         elif scope == "all":
-            scope_filter = or_(Folder.owner_user_id == current_user.id, Folder.owner_user_id.in_(friend_ids))
+            scope_filter = or_(
+                Folder.owner_user_id == current_user.id,
+                Folder.owner_user_id.in_(friend_ids),
+                shared_filter,
+            )
         else:
-            scope_filter = Folder.owner_user_id == current_user.id
+            scope_filter = or_(Folder.owner_user_id == current_user.id, shared_filter)
     scoped_filters = [role_filter]
     if scope_filter is not None:
         scoped_filters.append(scope_filter)
@@ -4083,11 +4191,22 @@ def decks_overview():
             .subquery()
         )
         total_decks = db.session.query(func.count(base_counts.c.folder_id)).scalar() or 0
+        shared_total = 0
+        if is_authenticated and shared_ids is not None and scope in {"mine", "all"}:
+            shared_total = (
+                db.session.query(func.count(base_counts.c.folder_id))
+                .filter(
+                    base_counts.c.folder_id.in_(shared_ids),
+                    base_counts.c.owner_user_id != current_user.id,
+                )
+                .scalar()
+                or 0
+            )
         if is_authenticated and scope == "friends":
             proxy_total = 0
             owned_total = 0
             friends_total = total_decks
-        elif is_authenticated and scope == "all":
+        elif is_authenticated and scope in {"mine", "all"}:
             proxy_total = (
                 db.session.query(func.count(base_counts.c.folder_id))
                 .filter(
@@ -4106,7 +4225,10 @@ def decks_overview():
                 .scalar()
                 or 0
             )
-            friends_total = total_decks - owned_total - proxy_total
+            if scope == "all":
+                friends_total = total_decks - owned_total - proxy_total - shared_total
+            else:
+                friends_total = 0
         else:
             proxy_total = (
                 db.session.query(func.count(base_counts.c.folder_id))
@@ -4124,10 +4246,10 @@ def decks_overview():
                 if isinstance(owner, str) and owner.strip()
             }
         )
-        return total_decks, proxy_total, owned_total, friends_total, owner_names
+        return total_decks, proxy_total, owned_total, friends_total, shared_total, owner_names
 
-    summary_cache_key = f"deck_summary:{user_key}:{scope}"
-    total_decks, proxy_total, owned_total, friends_total, owner_names = _cache_fetch(
+    summary_cache_key = f"deck_summary:v2:{user_key}:{scope}"
+    total_decks, proxy_total, owned_total, friends_total, shared_total, owner_names = _cache_fetch(
         summary_cache_key,
         120,
         _summary_payload,
@@ -4136,6 +4258,7 @@ def decks_overview():
     proxy_total = int(proxy_total or 0)
     owned_total = int(owned_total or 0)
     friends_total = int(friends_total or 0)
+    shared_total = int(shared_total or 0)
 
     if per is None:
         per = total_decks if total_decks else 1
@@ -4576,6 +4699,7 @@ def decks_overview():
         proxy_total=proxy_total,
         owned_total=owned_total,
         friends_total=friends_total,
+        shared_total=shared_total,
         total_decks=total_decks,
         scope=scope,
         show_scope_toggle=is_authenticated,
@@ -5234,164 +5358,304 @@ def deck_tokens_overview():
     )
 
 
-def _opening_hand_deck_options() -> tuple[list[Folder], list[FolderOptionVM]]:
+def _opening_hand_deck_options() -> tuple[dict[str, dict], list[dict]]:
     decks = (
         Folder.query.filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
         .order_by(Folder.name.asc())
         .all()
     )
-    deck_options = [
-        FolderOptionVM(id=deck.id, name=deck.name or f"Deck {deck.id}")
-        for deck in decks
-    ]
-    return decks, deck_options
+    deck_lookup: dict[str, dict] = {}
+    deck_options: list[dict] = []
 
+    for deck in decks:
+        key = str(deck.id)
+        label = deck.name or f"Deck {deck.id}"
+        deck_lookup[key] = {"source": "folder", "deck": deck, "label": label}
+        deck_options.append({"id": key, "name": label})
 
-def _opening_hand_lookups(deck_ids: Iterable[int]) -> tuple[str, str]:
-    deck_card_lookup: dict[str, list[dict]] = {}
-    deck_token_lookup: dict[str, list[dict]] = {}
-    deck_ids = [int(deck_id) for deck_id in (deck_ids or []) if deck_id]
-    if deck_ids:
-        have_cache = _ensure_cache_ready()
-        token_cache: dict[str, list[dict]] = {}
-        card_rows = (
-            Card.query.with_entities(
-                Card.folder_id,
-                Card.id,
-                Card.name,
-                Card.set_code,
-                Card.collector_number,
-                Card.lang,
-                Card.is_foil,
-                Card.oracle_id,
-                Card.type_line,
-                Card.mana_value,
-                Card.oracle_text,
-                Card.faces_json,
-            )
-            .filter(Card.folder_id.in_(deck_ids))
-            .order_by(Card.folder_id.asc(), Card.name.asc(), Card.collector_number.asc())
+    build_sessions: list[BuildSession] = []
+    if current_user.is_authenticated:
+        build_sessions = (
+            BuildSession.query.filter_by(owner_user_id=current_user.id, status="active")
+            .order_by(BuildSession.updated_at.desc(), BuildSession.created_at.desc())
             .all()
         )
+    for session in build_sessions:
+        key = _opening_hand_build_key(session.id)
+        label = _opening_hand_build_label(session)
+        deck_lookup[key] = {"source": "build", "deck": session, "label": label}
+        deck_options.append({"id": key, "name": label})
+
+    return deck_lookup, deck_options
+
+
+def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
+    deck_card_lookup: dict[str, list[dict]] = {}
+    deck_token_lookup: dict[str, list[dict]] = {}
+    raw_refs = [str(deck_ref).strip() for deck_ref in (deck_refs or []) if deck_ref]
+    normalized_refs: list[str] = []
+    folder_ids: list[int] = []
+    build_ids: list[int] = []
+
+    for raw in raw_refs:
+        try:
+            parsed = _parse_opening_hand_deck_ref(raw)
+        except ValidationError:
+            continue
+        if not parsed:
+            continue
+        source, deck_id = parsed
+        key = _opening_hand_deck_key(source, deck_id)
+        if key not in normalized_refs:
+            normalized_refs.append(key)
+        if source == "build":
+            build_ids.append(deck_id)
+        else:
+            folder_ids.append(deck_id)
+
+    if normalized_refs:
+        have_cache = _ensure_cache_ready()
+        token_cache: dict[str, list[dict]] = {}
         placeholder_image = static_url("img/card-placeholder.svg")
-        seen_map: dict[str, set[str]] = {}
-        token_seen: dict[str, set[str]] = {}
-        for (
-            folder_id,
-            card_id,
-            card_name,
-            set_code,
-            collector_number,
-            lang,
-            is_foil,
-            oracle_id,
-            type_line,
-            mana_value,
-            oracle_text,
-            faces_json,
-        ) in card_rows:
-            if not card_name:
-                continue
-            folder_key = str(folder_id)
-            entries = deck_card_lookup.setdefault(folder_key, [])
-            seen = seen_map.setdefault(folder_key, set())
-            value_token = f"{card_id or 0}:{set_code}:{collector_number}:{lang or 'en'}:{1 if is_foil else 0}"
-            if value_token in seen:
-                continue
-            seen.add(value_token)
 
-            pr = None
-            try:
-                pr = _lookup_print_data(set_code, collector_number, card_name, oracle_id)
-            except Exception:
+        if folder_ids:
+            card_rows = (
+                Card.query.with_entities(
+                    Card.folder_id,
+                    Card.id,
+                    Card.name,
+                    Card.set_code,
+                    Card.collector_number,
+                    Card.lang,
+                    Card.is_foil,
+                    Card.oracle_id,
+                    Card.type_line,
+                    Card.mana_value,
+                    Card.oracle_text,
+                    Card.faces_json,
+                )
+                .filter(Card.folder_id.in_(folder_ids))
+                .order_by(Card.folder_id.asc(), Card.name.asc(), Card.collector_number.asc())
+                .all()
+            )
+            seen_map: dict[str, set[str]] = {}
+            token_seen: dict[str, set[str]] = {}
+            for (
+                folder_id,
+                card_id,
+                card_name,
+                set_code,
+                collector_number,
+                lang,
+                is_foil,
+                oracle_id,
+                type_line,
+                mana_value,
+                oracle_text,
+                faces_json,
+            ) in card_rows:
+                if not card_name:
+                    continue
+                folder_key = str(folder_id)
+                entries = deck_card_lookup.setdefault(folder_key, [])
+                seen = seen_map.setdefault(folder_key, set())
+                value_token = f"{card_id or 0}:{set_code}:{collector_number}:{lang or 'en'}:{1 if is_foil else 0}"
+                if value_token in seen:
+                    continue
+                seen.add(value_token)
+
                 pr = None
+                try:
+                    pr = _lookup_print_data(set_code, collector_number, card_name, oracle_id)
+                except Exception:
+                    pr = None
 
-            if not pr and oracle_id:
+                if not pr and oracle_id:
+                    try:
+                        prints = prints_for_oracle(oracle_id) or []
+                        if prints:
+                            pr = next((p for p in prints if not p.get("digital")), prints[0])
+                    except Exception:
+                        pr = None
+
+                if not pr:
+                    try:
+                        pr = find_by_set_cn(set_code, collector_number, card_name)
+                    except Exception:
+                        pr = None
+
+                imgs = _image_from_print(pr)
+                back_imgs = _back_image_from_print(pr)
+                flags = _card_type_flags(type_line)
+                entry_vm = OpeningHandCardVM(
+                    value=value_token,
+                    name=card_name,
+                    image=imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder_image,
+                    hover=imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
+                    back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
+                    back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
+                    type_line=type_line or "",
+                    mana_value=mana_value,
+                    is_creature=bool(flags["is_creature"]),
+                    is_land=bool(flags["is_land"]),
+                    is_instant=bool(flags["is_instant"]),
+                    is_sorcery=bool(flags["is_sorcery"]),
+                    is_permanent=bool(flags["is_permanent"]),
+                    zone_hint=str(flags["zone_hint"]),
+                )
+                entries.append(entry_vm.to_payload())
+
+                tokens: list[dict] = []
+                if have_cache and oracle_id:
+                    cached_tokens = token_cache.get(oracle_id)
+                    if cached_tokens is None:
+                        try:
+                            cached_tokens = sc.tokens_from_oracle(oracle_id) or []
+                        except Exception:
+                            cached_tokens = []
+                        token_cache[oracle_id] = cached_tokens
+                    tokens = cached_tokens
+
+                if not tokens:
+                    text = oracle_text or _oracle_text_from_faces(faces_json)
+                    tokens = _token_stubs_from_oracle_text(text)
+
+                if tokens:
+                    token_bucket = deck_token_lookup.setdefault(folder_key, [])
+                    seen_tokens = token_seen.setdefault(folder_key, set())
+                    for token in tokens:
+                        token_name = (token.get("name") or "Token").strip()
+                        token_type = (token.get("type_line") or "").strip()
+                        token_id = token.get("id")
+                        token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                        if token_key in seen_tokens:
+                            continue
+                        seen_tokens.add(token_key)
+                        token_imgs = token.get("images") or {}
+                        token_flags = _card_type_flags(token_type)
+                        token_vm = OpeningHandTokenVM(
+                            id=token_id,
+                            name=token_name,
+                            type_line=token_type,
+                            image=token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                            hover=token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                            is_creature=bool(token_flags["is_creature"]),
+                            is_land=bool(token_flags["is_land"]),
+                            is_instant=bool(token_flags["is_instant"]),
+                            is_sorcery=bool(token_flags["is_sorcery"]),
+                            is_permanent=bool(token_flags["is_permanent"]),
+                            zone_hint=str(token_flags["zone_hint"]),
+                        )
+                        token_bucket.append(token_vm.to_payload())
+
+        if build_ids:
+            build_rows = (
+                db.session.query(BuildSessionCard.session_id, BuildSessionCard.card_oracle_id)
+                .join(BuildSession, BuildSessionCard.session_id == BuildSession.id)
+                .filter(
+                    BuildSessionCard.session_id.in_(build_ids),
+                    BuildSession.owner_user_id == current_user.id,
+                    BuildSession.status == "active",
+                )
+                .all()
+            )
+            seen_map: dict[str, set[str]] = {}
+            token_seen: dict[str, set[str]] = {}
+            for session_id, oracle_id in build_rows:
+                oracle_id = (oracle_id or "").strip()
+                if not oracle_id:
+                    continue
+                session_key = _opening_hand_build_key(session_id)
+                entries = deck_card_lookup.setdefault(session_key, [])
+                seen = seen_map.setdefault(session_key, set())
+                if oracle_id in seen:
+                    continue
+                seen.add(oracle_id)
+
+                pr = None
                 try:
                     prints = prints_for_oracle(oracle_id) or []
-                    if prints:
-                        pr = next((p for p in prints if not p.get("digital")), prints[0])
                 except Exception:
-                    pr = None
+                    prints = []
+                if prints:
+                    pr = next((p for p in prints if not p.get("digital")), prints[0])
 
-            if not pr:
-                try:
-                    pr = find_by_set_cn(set_code, collector_number, card_name)
-                except Exception:
-                    pr = None
+                imgs = _image_from_print(pr)
+                back_imgs = _back_image_from_print(pr)
+                type_line = (pr or {}).get("type_line") or ""
+                mana_value = (pr or {}).get("cmc")
+                flags = _card_type_flags(type_line)
+                name = (pr or {}).get("name") or oracle_id or "Card"
+                entry_vm = OpeningHandCardVM(
+                    value=oracle_id,
+                    name=name,
+                    image=imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder_image,
+                    hover=imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
+                    back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
+                    back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
+                    type_line=type_line,
+                    mana_value=mana_value,
+                    is_creature=bool(flags["is_creature"]),
+                    is_land=bool(flags["is_land"]),
+                    is_instant=bool(flags["is_instant"]),
+                    is_sorcery=bool(flags["is_sorcery"]),
+                    is_permanent=bool(flags["is_permanent"]),
+                    zone_hint=str(flags["zone_hint"]),
+                )
+                entries.append(entry_vm.to_payload())
 
-            imgs = _image_from_print(pr)
-            back_imgs = _back_image_from_print(pr)
-            flags = _card_type_flags(type_line)
-            entry_vm = OpeningHandCardVM(
-                value=value_token,
-                name=card_name,
-                image=imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder_image,
-                hover=imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
-                back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
-                back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
-                type_line=type_line or "",
-                mana_value=mana_value,
-                is_creature=bool(flags["is_creature"]),
-                is_land=bool(flags["is_land"]),
-                is_instant=bool(flags["is_instant"]),
-                is_sorcery=bool(flags["is_sorcery"]),
-                is_permanent=bool(flags["is_permanent"]),
-                zone_hint=str(flags["zone_hint"]),
-            )
-            entries.append(entry_vm.to_payload())
+                tokens: list[dict] = []
+                if have_cache and oracle_id:
+                    cached_tokens = token_cache.get(oracle_id)
+                    if cached_tokens is None:
+                        try:
+                            cached_tokens = sc.tokens_from_oracle(oracle_id) or []
+                        except Exception:
+                            cached_tokens = []
+                        token_cache[oracle_id] = cached_tokens
+                    tokens = cached_tokens
 
-            tokens: list[dict] = []
-            if have_cache and oracle_id:
-                cached_tokens = token_cache.get(oracle_id)
-                if cached_tokens is None:
-                    try:
-                        cached_tokens = sc.tokens_from_oracle(oracle_id) or []
-                    except Exception:
-                        cached_tokens = []
-                    token_cache[oracle_id] = cached_tokens
-                tokens = cached_tokens
+                if not tokens:
+                    faces = (pr or {}).get("card_faces") or []
+                    oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces(faces)
+                    tokens = _token_stubs_from_oracle_text(oracle_text)
 
-            if not tokens:
-                text = oracle_text or _oracle_text_from_faces(faces_json)
-                tokens = _token_stubs_from_oracle_text(text)
-
-            if tokens:
-                token_bucket = deck_token_lookup.setdefault(folder_key, [])
-                seen_tokens = token_seen.setdefault(folder_key, set())
-                for token in tokens:
-                    token_name = (token.get("name") or "Token").strip()
-                    token_type = (token.get("type_line") or "").strip()
-                    token_id = token.get("id")
-                    token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
-                    if token_key in seen_tokens:
-                        continue
-                    seen_tokens.add(token_key)
-                    token_imgs = token.get("images") or {}
-                    token_flags = _card_type_flags(token_type)
-                    token_vm = OpeningHandTokenVM(
-                        id=token_id,
-                        name=token_name,
-                        type_line=token_type,
-                        image=token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
-                        hover=token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
-                        is_creature=bool(token_flags["is_creature"]),
-                        is_land=bool(token_flags["is_land"]),
-                        is_instant=bool(token_flags["is_instant"]),
-                        is_sorcery=bool(token_flags["is_sorcery"]),
-                        is_permanent=bool(token_flags["is_permanent"]),
-                        zone_hint=str(token_flags["zone_hint"]),
-                    )
-                    token_bucket.append(token_vm.to_payload())
+                if tokens:
+                    token_bucket = deck_token_lookup.setdefault(session_key, [])
+                    seen_tokens = token_seen.setdefault(session_key, set())
+                    for token in tokens:
+                        token_name = (token.get("name") or "Token").strip()
+                        token_type = (token.get("type_line") or "").strip()
+                        token_id = token.get("id")
+                        token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                        if token_key in seen_tokens:
+                            continue
+                        seen_tokens.add(token_key)
+                        token_imgs = token.get("images") or {}
+                        token_flags = _card_type_flags(token_type)
+                        token_vm = OpeningHandTokenVM(
+                            id=token_id,
+                            name=token_name,
+                            type_line=token_type,
+                            image=token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                            hover=token_imgs.get("large") or token_imgs.get("normal") or token_imgs.get("small") or placeholder_image,
+                            is_creature=bool(token_flags["is_creature"]),
+                            is_land=bool(token_flags["is_land"]),
+                            is_instant=bool(token_flags["is_instant"]),
+                            is_sorcery=bool(token_flags["is_sorcery"]),
+                            is_permanent=bool(token_flags["is_permanent"]),
+                            zone_hint=str(token_flags["zone_hint"]),
+                        )
+                        token_bucket.append(token_vm.to_payload())
 
         for entries in deck_card_lookup.values():
             entries.sort(key=lambda item: (item.get("name") or "").lower())
         for token_entries in deck_token_lookup.values():
             token_entries.sort(key=lambda item: (item.get("name") or "").lower())
 
-    for deck_id in deck_ids:
-        deck_card_lookup.setdefault(str(deck_id), [])
-        deck_token_lookup.setdefault(str(deck_id), [])
+    for deck_key in normalized_refs:
+        deck_card_lookup.setdefault(deck_key, [])
+        deck_token_lookup.setdefault(deck_key, [])
 
     deck_card_lookup_json = json.dumps(deck_card_lookup, ensure_ascii=True)
     deck_token_lookup_json = json.dumps(deck_token_lookup, ensure_ascii=True)
@@ -5414,38 +5678,46 @@ def opening_hand_play():
     deck_list_text = (request.form.get("deck_list") or "").strip()
     commander_hint = (request.form.get("commander_name") or "").strip()
 
-    decks, deck_options = _opening_hand_deck_options()
-    deck_lookup = {deck.id: deck for deck in decks}
+    deck_lookup, deck_options = _opening_hand_deck_options()
+    deck_key = ""
+    selected_deck_name = ""
+    commander_cards: list[dict] = []
+    deck_refs: list[str] = []
 
-    deck_id = None
+    custom_token_entries_json = json.dumps([], ensure_ascii=True)
+
     if deck_id_raw:
         try:
-            deck_id = parse_positive_int(deck_id_raw, field="deck id")
+            parsed = _parse_opening_hand_deck_ref(deck_id_raw)
         except ValidationError as exc:
             log_validation_error(exc, context="opening_hand_play")
             flash("Invalid deck selection.", "danger")
             return redirect(url_for("views.opening_hand"))
-        if deck_id not in deck_lookup:
-            flash("Deck not found.", "warning")
-            return redirect(url_for("views.opening_hand"))
-
-    commander_cards: list[dict] = []
-
-    custom_token_entries_json = json.dumps([], ensure_ascii=True)
-
-    if deck_id:
-        selected_deck = deck_lookup[deck_id]
-        selected_deck_name = selected_deck.name or f"Deck {deck_id}"
-        deck_list_text = ""
-        commander_hint = ""
-        deck_ids = [deck_id]
-        commander_cards = _commander_card_payloads(
-            selected_deck.commander_name,
-            selected_deck.commander_oracle_id,
-        )
+        if parsed:
+            source, deck_id = parsed
+            deck_key = _opening_hand_deck_key(source, deck_id)
+            selected = deck_lookup.get(deck_key)
+            if not selected:
+                flash("Deck not found.", "warning")
+                return redirect(url_for("views.opening_hand"))
+            selected_deck_name = selected.get("label") or "Deck"
+            deck_list_text = ""
+            commander_hint = ""
+            deck_refs = [deck_key]
+            if source == "build":
+                session = selected.get("deck")
+                commander_cards = _commander_card_payloads(
+                    session.commander_name,
+                    session.commander_oracle_id,
+                )
+            else:
+                selected_deck = selected.get("deck")
+                commander_cards = _commander_card_payloads(
+                    selected_deck.commander_name,
+                    selected_deck.commander_oracle_id,
+                )
     elif deck_list_text:
         selected_deck_name = "Custom list"
-        deck_ids = []
         _, entries_from_list, _, commander_cards = _deck_entries_from_list(deck_list_text, commander_hint)
         oracle_ids = {
             entry.get("oracle_id")
@@ -5495,7 +5767,7 @@ def opening_hand_play():
         flash("Select a deck or paste a deck list to continue.", "warning")
         return redirect(url_for("views.opening_hand"))
 
-    deck_card_lookup_json, deck_token_lookup_json = _opening_hand_lookups(deck_ids)
+    deck_card_lookup_json, deck_token_lookup_json = _opening_hand_lookups(deck_refs)
     placeholder = static_url("img/card-placeholder.svg")
     commander_payload = [_client_card_payload(card, placeholder) for card in commander_cards]
     selected_commander_cards_json = json.dumps(commander_payload, ensure_ascii=True)
@@ -5505,7 +5777,7 @@ def opening_hand_play():
         deck_options=deck_options,
         deck_card_lookup_json=deck_card_lookup_json,
         deck_token_lookup_json=deck_token_lookup_json,
-        selected_deck_id=str(deck_id) if deck_id else "",
+        selected_deck_id=deck_key,
         selected_deck_name=selected_deck_name,
         selected_deck_list=deck_list_text,
         selected_commander_name=commander_hint,
@@ -5526,16 +5798,22 @@ def opening_hand_shuffle():
 
     commander_cards: list[dict] = []
 
+    deck_source = None
     deck_id = None
     if deck_id_raw not in (None, "", False):
         try:
-            deck_id = parse_positive_int(deck_id_raw, field="deck id")
+            parsed = _parse_opening_hand_deck_ref(deck_id_raw)
         except ValidationError as exc:
             log_validation_error(exc, context="opening_hand_shuffle")
             return jsonify({"ok": False, "error": "Invalid deck selection."}), 400
+        if parsed:
+            deck_source, deck_id = parsed
 
     if deck_id:
-        deck_name, entries, warnings, commander_cards = _deck_entries_from_folder(deck_id)
+        if deck_source == "build":
+            deck_name, entries, warnings, commander_cards = _deck_entries_from_build_session(deck_id)
+        else:
+            deck_name, entries, warnings, commander_cards = _deck_entries_from_folder(deck_id)
         if deck_name is None:
             return jsonify({"ok": False, "error": "Deck not found."}), 404
     elif deck_list_text:

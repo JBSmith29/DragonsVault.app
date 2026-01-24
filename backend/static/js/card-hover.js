@@ -135,6 +135,7 @@
     '.calc-card-name',
     '.deck-name-link',
     '.deck-hover-target',
+    '.token-source',
     '.rec-card-title',
     '.rec-row-title',
     '.edhrec-card__title',

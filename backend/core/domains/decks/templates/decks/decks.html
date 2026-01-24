@@ -318,6 +318,7 @@
   {% set proxy_total = proxy_total if proxy_total is defined else (proxy_count or 0) %}
   {% set owned_total = owned_total if owned_total is defined else (total_decks - proxy_total) %}
   {% set friends_total = friends_total if friends_total is defined else 0 %}
+  {% set shared_total = shared_total if shared_total is defined else 0 %}
   {% set scope = scope if scope is defined else 'mine' %}
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
       <div>
@@ -326,6 +327,9 @@
         <span>Total: <strong>{{ '{:,}'.format(total_decks) }}</strong></span>
         <span>Owned: <strong>{{ '{:,}'.format(owned_total) }}</strong></span>
         <span>Proxy: <strong>{{ '{:,}'.format(proxy_total) }}</strong></span>
+        {% if shared_total %}
+          <span>Shared: <strong>{{ '{:,}'.format(shared_total) }}</strong></span>
+        {% endif %}
         {% if scope == 'friends' or friends_total %}
           <span>Friends: <strong>{{ '{:,}'.format(friends_total) }}</strong></span>
         {% endif %}

@@ -286,7 +286,7 @@ def _pod_payloads_for_management(
             if roster_player.user_id == current_user_id:
                 self_member_id = member.id
         members.sort(key=lambda item: item["label"].lower())
-        is_owner, is_member = _pod_access_flags(pod, current_user_id)
+        is_owner, _ = _pod_access_flags(pod, current_user_id)
         payloads.append(
             {
                 "id": pod.id,
@@ -296,7 +296,7 @@ def _pod_payloads_for_management(
                 "owner_user_id": pod.owner_user_id,
                 "owner_label": owner_label_map.get(pod.owner_user_id) or "Unknown owner",
                 "is_owner": is_owner,
-                "can_manage": is_owner or is_member,
+                "can_manage": is_owner,
                 "self_member_id": self_member_id,
                 "roster_options": roster_options_by_owner.get(pod.owner_user_id, []),
             }
@@ -1940,6 +1940,7 @@ def games_overview():
     query = _apply_notes_search(query, q)
     sessions = query.order_by(GameSession.played_at.desc().nullslast(), GameSession.created_at.desc()).all()
     games = [_game_session_payload(session, current_user.id) for session in sessions]
+    has_owned_games = any(session.owner_user_id == current_user.id for session in sessions)
     summary = _games_summary(current_user.id)
     manual_decks = _manual_deck_summary(current_user.id)
     registered_deck_options = _accessible_deck_options(current_user.id) if manual_decks else []
@@ -1948,6 +1949,7 @@ def games_overview():
         games=games,
         summary=summary,
         search_query=q,
+        has_owned_games=has_owned_games,
         manual_decks=manual_decks,
         registered_deck_options=registered_deck_options,
     )
@@ -2033,6 +2035,78 @@ def games_manual_deck_update():
     bracket_level = (request.form.get("bracket_level") or "").strip()
     bracket_label = (request.form.get("bracket_label") or "").strip()
     bracket_score_raw = (request.form.get("bracket_score") or "").strip()
+
+    has_updates = False
+    commander_oracle_id = None
+    if commander_name_input:
+        try:
+            sc.ensure_cache_loaded()
+            commander_oracle_id = sc.unique_oracle_by_name(commander_name_input)
+        except Exception:
+            commander_oracle_id = None
+        has_updates = True
+
+    bracket_score = None
+    if bracket_score_raw:
+        try:
+            bracket_score = float(bracket_score_raw)
+            has_updates = True
+        except ValueError:
+            flash("Bracket score must be a number.", "warning")
+            return redirect(url_for("views.games_overview"))
+
+    if bracket_level or bracket_label:
+        has_updates = True
+
+    if not has_updates:
+        flash("Add bracket or commander details before updating.", "warning")
+        return redirect(url_for("views.games_overview"))
+
+    for deck in decks:
+        if commander_name_input:
+            deck.commander_name = commander_name_input
+            deck.commander_oracle_id = commander_oracle_id
+        if bracket_level:
+            deck.bracket_level = bracket_level
+        if bracket_label:
+            deck.bracket_label = bracket_label
+        if bracket_score is not None:
+            deck.bracket_score = bracket_score
+            deck.power_score = bracket_score
+
+    db.session.commit()
+    flash(f"Updated {len(decks)} log entries.", "success")
+    return redirect(url_for("views.games_overview"))
+
+
+def games_deck_bracket_update():
+    deck_name = (request.form.get("deck_name") or "").strip()
+    match_commander_name = (request.form.get("match_commander_name") or "").strip()
+    commander_name_input = (request.form.get("commander_name") or "").strip()
+    bracket_level = (request.form.get("bracket_level") or "").strip()
+    bracket_label = (request.form.get("bracket_label") or "").strip()
+    bracket_score_raw = (request.form.get("bracket_score") or "").strip()
+
+    if not deck_name:
+        flash("Enter a deck name to update.", "warning")
+        return redirect(url_for("views.games_overview"))
+
+    deck_query = (
+        GameDeck.query.join(GameSession, GameSession.id == GameDeck.session_id)
+        .filter(
+            GameSession.owner_user_id == current_user.id,
+            func.lower(func.trim(GameDeck.deck_name)) == deck_name.lower(),
+        )
+    )
+    if match_commander_name:
+        deck_query = deck_query.filter(
+            func.lower(func.trim(func.coalesce(GameDeck.commander_name, ""))) == match_commander_name.lower()
+        )
+
+    decks = deck_query.all()
+    if not decks:
+        flash("Deck not found in your logs.", "warning")
+        return redirect(url_for("views.games_overview"))
 
     has_updates = False
     commander_oracle_id = None
@@ -2927,7 +3001,7 @@ def games_players():
         .all()
     )
     pod_owner_ids = {pod.owner_user_id for pod in pods}
-    managed_owner_ids = {current_user.id, *pod_owner_ids}
+    managed_owner_ids = {current_user.id}
 
     owner_label_map: dict[int, str] = {
         current_user.id: (
@@ -2937,15 +3011,6 @@ def games_players():
             or f"User {current_user.id}"
         )
     }
-    other_owner_ids = {owner_id for owner_id in managed_owner_ids if owner_id != current_user.id}
-    if other_owner_ids:
-        for user in User.query.filter(User.id.in_(other_owner_ids)).all():
-            owner_label_map[user.id] = (
-                user.display_name
-                or user.username
-                or user.email
-                or f"User {user.id}"
-            )
 
     sorted_owner_ids = sorted(
         managed_owner_ids,
@@ -3026,8 +3091,8 @@ def games_players():
             if not pod:
                 flash("Pod not found.", "warning")
                 return redirect(url_for("views.games_players"))
-            is_owner, is_member = _pod_access_flags(pod, current_user.id)
-            if not (is_owner or is_member):
+            is_owner, _ = _pod_access_flags(pod, current_user.id)
+            if not is_owner:
                 flash("Pod not found.", "warning")
                 return redirect(url_for("views.games_players"))
             roster_player = GameRosterPlayer.query.filter_by(id=roster_id, owner_user_id=pod.owner_user_id).first()
@@ -3069,8 +3134,11 @@ def games_players():
             if not pod:
                 flash("Pod not found.", "warning")
                 return redirect(url_for("views.games_players"))
-            is_owner, is_member = _pod_access_flags(pod, current_user.id)
-            if not (is_owner or is_member):
+            is_owner, _ = _pod_access_flags(pod, current_user.id)
+            is_self_member = bool(
+                member.roster_player and member.roster_player.user_id == current_user.id
+            )
+            if not is_owner and not is_self_member:
                 flash("Pod member not found.", "warning")
                 return redirect(url_for("views.games_players"))
             db.session.delete(member)
@@ -3087,7 +3155,7 @@ def games_players():
                 except ValidationError as exc:
                     log_validation_error(exc, context="game_roster_owner")
                     roster_owner_id = current_user.id
-            if roster_owner_id not in managed_owner_ids:
+            if roster_owner_id != current_user.id:
                 flash("Select a valid roster owner.", "warning")
                 return redirect(url_for("views.games_players"))
             kind = (request.form.get("player_kind") or "guest").strip().lower()
@@ -3174,8 +3242,11 @@ def games_players():
                 flash("Select a player.", "warning")
                 return redirect(url_for("views.games_players"))
 
-            roster_player = GameRosterPlayer.query.filter_by(id=roster_id).first()
-            if not roster_player or roster_player.owner_user_id not in managed_owner_ids:
+            roster_player = GameRosterPlayer.query.filter_by(
+                id=roster_id,
+                owner_user_id=current_user.id,
+            ).first()
+            if not roster_player:
                 flash("Player not found.", "warning")
                 return redirect(url_for("views.games_players"))
             roster_owner_id = roster_player.owner_user_id
@@ -3234,12 +3305,11 @@ def games_players():
                 log_validation_error(exc, context="game_roster_remove")
                 flash("Invalid assignment.", "warning")
                 return redirect(url_for("views.games_players"))
-            assignment = GameRosterDeck.query.filter_by(id=assignment_id).first()
+            assignment = GameRosterDeck.query.filter_by(
+                id=assignment_id,
+                owner_user_id=current_user.id,
+            ).first()
             if not assignment:
-                return redirect(url_for("views.games_players"))
-            roster_player = GameRosterPlayer.query.filter_by(id=assignment.roster_player_id).first()
-            if not roster_player or roster_player.owner_user_id not in managed_owner_ids:
-                flash("Deck not found.", "warning")
                 return redirect(url_for("views.games_players"))
             db.session.delete(assignment)
             db.session.commit()
@@ -3254,8 +3324,11 @@ def games_players():
                 log_validation_error(exc, context="game_roster_remove_player")
                 flash("Invalid player.", "warning")
                 return redirect(url_for("views.games_players"))
-            roster_player = GameRosterPlayer.query.filter_by(id=roster_id).first()
-            if not roster_player or roster_player.owner_user_id not in managed_owner_ids:
+            roster_player = GameRosterPlayer.query.filter_by(
+                id=roster_id,
+                owner_user_id=current_user.id,
+            ).first()
+            if not roster_player:
                 flash("Player not found.", "warning")
                 return redirect(url_for("views.games_players"))
             db.session.delete(roster_player)
@@ -4495,5 +4568,6 @@ __all__ = [
     "games_edit",
     "games_delete",
     "games_bulk_delete",
+    "games_deck_bracket_update",
     "game_detail",
 ]

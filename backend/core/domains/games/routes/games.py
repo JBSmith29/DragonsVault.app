@@ -50,6 +50,12 @@ def games_manual_deck_update():
     return game_service.games_manual_deck_update()
 
 
+@views.route("/games/deck-bracket/update", methods=["POST"])
+@login_required
+def games_deck_bracket_update():
+    return game_service.games_deck_bracket_update()
+
+
 @views.route("/games/export")
 @login_required
 def games_export():
@@ -140,6 +146,7 @@ __all__ = [
     "games_admin",
     "games_overview",
     "games_manual_deck_update",
+    "games_deck_bracket_update",
     "games_export",
     "games_import",
     "games_import_template",

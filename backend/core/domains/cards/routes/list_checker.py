@@ -12,7 +12,7 @@ from flask_login import current_user
 from sqlalchemy import func, or_
 
 from extensions import db
-from models import Card, Folder, FolderShare, UserFriend
+from models import Card, Folder, FolderShare, User, UserFriend
 from core.domains.cards.services import scryfall_cache
 from core.domains.decks.services import deck_utils
 
@@ -145,6 +145,8 @@ def _compute_list_checker(pasted: str):
             Card,
             Folder.id.label("folder_id"),
             Folder.name.label("folder_name"),
+            Folder.owner_user_id.label("owner_user_id"),
+            Folder.owner.label("owner_name"),
         )
         .join(Folder, Folder.id == Card.folder_id, isouter=True)
         .filter(func.lower(Card.name).in_(keys))
@@ -158,30 +160,86 @@ def _compute_list_checker(pasted: str):
     collection_ids, _, _ = _collection_metadata()
     collection_id_set = set(collection_ids)
 
-    def _rank_folder(fid, fname=None):
-        if fname is None:
-            fname = fid
-            fid = None
-        lower = (fname or "").strip().lower()
+    folder_meta = {}
+    owner_user_ids = set()
+    for _card, folder_id, folder_name, owner_user_id, owner_name in rows:
+        if folder_id is None:
+            continue
+        if folder_id not in folder_meta:
+            folder_meta[folder_id] = {
+                "name": folder_name or "",
+                "owner_user_id": owner_user_id,
+                "owner": owner_name or "",
+            }
+        if owner_user_id:
+            owner_user_ids.add(owner_user_id)
+
+    owner_label_map = {}
+    if owner_user_ids:
+        owner_rows = (
+            db.session.query(User.id, User.display_name, User.username, User.email)
+            .filter(User.id.in_(owner_user_ids))
+            .all()
+        )
+        for uid, display_name, username, email in owner_rows:
+            label = display_name or username or email
+            if label:
+                owner_label_map[uid] = label
+
+    def _folder_label(fid):
+        meta = folder_meta.get(fid) or {}
+        name = (meta.get("name") or "").strip()
+        if not name:
+            return ""
+        owner_id = meta.get("owner_user_id")
+        owner_label = owner_label_map.get(owner_id) or (meta.get("owner") or "").strip()
+        if owner_id and current_user.is_authenticated and owner_id == current_user.id:
+            return name
+        if owner_label:
+            return f"{owner_label}: {name}"
+        return name
+
+    def _label_for_folder(fid):
+        label = _folder_label(fid)
+        if label:
+            return label
+        meta = folder_meta.get(fid) or {}
+        name = (meta.get("name") or "").strip()
+        if name:
+            return name
+        return str(fid) if fid is not None else ""
+
+    def _rank_folder(fid, label):
+        lower = (label or "").strip().lower()
         return (
             0 if (fid in collection_id_set) else 1,
             lower,
         )
 
+    def _format_breakdown(breakdown):
+        items = []
+        for fid, cnt in breakdown.items():
+            label = _label_for_folder(fid)
+            if not label:
+                continue
+            items.append((fid, label, cnt))
+        items.sort(key=lambda row: _rank_folder(row[0], row[1]))
+        return [(label, cnt) for _, label, cnt in items]
+
     avail_ids = _accessible_folder_ids()
 
     best_card_for_name = {}
-    for card, folder_id, folder_name in rows:
-        if folder_name:
+    for card, folder_id, folder_name, owner_user_id, owner_name in rows:
+        if folder_id and folder_name:
             nkey = _normalize_name(card.name)
-            per_folder_counts[nkey][folder_name] += 1
+            per_folder_counts[nkey][folder_id] += 1
             is_collection_folder = bool(folder_id and folder_id in collection_id_set)
             if is_collection_folder:
-                collection_counts[nkey][folder_name] += 1
+                collection_counts[nkey][folder_id] += 1
                 if folder_id:
-                    available_per_folder_counts[nkey][folder_name] += 1
+                    available_per_folder_counts[nkey][folder_id] += 1
             else:
-                deck_counts[nkey][folder_name] += 1
+                deck_counts[nkey][folder_id] += 1
             cand = (_rank_folder(folder_id, folder_name), card)
             prev = best_card_for_name.get(nkey)
             if prev is None or cand[0] < prev[0]:
@@ -231,15 +289,15 @@ def _compute_list_checker(pasted: str):
                 .all()
             )
             for card, folder_id, folder_name in add_rows:
-                if folder_name:
-                    per_folder_counts[nkey][folder_name] += 1
+                if folder_id and folder_name:
+                    per_folder_counts[nkey][folder_id] += 1
                     is_collection_folder = bool(folder_id and folder_id in collection_id_set)
                     if is_collection_folder:
-                        collection_counts[nkey][folder_name] += 1
+                        collection_counts[nkey][folder_id] += 1
                         if folder_id:
-                            available_per_folder_counts[nkey][folder_name] += 1
+                            available_per_folder_counts[nkey][folder_id] += 1
                     else:
-                        deck_counts[nkey][folder_name] += 1
+                        deck_counts[nkey][folder_id] += 1
             add_rows2 = (
                 db.session.query(Card.folder_id)
                 .join(Folder, Folder.id == Card.folder_id, isouter=True)
@@ -268,15 +326,15 @@ def _compute_list_checker(pasted: str):
             .all()
         )
         for card, folder_id, folder_name in add_rows:
-            if folder_name:
-                per_folder_counts[nkey][folder_name] += 1
+            if folder_id and folder_name:
+                per_folder_counts[nkey][folder_id] += 1
                 is_collection_folder = bool(folder_id and folder_id in collection_id_set)
                 if is_collection_folder:
-                    collection_counts[nkey][folder_name] += 1
+                    collection_counts[nkey][folder_id] += 1
                     if folder_id:
-                        available_per_folder_counts[nkey][folder_name] += 1
+                        available_per_folder_counts[nkey][folder_id] += 1
                 else:
-                    deck_counts[nkey][folder_name] += 1
+                    deck_counts[nkey][folder_id] += 1
 
         add_rows2 = (
             db.session.query(Card.folder_id)
@@ -332,6 +390,39 @@ def _compute_list_checker(pasted: str):
         name_to_sid = {}
         face_to_sid = {}
 
+    folder_ids = set()
+    for breakdown in (per_folder_counts, collection_counts, deck_counts, available_per_folder_counts):
+        for counts in breakdown.values():
+            folder_ids.update(fid for fid in counts if fid is not None)
+
+    missing_ids = [fid for fid in folder_ids if fid not in folder_meta]
+    if missing_ids:
+        folder_rows = (
+            db.session.query(
+                Folder.id,
+                Folder.name,
+                Folder.owner_user_id,
+                Folder.owner,
+                User.display_name,
+                User.username,
+                User.email,
+            )
+            .outerjoin(User, User.id == Folder.owner_user_id)
+            .filter(Folder.id.in_(missing_ids))
+            .all()
+        )
+        for fid, name, owner_user_id, owner, display_name, username, email in folder_rows:
+            if fid not in folder_meta:
+                folder_meta[fid] = {
+                    "name": name or "",
+                    "owner_user_id": owner_user_id,
+                    "owner": owner or "",
+                }
+            if owner_user_id and owner_user_id not in owner_label_map:
+                label = display_name or username or email
+                if label:
+                    owner_label_map[owner_user_id] = label
+
     results = []
     have_all = partial = missing = 0
     for nkey, spec in want.items():
@@ -360,12 +451,10 @@ def _compute_list_checker(pasted: str):
                 status = "partial"
                 partial += 1
 
-        folder_breakdown = sorted(per_folder_counts[nkey].items(), key=lambda kv: _rank_folder(kv[0]))
-        collection_breakdown = sorted(collection_counts[nkey].items(), key=lambda kv: _rank_folder(kv[0]))
-        deck_breakdown = sorted(deck_counts[nkey].items(), key=lambda kv: _rank_folder(kv[0]))
-        available_breakdown = sorted(
-            available_per_folder_counts[nkey].items(), key=lambda kv: _rank_folder(kv[0])
-        )
+        folder_breakdown = _format_breakdown(per_folder_counts[nkey])
+        collection_breakdown = _format_breakdown(collection_counts[nkey])
+        deck_breakdown = _format_breakdown(deck_counts[nkey])
+        available_breakdown = _format_breakdown(available_per_folder_counts[nkey])
 
         rep_card = rep_card_map.get(nkey)
         rep_card_id = int(rep_card.id) if rep_card else None

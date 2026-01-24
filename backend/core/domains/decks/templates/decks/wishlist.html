@@ -83,6 +83,10 @@
 {% set ord_cnt = ordered_count if ordered_count is defined else (items|selectattr('status','equalto','ordered')|list|length) %}
 {% set fetch_cnt = to_fetch_count if to_fetch_count is defined else (items|selectattr('status','equalto','to_fetch')|list|length) %}
 {% set removed_cnt = removed if removed is defined else (items|selectattr('status','equalto','removed')|list|length) %}
+{% set folder_owner_labels = folder_owner_labels if folder_owner_labels is defined else {} %}
+{% set sort = sort if sort is defined else (request.args.get('sort') or 'name') %}
+{% set direction = direction if direction is defined else (request.args.get('dir') or 'asc') %}
+{% set status_filter = (status_filter if status_filter is defined else (request.args.get('status') or 'all'))|lower %}
 
 <!-- Summary + actions -->
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -109,12 +113,12 @@
 <!-- Filters + search -->
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
   <ul class="nav nav-pills small" id="wl-filters">
-    <li class="nav-item"><a class="nav-link active" href="#" data-filter="all">All</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-filter="open">Open</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-filter="to_fetch">To Fetch</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-filter="ordered">Ordered</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-filter="acquired">Acquired</a></li>
-    <li class="nav-item"><a class="nav-link" href="#" data-filter="removed">Removed</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'all' %}active{% endif %}" href="{{ url_for('views.wishlist', status=None, sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="all">All</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'open' %}active{% endif %}" href="{{ url_for('views.wishlist', status='open', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="open">Open</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'to_fetch' %}active{% endif %}" href="{{ url_for('views.wishlist', status='to_fetch', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="to_fetch">To Fetch</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'ordered' %}active{% endif %}" href="{{ url_for('views.wishlist', status='ordered', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="ordered">Ordered</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'acquired' %}active{% endif %}" href="{{ url_for('views.wishlist', status='acquired', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="acquired">Acquired</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'removed' %}active{% endif %}" href="{{ url_for('views.wishlist', status='removed', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="removed">Removed</a></li>
   </ul>
 
   <div class="input-group input-group-sm" style="max-width: 360px;">
@@ -152,19 +156,31 @@
       </nav>
     {% endif %}
   </div>
+
+    {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
+  {% set color_dir = 'asc' if sort!='color' or direction=='desc' else 'desc' %}
+  {% set location_dir = 'asc' if sort!='location' or direction=='desc' else 'desc' %}
+  {% set requested_dir = 'asc' if sort!='requested' or direction=='desc' else 'desc' %}
+  {% set missing_dir = 'asc' if sort!='missing' or direction=='desc' else 'desc' %}
+  {% set status_dir = 'asc' if sort!='status' or direction=='desc' else 'desc' %}
+  {% set order_dir = 'asc' if sort!='order' or direction=='desc' else 'desc' %}
+  {% macro sort_url(field, dir_value) -%}
+    {{ url_for('views.wishlist', status=status_filter if status_filter != 'all' else None, sort=field, dir=dir_value, per=per_page, page=1) }}
+  {%- endmacro %}
+
   <table class="table table-sm align-middle table-hover cards-table" id="wl-table">
     <thead>
       <tr>
         <th style="width:36px;" class="text-center">
           <input class="form-check-input" type="checkbox" id="wlSelectAll" aria-label="Select all wishlist items">
         </th>
-        <th style="min-width:260px;">Card</th>
-        <th class="text-center" style="width:120px;">Color ID</th>
-        <th style="width:220px;">Location</th>
-        <th class="text-center" style="width:120px;">Requested</th>
-        <th class="text-center" style="width:110px;">Missing</th>
-        <th style="width:120px;">Status</th>
-        <th style="width:240px;">Order</th>
+        <th style="min-width:260px;"><a href="{{ sort_url('name', name_dir) }}">Card</a></th>
+        <th class="text-center" style="width:120px;"><a href="{{ sort_url('color', color_dir) }}">Color ID</a></th>
+        <th style="width:220px;"><a href="{{ sort_url('location', location_dir) }}">Location</a></th>
+        <th class="text-center" style="width:120px;"><a href="{{ sort_url('requested', requested_dir) }}">Requested</a></th>
+        <th class="text-center" style="width:110px;"><a href="{{ sort_url('missing', missing_dir) }}">Missing</a></th>
+        <th style="width:120px;"><a href="{{ sort_url('status', status_dir) }}">Status</a></th>
+        <th style="width:240px;"><a href="{{ sort_url('order', order_dir) }}">Order</a></th>
         <th style="width:260px;">Actions</th>
       </tr>
     </thead>
@@ -213,13 +229,26 @@
           {% if folder_list %}
             <div class="d-flex flex-wrap gap-1">
               {% for entry in folder_list %}
+                {% set owner_prefix = folder_owner_labels.get(entry.name|lower) %}
+                {% set entry_label = owner_prefix ~ ': ' ~ entry.name if owner_prefix else entry.name %}
                 <span class="badge bg-secondary-subtle text-secondary" data-folder-badge>
-                  {{ entry.name }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
+                  {{ entry_label }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
                 </span>
               {% endfor %}
             </div>
           {% elif it.card and it.card.folder %}
-            <span class="badge bg-secondary-subtle text-secondary">{{ it.card.folder.name }}</span>
+            {% set owner_label = None %}
+            {% if it.card.folder.owner_user %}
+              {% set owner_label = it.card.folder.owner_user.display_name or it.card.folder.owner_user.username or it.card.folder.owner_user.email %}
+            {% endif %}
+            {% if not owner_label %}
+              {% set owner_label = it.card.folder.owner %}
+            {% endif %}
+            {% if owner_label and it.card.folder.owner_user_id and current_user.is_authenticated and it.card.folder.owner_user_id != current_user.id %}
+              <span class="badge bg-secondary-subtle text-secondary">{{ owner_label }}: {{ it.card.folder.name }}</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary">{{ it.card.folder.name }}</span>
+            {% endif %}
           {% else %}
             <span class="text-muted">&mdash;</span>
           {% endif %}
@@ -383,14 +412,27 @@
       {% if folder_list %}
       <div class="text-muted small">Location:
         {% for entry in folder_list %}
+          {% set owner_prefix = folder_owner_labels.get(entry.name|lower) %}
+          {% set entry_label = owner_prefix ~ ': ' ~ entry.name if owner_prefix else entry.name %}
           <span class="badge bg-secondary-subtle text-secondary">
-            {{ entry.name }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
+            {{ entry_label }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
           </span>
         {% endfor %}
       </div>
       {% elif it.card and it.card.folder %}
       <div class="text-muted small">Location:
-        <span class="badge bg-secondary-subtle text-secondary">{{ it.card.folder.name }}</span>
+        {% set owner_label = None %}
+        {% if it.card.folder.owner_user %}
+          {% set owner_label = it.card.folder.owner_user.display_name or it.card.folder.owner_user.username or it.card.folder.owner_user.email %}
+        {% endif %}
+        {% if not owner_label %}
+          {% set owner_label = it.card.folder.owner %}
+        {% endif %}
+        {% if owner_label and it.card.folder.owner_user_id and current_user.is_authenticated and it.card.folder.owner_user_id != current_user.id %}
+          <span class="badge bg-secondary-subtle text-secondary">{{ owner_label }}: {{ it.card.folder.name }}</span>
+        {% else %}
+          <span class="badge bg-secondary-subtle text-secondary">{{ it.card.folder.name }}</span>
+        {% endif %}
       </div>
       {% endif %}
       {% set st = it.status or 'open' %}
@@ -578,6 +620,10 @@
     filters.addEventListener('click', (e) => {
       const a = e.target.closest('a[data-filter]');
       if (!a) return;
+      const href = a.getAttribute('href') || '';
+      if (href && href !== '#') {
+        return;
+      }
       e.preventDefault();
       filters.querySelectorAll('.nav-link').forEach(x => x.classList.remove('active'));
       a.classList.add('active');
@@ -801,7 +847,17 @@
 
   async function postAction(url, payload) {
     const body = new URLSearchParams(payload || {});
-    const res = await fetch(url, { method:'POST', body });
+    const headers = { ...(window.csrfHeader || {}) };
+    if (!headers['X-CSRFToken']) {
+      const token = document.querySelector('meta[name="csrf-token"]')?.content;
+      if (token) headers['X-CSRFToken'] = token;
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+      credentials: 'same-origin',
+    });
     return res.ok;
   }
 

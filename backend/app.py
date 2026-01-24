@@ -777,7 +777,7 @@ def create_app():
         Talisman(
             app,
             content_security_policy=csp,
-            content_security_policy_nonce_in=["script-src", "script-src-elem"],
+            content_security_policy_nonce_in=["script-src"],
             force_https=app.config.get("TALISMAN_FORCE_HTTPS", not app.debug),
             session_cookie_secure=app.config.get("SESSION_COOKIE_SECURE", True),
             session_cookie_samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),

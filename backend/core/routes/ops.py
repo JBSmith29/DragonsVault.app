@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from functools import lru_cache
+from ipaddress import ip_address, ip_network
 import os
 import time
 from pathlib import Path
@@ -21,15 +23,79 @@ from shared.events.live_updates import latest_job_events
 from .base import views
 
 
+_DEFAULT_OPS_ALLOWLIST = (
+    "127.0.0.0/8",
+    "::1/128",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+)
+
+
+@lru_cache(maxsize=1)
+def _ops_allowlist() -> tuple:
+    raw = os.getenv("OPS_HEALTHCHECK_ALLOWLIST")
+    if raw is None:
+        entries = list(_DEFAULT_OPS_ALLOWLIST)
+    else:
+        entries = [item.strip() for item in raw.split(",") if item.strip()]
+    networks = []
+    for entry in entries:
+        try:
+            networks.append(ip_network(entry, strict=False))
+        except ValueError:
+            continue
+    return tuple(networks)
+
+
+def _client_ip() -> str | None:
+    if request.remote_addr:
+        return request.remote_addr
+    if request.access_route:
+        return request.access_route[0]
+    return None
+
+
+def _ops_authorized() -> bool:
+    token = os.getenv("OPS_HEALTHCHECK_TOKEN")
+    if token and request.headers.get("X-Ops-Token") == token:
+        return True
+    client_ip = _client_ip()
+    if not client_ip:
+        return False
+    try:
+        ip_obj = ip_address(client_ip)
+    except ValueError:
+        return False
+    for network in _ops_allowlist():
+        if ip_obj in network:
+            return True
+    return False
+
+
+def _ops_forbidden():
+    payload = {"error": "forbidden", "detail": "ops endpoints are restricted"}
+    wants_json = request.path.startswith("/api/") or (
+        request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/plain"]
+    )
+    if wants_json:
+        return jsonify(payload), 403
+    return Response("forbidden", status=403, content_type="text/plain")
+
+
 @views.route("/healthz", methods=["GET"])
 def healthz():
     """Lightweight health probe that requires no external dependencies."""
+    if not _ops_authorized():
+        return _ops_forbidden()
     return jsonify(status="ok", service="DragonsVault"), 200
 
 
 @views.route("/readyz", methods=["GET"])
 def readyz():
     """Readiness probe that verifies database connectivity."""
+    if not _ops_authorized():
+        return _ops_forbidden()
     try:
         db.session.execute(text("SELECT 1"))
         db.session.commit()
@@ -124,6 +190,8 @@ def _redis_readiness() -> dict[str, object]:
 @views.route("/ops/health", methods=["GET"])
 @views.route("/api/ops/health", methods=["GET"])
 def overall_health():
+    if not _ops_authorized():
+        return _ops_forbidden()
     raw_timeout = os.getenv("OPS_HEALTHCHECK_TIMEOUT", "2.0")
     try:
         timeout = float(raw_timeout)
@@ -222,6 +290,8 @@ def _wants_json() -> bool:
 @views.route("/metrics", methods=["GET"])
 def metrics():
     """Expose application metrics for dashboards/alerts."""
+    if not _ops_authorized():
+        return _ops_forbidden()
     payload = _metrics_snapshot()
     if _wants_json():
         return jsonify(payload)

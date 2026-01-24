@@ -6,14 +6,16 @@ import csv
 import json
 import re
 from io import StringIO
+from collections import defaultdict
 from math import ceil
 
 from flask import abort, flash, jsonify, make_response, redirect, render_template, request, url_for, current_app
-from sqlalchemy import func
+from flask_login import current_user
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import Card, WishlistItem
+from models import Card, Folder, FolderShare, UserFriend, WishlistItem
 from core.domains.cards.services import scryfall_cache as sc
 from core.shared.database import get_or_404
 
@@ -274,10 +276,49 @@ def wishlist():
     page = max(page, 1)
     per = max(1, min(per, 500))
 
+    sort = (request.args.get("sort") or "name").strip().lower()
+    direction = (request.args.get("dir") or "asc").strip().lower()
+    if direction not in {"asc", "desc"}:
+        direction = "asc"
+    reverse = direction == "desc"
+    allowed_sorts = {"name", "color", "location", "requested", "missing", "status", "order"}
+    if sort not in allowed_sorts:
+        sort = "name"
+
+    status_filter = (request.args.get("status") or "all").strip().lower()
+    if status_filter not in ALLOWED_WISHLIST_STATUSES and status_filter != "all":
+        status_filter = "all"
+
     base_query = (
-        WishlistItem.query.options(selectinload(WishlistItem.card).selectinload(Card.folder))
-        .order_by(WishlistItem.status.asc(), WishlistItem.created_at.desc(), WishlistItem.name.asc())
+        WishlistItem.query.options(
+            selectinload(WishlistItem.card).selectinload(Card.folder).selectinload(Folder.owner_user)
+        )
     )
+    if sort in {"color", "location"}:
+        base_query = base_query.outerjoin(Card, WishlistItem.card_id == Card.id).outerjoin(Folder, Card.folder_id == Folder.id)
+
+    if status_filter != "all":
+        base_query = base_query.filter(WishlistItem.status == status_filter)
+
+    if sort == "name":
+        order_col = func.lower(WishlistItem.name)
+    elif sort == "requested":
+        order_col = func.coalesce(WishlistItem.requested_qty, 0)
+    elif sort == "missing":
+        order_col = func.coalesce(WishlistItem.missing_qty, 0)
+    elif sort == "status":
+        order_col = func.lower(WishlistItem.status)
+    elif sort == "order":
+        order_col = func.lower(func.coalesce(WishlistItem.order_ref, ""))
+    elif sort == "location":
+        order_col = func.lower(func.coalesce(func.nullif(WishlistItem.source_folders, ""), Folder.name, ""))
+    elif sort == "color":
+        order_col = func.lower(func.coalesce(Card.color_identity, Card.colors, ""))
+    else:
+        order_col = func.lower(WishlistItem.name)
+
+    order_expr = order_col.desc() if reverse else order_col.asc()
+    base_query = base_query.order_by(order_expr, func.lower(WishlistItem.name), WishlistItem.id.asc())
     total_items = base_query.order_by(None).count()
     pages = max(1, ceil(total_items / per)) if per else 1
     page = min(page, pages) if total_items else 1
@@ -287,6 +328,66 @@ def wishlist():
     items = base_query.limit(per).offset((page - 1) * per).all()
     for item in items:
         item.display_color_identity = _color_identity_for_item(item)
+
+    folder_owner_labels = {}
+    folder_name_keys = set()
+    for item in items:
+        for entry in item.source_folders_list:
+            name = (entry.get("name") or "").strip()
+            if not name:
+                continue
+            if ": " in name:
+                continue
+            folder_name_keys.add(name)
+
+    if folder_name_keys:
+        lower_names = {name.lower() for name in folder_name_keys if name}
+        folder_query = (
+            Folder.query.options(selectinload(Folder.owner_user))
+            .filter(func.lower(Folder.name).in_(lower_names))
+        )
+        if current_user.is_authenticated:
+            friend_ids = (
+                db.session.query(UserFriend.friend_user_id)
+                .filter(UserFriend.user_id == current_user.id)
+            )
+            shared_ids = (
+                db.session.query(FolderShare.folder_id)
+                .filter(FolderShare.shared_user_id == current_user.id)
+            )
+            folder_query = folder_query.filter(
+                or_(
+                    Folder.owner_user_id == current_user.id,
+                    Folder.id.in_(shared_ids),
+                    Folder.owner_user_id.in_(friend_ids),
+                    Folder.is_public.is_(True),
+                )
+            )
+        else:
+            folder_query = folder_query.filter(Folder.is_public.is_(True))
+
+        name_to_owners = defaultdict(set)
+        for folder in folder_query.all():
+            name = (folder.name or "").strip()
+            if not name:
+                continue
+            name_key = name.lower()
+            owner_label = None
+            if folder.owner_user:
+                owner_label = folder.owner_user.display_name or folder.owner_user.username or folder.owner_user.email
+            if not owner_label:
+                owner_label = folder.owner
+            name_to_owners[name_key].add((folder.owner_user_id, owner_label or ""))
+
+        for name_key, owners in name_to_owners.items():
+            owners = {entry for entry in owners if entry[1]}
+            if len(owners) != 1:
+                continue
+            owner_id, owner_label = next(iter(owners))
+            if current_user.is_authenticated and owner_id == current_user.id:
+                continue
+            if owner_label:
+                folder_owner_labels[name_key] = owner_label
 
     def _url_with(page_num: int):
         args = request.args.to_dict(flat=False)
@@ -323,6 +424,10 @@ def wishlist():
         acquired=acquired_count,
         removed=removed_count,
         total=total_items,
+        folder_owner_labels=folder_owner_labels,
+        sort=sort,
+        direction=direction,
+        status_filter=status_filter,
     )
 
 

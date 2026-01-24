@@ -7,18 +7,22 @@
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
       <h1 class="h2 mb-1">Opening Hand Simulator</h1>
-      <p class="text-muted mb-0">Pick a deck to shuffle, draw, and play out your opening hand on a dedicated board.</p>
+      <p class="text-muted mb-0">Pick a saved deck or proxy build to shuffle, draw, and play out your opening hand on a dedicated board.</p>
     </div>
   </div>
 
-  <form method="post" action="{{ url_for('views.opening_hand_play') }}" class="row g-4" id="openingHandStartForm">
+  <form method="post"
+        action="{{ url_for('views.opening_hand_play') }}"
+        class="row g-4"
+        id="openingHandStartForm"
+        data-hx-boost="false">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="col-12 col-lg-5">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title mb-2">Use a saved deck</h5>
-          <p class="text-muted small mb-3">Choose one of your decks to build the draw pile automatically.</p>
+          <h5 class="card-title mb-2">Use a saved deck or proxy build</h5>
+          <p class="text-muted small mb-3">Choose one of your decks or proxy builds to build the draw pile automatically.</p>
 
           <label class="form-label small text-muted">Deck</label>
           <div class="dropdown dv-select w-100" data-dv-select="opening-deck">
@@ -28,6 +32,13 @@
               <i class="bi bi-chevron-down"></i>
             </button>
             <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="openingHandDeckToggle">
+              <li class="dv-select-search-wrapper">
+                <input type="text"
+                       class="form-control form-control-sm dv-select-search"
+                       placeholder="Search decks"
+                       autocomplete="off"
+                       data-dv-select-search>
+              </li>
               <li>
                 <button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Select a deck">Select a deck</button>
               </li>
@@ -38,7 +49,7 @@
               {% endfor %}
             </ul>
           </div>
-          <div class="form-text">Commanders stored with the deck are automatically excluded.</div>
+          <div class="form-text">Commanders stored with the deck or build are automatically excluded.</div>
         </div>
       </div>
     </div>
@@ -69,90 +80,5 @@
   </form>
 </div>
 
-<script nonce="{{ csp_nonce() }}">
-(function () {
-  const deckSelectWrapper = document.querySelector('[data-dv-select="opening-deck"]');
-  const deckSelectInput = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-input]') : null;
-  const deckSelectLabel = deckSelectWrapper ? deckSelectWrapper.querySelector('[data-dv-select-label]') : null;
-  const deckOptionButtons = deckSelectWrapper ? Array.from(deckSelectWrapper.querySelectorAll('[data-dv-select-option]')) : [];
-  const deckListInput = document.getElementById('openingHandDeckList');
-  const commanderInput = document.getElementById('openingHandCommander');
-  const startBtn = document.getElementById('openingHandStartBtn');
-  const helpText = document.getElementById('openingHandHelp');
-
-  function selectionState() {
-    const deckId = deckSelectInput ? (deckSelectInput.value || '').trim() : '';
-    const deckList = deckListInput ? (deckListInput.value || '').trim() : '';
-    return {
-      deckId,
-      deckList,
-      hasSelection: Boolean(deckId || deckList),
-    };
-  }
-
-  function setHelpText(message) {
-    if (helpText) {
-      helpText.textContent = message;
-    }
-  }
-
-  function updateStartState() {
-    const state = selectionState();
-    if (startBtn) {
-      startBtn.disabled = !state.hasSelection;
-    }
-    if (!state.hasSelection) {
-      setHelpText('Select a deck or paste a list to continue.');
-    } else if (state.deckId) {
-      setHelpText('Using a saved deck.');
-    } else {
-      setHelpText('Using a pasted list.');
-    }
-  }
-
-  function clearDeckSelect() {
-    if (!deckSelectWrapper) {
-      return;
-    }
-    const placeholder = 'Select a deck';
-    deckOptionButtons.forEach((btn) => {
-      btn.classList.toggle('active', (btn.dataset.value || '') === '');
-    });
-    if (deckSelectInput) {
-      deckSelectInput.value = '';
-      deckSelectInput.dispatchEvent(new Event('input', { bubbles: true }));
-      deckSelectInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (deckSelectLabel) {
-      deckSelectLabel.textContent = placeholder;
-    }
-    deckSelectWrapper.dataset.dvSelectValue = '';
-  }
-
-  if (deckSelectWrapper) {
-    deckSelectWrapper.addEventListener('dv-select:ready', updateStartState);
-    deckSelectWrapper.addEventListener('dv-select:change', function (event) {
-      const value = event.detail && event.detail.value ? event.detail.value : '';
-      if (value && deckListInput && deckListInput.value.trim()) {
-        deckListInput.value = '';
-        if (commanderInput) {
-          commanderInput.value = '';
-        }
-      }
-      updateStartState();
-    });
-  }
-
-  if (deckListInput) {
-    deckListInput.addEventListener('input', function () {
-      if (deckListInput.value.trim()) {
-        clearDeckSelect();
-      }
-      updateStartState();
-    });
-  }
-
-  updateStartState();
-})();
-</script>
+<script src="{{ static_url('js/opening-hand-landing.js') }}" defer></script>
 {% endblock %}

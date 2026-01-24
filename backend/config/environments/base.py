@@ -66,8 +66,7 @@ class BaseConfig:
     CONTENT_SECURITY_POLICY = {
         "default-src": "'self'",
         "img-src": "'self' data: https://c1.scryfall.com https://cards.scryfall.io https://svgs.scryfall.io",
-        "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://instant.page https://js.hcaptcha.com",
-        "script-src-elem": "'self' https://cdn.jsdelivr.net https://unpkg.com https://instant.page https://js.hcaptcha.com",
+        "script-src": "'self' https://cdn.jsdelivr.net https://unpkg.com https://instant.page https://js.hcaptcha.com",
         "script-src-attr": "'unsafe-inline'",
         "style-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net",
         "connect-src": "'self' https://api.scryfall.com https://js.hcaptcha.com",

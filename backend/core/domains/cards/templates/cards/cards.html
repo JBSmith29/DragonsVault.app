@@ -904,8 +904,17 @@
       }, 150);
     };
 
-    form.querySelectorAll('input[name="type"], input[name="color"]').forEach((input) => {
+    const colorExact = () => !!form.querySelector('input[name="color_mode"][value="exact"]:checked');
+
+    form.querySelectorAll('input[name="type"]').forEach((input) => {
       input.addEventListener('change', scheduleSubmit);
+    });
+
+    form.querySelectorAll('input[name="color"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (colorExact()) return;
+        scheduleSubmit();
+      });
     });
   }
 

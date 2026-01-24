@@ -617,7 +617,7 @@
               {% endfor %}
             </ul>
           </div>
-          <div class="form-text">Choose one of your saved decks to use its draw pile. Commanders stored with the deck are automatically excluded.</div>
+          <div class="form-text">Choose one of your saved decks or proxy builds to use its draw pile. Commanders stored with the deck or build are automatically excluded.</div>
         </div>
         <div class="d-flex flex-wrap align-items-center gap-3">
           <button class="btn btn-outline-theme" type="button" data-bs-toggle="modal" data-bs-target="#deckPickerModal" id="deckListBtn">
@@ -2885,10 +2885,17 @@
           credentials: 'same-origin',
           body: JSON.stringify(payload)
         });
-        const data = await response.json();
 
-        if (!response.ok || !data.ok) {
-          showMessage(data.error || 'Unable to shuffle deck.', 'danger');
+        let data = null;
+        try {
+          data = await response.json();
+        } catch (_) {
+          data = null;
+        }
+
+        if (!response.ok || !data || !data.ok) {
+          const detail = (data && data.error) ? data.error : `Unable to shuffle deck (HTTP ${response.status}).`;
+          showMessage(detail, 'danger');
           return;
         }
 
@@ -2949,18 +2956,25 @@
           credentials: 'same-origin',
           body: JSON.stringify(payload)
         });
-        const data = await response.json();
 
-        if (!response.ok || !data.ok) {
-          showMessage(data.error || 'Unable to draw.', 'warning');
-          if (data.state && stateInput) {
+        let data = null;
+        try {
+          data = await response.json();
+        } catch (_) {
+          data = null;
+        }
+
+        if (!response.ok || !data || !data.ok) {
+          const detail = (data && data.error) ? data.error : `Unable to draw (HTTP ${response.status}).`;
+          showMessage(detail, 'warning');
+          if (data && data.state && stateInput) {
             stateInput.value = data.state;
           }
-          if (typeof data.remaining === 'number' && handRemaining) {
+          if (data && typeof data.remaining === 'number' && handRemaining) {
             handRemaining.hidden = false;
             handRemaining.textContent = data.remaining + ' cards remaining';
           }
-          drawBtn.disabled = data.remaining === 0;
+          drawBtn.disabled = !!(data && data.remaining === 0);
           return;
         }
 
