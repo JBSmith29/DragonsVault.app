@@ -83,7 +83,6 @@
 {% set ord_cnt = ordered_count if ordered_count is defined else (items|selectattr('status','equalto','ordered')|list|length) %}
 {% set fetch_cnt = to_fetch_count if to_fetch_count is defined else (items|selectattr('status','equalto','to_fetch')|list|length) %}
 {% set removed_cnt = removed if removed is defined else (items|selectattr('status','equalto','removed')|list|length) %}
-{% set folder_owner_labels = folder_owner_labels if folder_owner_labels is defined else {} %}
 {% set sort = sort if sort is defined else (request.args.get('sort') or 'name') %}
 {% set direction = direction if direction is defined else (request.args.get('dir') or 'asc') %}
 {% set status_filter = (status_filter if status_filter is defined else (request.args.get('status') or 'all'))|lower %}
@@ -225,30 +224,16 @@
         </td>
 
         <td>
-          {% set folder_list = it.source_folders_list %}
+          {% set folder_list = it.display_source_folders if it.display_source_folders is defined else it.source_folders_list %}
           {% if folder_list %}
             <div class="d-flex flex-wrap gap-1">
               {% for entry in folder_list %}
-                {% set owner_prefix = folder_owner_labels.get(entry.name|lower) %}
-                {% set entry_label = owner_prefix ~ ': ' ~ entry.name if owner_prefix else entry.name %}
+                {% set entry_label = entry.label if entry.label is defined else entry.name %}
                 <span class="badge bg-secondary-subtle text-secondary" data-folder-badge>
                   {{ entry_label }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
                 </span>
               {% endfor %}
             </div>
-          {% elif it.card and it.card.folder %}
-            {% set owner_label = None %}
-            {% if it.card.folder.owner_user %}
-              {% set owner_label = it.card.folder.owner_user.display_name or it.card.folder.owner_user.username or it.card.folder.owner_user.email %}
-            {% endif %}
-            {% if not owner_label %}
-              {% set owner_label = it.card.folder.owner %}
-            {% endif %}
-            {% if owner_label and it.card.folder.owner_user_id and current_user.is_authenticated and it.card.folder.owner_user_id != current_user.id %}
-              <span class="badge bg-secondary-subtle text-secondary">{{ owner_label }}: {{ it.card.folder.name }}</span>
-            {% else %}
-              <span class="badge bg-secondary-subtle text-secondary">{{ it.card.folder.name }}</span>
-            {% endif %}
           {% else %}
             <span class="text-muted">&mdash;</span>
           {% endif %}
@@ -408,31 +393,15 @@
           {% include "includes/_color_identity.html" %}
         </div>
       {% endif %}
-      {% set folder_list = it.source_folders_list %}
+      {% set folder_list = it.display_source_folders if it.display_source_folders is defined else it.source_folders_list %}
       {% if folder_list %}
       <div class="text-muted small">Location:
         {% for entry in folder_list %}
-          {% set owner_prefix = folder_owner_labels.get(entry.name|lower) %}
-          {% set entry_label = owner_prefix ~ ': ' ~ entry.name if owner_prefix else entry.name %}
+          {% set entry_label = entry.label if entry.label is defined else entry.name %}
           <span class="badge bg-secondary-subtle text-secondary">
             {{ entry_label }}{% if entry.qty is not none %} x{{ entry.qty }}{% endif %}
           </span>
         {% endfor %}
-      </div>
-      {% elif it.card and it.card.folder %}
-      <div class="text-muted small">Location:
-        {% set owner_label = None %}
-        {% if it.card.folder.owner_user %}
-          {% set owner_label = it.card.folder.owner_user.display_name or it.card.folder.owner_user.username or it.card.folder.owner_user.email %}
-        {% endif %}
-        {% if not owner_label %}
-          {% set owner_label = it.card.folder.owner %}
-        {% endif %}
-        {% if owner_label and it.card.folder.owner_user_id and current_user.is_authenticated and it.card.folder.owner_user_id != current_user.id %}
-          <span class="badge bg-secondary-subtle text-secondary">{{ owner_label }}: {{ it.card.folder.name }}</span>
-        {% else %}
-          <span class="badge bg-secondary-subtle text-secondary">{{ it.card.folder.name }}</span>
-        {% endif %}
       </div>
       {% endif %}
       {% set st = it.status or 'open' %}

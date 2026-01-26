@@ -16,7 +16,7 @@ from models import Card, Folder, FolderShare, User, UserFriend
 from core.domains.cards.services import scryfall_cache
 from core.domains.decks.services import deck_utils
 
-from core.routes.base import _collection_metadata, _normalize_name, views
+from core.routes.base import _collection_rows_with_fallback, _normalize_name, views
 
 BASIC_LAND_SLUGS = {_normalize_name(name) for name in deck_utils.BASIC_LANDS}
 
@@ -157,7 +157,20 @@ def _compute_list_checker(pasted: str):
     collection_counts = defaultdict(lambda: defaultdict(int))
     deck_counts = defaultdict(lambda: defaultdict(int))
     available_per_folder_counts = defaultdict(lambda: defaultdict(int))
-    collection_ids, _, _ = _collection_metadata()
+    current_user_id = current_user.id if current_user.is_authenticated else None
+    friend_ids = set()
+    if current_user_id:
+        friend_rows = (
+            db.session.query(UserFriend.friend_user_id)
+            .filter(UserFriend.user_id == current_user_id)
+            .all()
+        )
+        friend_ids = {fid for (fid,) in friend_rows if fid}
+        owner_ids = [current_user_id] + list(friend_ids)
+        collection_rows = _collection_rows_with_fallback(owner_user_ids=owner_ids)
+    else:
+        collection_rows = _collection_rows_with_fallback()
+    collection_ids = [fid for fid, _ in collection_rows if fid is not None]
     collection_id_set = set(collection_ids)
 
     folder_meta = {}
@@ -211,8 +224,16 @@ def _compute_list_checker(pasted: str):
 
     def _rank_folder(fid, label):
         lower = (label or "").strip().lower()
+        meta = folder_meta.get(fid) or {}
+        owner_id = meta.get("owner_user_id")
+        owner_rank = 2
+        if current_user_id and owner_id == current_user_id:
+            owner_rank = 0
+        elif owner_id in friend_ids:
+            owner_rank = 1
         return (
             0 if (fid in collection_id_set) else 1,
+            owner_rank,
             lower,
         )
 

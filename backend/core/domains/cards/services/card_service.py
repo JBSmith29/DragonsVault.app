@@ -1236,13 +1236,17 @@ def _create_proxy_deck_from_lines(
 def _owner_summary(decks: list[dict]) -> list[dict]:
     summary: dict[str, dict] = {}
     for deck in decks:
-        raw_owner = deck.get("owner") or ""
-        owner_key = raw_owner.strip().lower()
-        label = raw_owner.strip() or "Unassigned"
+        raw_owner = (deck.get("owner") or "").strip()
+        owner_key = (deck.get("owner_key") or "").strip().lower()
+        owner_label = (deck.get("owner_label") or "").strip()
+        if not owner_key:
+            owner_key = f"owner:{raw_owner.lower()}" if raw_owner else "owner:unassigned"
+        label = owner_label or raw_owner or "Unassigned"
         entry = summary.get(owner_key)
         if not entry:
             entry = {
-                "owner": raw_owner.strip() or None,
+                "key": owner_key,
+                "owner": raw_owner or None,
                 "label": label,
                 "deck_count": 0,
                 "card_total": 0,
@@ -1255,7 +1259,7 @@ def _owner_summary(decks: list[dict]) -> list[dict]:
             entry["proxy_count"] += 1
     return sorted(
         summary.values(),
-        key=lambda item: (item["owner"] is None, item["label"].lower()),
+        key=lambda item: (item["label"].lower(), item["key"]),
     )
 
 
@@ -4291,8 +4295,8 @@ def decks_overview():
         Folder.is_proxy,
     )
 
-    sort_key = sort if sort in {"name", "owner", "qty", "ci", "pips", "bracket"} else ""
-    requires_full_sort = sort_key in {"ci", "pips", "bracket"}
+    sort_key = sort if sort in {"name", "owner", "qty", "tag", "ci", "pips", "bracket"} else ""
+    requires_full_sort = sort_key in {"tag", "ci", "pips", "bracket"}
 
     if requires_full_sort:
         rows = grouped.all()
@@ -4311,16 +4315,42 @@ def decks_overview():
             .all()
         )
 
+    owner_user_ids = {owner_user_id for _fid, _name, _rows, _qty, _cmd_oid, _cmd_name, _owner, owner_user_id, _is_proxy in rows if owner_user_id}
+    owner_user_labels = {}
+    if owner_user_ids:
+        owner_rows = (
+            db.session.query(User.id, User.display_name, User.username, User.email)
+            .filter(User.id.in_(owner_user_ids))
+            .all()
+        )
+        for uid, display_name, username, email in owner_rows:
+            label = display_name or username or email
+            if label:
+                owner_user_labels[uid] = label
+
     # normalize for the template
     decks = []
     for fid, name, _rows, qty, cmd_oid, cmd_name, owner, owner_user_id, is_proxy in rows:
+        raw_owner = (owner or "").strip()
+        owner_label = (owner_user_labels.get(owner_user_id) or "").strip()
+        if owner_user_id and not owner_label:
+            owner_label = raw_owner or "Unknown User"
+        if not owner_user_id:
+            owner_label = raw_owner or "Unassigned"
+        owner_display = raw_owner or (owner_label if owner_label != "Unassigned" else "")
+        if owner_user_id:
+            owner_key = f"user:{owner_user_id}"
+        else:
+            owner_key = f"owner:{(raw_owner.lower() if raw_owner else 'unassigned')}"
         decks.append({
             "id": fid,
             "name": name,
             "qty": int(qty or 0),
             "commander_oid": cmd_oid,
             "commander_name": cmd_name,
-            "owner": owner,
+            "owner": owner_display or None,
+            "owner_label": owner_label,
+            "owner_key": owner_key,
             "owner_user_id": owner_user_id,
             "is_proxy": bool(is_proxy),
             "bracket": {},
@@ -4596,11 +4626,17 @@ def decks_overview():
                 ),
                 reverse=reverse,
             )
+        elif sort_key == "tag":
+            def _tag_sort_key(deck):
+                tag = (deck.get("tag_label") or deck.get("tag") or "").strip()
+                return (not tag, tag.lower())
+            decks.sort(key=_tag_sort_key, reverse=reverse)
         decks = decks[offset: offset + per]
 
     owner_summary_raw = _owner_summary(decks)
     owner_summary = [
         DeckOwnerSummaryVM(
+            key=item.get("key") or "",
             owner=item.get("owner"),
             label=item.get("label") or "Unassigned",
             deck_count=int(item.get("deck_count") or 0),
@@ -4639,7 +4675,7 @@ def decks_overview():
                 name=deck.get("name") or "",
                 qty=int(deck.get("qty") or 0),
                 owner=deck.get("owner"),
-                owner_key=(deck.get("owner") or "").strip().lower(),
+                owner_key=(deck.get("owner_key") or (deck.get("owner") or "").strip().lower()),
                 is_proxy=bool(deck.get("is_proxy")),
                 is_owner=bool(
                     current_user

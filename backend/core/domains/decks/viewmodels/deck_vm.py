@@ -38,6 +38,7 @@ class DeckVM:
 
 @dataclass(slots=True)
 class DeckOwnerSummaryVM:
+    key: str
     owner: Optional[str]
     label: str
     deck_count: int

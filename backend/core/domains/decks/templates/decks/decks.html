@@ -339,6 +339,8 @@
       {% if show_scope_toggle %}
         <div class="btn-group btn-group-sm" role="group" aria-label="Deck view scope">
           <a class="btn btn-outline-primary {% if scope == 'mine' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='mine') }}">My Decks</a>
+          <a class="btn btn-outline-primary {% if scope == 'friends' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='friends') }}">Friends</a>
+          <a class="btn btn-outline-primary {% if scope == 'all' %}active{% endif %}" href="{{ url_for('views.decks_overview', scope='all') }}">All</a>
         </div>
       {% endif %}
       <a class="btn btn-outline-theme btn-sm" href="{{ url_for('views.deck_tokens_overview') }}">
@@ -370,7 +372,7 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
           {% for owner in owner_summary %}
-            <button type="button" class="deck-owner-pill" data-owner="{{ (owner.owner or '')|e }}" data-owner-key="{{ (owner.owner or '')|lower }}" aria-pressed="false">
+            <button type="button" class="deck-owner-pill" data-owner="{{ (owner.label or '')|e }}" data-owner-key="{{ owner.key }}" aria-pressed="false">
               <div class="name">
                 {{ owner.label }}
                 {% if owner.proxy_count %}
@@ -404,6 +406,7 @@
         {% set sort = (request.args.get('sort') or '') %}
         {% set direction = (request.args.get('dir') or 'desc') %}
         {% set name_dir = 'asc' if sort!='name' or direction=='desc' else 'desc' %}
+        {% set tag_dir = 'asc' if sort!='tag' or direction=='desc' else 'desc' %}
         {% set owner_dir = 'asc' if sort!='owner' or direction=='desc' else 'desc' %}
         {% set ci_dir   = 'asc' if sort!='ci'   or direction=='desc' else 'desc' %}
         {% set pips_dir = 'asc' if sort!='pips' or direction=='desc' else 'desc' %}
@@ -412,7 +415,7 @@
         <thead>
           <tr>
            <th><a href="{{ url_for('views.decks_overview', scope=scope, sort='name', dir=name_dir) }}">Deck</a></th>
-           <th>Deck Tag</th>
+           <th><a href="{{ url_for('views.decks_overview', scope=scope, sort='tag', dir=tag_dir) }}">Deck Tag</a></th>
            <th class="owner-cell"><a href="{{ url_for('views.decks_overview', scope=scope, sort='owner', dir=owner_dir) }}">Owner</a></th>
             <th><a href="{{ url_for('views.decks_overview', scope=scope, sort='ci', dir=ci_dir) }}">Color Identity</a></th>
             <th class="col-ci-pips"><a href="{{ url_for('views.decks_overview', scope=scope, sort='pips', dir=pips_dir) }}">Pips</a></th>
@@ -1070,19 +1073,37 @@
     }
   }
 
-  document.querySelectorAll('.cards-table .deck-row').forEach(row => {
-    row.addEventListener('click', (event) => {
-      if (event.target.closest('a, button')) return;
-      const deckId = row.dataset.deckId;
-      if (deckId) openDrawer(deckId);
-    });
-    row.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      if (event.target.closest('a, button')) return;
-      event.preventDefault();
-      const deckId = row.dataset.deckId;
-      if (deckId) openDrawer(deckId);
-    });
+  function getEventElement(target) {
+    if (!target) return null;
+    if (target.nodeType === Node.ELEMENT_NODE) return target;
+    if (target.nodeType === Node.TEXT_NODE) return target.parentElement;
+    return null;
+  }
+
+  function findDeckRow(target) {
+    const el = getEventElement(target);
+    return el ? el.closest('.cards-table .deck-row') : null;
+  }
+
+  function isInteractiveTarget(target) {
+    const el = getEventElement(target);
+    return !!(el && el.closest('a, button, input, select, textarea, label'));
+  }
+
+  document.addEventListener('click', (event) => {
+    const row = findDeckRow(event.target);
+    if (!row || isInteractiveTarget(event.target)) return;
+    const deckId = row.dataset.deckId;
+    if (deckId) openDrawer(deckId);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = findDeckRow(event.target);
+    if (!row || isInteractiveTarget(event.target)) return;
+    event.preventDefault();
+    const deckId = row.dataset.deckId;
+    if (deckId) openDrawer(deckId);
   });
 
 })();

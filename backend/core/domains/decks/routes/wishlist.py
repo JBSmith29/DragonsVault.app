@@ -15,7 +15,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import Card, Folder, FolderShare, UserFriend, WishlistItem
+from models import Card, Folder, FolderRole, UserFriend, WishlistItem
 from core.domains.cards.services import scryfall_cache as sc
 from core.shared.database import get_or_404
 
@@ -104,6 +104,191 @@ def _color_identity_for_item(item):
     if oid:
         return _color_identity_for_oracle(oid)
     return None
+
+
+
+
+def _type_line_for_oracle(oracle_id):
+    if not oracle_id:
+        return None
+    try:
+        prints = sc.prints_for_oracle(oracle_id)
+    except Exception:
+        return None
+    if not prints:
+        return None
+    type_line = prints[0].get("type_line")
+    if not type_line:
+        return None
+    return str(type_line).strip() or None
+
+
+def _type_line_for_item(item):
+    card = getattr(item, "card", None)
+    if card and getattr(card, "type_line", None):
+        return card.type_line
+    type_line = _type_line_for_oracle(item.oracle_id)
+    if type_line:
+        return type_line
+    try:
+        oid = sc.unique_oracle_by_name(item.name)
+    except Exception:
+        oid = None
+    if oid:
+        return _type_line_for_oracle(oid)
+    return None
+
+
+def _format_color_identity(value):
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        tokens = [str(v).strip().upper() for v in value if str(v).strip()]
+        letters = [tok for tok in tokens if tok in {"W", "U", "B", "R", "G"}]
+        if letters:
+            return "".join(letters)
+        if "C" in tokens:
+            return "C"
+        return "".join(tokens)
+    text = str(value).strip().upper()
+    if not text:
+        return ""
+    letters = [ch for ch in text if ch in "WUBRGC"]
+    if letters:
+        if any(ch in "WUBRG" for ch in letters):
+            return "".join([ch for ch in letters if ch in "WUBRG"])
+        return "C"
+    return text
+
+
+
+
+def _split_folder_label(raw_name):
+    text = (str(raw_name) if raw_name is not None else "").strip()
+    if not text:
+        return None, ""
+    if ":" in text:
+        owner_part, folder_part = text.split(":", 1)
+        owner_part = owner_part.strip()
+        folder_part = folder_part.strip()
+        return owner_part or None, folder_part
+    return None, text
+
+
+def _collection_folder_meta(folder_names, current_user_id, friend_ids):
+    meta = {}
+    if not folder_names:
+        return meta
+    lower_names = {name.lower() for name in folder_names if name}
+    if not lower_names:
+        return meta
+    query = (
+        Folder.query.options(selectinload(Folder.owner_user))
+        .join(FolderRole, FolderRole.folder_id == Folder.id)
+        .filter(FolderRole.role == FolderRole.ROLE_COLLECTION)
+        .filter(func.lower(Folder.name).in_(lower_names))
+    )
+    if current_user_id:
+        owner_ids = {current_user_id} | set(friend_ids or [])
+        query = query.filter(Folder.owner_user_id.in_(owner_ids))
+    else:
+        query = query.filter(Folder.is_public.is_(True))
+    for folder in query.all():
+        name_key = (folder.name or "").strip().lower()
+        if not name_key:
+            continue
+        entry = meta.setdefault(
+            name_key,
+            {"labels": set(), "has_user": False, "has_friend": False},
+        )
+        owner_id = folder.owner_user_id
+        owner_label = None
+        if folder.owner_user:
+            owner_label = folder.owner_user.display_name or folder.owner_user.username or folder.owner_user.email
+        if not owner_label:
+            owner_label = folder.owner
+        if owner_label:
+            entry["labels"].add(owner_label)
+        if current_user_id and owner_id == current_user_id:
+            entry["has_user"] = True
+        elif owner_id in (friend_ids or set()):
+            entry["has_friend"] = True
+    return meta
+
+
+def _build_wishlist_source_entries(items):
+    current_user_id = current_user.id if current_user.is_authenticated else None
+    friend_ids = set()
+    if current_user_id:
+        friend_rows = (
+            db.session.query(UserFriend.friend_user_id)
+            .filter(UserFriend.user_id == current_user_id)
+            .all()
+        )
+        friend_ids = {fid for (fid,) in friend_rows if fid}
+
+    name_candidates = set()
+    for item in items:
+        for entry in item.source_folders_list:
+            raw_name = entry.get("name") if isinstance(entry, dict) else ""
+            _owner_hint, folder_name = _split_folder_label(raw_name)
+            if folder_name:
+                name_candidates.add(folder_name)
+
+    meta = _collection_folder_meta(name_candidates, current_user_id, friend_ids)
+
+    entries_by_item = []
+    max_sources = 0
+    for item in items:
+        entries = []
+        for entry in item.source_folders_list:
+            raw_name = entry.get("name") if isinstance(entry, dict) else ""
+            owner_hint, folder_name = _split_folder_label(raw_name)
+            if not folder_name:
+                continue
+            info = meta.get(folder_name.lower())
+            if not info:
+                continue
+            rank = 0 if info.get("has_user") else 1 if info.get("has_friend") else 2
+            label = folder_name
+            if rank > 0:
+                owner_label = owner_hint
+                if not owner_label:
+                    labels = info.get("labels") or set()
+                    if len(labels) == 1:
+                        owner_label = next(iter(labels))
+                if owner_label:
+                    label = f"{owner_label}: {folder_name}"
+            entries.append({"label": label, "qty": entry.get("qty"), "rank": rank})
+
+        if not entries:
+            folder = item.card.folder if item.card and item.card.folder else None
+            if folder and folder.is_collection:
+                owner_id = folder.owner_user_id
+                label = None
+                rank = None
+                if current_user_id and owner_id == current_user_id:
+                    label = folder.name
+                    rank = 0
+                elif owner_id in friend_ids:
+                    owner_label = None
+                    if folder.owner_user:
+                        owner_label = folder.owner_user.display_name or folder.owner_user.username or folder.owner_user.email
+                    if not owner_label:
+                        owner_label = folder.owner
+                    label = f"{owner_label}: {folder.name}" if owner_label else folder.name
+                    rank = 1
+                if label:
+                    entries.append({"label": label, "qty": None, "rank": rank})
+
+        entries.sort(key=lambda e: (e.get("rank", 2), (e.get("label") or "").lower()))
+        for entry in entries:
+            entry.pop("rank", None)
+        entries_by_item.append(entries)
+        if len(entries) > max_sources:
+            max_sources = len(entries)
+
+    return entries_by_item, max_sources
 
 
 def _serialize_source_folders(value):
@@ -329,65 +514,9 @@ def wishlist():
     for item in items:
         item.display_color_identity = _color_identity_for_item(item)
 
-    folder_owner_labels = {}
-    folder_name_keys = set()
-    for item in items:
-        for entry in item.source_folders_list:
-            name = (entry.get("name") or "").strip()
-            if not name:
-                continue
-            if ": " in name:
-                continue
-            folder_name_keys.add(name)
-
-    if folder_name_keys:
-        lower_names = {name.lower() for name in folder_name_keys if name}
-        folder_query = (
-            Folder.query.options(selectinload(Folder.owner_user))
-            .filter(func.lower(Folder.name).in_(lower_names))
-        )
-        if current_user.is_authenticated:
-            friend_ids = (
-                db.session.query(UserFriend.friend_user_id)
-                .filter(UserFriend.user_id == current_user.id)
-            )
-            shared_ids = (
-                db.session.query(FolderShare.folder_id)
-                .filter(FolderShare.shared_user_id == current_user.id)
-            )
-            folder_query = folder_query.filter(
-                or_(
-                    Folder.owner_user_id == current_user.id,
-                    Folder.id.in_(shared_ids),
-                    Folder.owner_user_id.in_(friend_ids),
-                    Folder.is_public.is_(True),
-                )
-            )
-        else:
-            folder_query = folder_query.filter(Folder.is_public.is_(True))
-
-        name_to_owners = defaultdict(set)
-        for folder in folder_query.all():
-            name = (folder.name or "").strip()
-            if not name:
-                continue
-            name_key = name.lower()
-            owner_label = None
-            if folder.owner_user:
-                owner_label = folder.owner_user.display_name or folder.owner_user.username or folder.owner_user.email
-            if not owner_label:
-                owner_label = folder.owner
-            name_to_owners[name_key].add((folder.owner_user_id, owner_label or ""))
-
-        for name_key, owners in name_to_owners.items():
-            owners = {entry for entry in owners if entry[1]}
-            if len(owners) != 1:
-                continue
-            owner_id, owner_label = next(iter(owners))
-            if current_user.is_authenticated and owner_id == current_user.id:
-                continue
-            if owner_label:
-                folder_owner_labels[name_key] = owner_label
+    source_entries, _ = _build_wishlist_source_entries(items)
+    for item, entries in zip(items, source_entries):
+        item.display_source_folders = entries
 
     def _url_with(page_num: int):
         args = request.args.to_dict(flat=False)
@@ -424,7 +553,6 @@ def wishlist():
         acquired=acquired_count,
         removed=removed_count,
         total=total_items,
-        folder_owner_labels=folder_owner_labels,
         sort=sort,
         direction=direction,
         status_filter=status_filter,
@@ -519,28 +647,39 @@ def wishlist_order_ref(item_id: int):
 @views.route("/wishlist/export", methods=["GET"])
 def wishlist_export():
     items = (
-        WishlistItem.query.order_by(
+        WishlistItem.query.options(
+            selectinload(WishlistItem.card).selectinload(Card.folder).selectinload(Folder.owner_user)
+        )
+        .order_by(
             WishlistItem.status.asc(), WishlistItem.created_at.desc(), WishlistItem.name.asc()
-        ).all()
+        )
+        .all()
     )
+
+    source_entries, max_sources = _build_wishlist_source_entries(items)
+    source_col_count = max(1, max_sources)
+
     buf = StringIO()
     writer = csv.writer(buf)
-    writer.writerow(
-        ["name", "requested_qty", "status", "order_ref", "added_at", "oracle_id", "scryfall_id", "source_folders"]
-    )
-    for item in items:
-        writer.writerow(
-            [
-                item.name,
-                item.requested_qty,
-                item.status,
-                item.order_ref or "",
-                (item.created_at.isoformat(sep=" ", timespec="minutes") if item.created_at else ""),
-                item.oracle_id or "",
-                item.scryfall_id or "",
-                item.source_folders or "",
-            ]
-        )
+    header = ["Card Name", "Qty Requested", "Card Type", "Color"]
+    header.extend([f"Source Folder {idx}" for idx in range(1, source_col_count + 1)])
+    header.append("Status")
+    writer.writerow(header)
+
+    for item, entries in zip(items, source_entries):
+        color_value = _format_color_identity(_color_identity_for_item(item))
+        type_line = _type_line_for_item(item) or ""
+        labels = []
+        for entry in entries:
+            label = entry.get("label") or ""
+            labels.append(label.replace(": ", ":"))
+        row = [item.name, item.requested_qty or 0, type_line, color_value]
+        row.extend(labels)
+        if len(labels) < source_col_count:
+            row.extend([""] * (source_col_count - len(labels)))
+        row.append(item.status)
+        writer.writerow(row)
+
     response = make_response(buf.getvalue())
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
     response.headers["Content-Disposition"] = "attachment; filename=wishlist.csv"
