@@ -1,141 +1,153 @@
-# DragonsVault ??
+# DragonsVault
 
 ![python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Docker](https://img.shields.io/badge/docker-required-blue)
 ![License](https://img.shields.io/badge/license-Unlicense-green)
 
-DragonsVault is a **Magic: The Gathering** collection manager, powered by Docker. Collect your cards, vault your desks and conquer your opponents from within a single app!
+DragonsVault is a Docker-first **Magic: The Gathering** collection manager for cards, decks, and games. Track ownership, build decks, log pods, and explore data powered by Scryfall, EDHREC, and more.
 
-## ?? Features
+## Highlights
 
-| **Page / Feature** | **Highlights** |
-| -- | - |
-| **Dashboard** | Overall stats, deck tiles with commander art, collection totals, quick actions. |
-| **Cards** | Filterable table with art thumbnails, deck context, color identity, wishlist badges. |
-| **Collection** | Bucket-level stats (e.g., Mythic, Lands), type breakdown tiles linking back into the list view. |
-| **Deck detail** | Commander picker, mana curve, pip breakdown, export to CSV, folder insights. |
-| **Build-A-Deck** | Persistent sandbox with EDHREC integrations, gallery/list view toggle, role filters, and stateful panels. |
-| **Card detail** | Owned print metadata, alternate arts, tokens, rulings, external links. |
-| **Scryfall browser** | Live API search with offline owned counts, jump into print detail or the local card view. |
-| **Wishlist** | Track requested quantities, status transitions, inline edits, CSV export. |
-| **Import/Export** | Preview uploads, configure quantity mode, download templates or filtered exports. |
-| **List Checker** | Compare a pasted deck list against ownership, highlight missing cards, export results. |
-| **Admin** | Refresh Scryfall caches, manage folder categories, clear caches, inspect stats. |
+- Collection browser with filters, art thumbnails, color identity, owned counts, and wishlist badges.
+- Deck tools: commander picker, mana curve, pip breakdown, role insights, and CSV export.
+- Build-A-Deck sandbox with EDHREC integration, role filters, list/gallery views, and persistent panels.
+- Games workflow: unified dashboard, streamlined pod management, auto deck assignment, and a 3-step quick log.
+- Metrics and leaderboards with quick filters, exports, and admin tooling.
+- CSV/Excel imports (ManaBox, Moxfield), list checker, and export templates.
+- Admin/ops: cache refresh, folder categories, health checks, and bulk actions.
 
-## ?? Prerequisites
+## Feature tour
 
-- ?? [Docker](https://www.docker.com/get-started/)
+### Collection & Cards
+- Filterable cards table with art thumbnails, deck context, color identity, and wishlist badges.
+- Card detail with owned print metadata, alternate arts, tokens, rulings, and external links.
+- Collection insights with bucket-level stats (e.g., Mythic, Lands) and type breakdown tiles.
 
-## ? Quickstart Guide
+### Decks & Building
+- Deck detail with commander picker, mana curve, pip breakdown, CSV export, and folder insights.
+- Build-A-Deck sandbox with EDHREC integrations, role filters, list/gallery toggle, and stateful panels.
+- List checker to compare pasted deck lists against ownership and export results.
 
-### 1. Clone the Repository
+### Games & Analytics
+- Unified games dashboard with quick metrics, recent activity, and admin panel.
+- Streamlined pod management with quick pods, invitations, templates, and bulk operations.
+- Auto deck assignment based on player ownership and preferences.
+- 3-step quick log wizard with advanced mode toggle.
+- Enhanced metrics with quick filters, leaderboards, and export tools.
+- Admin endpoints for system stats, cache management, and health checks.
+
+### Imports, Exports, and Lists
+- CSV/Excel import with preview, quantity modes, and templates.
+- Wishlist tracking with status transitions, inline edits, and export.
+- Scryfall browser with live API search and offline owned counts.
+
+### Integrations & Data
+- Scryfall bulk cache for offline browsing, rulings, and symbols.
+- Commander Spellbook combo sync for deck insights.
+- MTGJSON pricing (price-service) and EDHREC data (edhrec-service).
+
+### Admin & Ops
+- Admin tools for cache refresh, folder categories, and stats inspection.
+- Health checks, structured logs, and background job visibility.
+
+## Architecture at a glance
+
+- Flask monolith + RQ worker, plus Vite/React UI (dev profile).
+- Postgres + PgBouncer, Redis, and nginx reverse proxy.
+- Microservices for card-data, price-service, edhrec-service, and user-manager scaffolding.
+- Experimental Django API at `/api-next` for migration testing.
+
+## Prerequisites
+
+- Docker (Desktop or Engine)
+- Git (optional, for cloning)
+
+## Quickstart
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/JBSmith29/DragonsVault.git
 cd DragonsVault
 ```
 
-> **Optional**: Create a `.env` file within the projects root directory for secrets or overrides. Any variables in this file are passed into the container.
+> Optional: Create a `.env` file in the project root for secrets or overrides. Any variables in this file are passed into the containers.
 
-### 2. Verify that Docker is Running
-
-```bash
-docker info
-```
-
-> If you get an error, make sure Docker Desktop or your Docker service is running.
-
-### 3. Deploy the DragonsVault Server with Docker (Postgres + PgBouncer)
+### 2. Start the stack (Postgres + PgBouncer)
 
 ```bash
-# prepare env (edit POSTGRES_PASSWORD if you like)
 cp infra/env.postgres.example .env
 
-# start infra with env file
-docker compose --env-file .env up -d postgres pgbouncer pgmaintenance
-
-# initialize schema
-docker compose --env-file .env run --rm web flask db upgrade
-
-# start app services
-docker compose --env-file .env up -d web worker nginx redis
+docker compose --env-file .env up -d postgres pgbouncer redis pgmaintenance
 ```
 
-### 4. Access DragonsVault through your Web Browser
+### 3. Initialize the database
 
-Within a web browser, navigate to [http://localhost](http://localhost) (or your LAN IP / Cloudflare hostname) to access your vault. Code changes on your host refresh automatically in the container.
+```bash
+docker compose --env-file .env run --rm web flask db upgrade
+```
 
-### 5. Interacting with your DragonsVault Instance after it's Launched 
+### 4. Start the app services
 
-- **Modifying my Container**: Within another command-line terminal, navigate to the root directory of your DragonsVault application. Then run `docker compose exec web flask [COMMAND]` to execute additional configuration commands.
-- **Stopping my Container**: Within the original command-line terminal that your used to launch your instance, press <kbd>Ctrl</kbd> + <kbd>C</kbd>.
-- **Rebuilding my Container**: If you need to rebuild your DragonsVault instance for any reason, run `docker compose down` to remove your existing installation file.
-- **Restarting your Container**: To restart your existing DragonsVault instance, run `docker compose up`.
+```bash
+docker compose --env-file .env up -d web worker nginx
+```
 
-### 6. Configure your DragonsVault Instance 
+> Optional (dev UI): `docker compose --env-file .env --profile dev up -d ui`
 
-> **Database**: The default stack uses Postgres (via PgBouncer). Set a strong `POSTGRES_PASSWORD` in `.env` before starting.
+### 5. Open the app
 
-### 6.1 Download the Scryfall Bulk Data Collection
+Visit `http://localhost` (or your LAN IP / Cloudflare hostname).
 
-Run the following commands against your running DragonsVault instance using `docker compose exec`. The shell snippets use a heredoc so the embedded Python executes in a single command (PowerShell users can copy/paste the inline `python - <<'PY' … PY` block instead).
+## After launch
 
-   ```bash
-   docker compose exec web flask fetch-scryfall-bulk --progress
-   docker compose exec web flask refresh-scryfall
-   docker compose exec web flask shell <<'PY'
-   from shared.jobs.jobs import run_scryfall_refresh_inline
-   run_scryfall_refresh_inline('rulings')
-   exit()
-   PY
-   docker compose exec web flask shell <<'PY'
-   from core.shared.utils.symbols_cache import ensure_symbols_cache
-   ensure_symbols_cache(force=True)
-   exit()
-   PY
-   docker compose exec web flask sync-spellbook-combos
-   ```
+- Run app commands: `docker compose exec web flask [COMMAND]`
+- Stop the stack: `docker compose down`
+- Rebuild/recreate: `docker compose up -d --build`
+- Restart a service: `docker compose restart web worker nginx`
 
-> `flask shell` does not support `-c`; you must drop into the shell (or use the heredoc above) and run the Python import manually.
+## First-time data setup (recommended)
 
-> This step is optional, but highly recommended for offline browsing.
+Run the following commands against your running instance using `docker compose exec`:
 
-### 6.2 Classify Folders
+```bash
+docker compose exec web flask fetch-scryfall-bulk --progress
+docker compose exec web flask refresh-scryfall
+docker compose exec web flask shell <<'PY'
+from shared.jobs.jobs import run_scryfall_refresh_inline
+run_scryfall_refresh_inline('rulings')
+exit()
+PY
+docker compose exec web flask shell <<'PY'
+from core.shared.utils.symbols_cache import ensure_symbols_cache
+ensure_symbols_cache(force=True)
+exit()
+PY
+docker compose exec web flask sync-spellbook-combos
+```
 
-Navigate to `Admin` ? `Folder Categories`. Mark your bulk collection bins (e.g., Lands, Mythic) as `collection` and keep actual decks as `deck`.
+> Note: `flask shell` does not support `-c`; use the heredoc pattern above.
 
-### 6.3 Import Existing Cards
+## Importing custom data
 
-Use the `/import` or the `docker compose exec web flask import-csv` CLI. Once the import finishes, the app automatically redirects to the Folder Categories screen so you can classify any newly created folders before continuing.
-
-### 6.4 Verify Dashboards
-
-Manually check that the main dashboard, cards list, deck pages, and wishlist to confirm data looks correct.
-
-### 6.5 Re-Index FTS (Optional)
-
-After performing a large import, execute `docker compose exec web flask fts-reindex` against your application to improve the performance.
-
-## ?? Importing Custom Data
-
-### CSV / Excel Import Format
+### CSV / Excel import format
 
 Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `quantity`, `lang`, `foil`. Case and spacing are forgiving; the importer normalizes common variants.
 
-- ManaBox exports are supported: `Binder Name` maps to folders and `Binder Type` (Deck/Binder) automatically sets each folder to `deck` or `collection`. An example `csv` file is listed below.
+- ManaBox exports are supported: `Binder Name` maps to folders and `Binder Type` (Deck/Binder) automatically sets each folder to `deck` or `collection`.
 - Moxfield exports are supported: `Count` -> quantity, `Name` -> card name, `Edition` -> set code, `Language`, `Foil`, and `Proxy` are respected. Unused columns (Tags, Alter, Purchase Price, etc.) are ignored.
 
-   ```csv
-   folder,name,set_code,collector_number,quantity,foil,lang
-   Collection,Sol Ring,2xm,229,1,0,en
-   Mono-Red,Lightning Bolt,m11,146,4,0,en
-   Bulk Rares,Golos, Tireless Pilgrim,m20,226,1,0,en
-   ```
+```csv
+folder,name,set_code,collector_number,quantity,foil,lang
+Collection,Sol Ring,2xm,229,1,0,en
+Mono-Red,Lightning Bolt,m11,146,4,0,en
+Bulk Rares,Golos, Tireless Pilgrim,m20,226,1,0,en
+```
 
 - Excel (`.xlsx`, `.xlsm`) files are supported; only the first worksheet is read.
 - `quantity_mode` option (`new_only`) creates only brand-new rows. Combine with `--overwrite` when you need to wipe everything and rebuild from a fresh spreadsheet.
 
-### Collection Export
+### Collection export
 
 - Cards list: `/cards/export`
 - Wishlist: `/wishlist/export`
@@ -144,15 +156,15 @@ Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `qu
 
 All exports include a UTF-8 BOM for compatibility with Excel.
 
-## ?? Authentication & API Tokens
+## Authentication & API tokens
 
-- **Create users**  run `docker compose exec web flask users create USERNAME EMAIL --admin` (or use the Admin ? Create User form). Usernames must be unique and logins accept either email or username; passwords are prompted interactively.
-- **Sign in**  visit `/login` to access Import/Admin links plus the account menu.
-- **Generate tokens**  use the `/account/api-token` page or `docker compose exec web flask users token you@example.com` to print a new Bearer token (shown once).
-- **Use tokens**  add `Authorization: Bearer <token>` when calling protected endpoints from backend/scripts or CI pipelines (query params are rejected).
-- **Audit trail**  logins, admin actions, imports, and token rotations are stored in `audit_logs` for traceability.
+- Create users: `docker compose exec web flask users create USERNAME EMAIL --admin` (or use Admin -> Create User). Usernames must be unique and logins accept either email or username; passwords are prompted interactively.
+- Sign in: visit `/login` to access Import/Admin links plus the account menu.
+- Generate tokens: use `/account/api-token` or `docker compose exec web flask users token you@example.com` (Bearer token shown once).
+- Use tokens: add `Authorization: Bearer <token>` when calling protected endpoints (query params are rejected).
+- Audit trail: logins, admin actions, imports, and token rotations are stored in `audit_logs`.
 
-## ?? Command Reference
+## Command reference
 
 | **Command** | **Purpose** |
 | - | - |
@@ -160,19 +172,17 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 | `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {delta,new_only}]` | CLI importer mirroring the web importer. |
 | `flask fetch-scryfall-bulk [--progress]` | Download the Scryfall `default_cards` bulk file. |
 | `flask refresh-scryfall` | Load the downloaded bulk file into memory and build indexes. |
-| `flask shell -c "from shared.jobs.jobs import run_scryfall_refresh_inline; run_scryfall_refresh_inline('rulings')"` | Download rulings bulk data (inline helper). |
-| `flask shell -c "from core.shared.utils.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` | Refresh mana symbol JSON/SVGs. |
 | `flask sync-spellbook-combos [--card-count N ...]` | Pull Commander Spellbook combos into `data/spellbook_combos.json`. |
 | `flask repair-oracle-ids-advanced [--dry-run]` | Fill missing `oracle_id` values via Scryfall cache lookups. |
 | `flask dedupe-cards` | Detect duplicate prints within folders. |
 | `flask fts-ensure` | Ensure the FTS table & triggers exist. |
 | `flask fts-reindex` | Rebuild the FTS index. |
-| `flask analyze` | Run `ANALYZE` on the SQLite database. |
-| `flask vacuum` | Run `VACUUM` on the SQLite database. |
+| `flask analyze` | Run `ANALYZE` on the SQLite database (SQLite only). |
+| `flask vacuum` | Run `VACUUM` on the SQLite database (SQLite only). |
 
-A complete list lives near the bottom of `app.py`.
+A complete list lives near the bottom of `backend/app.py`.
 
-## ?? Tests
+## Tests
 
 Run the test suite with:
 
@@ -182,7 +192,15 @@ pytest
 
 CI is configured via GitHub Actions (`.github/workflows/python-tests.yml`). Extend the suite as you add features.
 
-## ?? Configuration
+## Configuration
+
+Most commonly tuned settings:
+
+- `POSTGRES_PASSWORD` (set in `.env`)
+- `SECRET_KEY` / `SECRET_KEY_FILE`
+- `CACHE_TYPE` + `CACHE_REDIS_URL`
+- `EDHREC_SERVICE_URL`, `PRICE_SERVICE_URL`
+- `FLASK_ENV=development` for hot reload
 
 Key environment variables (defaults in parentheses):
 
@@ -225,7 +243,7 @@ Key environment variables (defaults in parentheses):
 
 `.env` files are loaded automatically by `python-dotenv`.
 
-## ?? Project Layout
+## Project layout
 
 ```bash
 DragonsVault/
@@ -251,23 +269,23 @@ DragonsVault/
 +-- README.md             # Project documentation
 ```
 
-## ?? Experimental Django API
+## Experimental Django API
 
 The Django + DRF service runs alongside Flask at `/api-next`. It currently requires an API token (`Authorization: Bearer <token>`). Use it for migration testing while the legacy `/api` routes remain on Flask.
 
-## ??? Troubleshooting
+## Troubleshooting
 
 | **Symptom** | **Resolution** |
 | - | - |
 | OperationalError: no such column: folder.category | Run `flask db upgrade`. If upgrading from a very old DB, stamp to the latest seen revision before running upgrade. |
-| Scryfall-owned counts show zero | Ensure collection folders are marked as `collection` in Admin ? Folder Categories. |
-| Mana symbols missing from card text | Run `flask shell -c "from core.shared.utils.symbols_cache import ensure_symbols_cache; ensure_symbols_cache(force=True)"` or use the Admin button to re-fetch symbology. |
+| Scryfall-owned counts show zero | Ensure collection folders are marked as `collection` in Admin -> Folder Categories. |
+| Mana symbols missing from card text | Run the symbols cache refresh (see First-time data setup) or use the Admin button. |
 | Migration history references missing revisions | The repo is rebased to a single `0001_initial` migration. Delete your local DB (`instance/*.db`) and rerun `docker compose run --rm web ./backend/scripts/bootstrap.sh` (or `flask db upgrade`). |
-| Gunicorn worker timeout on startup | Pre-warm inside a container: `docker compose run --rm web ./backend/scripts/bootstrap.sh`. If still slow, raise `WEB_TIMEOUT` (default 300) before `docker compose up`. |
+| Gunicorn worker timeout on startup | Pre-warm inside a container: `docker compose run --rm web ./backend/scripts/bootstrap.sh`. If still slow, raise `WEB_TIMEOUT` before `docker compose up`. |
 | CSV import fails with Unsupported file type | Confirm the file is `.csv`, `.xlsx`, or `.xlsm`. The importer checks extensions. |
 | FTS search returns stale results | Run `flask fts-reindex`. |
 | SQLite locks / slow queries | Limit concurrent writers, run `flask analyze`/`flask vacuum`, and consider migrating to PostgreSQL if concurrency needs grow. |
 
-## ?? License
+## License
 
-This project is released under the [Unlicense](https://unlicense.org/), which dedicates it to the public domain. Card data and imagery are provided courtesy of [Scryfall](https://scryfall.com/) and remain  Wizards of the Coast.
+This project is released under the Unlicense, which dedicates it to the public domain. Card data and imagery are provided courtesy of Scryfall and remain copyright Wizards of the Coast.
