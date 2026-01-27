@@ -59,7 +59,13 @@ def db_session(app):
         yield db
         db.session.remove()
         db.engine.dispose()
-        db.drop_all()
+        # SQLite teardown: delete the DB file to avoid drop_all issues across runs.
+        if TEST_DB_PATH.exists():
+            TEST_DB_PATH.unlink()
+        for suffix in ("-wal", "-shm"):
+            sidecar = TEST_DB_PATH.with_name(TEST_DB_PATH.name + suffix)
+            if sidecar.exists():
+                sidecar.unlink()
 
 
 @pytest.fixture
