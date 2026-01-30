@@ -90,13 +90,15 @@
       </div>
 
       <div class="d-flex align-items-center gap-2">
-        <!-- Export CSV (normal POST so browser downloads) -->
+        <!-- Export CSV (fetch so page stays put) -->
         <form method="post"
               action="{{ url_for('views.list_checker_export_csv') }}"
               hx-boost="false"
-              class="d-inline">
+              class="d-inline"
+              data-list-checker-export="1"
+              data-export-filename="list_checker_results.csv">
           <textarea name="card_list" hidden>{{ pasted }}</textarea>
-          <button type="submit" class="btn btn-outline-secondary btn-sm">
+          <button type="submit" class="btn btn-outline-secondary btn-sm" data-export-btn>
             Export CSV
           </button>
         </form>
@@ -399,6 +401,54 @@
     hydrateThumbs(document);
     window.dvAttachCheckerHover = attachHoverPreviews;
     window.dvHydrateCheckerThumbs = hydrateThumbs;
+  })();
+
+  // Export CSV via fetch (stay on page)
+  (function () {
+    document.addEventListener('submit', async (evt) => {
+      const form = evt.target;
+      if (!form || !(form instanceof HTMLFormElement)) return;
+      if (!form.matches('[data-list-checker-export]')) return;
+      if (!window.fetch || !window.FormData) return;
+      evt.preventDefault();
+
+      const btn = form.querySelector('[data-export-btn]') || form.querySelector('button[type="submit"]');
+      const original = btn ? btn.textContent : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Exporting...';
+      }
+      try {
+        const resp = await fetch(form.action, {
+          method: 'POST',
+          body: new FormData(form),
+        });
+        const contentType = resp.headers.get('content-type') || '';
+        if (!resp.ok || !contentType.includes('text/csv')) {
+          throw new Error('Export failed');
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = form.dataset.exportFilename || 'list_checker_results.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (btn) {
+          btn.textContent = 'Exported';
+          setTimeout(() => { if (btn) btn.textContent = original; }, 1200);
+        }
+      } catch (err) {
+        if (btn) {
+          btn.textContent = 'Export failed';
+          setTimeout(() => { if (btn) btn.textContent = original; }, 1400);
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
   })();
 
 })();

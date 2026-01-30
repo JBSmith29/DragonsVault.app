@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import random
@@ -16,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import load_only, selectinload
 
@@ -116,6 +116,8 @@ from core.domains.decks.viewmodels.folder_vm import CollectionBucketVM, FolderOp
 from core.domains.decks.viewmodels.opening_hand_vm import OpeningHandCardVM, OpeningHandTokenVM
 
 HAND_SIZE = 7
+OPENING_HAND_STATE_SALT = "opening-hand-state-v1"
+OPENING_HAND_STATE_MAX_AGE_SECONDS = 6 * 60 * 60
 
 def _user_cache_key() -> str:
     return str(getattr(current_user, "id", None) or "anon")
@@ -548,21 +550,62 @@ RARITY_CHOICE_ORDER: List[tuple[str, str]] = [
 
 
 def _encode_state(payload: dict) -> str:
-    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+    serializer = _opening_hand_state_serializer()
+    return serializer.dumps(payload)
 
 
 def _decode_state(token: str) -> Optional[dict]:
     if not token:
         return None
     try:
-        raw = base64.urlsafe_b64decode(token.encode("ascii"))
-        payload = json.loads(raw.decode("utf-8"))
-        if not isinstance(payload, dict):
-            return None
-        return payload
+        serializer = _opening_hand_state_serializer()
+        max_age = current_app.config.get(
+            "OPENING_HAND_STATE_MAX_AGE_SECONDS",
+            OPENING_HAND_STATE_MAX_AGE_SECONDS,
+        )
+        payload = serializer.loads(token, max_age=max_age)
+    except BadSignature:
+        return None
+    return _normalize_opening_hand_state(payload)
+
+
+def _opening_hand_state_serializer() -> URLSafeTimedSerializer:
+    secret = current_app.secret_key or current_app.config.get("SECRET_KEY") or "dev"
+    return URLSafeTimedSerializer(secret, salt=OPENING_HAND_STATE_SALT)
+
+
+def _normalize_opening_hand_state(payload: object) -> Optional[dict]:
+    if not isinstance(payload, dict):
+        return None
+    deck = payload.get("deck")
+    if not isinstance(deck, list):
+        return None
+    if any(not isinstance(entry, dict) for entry in deck):
+        return None
+    try:
+        index = int(payload.get("index") or 0)
     except Exception:
         return None
+    if index < 0 or index > len(deck):
+        return None
+    deck_name = payload.get("deck_name") or "Deck"
+    if not isinstance(deck_name, str):
+        deck_name = str(deck_name)
+    user_id = payload.get("user_id")
+    try:
+        user_id = int(user_id) if user_id is not None else None
+    except Exception:
+        return None
+    if not current_user or not getattr(current_user, "is_authenticated", False):
+        return None
+    if user_id != current_user.id:
+        return None
+    return {
+        "deck": deck,
+        "index": index,
+        "deck_name": deck_name,
+        "user_id": user_id,
+    }
 
 
 def _image_from_print(print_obj: dict | None) -> dict:
@@ -764,6 +807,7 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
     folder = db.session.get(Folder, folder_id)
     if not folder:
         return None, [], ["Deck not found."], []
+    ensure_folder_access(folder, write=False, allow_shared=True)
 
     _ensure_cache_ready()
 
@@ -5395,11 +5439,27 @@ def deck_tokens_overview():
 
 
 def _opening_hand_deck_options() -> tuple[dict[str, dict], list[dict]]:
-    decks = (
-        Folder.query.filter(Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES)))
-        .order_by(Folder.name.asc())
-        .all()
-    )
+    role_filter = Folder.role_entries.any(FolderRole.role.in_(FolderRole.DECK_ROLES))
+    deck_query = Folder.query.filter(role_filter)
+    if current_user and getattr(current_user, "is_authenticated", False):
+        friend_ids = (
+            db.session.query(UserFriend.friend_user_id)
+            .filter(UserFriend.user_id == current_user.id)
+        )
+        shared_ids = (
+            db.session.query(FolderShare.folder_id)
+            .filter(FolderShare.shared_user_id == current_user.id)
+        )
+        deck_query = deck_query.filter(
+            or_(
+                Folder.owner_user_id == current_user.id,
+                Folder.owner_user_id.in_(friend_ids),
+                Folder.id.in_(shared_ids),
+            )
+        )
+    else:
+        deck_query = deck_query.filter(text("1=0"))
+    decks = deck_query.order_by(Folder.name.asc()).all()
     deck_lookup: dict[str, dict] = {}
     deck_options: list[dict] = []
 
@@ -5869,6 +5929,7 @@ def opening_hand_shuffle():
         "deck": deck_pool,
         "index": next_index,
         "deck_name": deck_name,
+        "user_id": current_user.id if current_user and getattr(current_user, "is_authenticated", False) else None,
     }
     state_token = _encode_state(state)
     remaining = deck_size - next_index
@@ -5897,9 +5958,9 @@ def opening_hand_draw():
     if not state:
         return jsonify({"ok": False, "error": "Invalid or expired hand state."}), 400
 
-    deck = state.get("deck") or []
-    index = int(state.get("index") or 0)
-    deck_name = state.get("deck_name") or "Deck"
+    deck = state["deck"]
+    index = state["index"]
+    deck_name = state["deck_name"]
 
     if index >= len(deck):
         return jsonify({"ok": False, "error": "No more cards to draw.", "remaining": 0, "deck_name": deck_name, "state": token})

@@ -544,7 +544,7 @@ def list_checker_export_csv():
     writer = csv.writer(si)
     writer.writerow(["Card", "Requested", "Available", "Missing", "Status", "Total Owned", "Folders"])
     for rec in results:
-        folders_str = " | ".join(f"{fname} ×{cnt}" for fname, cnt in rec["folders"])
+        folders_str = " | ".join(f"{fname} ×{cnt}" for fname, cnt in rec["available_folders"])
         writer.writerow(
             [
                 rec["name"],
