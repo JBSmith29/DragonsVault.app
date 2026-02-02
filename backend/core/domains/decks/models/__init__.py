@@ -16,6 +16,7 @@ from .edhrec_cache import (
 )
 from .folder import Folder, FolderShare
 from .folder_role import FolderRole
+from .friend_card_request import FriendCardRequest
 from .wishlist import WishlistItem
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "Folder",
     "FolderShare",
     "FolderRole",
+    "FriendCardRequest",
     "WishlistItem",
 ]

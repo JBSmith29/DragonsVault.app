@@ -37,7 +37,15 @@ API_PAGE_SIZE = 175  # Scryfall /cards/search page size
 DEFAULT_COLLECTION_FOLDERS = {"lands", "common", "uncommon", "rare", "mythic", "to add"}
 
 # Valid wishlist statuses
-ALLOWED_WISHLIST_STATUSES = {"open", "to_fetch", "ordered", "acquired", "removed"}
+ALLOWED_WISHLIST_STATUSES = {
+    "open",
+    "to_fetch",
+    "ordered",
+    "acquired",
+    "removed",
+    "requested",
+    "rejected",
+}
 
 _NO_VALUE = object()
 

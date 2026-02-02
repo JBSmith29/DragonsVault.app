@@ -10,7 +10,7 @@ class WishlistItem(db.Model):
     __tablename__ = "wishlist_items"
     __table_args__ = (
         db.CheckConstraint(
-            "status in ('open','to_fetch','ordered','acquired','removed')",
+            "status in ('open','to_fetch','ordered','acquired','removed','requested','rejected')",
             name="ck_wishlist_items_status",
         ),
         db.CheckConstraint("requested_qty >= 0", name="ck_wishlist_items_requested_qty_nonneg"),
@@ -42,7 +42,7 @@ class WishlistItem(db.Model):
     requested_qty = db.Column(db.Integer, nullable=False, default=0)
     missing_qty = db.Column(db.Integer, nullable=False, default=0)
 
-    # "open" | "to_fetch" | "ordered" | "acquired" | "removed"
+    # "open" | "to_fetch" | "ordered" | "acquired" | "removed" | "requested" | "rejected"
     status = db.Column(db.String(16), nullable=False, default="open", index=True)
 
     # Optional JSON payload describing where to retrieve the card(s)

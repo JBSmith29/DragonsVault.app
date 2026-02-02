@@ -17,6 +17,7 @@ from .folder import Folder, FolderShare  # type: ignore F401
 from .folder_role import FolderRole  # type: ignore F401
 from .deck_stats import DeckStats  # type: ignore F401
 from .wishlist import WishlistItem  # type: ignore F401
+from .friend_card_request import FriendCardRequest  # type: ignore F401
 from .user import User, AuditLog, UserFollow  # type: ignore F401
 from .friend import UserFriend, UserFriendRequest  # type: ignore F401
 from .game import (  # type: ignore F401
@@ -73,6 +74,7 @@ __all__ = [
     "FolderRole",
     "DeckStats",
     "WishlistItem",
+    "FriendCardRequest",
     "User",
     "AuditLog",
     "UserFollow",

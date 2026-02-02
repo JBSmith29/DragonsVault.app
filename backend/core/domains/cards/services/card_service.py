@@ -20,7 +20,20 @@ from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import load_only, selectinload
 
 from extensions import cache, db
-from models import BuildSession, BuildSessionCard, Card, Folder, FolderRole, FolderShare, User, UserSetting, UserFriend, UserFriendRequest
+from models import (
+    BuildSession,
+    BuildSessionCard,
+    Card,
+    Folder,
+    FolderRole,
+    FolderShare,
+    FriendCardRequest,
+    User,
+    UserSetting,
+    UserFriend,
+    UserFriendRequest,
+    WishlistItem,
+)
 from models.role import Role, SubRole, CardRole, OracleCoreRoleTag, OracleEvergreenTag, OracleRole
 from core.domains.cards.services import scryfall_cache as sc
 from core.domains.decks.services.proxy_decks import fetch_proxy_deck, resolve_proxy_cards
@@ -3182,6 +3195,64 @@ def shared_folders():
             }
         )
 
+    incoming_card_rows = (
+        FriendCardRequest.query.options(
+            selectinload(FriendCardRequest.requester),
+            selectinload(FriendCardRequest.wishlist_item),
+        )
+        .join(User, User.id == FriendCardRequest.requester_user_id)
+        .filter(FriendCardRequest.recipient_user_id == current_user.id)
+        .filter(FriendCardRequest.status == "pending")
+        .order_by(FriendCardRequest.created_at.desc())
+        .all()
+    )
+    incoming_card_requests = []
+    for req in incoming_card_rows:
+        user = req.requester
+        label = None
+        if user:
+            label = user.display_name or user.username or user.email
+        item = req.wishlist_item
+        card_name = item.name if item else "Unknown card"
+        incoming_card_requests.append(
+            {
+                "id": req.id,
+                "label": label or "Unknown",
+                "email": user.email if user else None,
+                "card_name": card_name,
+                "qty": req.requested_qty,
+            }
+        )
+
+    outgoing_card_rows = (
+        FriendCardRequest.query.options(
+            selectinload(FriendCardRequest.recipient),
+            selectinload(FriendCardRequest.wishlist_item),
+        )
+        .join(User, User.id == FriendCardRequest.recipient_user_id)
+        .filter(FriendCardRequest.requester_user_id == current_user.id)
+        .order_by(FriendCardRequest.created_at.desc())
+        .all()
+    )
+    outgoing_card_requests = []
+    for req in outgoing_card_rows:
+        user = req.recipient
+        label = None
+        if user:
+            label = user.display_name or user.username or user.email
+        item = req.wishlist_item
+        card_name = item.name if item else "Unknown card"
+        outgoing_card_requests.append(
+            {
+                "id": req.id,
+                "label": label or "Unknown",
+                "email": user.email if user else None,
+                "card_name": card_name,
+                "qty": req.requested_qty,
+                "status": req.status,
+            }
+        )
+
     friend_entries: list[SharedFolderEntryVM] = []
     friend_folder_ids: set[int] = set()
     if friend_ids:
@@ -3310,6 +3381,8 @@ def shared_folders():
         friends=friends,
         incoming_requests=incoming_requests,
         outgoing_requests=outgoing_requests,
+        incoming_card_requests=incoming_card_requests,
+        outgoing_card_requests=outgoing_card_requests,
         my_public_folders=my_public,
         other_public_folders=other_public,
     )

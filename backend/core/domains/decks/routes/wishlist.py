@@ -15,7 +15,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import Card, Folder, FolderRole, UserFriend, WishlistItem
+from models import Card, Folder, FolderRole, FriendCardRequest, UserFriend, WishlistItem
 from core.domains.cards.services import scryfall_cache as sc
 from core.shared.database import get_or_404
 
@@ -282,8 +282,6 @@ def _build_wishlist_source_entries(items):
                     entries.append({"label": label, "qty": None, "rank": rank})
 
         entries.sort(key=lambda e: (e.get("rank", 2), (e.get("label") or "").lower()))
-        for entry in entries:
-            entry.pop("rank", None)
         entries_by_item.append(entries)
         if len(entries) > max_sources:
             max_sources = len(entries)
@@ -416,7 +414,7 @@ def _wishlist_upsert_rows(rows) -> tuple[int, int, int]:
                     item.missing_qty = 0
                 elif item.status == "to_fetch":
                     item.missing_qty = current_requested
-                elif item.status in {"open", "ordered"}:
+                elif item.status in {"open", "ordered", "requested", "rejected"}:
                     if item.missing_qty is None or item.missing_qty < current_requested:
                         item.missing_qty = current_requested
                 else:
@@ -517,6 +515,9 @@ def wishlist():
     source_entries, _ = _build_wishlist_source_entries(items)
     for item, entries in zip(items, source_entries):
         item.display_source_folders = entries
+        has_user = any(entry.get("rank") == 0 for entry in entries)
+        has_friend = any(entry.get("rank") == 1 for entry in entries)
+        item.in_friends_collection = bool(has_friend and not has_user)
 
     def _url_with(page_num: int):
         args = request.args.to_dict(flat=False)
@@ -536,6 +537,8 @@ def wishlist():
     ordered_count = counts.get("ordered", 0)
     acquired_count = counts.get("acquired", 0)
     removed_count = counts.get("removed", 0)
+    requested_count = counts.get("requested", 0)
+    rejected_count = counts.get("rejected", 0)
     return render_template(
         "decks/wishlist.html",
         items=items,
@@ -552,6 +555,8 @@ def wishlist():
         ordered_count=ordered_count,
         acquired=acquired_count,
         removed=removed_count,
+        requested=requested_count,
+        rejected=rejected_count,
         total=total_items,
         sort=sort,
         direction=direction,
@@ -571,6 +576,187 @@ def wishlist_add_form():
     added = created + updated
     flash(f"Added {added} item(s) to wishlist.", "success" if added else "warning")
     return redirect(url_for("views.wishlist"))
+
+
+@views.route("/wishlist/request-friend", methods=["POST"])
+def wishlist_request_friend():
+    if not current_user.is_authenticated:
+        flash("Sign in to request cards from friends.", "warning")
+        return redirect(url_for("views.list_checker"))
+
+    rows_raw = request.form.get("rows", "")
+    try:
+        rows = json.loads(rows_raw) if rows_raw else []
+    except Exception:
+        rows = _normalize_wishlist_rows(rows_raw)
+
+    if not rows:
+        flash("No friend requests to send.", "warning")
+        return redirect(url_for("views.wishlist"))
+
+    friend_ids = {
+        fid for (fid,) in db.session.query(UserFriend.friend_user_id).filter(UserFriend.user_id == current_user.id).all()
+    }
+    if not friend_ids:
+        flash("You don't have any friends to request from yet.", "warning")
+        return redirect(url_for("views.wishlist"))
+
+    created = updated = skipped = 0
+    request_sent = 0
+
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
+
+        friend_user_raw = row.get("friend_user_id") or row.get("recipient_user_id") or row.get("friend_id")
+        try:
+            friend_user_id = int(friend_user_raw)
+        except Exception:
+            skipped += 1
+            continue
+        if friend_user_id not in friend_ids:
+            skipped += 1
+            continue
+
+        raw_name = row.get("name") or row.get("card") or ""
+        if not isinstance(raw_name, str):
+            raw_name = str(raw_name or "")
+        name = raw_name.strip()
+        if not name or name.lower() == "[object object]":
+            skipped += 1
+            continue
+
+        requested_qty = _parse_int(
+            row.get("requested_qty"),
+            row.get("missing_qty"),
+            row.get("requested"),
+            row.get("qty"),
+            row.get("quantity"),
+            default=1,
+        )
+        if requested_qty <= 0:
+            skipped += 1
+            continue
+
+        scryfall_id = (row.get("scryfall_id") or row.get("scry_id")) or None
+        oracle_id = row.get("oracle_id") or None
+        try:
+            card_id = int(row.get("card_id"))
+        except Exception:
+            card_id = None
+
+        folders_json = _serialize_source_folders(row.get("source_folders") or row.get("folders"))
+
+        query = WishlistItem.query
+        item = None
+        if scryfall_id:
+            item = query.filter_by(scryfall_id=scryfall_id).first()
+        if item is None and oracle_id:
+            item = query.filter_by(oracle_id=oracle_id).first()
+        if item is None:
+            item = query.filter_by(name=name).first()
+
+        if item:
+            prev_requested = int(item.requested_qty or 0)
+            if requested_qty > prev_requested:
+                item.requested_qty = requested_qty
+            current_requested = int(item.requested_qty or requested_qty)
+            item.status = "requested"
+            if card_id:
+                item.card_id = card_id
+            if folders_json is not None:
+                item.source_folders = folders_json
+            item.missing_qty = current_requested
+            updated += 1
+        else:
+            item = WishlistItem(
+                name=name,
+                requested_qty=requested_qty,
+                missing_qty=requested_qty,
+                scryfall_id=scryfall_id,
+                oracle_id=oracle_id,
+                card_id=card_id,
+                status="requested",
+                source_folders=folders_json,
+            )
+            db.session.add(item)
+            db.session.flush()
+            created += 1
+
+        if item and item.id:
+            req = FriendCardRequest.query.filter_by(
+                requester_user_id=current_user.id,
+                recipient_user_id=friend_user_id,
+                wishlist_item_id=item.id,
+            ).first()
+            if req:
+                req.status = "pending"
+                req.requested_qty = requested_qty
+            else:
+                db.session.add(
+                    FriendCardRequest(
+                        requester_user_id=current_user.id,
+                        recipient_user_id=friend_user_id,
+                        wishlist_item_id=item.id,
+                        requested_qty=requested_qty,
+                        status="pending",
+                    )
+                )
+            request_sent += 1
+        else:
+            skipped += 1
+
+    db.session.commit()
+    if request_sent:
+        flash(f"Sent {request_sent} friend request(s).", "success")
+    else:
+        flash("No friend requests were sent.", "warning")
+    return redirect(url_for("views.wishlist"))
+
+
+@views.route("/friend-card-requests", methods=["POST"])
+def friend_card_request_action():
+    if not current_user.is_authenticated:
+        flash("Sign in to respond to friend requests.", "warning")
+        return redirect(url_for("views.shared_folders"))
+
+    action = (request.form.get("action") or "").strip().lower()
+    request_id_raw = request.form.get("request_id")
+    try:
+        request_id = int(request_id_raw)
+    except Exception:
+        flash("Invalid request selection.", "warning")
+        return redirect(url_for("views.shared_folders"))
+
+    if action not in {"accept", "reject"}:
+        flash("Unknown request action.", "warning")
+        return redirect(url_for("views.shared_folders"))
+
+    req = FriendCardRequest.query.filter_by(
+        id=request_id,
+        recipient_user_id=current_user.id,
+    ).first()
+    if not req:
+        flash("Request not found.", "warning")
+        return redirect(url_for("views.shared_folders"))
+
+    item = WishlistItem.query.get(req.wishlist_item_id) if req.wishlist_item_id else None
+    if action == "accept":
+        req.status = "accepted"
+        if item and item.status == "requested":
+            item.status = "to_fetch"
+            item.missing_qty = item.requested_qty or 0
+        flash("Request accepted.", "success")
+    elif action == "reject":
+        req.status = "rejected"
+        if item and item.status == "requested":
+            item.status = "rejected"
+            item.missing_qty = item.requested_qty or 0
+        flash("Request declined.", "info")
+
+    db.session.commit()
+    return redirect(url_for("views.shared_folders"))
 
 
 @views.route("/wishlist/add", methods=["POST"])
@@ -626,7 +812,7 @@ def wishlist_update(item_id: int):
         new_qty = 0
 
     item.requested_qty = new_qty
-    if item.status in {"open", "ordered", "to_fetch"}:
+    if item.status in {"open", "ordered", "to_fetch", "requested", "rejected"}:
         item.missing_qty = new_qty
     else:
         item.missing_qty = 0
@@ -712,6 +898,8 @@ __all__ = [
     "wishlist_delete",
     "wishlist_export",
     "wishlist_mark",
+    "wishlist_request_friend",
+    "friend_card_request_action",
     "wishlist_order_ref",
     "wishlist_update",
 ]

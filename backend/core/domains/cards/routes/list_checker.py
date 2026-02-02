@@ -247,6 +247,44 @@ def _compute_list_checker(pasted: str):
         items.sort(key=lambda row: _rank_folder(row[0], row[1]))
         return [(label, cnt) for _, label, cnt in items]
 
+    def _format_breakdown_detail(breakdown):
+        items = []
+        for fid, cnt in breakdown.items():
+            label = _label_for_folder(fid)
+            if not label:
+                continue
+            meta = folder_meta.get(fid) or {}
+            owner_id = meta.get("owner_user_id")
+            owner_label = owner_label_map.get(owner_id) or (meta.get("owner") or "").strip()
+            owner_rank = 2
+            if current_user_id and owner_id == current_user_id:
+                owner_rank = 0
+            elif owner_id in friend_ids:
+                owner_rank = 1
+            items.append(
+                {
+                    "folder_id": fid,
+                    "label": label,
+                    "qty": cnt,
+                    "owner_user_id": owner_id,
+                    "owner_label": owner_label,
+                    "owner_rank": owner_rank,
+                }
+            )
+        items.sort(key=lambda row: _rank_folder(row["folder_id"], row["label"]))
+        return items
+
+    def _filter_breakdown_by_owner(breakdown, owner_ids):
+        if not owner_ids:
+            return {}
+        filtered = {}
+        for fid, cnt in breakdown.items():
+            meta = folder_meta.get(fid) or {}
+            owner_id = meta.get("owner_user_id")
+            if owner_id in owner_ids:
+                filtered[fid] = cnt
+        return filtered
+
     avail_ids = _accessible_folder_ids()
 
     best_card_for_name = {}
@@ -445,7 +483,7 @@ def _compute_list_checker(pasted: str):
                     owner_label_map[owner_user_id] = label
 
     results = []
-    have_all = partial = missing = 0
+    have_all = partial = missing = friends = 0
     for nkey, spec in want.items():
         requested = spec["qty"]
         display = spec["display"]
@@ -454,6 +492,19 @@ def _compute_list_checker(pasted: str):
         total_owned = sum(per_folder_counts[nkey].values())
         available = available_count[nkey]
         missing_qty = max(0, requested - available)
+        available_user = 0
+        available_friends = 0
+
+        if current_user_id:
+            for fid, cnt in available_per_folder_counts[nkey].items():
+                meta = folder_meta.get(fid) or {}
+                owner_id = meta.get("owner_user_id")
+                if owner_id == current_user_id:
+                    available_user += cnt
+                elif owner_id in friend_ids:
+                    available_friends += cnt
+        else:
+            available_user = available
 
         if is_basic_land:
             available = max(available, requested)
@@ -462,20 +513,53 @@ def _compute_list_checker(pasted: str):
             status = "have_all"
             have_all += 1
         else:
-            if available >= requested:
+            if available_user >= requested:
                 status = "have_all"
                 have_all += 1
-            elif available == 0:
-                status = "missing"
-                missing += 1
-            else:
+            elif available_friends > 0:
+                status = "friends"
+                friends += 1
+            elif available_user > 0:
                 status = "partial"
                 partial += 1
+            else:
+                status = "missing"
+                missing += 1
 
         folder_breakdown = _format_breakdown(per_folder_counts[nkey])
         collection_breakdown = _format_breakdown(collection_counts[nkey])
         deck_breakdown = _format_breakdown(deck_counts[nkey])
         available_breakdown = _format_breakdown(available_per_folder_counts[nkey])
+        available_detail = _format_breakdown_detail(available_per_folder_counts[nkey])
+        if current_user_id:
+            available_user_breakdown = _format_breakdown(
+                _filter_breakdown_by_owner(available_per_folder_counts[nkey], {current_user_id})
+            )
+            available_friend_breakdown = _format_breakdown(
+                _filter_breakdown_by_owner(available_per_folder_counts[nkey], friend_ids)
+            )
+        else:
+            available_user_breakdown = available_breakdown
+            available_friend_breakdown = []
+
+        friend_targets_map = {}
+        if current_user_id and friend_ids:
+            for fid, cnt in available_per_folder_counts[nkey].items():
+                meta = folder_meta.get(fid) or {}
+                owner_id = meta.get("owner_user_id")
+                if owner_id not in friend_ids:
+                    continue
+                owner_label = owner_label_map.get(owner_id) or (meta.get("owner") or "").strip() or "Friend"
+                entry = friend_targets_map.setdefault(
+                    owner_id,
+                    {"user_id": owner_id, "label": owner_label, "qty": 0, "folders": []},
+                )
+                entry["qty"] += cnt
+                entry["folders"].append({"name": _label_for_folder(fid), "qty": cnt})
+        friend_targets = sorted(
+            friend_targets_map.values(),
+            key=lambda e: (-e["qty"], (e["label"] or "").lower()),
+        )
 
         rep_card = rep_card_map.get(nkey)
         rep_card_id = int(rep_card.id) if rep_card else None
@@ -501,6 +585,12 @@ def _compute_list_checker(pasted: str):
                 "collection_folders": collection_breakdown,
                 "deck_folders": deck_breakdown,
                 "available_folders": available_breakdown,
+                "available_folders_detail": available_detail,
+                "available_user_folders": available_user_breakdown,
+                "available_friend_folders": available_friend_breakdown,
+                "available_user": available_user,
+                "available_friends": available_friends,
+                "friend_targets": friend_targets,
                 "total_owned": total_owned,
                 "card_id": rep_card_id,
                 "scry_id": scry_id,
@@ -508,9 +598,12 @@ def _compute_list_checker(pasted: str):
             }
         )
 
-    results.sort(key=lambda rec: {"missing": 0, "partial": 1, "have_all": 2}.get(rec["status"], 3))
+    results.sort(
+        key=lambda rec: {"missing": 0, "friends": 1, "partial": 2, "have_all": 3}.get(rec["status"], 4)
+    )
     summary = {
         "have_all": have_all,
+        "friends": friends,
         "partial": partial,
         "missing": missing,
         "total_rows": len(results),
@@ -542,9 +635,28 @@ def list_checker_export_csv():
 
     si = StringIO()
     writer = csv.writer(si)
-    writer.writerow(["Card", "Requested", "Available", "Missing", "Status", "Total Owned", "Folders"])
+    max_sources = 0
     for rec in results:
-        folders_str = " | ".join(f"{fname} ×{cnt}" for fname, cnt in rec["available_folders"])
+        folders_for_export = rec.get("available_user_folders")
+        if not folders_for_export:
+            folders_for_export = rec.get("available_folders") or []
+        max_sources = max(max_sources, len(folders_for_export))
+    source_col_count = max(1, max_sources)
+
+    header = ["Card", "Requested", "Available", "Missing", "Status", "Total Owned"]
+    header.extend([f"Collection {idx}" for idx in range(1, source_col_count + 1)])
+    writer.writerow(header)
+    for rec in results:
+        folders_for_export = rec.get("available_user_folders")
+        if not folders_for_export:
+            folders_for_export = rec.get("available_folders") or []
+        labels = []
+        for fname, cnt in folders_for_export:
+            if not fname:
+                continue
+            labels.append(f"{fname} ×{cnt}")
+        if len(labels) < source_col_count:
+            labels.extend([""] * (source_col_count - len(labels)))
         writer.writerow(
             [
                 rec["name"],
@@ -553,14 +665,14 @@ def list_checker_export_csv():
                 rec["missing_qty"],
                 rec["status"],
                 rec["total_owned"],
-                folders_str,
             ]
+            + labels
         )
 
-    out = si.getvalue()
+    out = "\ufeff" + si.getvalue()
     return Response(
         out,
-        mimetype="text/csv",
+        mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=list_checker_results.csv"},
     )
 

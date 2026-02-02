@@ -83,6 +83,8 @@
 {% set ord_cnt = ordered_count if ordered_count is defined else (items|selectattr('status','equalto','ordered')|list|length) %}
 {% set fetch_cnt = to_fetch_count if to_fetch_count is defined else (items|selectattr('status','equalto','to_fetch')|list|length) %}
 {% set removed_cnt = removed if removed is defined else (items|selectattr('status','equalto','removed')|list|length) %}
+{% set requested_cnt = requested if requested is defined else (items|selectattr('status','equalto','requested')|list|length) %}
+{% set rejected_cnt = rejected if rejected is defined else (items|selectattr('status','equalto','rejected')|list|length) %}
 {% set sort = sort if sort is defined else (request.args.get('sort') or 'name') %}
 {% set direction = direction if direction is defined else (request.args.get('dir') or 'asc') %}
 {% set status_filter = (status_filter if status_filter is defined else (request.args.get('status') or 'all'))|lower %}
@@ -91,9 +93,11 @@
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
   <div class="d-flex gap-2 flex-wrap">
     <span class="badge text-bg-primary">Open: {{ open_cnt }}</span>
+    <span class="badge text-bg-orange">Requested: {{ requested_cnt }}</span>
     <span class="badge text-bg-warning">To Fetch: {{ fetch_cnt }}</span>
     <span class="badge text-bg-info">Ordered: {{ ord_cnt }}</span>
     <span class="badge text-bg-success">Acquired: {{ acq_cnt }}</span>
+    <span class="badge text-bg-danger">Rejected: {{ rejected_cnt }}</span>
     <span class="badge text-bg-secondary">Removed: {{ removed_cnt }}</span>
     <span class="badge text-bg-dark">Total: {{ total_items }}</span>
   </div>
@@ -114,9 +118,11 @@
   <ul class="nav nav-pills small" id="wl-filters">
     <li class="nav-item"><a class="nav-link {% if status_filter == 'all' %}active{% endif %}" href="{{ url_for('views.wishlist', status=None, sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="all">All</a></li>
     <li class="nav-item"><a class="nav-link {% if status_filter == 'open' %}active{% endif %}" href="{{ url_for('views.wishlist', status='open', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="open">Open</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'requested' %}active{% endif %}" href="{{ url_for('views.wishlist', status='requested', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="requested">Requested</a></li>
     <li class="nav-item"><a class="nav-link {% if status_filter == 'to_fetch' %}active{% endif %}" href="{{ url_for('views.wishlist', status='to_fetch', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="to_fetch">To Fetch</a></li>
     <li class="nav-item"><a class="nav-link {% if status_filter == 'ordered' %}active{% endif %}" href="{{ url_for('views.wishlist', status='ordered', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="ordered">Ordered</a></li>
     <li class="nav-item"><a class="nav-link {% if status_filter == 'acquired' %}active{% endif %}" href="{{ url_for('views.wishlist', status='acquired', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="acquired">Acquired</a></li>
+    <li class="nav-item"><a class="nav-link {% if status_filter == 'rejected' %}active{% endif %}" href="{{ url_for('views.wishlist', status='rejected', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="rejected">Rejected</a></li>
     <li class="nav-item"><a class="nav-link {% if status_filter == 'removed' %}active{% endif %}" href="{{ url_for('views.wishlist', status='removed', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="removed">Removed</a></li>
   </ul>
 
@@ -185,7 +191,7 @@
     </thead>
     <tbody>
       {% for it in items %}
-      <tr class="wishlist-row" data-wl-item data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
+      <tr class="wishlist-row{% if it.in_friends_collection %} wl-row-friends{% endif %}" data-wl-item data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
         <td class="text-center">
           <input
             type="checkbox"
@@ -272,10 +278,19 @@
             <span class="badge text-bg-info">Ordered</span>
           {% elif st == 'to_fetch' %}
             <span class="badge text-bg-warning">To Fetch</span>
+          {% elif st == 'requested' %}
+            <span class="badge text-bg-orange">Requested</span>
+          {% elif st == 'rejected' %}
+            <span class="badge text-bg-danger">Rejected</span>
           {% elif st == 'removed' %}
             <span class="badge text-bg-secondary">Removed</span>
           {% else %}
             <span class="badge text-bg-primary">Open</span>
+          {% endif %}
+          {% if it.in_friends_collection %}
+            <div class="mt-1">
+              <span class="badge text-bg-orange">In Friends Collection</span>
+            </div>
           {% endif %}
         </td>
 
@@ -344,9 +359,11 @@
                 </button>
                 <ul class="dropdown-menu dv-select-menu" aria-labelledby="wlStatusToggle-{{ it.id }}">
                   <li><button class="dropdown-item {% if st == 'open' %}active{% endif %}" type="button" data-dv-select-option data-value="open" data-label="Open">Open</button></li>
+                  <li><button class="dropdown-item {% if st == 'requested' %}active{% endif %}" type="button" data-dv-select-option data-value="requested" data-label="Requested">Requested</button></li>
                   <li><button class="dropdown-item {% if st == 'to_fetch' %}active{% endif %}" type="button" data-dv-select-option data-value="to_fetch" data-label="To Fetch">To Fetch</button></li>
                   <li><button class="dropdown-item {% if st == 'ordered' %}active{% endif %}" type="button" data-dv-select-option data-value="ordered" data-label="Ordered">Ordered</button></li>
                   <li><button class="dropdown-item {% if st == 'acquired' %}active{% endif %}" type="button" data-dv-select-option data-value="acquired" data-label="Acquired">Acquired</button></li>
+                  <li><button class="dropdown-item {% if st == 'rejected' %}active{% endif %}" type="button" data-dv-select-option data-value="rejected" data-label="Rejected">Rejected</button></li>
                   <li><button class="dropdown-item {% if st == 'removed' %}active{% endif %}" type="button" data-dv-select-option data-value="removed" data-label="Removed">Removed</button></li>
                 </ul>
               </div>
@@ -370,7 +387,22 @@
 <div id="wl-gallery-view" class="d-none">
   <div class="wishlist-gallery">
     {% for it in items %}
-    <div class="wishlist-card" data-wl-item data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
+    <div class="wishlist-card{% if it.in_friends_collection %} wl-card-friends{% endif %}" data-wl-item data-status="{{ it.status|default('open') }}" data-name="{{ it.name|lower }}">
+      {% set st = it.status or 'open' %}
+      {% set status_class = 'text-bg-primary' %}
+      {% if st == 'acquired' %}
+        {% set status_class = 'text-bg-success' %}
+      {% elif st == 'ordered' %}
+        {% set status_class = 'text-bg-info' %}
+      {% elif st == 'to_fetch' %}
+        {% set status_class = 'text-bg-warning' %}
+      {% elif st == 'requested' %}
+        {% set status_class = 'text-bg-orange' %}
+      {% elif st == 'rejected' %}
+        {% set status_class = 'text-bg-danger' %}
+      {% elif st == 'removed' %}
+        {% set status_class = 'text-bg-secondary' %}
+      {% endif %}
       <div class="thumb">
         <img
           src="{{ (it.image_url or static_url('img/card-placeholder.svg')) | e }}"
@@ -383,7 +415,12 @@
       </div>
       <div class="meta">
         <div class="fw-semibold text-truncate">{{ it.name }}</div>
-        <span class="badge text-bg-secondary status">{{ it.status|default('Open')|title }}</span>
+        <div class="d-flex flex-column align-items-end gap-1">
+          <span class="badge {{ status_class }} status">{{ st|title }}</span>
+          {% if it.in_friends_collection %}
+            <span class="badge text-bg-orange status">Friends Collection</span>
+          {% endif %}
+        </div>
       </div>
       <div class="text-muted small">Requested: {{ it.requested_qty or it.quantity or 1 }}</div>
       {% set colors = it.display_color_identity %}
@@ -404,7 +441,6 @@
         {% endfor %}
       </div>
       {% endif %}
-      {% set st = it.status or 'open' %}
       {% set order_ref = it.order_ref or '' %}
       {% set order_is_url = order_ref.startswith('http://') or order_ref.startswith('https://') %}
       <div class="d-flex flex-column gap-1" data-order-cell>
@@ -469,9 +505,11 @@
             </button>
             <ul class="dropdown-menu dv-select-menu" aria-labelledby="wlStatusCardToggle-{{ it.id }}">
               <li><button class="dropdown-item {% if st == 'open' %}active{% endif %}" type="button" data-dv-select-option data-value="open" data-label="Open">Open</button></li>
+              <li><button class="dropdown-item {% if st == 'requested' %}active{% endif %}" type="button" data-dv-select-option data-value="requested" data-label="Requested">Requested</button></li>
               <li><button class="dropdown-item {% if st == 'to_fetch' %}active{% endif %}" type="button" data-dv-select-option data-value="to_fetch" data-label="To Fetch">To Fetch</button></li>
               <li><button class="dropdown-item {% if st == 'ordered' %}active{% endif %}" type="button" data-dv-select-option data-value="ordered" data-label="Ordered">Ordered</button></li>
               <li><button class="dropdown-item {% if st == 'acquired' %}active{% endif %}" type="button" data-dv-select-option data-value="acquired" data-label="Acquired">Acquired</button></li>
+              <li><button class="dropdown-item {% if st == 'rejected' %}active{% endif %}" type="button" data-dv-select-option data-value="rejected" data-label="Rejected">Rejected</button></li>
               <li><button class="dropdown-item {% if st == 'removed' %}active{% endif %}" type="button" data-dv-select-option data-value="removed" data-label="Removed">Removed</button></li>
             </ul>
           </div>
@@ -512,9 +550,11 @@
           <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="wlBulkStatusToggle">
             <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="" data-label="Choose status...">Choose status...</button></li>
             <li><button class="dropdown-item" type="button" data-dv-select-option data-value="open" data-label="Open">Open</button></li>
+            <li><button class="dropdown-item" type="button" data-dv-select-option data-value="requested" data-label="Requested">Requested</button></li>
             <li><button class="dropdown-item" type="button" data-dv-select-option data-value="to_fetch" data-label="To Fetch">To Fetch</button></li>
             <li><button class="dropdown-item" type="button" data-dv-select-option data-value="ordered" data-label="Ordered">Ordered</button></li>
             <li><button class="dropdown-item" type="button" data-dv-select-option data-value="acquired" data-label="Acquired">Acquired</button></li>
+            <li><button class="dropdown-item" type="button" data-dv-select-option data-value="rejected" data-label="Rejected">Rejected</button></li>
             <li><button class="dropdown-item" type="button" data-dv-select-option data-value="removed" data-label="Removed">Removed</button></li>
           </ul>
         </div>
@@ -550,6 +590,9 @@
   .wishlist-thumb img { object-fit: contain; width: 100%; height: auto; display: block; }
   .wishlist-row td { padding-top: .9rem; padding-bottom: .9rem; }
   .wl-select { cursor: pointer; }
+  .wl-row-friends { background: rgba(253, 126, 20, 0.12); }
+  .wl-card-friends { border-color: #fd7e14; box-shadow: 0 0 0 1px rgba(253, 126, 20, 0.25); }
+  .text-bg-orange { background-color: #fd7e14; color: #fff; }
 </style>
 
 <script nonce="{{ csp_nonce() }}">

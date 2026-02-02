@@ -53,11 +53,11 @@
 
     {% set fetch = namespace(rows=[]) %}
     {% for r in results %}
-      {% if r.available_in_collection and r.available_in_collection > 0 %}
-        {% set fetch_qty = r.available_in_collection if r.available_in_collection < r.requested else r.requested %}
+      {% if r.available_user and r.available_user > 0 %}
+        {% set fetch_qty = r.available_user if r.available_user < r.requested else r.requested %}
         {% if fetch_qty > 0 %}
           {% set folder_ns = namespace(items=[]) %}
-          {% for fname, cnt in (r.available_folders or []) %}
+          {% for fname, cnt in (r.available_user_folders or r.available_folders or []) %}
             {% set _ = folder_ns.items.append({'name': fname, 'qty': cnt}) %}
           {% endfor %}
           {% if not folder_ns.items %}
@@ -80,11 +80,39 @@
     {% endfor %}
     {% set fetch_count = fetch.rows | length %}
 
+    {% set friend = namespace(rows=[]) %}
+    {% for r in results %}
+      {% if r.friend_targets %}
+        {% set target = r.friend_targets[0] %}
+        {% if target %}
+          {% set needed = (r.requested|int) - (r.available_user|int) %}
+          {% if needed > 0 and target.qty and target.qty > 0 %}
+            {% set req_qty = needed if needed < target.qty else target.qty %}
+            {% if req_qty > 0 %}
+              {% set _ = friend.rows.append({
+                'name': r.name,
+                'requested_qty': req_qty,
+                'missing_qty': req_qty,
+                'status': 'requested',
+                'card_id': r.card_id if r.card_id else None,
+                'scryfall_id': r.scry_id if r.scry_id else None,
+                'oracle_id': r.oracle_id if r.oracle_id else None,
+                'friend_user_id': target.user_id,
+                'source_folders': target.folders
+              }) %}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {% set friend_count = friend.rows | length %}
+
     <!-- Summary bar -->
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="d-flex gap-3 flex-wrap">
         <span class="badge text-bg-success">Have all: {{ summary.have_all }}</span>
         <span class="badge text-bg-warning">Partial: {{ summary.partial }}</span>
+        <span class="badge text-bg-orange">In Friends Collection: {{ summary.friends }}</span>
         <span class="badge text-bg-danger">Missing: {{ summary.missing }}</span>
         <span class="badge text-bg-secondary">Total: {{ summary.total_rows }}</span>
       </div>
@@ -124,6 +152,16 @@
           </button>
         </form>
 
+        <form method="post"
+              action="{{ url_for('views.wishlist_request_friend') }}"
+              class="d-inline"
+              hx-boost="false">
+          <textarea name="rows" hidden>{{ friend.rows | tojson }}</textarea>
+          <button type="submit" class="btn btn-outline-warning btn-sm" {% if friend_count == 0 %}disabled{% endif %}>
+            Request from Friend
+          </button>
+        </form>
+
         <a href="{{ url_for('views.wishlist') }}" class="btn btn-outline-secondary btn-sm">Open Wishlist</a>
       </div>
     </div>
@@ -142,7 +180,7 @@
         </thead>
         <tbody>
           {% for r in results %}
-            {% set row_cls = 'row-missing' if r.status=='missing' else ('row-partial' if r.status=='partial' else 'row-have') %}
+            {% set row_cls = 'row-missing' if r.status=='missing' else ('row-friends' if r.status=='friends' else ('row-partial' if r.status=='partial' else 'row-have')) %}
             <tr class="{{ row_cls }}">
               <td>
                 {% set back_to = request.full_path %}
@@ -166,6 +204,9 @@
                   </a>
                 {% else %}
                   {{ r.name }}
+                {% endif %}
+                {% if r.status == 'friends' %}
+                  <span class="badge text-bg-orange ms-2">In Friends Collection</span>
                 {% endif %}
               </td>
               <td class="text-center">{{ r.requested }}</td>
@@ -210,9 +251,11 @@
   .small-muted { color: #6c757d; }
   .row-have    { background: var(--bs-success-bg-subtle); }
   .row-partial { background: var(--bs-warning-bg-subtle); }
+  .row-friends { background: transparent; }
   .row-missing { background: var(--bs-danger-bg-subtle); }
   .table-hover tbody tr:hover { filter: brightness(0.985); }
   .checker-card-thumb img { object-fit: cover; width: 100%; height: 100%; }
+  .text-bg-orange { background-color: #fd7e14; color: #fff; }
 </style>
 
 <script nonce="{{ csp_nonce() }}">
