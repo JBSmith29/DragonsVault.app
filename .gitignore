@@ -35,6 +35,8 @@ instance/
 # Test/cache
 .pytest_cache/
 .cache/
+.pants.d/
+dist/
 
 # Secrets
 .env

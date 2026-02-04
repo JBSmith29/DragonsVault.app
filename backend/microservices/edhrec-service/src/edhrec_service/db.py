@@ -4,8 +4,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-from config import ServiceConfig
-from models import Base
+from .config import ServiceConfig
+from .models import Base
 
 _ENGINE: Optional[Engine] = None
 _SESSION_FACTORY: Optional[sessionmaker] = None

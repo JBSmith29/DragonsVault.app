@@ -38,6 +38,12 @@ def build_session_add_bulk(session_id: int):
     return build_session_service.add_cards_bulk(session_id)
 
 
+@views.post("/decks/build/<int:session_id>/cards/manual-add")
+@login_required
+def build_session_add_manual(session_id: int):
+    return build_session_service.add_cards_manual(session_id)
+
+
 @views.post("/decks/build/<int:session_id>/cards/remove")
 @login_required
 def build_session_remove(session_id: int):
@@ -92,6 +98,7 @@ __all__ = [
     "build_session",
     "build_session_add",
     "build_session_add_bulk",
+    "build_session_add_manual",
     "build_session_remove",
     "build_session_quantity",
     "build_session_tags",

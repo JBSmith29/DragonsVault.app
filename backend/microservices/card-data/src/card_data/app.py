@@ -1,10 +1,10 @@
 from flask import Flask, jsonify, request
 from sqlalchemy import select
 
-from config import load_config
-from db import ensure_tables, get_engine, get_session_factory, ping_db
-from models import OracleKeyword, OracleRole, OracleSynergy, ScryfallOracle
-from scryfall_sync import get_status, sync_scryfall
+from .config import load_config
+from .db import ensure_tables, get_engine, get_session_factory, ping_db
+from .models import OracleKeyword, OracleRole, OracleSynergy, ScryfallOracle
+from .scryfall_sync import get_status, sync_scryfall
 
 
 def create_app() -> Flask:

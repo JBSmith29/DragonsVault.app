@@ -11,9 +11,9 @@ import requests
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
-from config import ServiceConfig
-from db import ensure_tables, get_session_factory
-from models import ScryfallBulkMeta, ScryfallOracle
+from .config import ServiceConfig
+from .db import ensure_tables, get_session_factory
+from .models import ScryfallBulkMeta, ScryfallOracle
 
 SCRYFALL_BULK_URL = "https://api.scryfall.com/bulk-data"
 DEFAULT_BULK_NAME = "default_cards"

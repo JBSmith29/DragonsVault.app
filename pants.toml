@@ -1,0 +1,29 @@
+[GLOBAL]
+pants_version = "2.21.0"
+backend_packages = [
+  "pants.backend.python",
+  "pants.backend.shell",
+]
+pants_ignore = [
+  "frontend/node_modules/**",
+  "frontend/dist/**",
+  "instance/**",
+  "data/**",
+  "var/**",
+]
+
+[source]
+root_patterns = [
+  "backend",
+  "backend/microservices/*/src",
+  "tests",
+  "frontend",
+]
+
+[python]
+interpreter_constraints = ["CPython>=3.11,<3.13"]
+enable_resolves = false
+
+[pytest]
+config = "pytest.ini"
+args = ["-m", "not ui"]

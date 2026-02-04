@@ -48,7 +48,7 @@ services:
       --access-logfile -
       --error-logfile -
       --log-level info
-      "app:create_app()"
+      "user_manager.app:create_app()"
     restart: unless-stopped
     environment:
       FLASK_ENV: production
@@ -89,7 +89,7 @@ services:
       --access-logfile -
       --error-logfile -
       --log-level info
-      "app:create_app()"
+      "card_data.app:create_app()"
     restart: unless-stopped
     environment:
       FLASK_ENV: production
@@ -134,7 +134,7 @@ services:
       --access-logfile -
       --error-logfile -
       --log-level info
-      "app:create_app()"
+      "folder_service.app:create_app()"
     restart: unless-stopped
     environment:
       FLASK_ENV: production
@@ -175,7 +175,7 @@ services:
       --access-logfile -
       --error-logfile -
       --log-level info
-      "app:create_app()"
+      "price_service.app:create_app()"
     restart: unless-stopped
     environment:
       FLASK_ENV: production
@@ -222,7 +222,7 @@ services:
       --access-logfile -
       --error-logfile -
       --log-level info
-      "app:create_app()"
+      "edhrec_service.app:create_app()"
     restart: unless-stopped
     environment:
       FLASK_ENV: production

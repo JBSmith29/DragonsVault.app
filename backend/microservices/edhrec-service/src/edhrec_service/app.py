@@ -9,10 +9,10 @@ from flask import Flask, jsonify, request
 import requests
 from sqlalchemy import func, select
 
-from config import load_config
-from db import ensure_tables, get_engine, get_session_factory, ping_db
-from edhrec_fetcher import EdhrecError, EdhrecFetcher, slugify_commander, slugify_theme
-from models import EdhrecCommanderCache, EdhrecThemeCache
+from .config import load_config
+from .db import ensure_tables, get_engine, get_session_factory, ping_db
+from .edhrec_fetcher import EdhrecError, EdhrecFetcher, slugify_commander, slugify_theme
+from .models import EdhrecCommanderCache, EdhrecThemeCache
 
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()

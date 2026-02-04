@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from config import ServiceConfig
+from .config import ServiceConfig
 
 _ENGINE: Optional[Engine] = None
 

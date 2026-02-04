@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 
-from config import load_config
-from db import get_engine, ping_db
+from .config import load_config
+from .db import get_engine, ping_db
 
 
 def create_app() -> Flask:

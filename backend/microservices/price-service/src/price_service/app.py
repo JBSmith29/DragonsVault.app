@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from flask import Flask, jsonify, request
 from sqlalchemy import select
 
-from config import load_config
-from db import ensure_tables, get_engine, get_session_factory, ping_db
-from models import PrintPrice
+from .config import load_config
+from .db import ensure_tables, get_engine, get_session_factory, ping_db
+from .models import PrintPrice
 from mtgjson_client import MtgJsonClient, MtgJsonError
 from price_normalizer import normalize_prices
 

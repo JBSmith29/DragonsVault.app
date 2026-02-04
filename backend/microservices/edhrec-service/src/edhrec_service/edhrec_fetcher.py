@@ -14,7 +14,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from config import ServiceConfig
+from .config import ServiceConfig
 
 _NEXT_DATA_RE = re.compile(
     r'__NEXT_DATA__" type="application/json">(.*?)</script>',

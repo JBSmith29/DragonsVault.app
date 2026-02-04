@@ -1,12 +1,16 @@
 (function () {
   const initFilters = (root) => {
     const tableBody = root.querySelector("#buildSessionTable");
-    if (!tableBody || tableBody.dataset.buildFiltersReady === "true") {
+    const typeView = root.querySelector('[data-build-view="type"]');
+    const filterRoot = tableBody || typeView;
+    if (!filterRoot || filterRoot.dataset.buildFiltersReady === "true") {
       return;
     }
-    tableBody.dataset.buildFiltersReady = "true";
+    filterRoot.dataset.buildFiltersReady = "true";
 
-    let rows = Array.from(tableBody.querySelectorAll(".build-row"));
+    const isTypeView = !tableBody && !!typeView;
+    const rowSelector = isTypeView ? ".build-type-row" : ".build-row";
+    let rows = Array.from(filterRoot.querySelectorAll(rowSelector));
     const typePills = Array.from(root.querySelectorAll(".type-pill"));
     const cmcButtons = Array.from(root.querySelectorAll(".curve-bar-btn"));
     const typeHint = root.querySelector("#typeFilterHint");
@@ -19,7 +23,7 @@
     let activeCmc = "";
 
     function applyFilters() {
-      rows = Array.from(tableBody.querySelectorAll(".build-row")).filter(
+      rows = Array.from(filterRoot.querySelectorAll(rowSelector)).filter(
         (row) => row.isConnected,
       );
       rows.forEach((row) => {
@@ -29,6 +33,17 @@
         const cmcMatch = !activeCmc || cmcBucket === activeCmc;
         row.classList.toggle("d-none", !(typeMatch && cmcMatch));
       });
+      if (isTypeView) {
+        const groups = Array.from(
+          filterRoot.querySelectorAll(".build-type-group"),
+        );
+        groups.forEach((group) => {
+          const visible = Array.from(
+            group.querySelectorAll(".build-type-row"),
+          ).some((row) => !row.classList.contains("d-none"));
+          group.classList.toggle("d-none", !visible);
+        });
+      }
     }
 
     function updateTypeUI() {

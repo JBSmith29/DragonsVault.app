@@ -27,6 +27,7 @@ from core.domains.decks.services.edhrec_cache_service import (
     get_commander_type_distribution,
 )
 from core.domains.decks.services.edhrec.edhrec_ingestion_service import ingest_commander_tag_data
+from core.domains.decks.services.proxy_decks import parse_decklist
 from shared.events.live_updates import emit_job_event, latest_job_events
 from shared.cache.request_cache import request_cached
 from core.shared.utils.symbols_cache import colors_to_icons, render_mana_html
@@ -213,6 +214,84 @@ def add_cards_bulk(session_id: int):
     except Exception:
         db.session.rollback()
         flash("Unable to add cards to the build session.", "danger")
+    return _redirect_session(session_id)
+
+
+def add_cards_manual(session_id: int):
+    session = _get_session(session_id)
+    if session is None:
+        abort(404)
+
+    raw_list = (request.form.get("card_list") or "").strip()
+    single_name = (request.form.get("card_name") or "").strip()
+    single_qty_raw = request.form.get("card_quantity")
+
+    entries: list[tuple[str, int]] = []
+    if raw_list:
+        entries = parse_decklist(raw_list.splitlines())
+    elif single_name:
+        parsed = parse_decklist([single_name])
+        if parsed:
+            name, qty = parsed[0]
+            override_qty = None
+            if single_qty_raw not in (None, ""):
+                try:
+                    override_qty = int(single_qty_raw)
+                except (TypeError, ValueError):
+                    override_qty = None
+            if override_qty is not None:
+                if not (qty != 1 and override_qty == 1):
+                    qty = max(override_qty, 1)
+            entries = [(name, max(int(qty or 1), 1))]
+
+    if not entries:
+        flash("Enter at least one card name to add.", "warning")
+        return _redirect_session(session_id)
+
+    try:
+        sc.ensure_cache_loaded()
+    except Exception as exc:
+        _LOG.error("Manual build add failed to load card cache: %s", exc)
+        flash("Card cache unavailable. Please try again shortly.", "danger")
+        return _redirect_session(session_id)
+
+    unresolved: list[str] = []
+    resolved_counts: dict[str, int] = defaultdict(int)
+    for raw_name, qty in entries:
+        oracle_id = sc.unique_oracle_by_name(raw_name)
+        if not oracle_id:
+            unresolved.append(raw_name)
+            continue
+        resolved_counts[oracle_id] += max(int(qty or 1), 1)
+
+    if not resolved_counts:
+        if unresolved:
+            _flash_unresolved_manual_add(unresolved)
+        else:
+            flash("No cards resolved from the list.", "warning")
+        return _redirect_session(session_id)
+
+    for oracle_id, qty in resolved_counts.items():
+        entry = BuildSessionCard.query.filter_by(session_id=session.id, card_oracle_id=oracle_id).first()
+        if entry:
+            entry.quantity = int(entry.quantity or 0) + qty
+        else:
+            db.session.add(BuildSessionCard(session_id=session.id, card_oracle_id=oracle_id, quantity=qty))
+
+    try:
+        db.session.commit()
+        total_qty = sum(resolved_counts.values())
+        flash(
+            f"Added {total_qty} card{'s' if total_qty != 1 else ''} to the build.",
+            "success",
+        )
+    except Exception:
+        db.session.rollback()
+        flash("Unable to add cards to the build session.", "danger")
+
+    if unresolved:
+        _flash_unresolved_manual_add(unresolved)
+
     return _redirect_session(session_id)
 
 
@@ -496,6 +575,25 @@ def _redirect_session(session_id: int, extra_params: dict[str, str] | None = Non
             if value:
                 params[key] = value
     return redirect(url_for("views.build_session", session_id=session_id, **params))
+
+
+def _flash_unresolved_manual_add(names: list[str]) -> None:
+    if not names:
+        return
+    unique: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        key = (name or "").casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(name)
+    if not unique:
+        return
+    preview = ", ".join(unique[:5])
+    if len(unique) > 5:
+        preview = f"{preview} (+{len(unique) - 5} more)"
+    flash(f"Could not resolve: {preview}.", "warning")
 
 
 def _collection_oracle_ids(user_id: int | None) -> set[str]:
@@ -1611,6 +1709,7 @@ RE_COST_SYMBOL = re.compile(r"\{([^}]+)\}")
 __all__ = [
     "add_card",
     "add_cards_bulk",
+    "add_cards_manual",
     "build_session_page",
     "remove_card",
     "start_build_session",

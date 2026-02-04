@@ -5,7 +5,7 @@ from typing import Any
 
 import requests
 
-from config import ServiceConfig
+from .config import ServiceConfig
 
 
 class MtgJsonError(RuntimeError):

@@ -630,6 +630,59 @@
     </div>
 
     <div class="col-12">
+      <div class="card border-0 shadow-sm build-panel" id="buildManualAdd" data-nav-section data-nav-label="Manual Add" data-nav-level="1">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+              <h5 class="card-title mb-1">Manual Add</h5>
+              <p class="text-muted small mb-0">Add cards by name. Quantities like "2x Card" or "Card x2" are supported.</p>
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-12 col-lg-4">
+              <form method="post" action="{{ url_for('views.build_session_add_manual', session_id=build_session.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                <input type="hidden" name="sort" value="{{ sort_mode }}">
+                <input type="hidden" name="build_view" value="type">
+                <label for="buildManualCardName" class="form-label">Add single card</label>
+                <input type="text" class="form-control form-control-sm" id="buildManualCardName" name="card_name" placeholder="Sol Ring">
+                <div class="d-flex align-items-center gap-2 mt-2">
+                  <input type="number"
+                         class="form-control form-control-sm text-center"
+                         name="card_quantity"
+                         value="1"
+                         min="1"
+                         step="1"
+                         style="max-width: 90px;">
+                  <button class="btn btn-sm btn-outline-primary flex-grow-1" type="submit">Add Card</button>
+                </div>
+              </form>
+            </div>
+            <div class="col-12 col-lg-8">
+              <form method="post" action="{{ url_for('views.build_session_add_manual', session_id=build_session.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="rec_source" value="{{ rec_source }}">
+                <input type="hidden" name="sort" value="{{ sort_mode }}">
+                <input type="hidden" name="build_view" value="type">
+                <label for="buildManualCardList" class="form-label">Add multiple cards</label>
+                <textarea id="buildManualCardList"
+                          name="card_list"
+                          class="form-control form-control-sm"
+                          rows="5"
+                          placeholder="2x Arcane Signet&#10;Sol Ring&#10;Lightning Bolt x3"></textarea>
+                <div class="d-flex align-items-center justify-content-between gap-2 mt-2">
+                  <span class="text-muted small">One per line. Use quantities like "2x Name" or "Name x2".</span>
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Add List</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12">
       <!-- Mirror folder_detail stats row structure for consistent scan patterns. -->
       <div class="summary-row mb-3">
         <div>
@@ -720,7 +773,7 @@
         </div>
       </div>
 
-      <div class="card border-0 shadow-sm build-panel" id="buildCurrent" data-build-view-initial="{{ build_view or '' }}" data-nav-section data-nav-label="Current Build" data-nav-level="1">
+      <div class="card border-0 shadow-sm build-panel" id="buildCurrent" data-build-view-initial="type" data-nav-section data-nav-label="Current Build" data-nav-level="1">
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div class="d-flex align-items-center gap-2">
@@ -742,104 +795,10 @@
                   Send to List Checker
                 </button>
               </form>
-              <div class="btn-group btn-group-sm" role="group" aria-label="Current build view">
-                <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="list" aria-pressed="false">List</button>
-                <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="gallery" aria-pressed="false">Gallery</button>
-                <button type="button" class="btn btn-outline-secondary build-view-toggle" data-build-view-toggle data-view="type" aria-pressed="false">Type</button>
-              </div>
             </div>
           </div>
           {% if session_cards %}
-            <div class="build-view" data-build-view="list">
-              <div id="buildSessionTable" class="build-list-grid">
-                {% for card in session_cards %}
-                  <div class="build-row build-list-card"
-                       data-name="{{ card.name | e }}"
-                       data-type="{{ card.type_line | lower }}"
-                       data-cmc-bucket="{{ card.cmc_bucket }}">
-                    <div class="build-list-main">
-                      {% if card.image %}
-                        <img src="{{ card.image }}"
-                             alt="{{ card.name }}"
-                             class="build-list-thumb"
-                             data-hover-src="{{ card.image }}">
-                      {% endif %}
-                      <span class="build-list-title">{{ card.name }}</span>
-                    </div>
-                    <div class="build-list-meta">
-                      <form method="post"
-                            action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}"
-                            class="build-list-qty d-inline-flex align-items-center gap-2">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                        <input type="hidden" name="sort" value="{{ sort_mode }}">
-                        <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                        <input type="number"
-                               name="quantity"
-                               class="form-control form-control-sm text-center"
-                               value="{{ card.quantity }}"
-                               min="1"
-                               step="1">
-                        <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
-                      </form>
-                      <div class="build-list-price small text-muted">{{ card.price_text or '—' }}</div>
-                      <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}" class="build-list-remove">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                        <input type="hidden" name="sort" value="{{ sort_mode }}">
-                        <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                      </form>
-                    </div>
-                  </div>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="build-view d-none" data-build-view="gallery" data-ignore-hover="true">
-              <div class="row g-3">
-                {% for card in session_cards %}
-                  <div class="col-6 col-md-4 col-lg-3 col-xl-2">
-                    <div class="card h-100 build-gallery-card">
-                      {% if card.image %}
-                        <img src="{{ card.image }}"
-                             alt="{{ card.name }}"
-                             class="card-img-top build-gallery-img"
-                             data-hover-src="{{ card.image }}">
-                      {% endif %}
-                      <div class="card-body d-flex flex-column gap-2">
-                        <div class="fw-semibold">{{ card.name }}</div>
-                        <div class="small text-muted">{{ card.price_text or '—' }}</div>
-                        <form method="post" action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}" class="d-flex align-items-center gap-2">
-                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                          <input type="hidden" name="sort" value="{{ sort_mode }}">
-                          <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                          <input type="number"
-                                 name="quantity"
-                                 class="form-control form-control-sm text-center"
-                                 value="{{ card.quantity }}"
-                                 min="1"
-                                 step="1">
-                          <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
-                        </form>
-                      </div>
-                      <div class="card-footer bg-transparent border-0 pt-0">
-                        <form method="post" action="{{ url_for('views.build_session_remove', session_id=build_session.id) }}">
-                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                          <input type="hidden" name="rec_source" value="{{ rec_source }}">
-                          <input type="hidden" name="sort" value="{{ sort_mode }}">
-                          <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
-                          <button class="btn btn-sm btn-outline-danger w-100" type="submit">Remove</button>
-                        </form>
-                      </div>
-                    </div>
-                  </div>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="build-view d-none" data-build-view="type">
+            <div class="build-view" data-build-view="type">
               {% for group in session_cards_by_type %}
                 <div class="build-type-group">
                   <div class="build-type-header">
@@ -849,7 +808,9 @@
                   </div>
                   <div class="build-type-list">
                     {% for card in group.cards %}
-                      <div class="build-type-row">
+                      <div class="build-type-row"
+                           data-type="{{ card.type_line | lower }}"
+                           data-cmc-bucket="{{ card.cmc_bucket }}">
                         <form method="post"
                               action="{{ url_for('views.build_session_quantity', session_id=build_session.id) }}"
                               class="d-inline-flex align-items-center gap-2">
