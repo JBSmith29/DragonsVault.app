@@ -962,7 +962,7 @@ SIGNAL_REASON_LABELS: Dict[str, str] = {
 SCORE_OVERVIEW_TEXT = (
     "We apply hard bracket gates first (Game Changers, mass land denial, extra turns, fast mana, "
     "instant-win lines, and Commander Spellbook combos). The score then places decks into coarse "
-    "bands and applies a final Bracket 5 check (12+ promotes; 11.9 or lower demotes)."
+    "bands and applies a final Bracket 4/5 split (15+ = Bracket 5, under 15 = Bracket 4)."
 )
 
 SCORE_OVERVIEW_GUIDANCE: Tuple[str, ...] = (
@@ -981,8 +981,7 @@ SCORE_BANDS: Tuple[Tuple[float, int], ...] = (
     (math.inf, 5),
 )
 
-BRACKET5_SCORE_PROMOTION = 12.0
-BRACKET5_SCORE_DEMOTION = 11.9
+BRACKET45_SCORE_SPLIT = 15.0
 
 AVG_CMC_BENEFITS = [
     (2.0, 3.5),
@@ -2242,7 +2241,7 @@ def evaluate_commander_bracket(
     }
     if ruleset_metrics:
         score_methodology["guidance"].append(
-            "Wizard signals and ruleset metrics set the hard bracket floor; score can still promote to Bracket 5 at 12+ or demote Bracket 5 at 11.9 or lower."
+            "Wizard signals and ruleset metrics set the hard bracket floor; Brackets 4/5 are split by score (15+ = Bracket 5, under 15 = Bracket 4)."
         )
 
     def add_component(key: str, value: float, reason: str) -> None:
@@ -2512,10 +2511,8 @@ def evaluate_commander_bracket(
         score_band = _score_to_band(score)
         level = max(hard_floor, score_band)
 
-    if score >= BRACKET5_SCORE_PROMOTION:
-        level = 5
-    elif level == 5 and score <= BRACKET5_SCORE_DEMOTION:
-        level = 4
+    if level in (4, 5):
+        level = 5 if score >= BRACKET45_SCORE_SPLIT else 4
 
     label = BRACKET_LABELS.get(level, "Unknown")
 

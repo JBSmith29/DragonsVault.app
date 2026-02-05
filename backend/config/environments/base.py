@@ -14,7 +14,7 @@ class BaseConfig:
 
     # Security headers
     SEND_FILE_MAX_AGE_DEFAULT = 86400
-    PERMANENT_SESSION_LIFETIME = 3600  # 1 hour session timeout
+    PERMANENT_SESSION_LIFETIME = 4 * 60 * 60  # 4 hour session timeout
 
     # Database (absolute sqlite path; forward slashes are fine on Windows)
     DEFAULT_SQLITE = default_sqlite_uri(INSTANCE_DIR)

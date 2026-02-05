@@ -105,7 +105,7 @@
     align-items: flex-end;
     justify-content: center;
     gap: 0;
-    padding: 0.45rem 1rem 0.6rem;
+    padding: 0.6rem 1.35rem 1rem;
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
@@ -118,7 +118,7 @@
     background: rgba(15, 23, 42, 0.45);
     border: 1px solid rgba(148, 163, 184, 0.12);
     border-radius: 1rem;
-    padding: 0.5rem;
+    padding: 0.4rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -132,7 +132,7 @@
       transform 0.16s ease-out,
       box-shadow 0.16s ease-out;
     width: 100%;
-    max-width: 120px;
+    max-width: 180px;
     transform: translateY(var(--hand-offset)) rotate(var(--hand-rotate));
     transform-origin: bottom center;
   }
@@ -154,10 +154,10 @@
     background: rgba(15, 23, 42, 0.9);
   }
   .hand-card-grid .hand-card {
-    width: clamp(90px, 11vw, 120px);
+    width: clamp(120px, 16vw, 190px);
     max-width: none;
     flex: 0 0 auto;
-    margin-left: -12px;
+    margin-left: -24px;
     scroll-snap-align: center;
   }
   .hand-card-grid .hand-card:first-child {
@@ -172,8 +172,8 @@
   .hand-card-grid .hand-card:nth-child(7) { --hand-rotate: 3.5deg; --hand-offset: 6px; }
   .hand-card:not(.card-tapped):hover {
     border-color: rgba(148, 180, 255, 0.45);
-    transform: translateY(calc(var(--hand-offset) - 6px)) rotate(var(--hand-rotate)) scale(1.06);
-    box-shadow: 0 1rem 2.2rem rgba(15, 23, 42, 0.35);
+    transform: translateY(calc(var(--hand-offset) - 8px)) rotate(var(--hand-rotate)) scale(1.08);
+    box-shadow: 0 1.2rem 2.6rem rgba(15, 23, 42, 0.4);
     z-index: 2;
   }
   .hand-card:not(.card-tapped):active {
@@ -184,7 +184,7 @@
     width: 100%;
     aspect-ratio: 0.718;
     border-radius: 0.75rem;
-    box-shadow: 0 1.1rem 2rem rgba(15, 23, 42, 0.22);
+    box-shadow: 0 1.25rem 2.2rem rgba(15, 23, 42, 0.3);
     object-fit: contain;
     background: radial-gradient(circle at 30% 20%, rgba(148, 180, 255, 0.18), transparent),
       rgba(15, 23, 42, 0.85);
@@ -233,7 +233,7 @@
       "creatures commandColumn"
       "permanents commandColumn"
       "lands commandColumn";
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
     column-gap: 1.25rem;
     row-gap: 1.25rem;
     align-items: start;
@@ -278,6 +278,49 @@
     flex-wrap: wrap;
     align-items: flex-start;
     min-height: 180px;
+  }
+  .board-zone-graveyard {
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 0.95rem;
+    padding: 0.85rem 0.75rem;
+    min-height: 240px;
+  }
+  .board-zone-graveyard .board-zone-header {
+    gap: 0.65rem;
+  }
+  .board-zone-graveyard .board-zone-header::after {
+    opacity: 0.5;
+  }
+  .board-zone-graveyard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 0.65rem;
+    align-content: start;
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 0.2rem;
+  }
+  .board-zone-graveyard-grid::-webkit-scrollbar {
+    width: 6px;
+  }
+  .board-zone-graveyard-grid::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+  }
+  .board-zone-graveyard-grid .hand-card {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+  .board-zone-graveyard-grid .card-stack {
+    width: 100%;
+    max-width: none;
+    min-height: 140px;
+  }
+  .board-zone-graveyard-grid .card-stack .hand-card {
+    width: 100%;
+    max-width: none;
   }
   .board-zone-permanents .board-zone-cards {
     justify-content: flex-end;
@@ -411,9 +454,9 @@
     bottom: var(--hand-actions-safe);
     z-index: 1040;
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     gap: 0.65rem;
     padding: 0.65rem 0.5rem;
     background: transparent;
@@ -429,6 +472,15 @@
     padding: 0.45rem 0.9rem;
     border-radius: 999px;
     white-space: nowrap;
+  }
+  .opening-hand-actions .action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .opening-hand-actions .action-group-right {
+    margin-left: auto;
   }
   @media (max-width: 992px) {
     .opening-hand-actions {
@@ -446,7 +498,8 @@
       scroll-snap-align: center;
     }
     .hand-card-grid .hand-card {
-      margin-left: -18px;
+      width: clamp(110px, 44vw, 150px);
+      margin-left: -16px;
     }
     .hand-card-grid .hand-card:first-child {
       margin-left: 0;
@@ -583,9 +636,12 @@
           <div class="board-zone-header">Command Zone</div>
           <div id="boardCommand" class="board-zone-cards board-zone-strip" data-empty-text="No commanders ready yet."></div>
         </section>
-        <section class="board-zone board-zone-graveyard board-zone-stack" data-board-zone="graveyard">
-          <div class="board-zone-header">Graveyard</div>
-          <div id="boardGraveyard" class="board-zone-stack" data-empty-text="No cards in the graveyard yet."></div>
+        <section class="board-zone board-zone-graveyard" data-board-zone="graveyard">
+          <div class="board-zone-header">
+            Graveyard
+            <span class="badge rounded-pill text-bg-secondary" id="graveyardCount" hidden>0</span>
+          </div>
+          <div id="boardGraveyard" class="board-zone-cards board-zone-graveyard-grid" data-empty-text="No cards in the graveyard yet."></div>
         </section>
       </div>
     </div>
@@ -649,21 +705,25 @@
       </div>
     </div>
     <div class="opening-hand-actions{% if not selection_active %} d-none{% endif %}" id="handActionBar">
-      <button class="btn btn-primary" type="button" id="shuffleBtn">
-        Shuffle &amp; Deal
-      </button>
-      <button class="btn btn-outline-secondary" type="button" id="resetBtn">
-        Reset
-      </button>
-      <button class="btn btn-outline-theme" type="button" id="drawBtn" disabled>
-        Draw 1
-      </button>
-      <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
-        Select New Deck
-      </button>
-      <button class="btn btn-outline-success" type="button" id="untapAllBtn">
-        Untap All
-      </button>
+      <div class="action-group action-group-left">
+        <button class="btn btn-primary" type="button" id="shuffleBtn">
+          Shuffle &amp; Deal
+        </button>
+        <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
+          Select New Deck
+        </button>
+        <button class="btn btn-outline-secondary" type="button" id="resetBtn">
+          Reset
+        </button>
+      </div>
+      <div class="action-group action-group-right">
+        <button class="btn btn-outline-theme" type="button" id="drawBtn" disabled>
+          Draw 1
+        </button>
+        <button class="btn btn-outline-success" type="button" id="untapAllBtn">
+          Untap All
+        </button>
+      </div>
     </div>
 
   </section>
@@ -906,6 +966,7 @@
   const tokenAllCustomBtn = document.getElementById('tokenAllCustomBtn');
   const tokenPickerStatus = document.getElementById('tokenPickerStatus');
   const untapAllBtn = document.getElementById('untapAllBtn');
+  const graveyardCount = document.getElementById('graveyardCount');
   const fetchCardName = document.getElementById('fetchCardName');
   const fetchCardList = document.getElementById('fetchCardList');
   const fetchCardSearch = document.getElementById('fetchCardSearch');
@@ -1952,6 +2013,10 @@
     container.innerHTML = '';
     const cards = boardState[zoneKey] || [];
     const keepVisible = zoneKey === 'command' || zoneKey === 'graveyard';
+    if (zoneKey === 'graveyard' && graveyardCount) {
+      graveyardCount.textContent = String(cards.length || 0);
+      graveyardCount.hidden = cards.length === 0;
+    }
 
     if (!cards.length) {
       if (zoneRoot) {
@@ -1996,21 +2061,12 @@
     };
 
     roots.sort(sortByOrder).forEach(function (card) {
-        const children = (childMap.get(card.__uid) || []).sort(sortByOrder);
-      if (children.length === 0 && zoneKey !== 'graveyard') {
+      const children = (childMap.get(card.__uid) || []).sort(sortByOrder);
+      if (children.length === 0) {
         const singleEl = createCardElement(card, 'board', zoneKey);
         if (singleEl) {
           singleEl.style.removeProperty('--stack-index');
           container.appendChild(singleEl);
-        }
-        return;
-      }
-
-      if (zoneKey === 'graveyard' && children.length === 0) {
-        const graveEl = createCardElement(card, 'board', zoneKey);
-        if (graveEl) {
-          graveEl.style.setProperty('--stack-index', String(orderMap.get(card.__uid) || 0));
-          container.appendChild(graveEl);
         }
         return;
       }
@@ -2054,8 +2110,8 @@
       return;
     }
     const center = (count - 1) / 2;
-    const maxRotation = count <= 3 ? 2.5 : 3.5;
-    const maxOffset = count <= 3 ? 3 : 6;
+    const maxRotation = count <= 3 ? 3 : 4.5;
+    const maxOffset = count <= 3 ? 4 : 9;
 
     cards.forEach(function (cardEl, index) {
       let angle = 0;
@@ -2506,26 +2562,25 @@
       });
     }
 
-    if (isBoardCard && currentZone !== 'graveyard') {
+    if (currentZone !== 'graveyard') {
       options.push({
         label: 'Move to Graveyard',
         action: function () {
-          const item = borrowCardFromSource(cardId, 'board');
+          const item = borrowCardFromSource(cardId, isBoardCard ? 'board' : source);
           if (!item) {
             return;
           }
           moveCardToBoard(item, 'graveyard');
         }
       });
-    } else if (!isBoardCard) {
+    }
+
+    if (currentZone !== 'graveyard') {
       options.push({
-        label: 'Move to Graveyard',
+        label: 'Create Copy (Token)',
         action: function () {
-          const item = borrowCardFromSource(cardId, source);
-          if (!item) {
-            return;
-          }
-          moveCardToBoard(item, 'graveyard');
+          const targetZone = isBoardCard ? currentZone : null;
+          duplicateCardToZone(card, targetZone);
         }
       });
     }
@@ -2563,15 +2618,6 @@
         }
       });
     });
-
-    if (isBoardCard && currentZone !== 'graveyard') {
-      options.push({
-        label: 'Create Copy (Token)',
-        action: function () {
-          duplicateCardToZone(card, currentZone);
-        }
-      });
-    }
 
     if (!options.length) {
       return;

@@ -652,79 +652,6 @@
     </style>
     <link rel="stylesheet" href="{{ static_url('css/dv-design.css') }}">
   </head>
-  
-
-  <!-- Keep these tiny HTMX helpers early so they always bind -->
-  <script nonce="{{ csp_nonce() }}">
-    // Clean up Bootstrap overlays + image tooltips before HTMX swaps / requests
-    (function () {
-      function cleanupOverlays() {
-        try {
-          // Offcanvas / Modal
-          document.querySelectorAll('.offcanvas.show').forEach(el => {
-            const inst = (window.bootstrap && (bootstrap.Offcanvas.getInstance(el) || new bootstrap.Offcanvas(el))) || null;
-            if (inst) inst.hide();
-          });
-          document.querySelectorAll('.modal.show').forEach(el => {
-            const inst = (window.bootstrap && (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el))) || null;
-            if (inst) inst.hide();
-          });
-        } catch (_) {}
-
-        // Dispose any tooltip/popover instances (prevents stuck hover images)
-        try {
-          if (window.bootstrap) {
-            document.querySelectorAll(
-              '.wl-card-link, .checker-card-link, [data-bs-toggle="tooltip"], [data-bs-toggle="popover"]'
-            ).forEach(el => {
-              const tip = bootstrap.Tooltip.getInstance(el);
-              if (tip) tip.dispose();
-              if (bootstrap.Popover) {
-                const pop = bootstrap.Popover.getInstance(el);
-                if (pop) pop.dispose();
-              }
-              if (el.dataset) el.dataset.hasTooltip = '';
-            });
-          }
-        } catch (_) {}
-
-        // Remove leftover nodes appended to <body>
-        document.querySelectorAll('.tooltip, .popover, .modal-backdrop, .offcanvas-backdrop').forEach(n => n.remove());
-
-        // Reset body styles Bootstrap may have set
-        document.body.classList.remove('modal-open');
-        document.body.style.removeProperty('overflow');
-        document.body.style.removeProperty('paddingRight');
-      }
-
-      document.addEventListener('htmx:beforeRequest', cleanupOverlays);
-      document.addEventListener('htmx:beforeSwap', cleanupOverlays);
-
-      // Belt & suspenders on normal nav/unload
-      window.addEventListener('beforeunload', cleanupOverlays);
-      document.addEventListener('click', (e) => {
-        if (e.target.closest('a, button[type="submit"]')) cleanupOverlays();
-      });
-    })();
-
-    (function () {
-      const hxEnabled = {{ 'true' if not (disable_hx | default(false)) else 'false' }};
-
-      window.DV = window.DV || {};
-      window.DV.hxEnabled = hxEnabled;
-
-      const measureViewport = () => {
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-        document.documentElement.style.setProperty('--vh', viewportHeight + 'px');
-        const header = document.querySelector('.app-header');
-        const headerHeight = header ? header.getBoundingClientRect().height : 96;
-        document.documentElement.style.setProperty('--header-height', headerHeight + 'px');
-      };
-
-      window.addEventListener('resize', measureViewport, { passive: true });
-      measureViewport();
-    })();
-  </script>
 
   {% set hx_enabled = not (disable_hx | default(false)) %}
   <body
@@ -737,6 +664,78 @@
       hx-indicator="#global-indicator"
     {% endif %}
   >
+    <!-- Keep these tiny HTMX helpers early so they always bind -->
+    <script nonce="{{ csp_nonce() }}">
+      // Clean up Bootstrap overlays + image tooltips before HTMX swaps / requests
+      (function () {
+        function cleanupOverlays() {
+          try {
+            // Offcanvas / Modal
+            document.querySelectorAll('.offcanvas.show').forEach(el => {
+              const inst = (window.bootstrap && (bootstrap.Offcanvas.getInstance(el) || new bootstrap.Offcanvas(el))) || null;
+              if (inst) inst.hide();
+            });
+            document.querySelectorAll('.modal.show').forEach(el => {
+              const inst = (window.bootstrap && (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el))) || null;
+              if (inst) inst.hide();
+            });
+          } catch (_) {}
+
+          // Dispose any tooltip/popover instances (prevents stuck hover images)
+          try {
+            if (window.bootstrap) {
+              document.querySelectorAll(
+                '.wl-card-link, .checker-card-link, [data-bs-toggle="tooltip"], [data-bs-toggle="popover"]'
+              ).forEach(el => {
+                const tip = bootstrap.Tooltip.getInstance(el);
+                if (tip) tip.dispose();
+                if (bootstrap.Popover) {
+                  const pop = bootstrap.Popover.getInstance(el);
+                  if (pop) pop.dispose();
+                }
+                if (el.dataset) el.dataset.hasTooltip = '';
+              });
+            }
+          } catch (_) {}
+
+          // Remove leftover nodes appended to <body>
+          document.querySelectorAll('.tooltip, .popover, .modal-backdrop, .offcanvas-backdrop').forEach(n => n.remove());
+
+          // Reset body styles Bootstrap may have set
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('overflow');
+          document.body.style.removeProperty('paddingRight');
+        }
+
+        document.addEventListener('htmx:beforeRequest', cleanupOverlays);
+        document.addEventListener('htmx:beforeSwap', cleanupOverlays);
+
+        // Belt & suspenders on normal nav/unload
+        window.addEventListener('beforeunload', cleanupOverlays);
+        document.addEventListener('click', (e) => {
+          if (e.target.closest('a, button[type="submit"]')) cleanupOverlays();
+        });
+      })();
+
+      (function () {
+        const hxEnabled = {{ 'true' if not (disable_hx | default(false)) else 'false' }};
+
+        window.DV = window.DV || {};
+        window.DV.hxEnabled = hxEnabled;
+
+        const measureViewport = () => {
+          const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+          document.documentElement.style.setProperty('--vh', viewportHeight + 'px');
+          const header = document.querySelector('.app-header');
+          const headerHeight = header ? header.getBoundingClientRect().height : 96;
+          document.documentElement.style.setProperty('--header-height', headerHeight + 'px');
+        };
+
+        window.addEventListener('resize', measureViewport, { passive: true });
+        document.addEventListener('DOMContentLoaded', measureViewport, { once: true });
+        measureViewport();
+      })();
+    </script>
     {% set user_is_authenticated = current_user.is_authenticated if current_user is defined else False %}
     {% set user_is_admin = user_is_authenticated and (current_user.is_admin in [true, True, 1, '1', 'true', 'True']) %}
     {% if user_is_admin %}
