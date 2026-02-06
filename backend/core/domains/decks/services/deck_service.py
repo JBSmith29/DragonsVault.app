@@ -441,6 +441,24 @@ def opening_hand_draw():
     return card_service.opening_hand_draw()
 
 
+def opening_hand_peek():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_peek()
+
+
+def opening_hand_scry():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_scry()
+
+
+def opening_hand_surveil():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_surveil()
+
+
 def opening_hand_token_search():
     from core.domains.cards.services import card_service
 
@@ -463,6 +481,9 @@ __all__ = [
     "opening_hand",
     "opening_hand_play",
     "opening_hand_draw",
+    "opening_hand_peek",
+    "opening_hand_scry",
+    "opening_hand_surveil",
     "opening_hand_shuffle",
     "opening_hand_token_search",
     "register_deck_stats_listeners",

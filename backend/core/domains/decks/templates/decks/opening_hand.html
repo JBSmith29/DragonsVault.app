@@ -138,16 +138,20 @@
   }
   .hand-card .card-flip-btn {
     position: absolute;
-    top: 0.35rem;
-    left: 0.35rem;
+    bottom: -0.55rem;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 6;
     border: 1px solid rgba(148, 163, 184, 0.3);
     background: rgba(15, 23, 42, 0.75);
     color: #fff;
     border-radius: 999px;
-    padding: 0.15rem 0.5rem;
+    padding: 0.18rem 0.6rem;
     font-size: 0.65rem;
     line-height: 1;
+  }
+  .hand-card.has-back {
+    padding-bottom: 0.9rem;
   }
   .hand-card .card-flip-btn:hover,
   .hand-card .card-flip-btn:focus-visible {
@@ -379,6 +383,24 @@
     width: min(160px, 100%);
     max-width: 180px;
   }
+  .card-stack .stack-tap-btn {
+    position: absolute;
+    bottom: -0.4rem;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.8);
+    color: #e2e8f0;
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.65rem;
+    line-height: 1;
+    z-index: 40;
+  }
+  .card-stack .stack-tap-btn:hover,
+  .card-stack .stack-tap-btn:focus-visible {
+    background: rgba(15, 23, 42, 0.95);
+  }
   .card-stack .hand-card {
     position: absolute;
     top: 0;
@@ -586,6 +608,49 @@
     overflow-y: auto;
     padding-right: 4px;
   }
+  .scry-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.85rem;
+    max-height: 55vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .scry-card {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.85rem;
+    padding: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .scry-card img {
+    width: 100%;
+    aspect-ratio: 0.718;
+    border-radius: 0.65rem;
+    object-fit: cover;
+  }
+  .scry-card .scry-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+  .scry-top-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .scry-top-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 0.6rem;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    font-size: 0.85rem;
+  }
 </style>
 
 {% set selection_active = selected_deck_id or selected_deck_list %}
@@ -717,6 +782,9 @@
         </button>
       </div>
       <div class="action-group action-group-right">
+        <button class="btn btn-outline-info" type="button" id="scryBtn" data-bs-toggle="modal" data-bs-target="#scryModal" disabled>
+          Scry / Surveil
+        </button>
         <button class="btn btn-outline-theme" type="button" id="drawBtn" disabled>
           Draw 1
         </button>
@@ -924,6 +992,54 @@
 </div>
 {% endcall %}
 
+{% call wrap_modal() %}
+<div class="modal fade" id="scryModal" tabindex="-1" aria-labelledby="scryModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="scryModalLabel">Scry / Surveil</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 align-items-end mb-3">
+          <div class="col-12 col-lg-4">
+            <label for="scryMode" class="form-label">Mode</label>
+            <select id="scryMode" class="form-select form-select-sm">
+              <option value="scry">Scry (put any on bottom)</option>
+              <option value="surveil">Surveil (put any in graveyard)</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label for="scryCount" class="form-label">Cards to look at</label>
+            <input type="number" id="scryCount" class="form-control form-control-sm" min="1" max="10" value="1">
+          </div>
+          <div class="col-12 col-lg-4">
+            <button type="button" class="btn btn-outline-primary w-100" id="scryPreviewBtn">Preview Top Cards</button>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12 col-lg-8">
+            <div class="scry-preview" id="scryPreview"></div>
+            <div class="text-muted small mt-2" id="scryPreviewHint"></div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="text-uppercase text-muted small fw-semibold mb-2">Top Order</div>
+            <div class="scry-top-list" id="scryTopList"></div>
+            <div class="text-muted small mt-2" id="scryTopHint">Cards kept on top will be drawn in this order.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <div class="text-muted small me-auto" id="scryStatus"></div>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="scryApplyBtn">Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
 <script nonce="{{ csp_nonce() }}">
 (function () {
   const deckListInput = document.getElementById('deckListInput');
@@ -966,6 +1082,17 @@
   const tokenAllCustomBtn = document.getElementById('tokenAllCustomBtn');
   const tokenPickerStatus = document.getElementById('tokenPickerStatus');
   const untapAllBtn = document.getElementById('untapAllBtn');
+  const scryBtn = document.getElementById('scryBtn');
+  const scryModal = document.getElementById('scryModal');
+  const scryMode = document.getElementById('scryMode');
+  const scryCount = document.getElementById('scryCount');
+  const scryPreviewBtn = document.getElementById('scryPreviewBtn');
+  const scryPreview = document.getElementById('scryPreview');
+  const scryPreviewHint = document.getElementById('scryPreviewHint');
+  const scryTopList = document.getElementById('scryTopList');
+  const scryTopHint = document.getElementById('scryTopHint');
+  const scryStatus = document.getElementById('scryStatus');
+  const scryApplyBtn = document.getElementById('scryApplyBtn');
   const graveyardCount = document.getElementById('graveyardCount');
   const fetchCardName = document.getElementById('fetchCardName');
   const fetchCardList = document.getElementById('fetchCardList');
@@ -987,6 +1114,9 @@
   let commanderSeed = Array.isArray(commanderSeedPayload) ? commanderSeedPayload.slice() : [];
   let tokenAllSearchTimer = null;
   let tokenAllLastQuery = '';
+  let scryCards = [];
+  let scryChoices = new Map();
+  let scryTopOrder = [];
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),
@@ -1396,6 +1526,7 @@
         deckPickerSummary.textContent = 'No deck selected';
       }
     }
+    updateScryAvailability();
   }
 
   function syncSidebarCollapse(active) {
@@ -1868,6 +1999,296 @@
     handWarnings.className = 'alert alert-warning small mt-3';
   }
 
+  function updateScryAvailability() {
+    if (!scryBtn) {
+      return;
+    }
+    const hasState = Boolean(stateInput && stateInput.value);
+    scryBtn.disabled = !hasState;
+  }
+
+  function setScryStatus(message, tone) {
+    if (!scryStatus) {
+      return;
+    }
+    scryStatus.textContent = message || '';
+    scryStatus.className = 'text-muted small';
+    if (tone === 'warning') {
+      scryStatus.className = 'text-warning small';
+    } else if (tone === 'danger') {
+      scryStatus.className = 'text-danger small';
+    } else if (tone === 'success') {
+      scryStatus.className = 'text-success small';
+    }
+  }
+
+  function resetScryState() {
+    scryCards = [];
+    scryChoices = new Map();
+    scryTopOrder = [];
+    if (scryPreview) {
+      scryPreview.innerHTML = '';
+    }
+    if (scryTopList) {
+      scryTopList.innerHTML = '';
+    }
+    if (scryPreviewHint) {
+      scryPreviewHint.textContent = '';
+    }
+    setScryStatus('');
+  }
+
+  function renderScryTopList() {
+    if (!scryTopList) {
+      return;
+    }
+    scryTopList.innerHTML = '';
+    if (!scryTopOrder.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No cards kept on top.';
+      scryTopList.appendChild(empty);
+      return;
+    }
+    scryTopOrder.forEach(function (idx, position) {
+      const card = scryCards[idx];
+      if (!card) {
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'scry-top-item';
+      const label = document.createElement('div');
+      label.textContent = `${position + 1}. ${card.name || 'Card'}`;
+      const controls = document.createElement('div');
+      const upBtn = document.createElement('button');
+      upBtn.type = 'button';
+      upBtn.className = 'btn btn-outline-light btn-sm';
+      upBtn.textContent = 'Up';
+      upBtn.disabled = position === 0;
+      upBtn.addEventListener('click', function () {
+        if (position <= 0) return;
+        const copy = scryTopOrder.slice();
+        const temp = copy[position - 1];
+        copy[position - 1] = copy[position];
+        copy[position] = temp;
+        scryTopOrder = copy;
+        renderScryTopList();
+      });
+      const downBtn = document.createElement('button');
+      downBtn.type = 'button';
+      downBtn.className = 'btn btn-outline-light btn-sm';
+      downBtn.textContent = 'Down';
+      downBtn.disabled = position === scryTopOrder.length - 1;
+      downBtn.addEventListener('click', function () {
+        if (position >= scryTopOrder.length - 1) return;
+        const copy = scryTopOrder.slice();
+        const temp = copy[position + 1];
+        copy[position + 1] = copy[position];
+        copy[position] = temp;
+        scryTopOrder = copy;
+        renderScryTopList();
+      });
+      controls.appendChild(upBtn);
+      controls.appendChild(downBtn);
+      row.appendChild(label);
+      row.appendChild(controls);
+      scryTopList.appendChild(row);
+    });
+  }
+
+  function renderScryPreview() {
+    if (!scryPreview) {
+      return;
+    }
+    scryPreview.innerHTML = '';
+    if (!scryCards.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No cards to preview yet.';
+      scryPreview.appendChild(empty);
+      renderScryTopList();
+      return;
+    }
+    const mode = scryMode ? (scryMode.value || 'scry') : 'scry';
+    const offLabel = mode === 'surveil' ? 'Graveyard' : 'Bottom';
+    scryCards.forEach(function (card, idx) {
+      const cardWrap = document.createElement('div');
+      cardWrap.className = 'scry-card';
+      const img = document.createElement('img');
+      img.src = card.image || placeholderImage;
+      img.alt = card.name || '';
+      const title = document.createElement('div');
+      title.className = 'scry-name';
+      title.textContent = card.name || 'Card';
+      const select = document.createElement('select');
+      select.className = 'form-select form-select-sm';
+      const keepOpt = document.createElement('option');
+      keepOpt.value = 'top';
+      keepOpt.textContent = 'Keep on top';
+      const offOpt = document.createElement('option');
+      offOpt.value = mode === 'surveil' ? 'graveyard' : 'bottom';
+      offOpt.textContent = `Put in ${offLabel}`;
+      select.appendChild(keepOpt);
+      select.appendChild(offOpt);
+      let choice = scryChoices.get(idx) || 'top';
+      if (mode === 'surveil' && choice === 'bottom') {
+        choice = 'graveyard';
+        scryChoices.set(idx, choice);
+      }
+      if (mode === 'scry' && choice === 'graveyard') {
+        choice = 'bottom';
+        scryChoices.set(idx, choice);
+      }
+      select.value = choice;
+      select.addEventListener('change', function () {
+        const val = select.value;
+        scryChoices.set(idx, val);
+        if (val === 'top') {
+          if (!scryTopOrder.includes(idx)) {
+            scryTopOrder = scryTopOrder.concat([idx]);
+          }
+        } else {
+          scryTopOrder = scryTopOrder.filter(function (entry) { return entry !== idx; });
+        }
+        renderScryTopList();
+      });
+      cardWrap.appendChild(img);
+      cardWrap.appendChild(title);
+      cardWrap.appendChild(select);
+      scryPreview.appendChild(cardWrap);
+    });
+    renderScryTopList();
+  }
+
+  async function fetchScryPreview() {
+    if (!stateInput || !stateInput.value) {
+      setScryStatus('Shuffle a deck first.', 'warning');
+      return;
+    }
+    const countValue = scryCount ? parseInt(scryCount.value || '1', 10) || 1 : 1;
+    try {
+      const payload = { state: stateInput.value, count: countValue };
+      if (csrfToken) {
+        payload.csrf_token = csrfToken;
+      }
+      const response = await fetch('{{ url_for("views.opening_hand_peek") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || !data.ok) {
+        const detail = (data && data.error) ? data.error : `Unable to preview cards (HTTP ${response.status}).`;
+        setScryStatus(detail, 'danger');
+        return;
+      }
+      scryCards = Array.isArray(data.cards) ? data.cards : [];
+      scryChoices = new Map();
+      scryTopOrder = scryCards.map(function (_card, idx) { return idx; });
+      scryCards.forEach(function (_card, idx) {
+        scryChoices.set(idx, 'top');
+      });
+      if (scryPreviewHint) {
+        scryPreviewHint.textContent = `Looking at ${data.count} card${data.count === 1 ? '' : 's'} on top of ${data.deck_name}.`;
+      }
+      setScryStatus('');
+      renderScryPreview();
+    } catch (err) {
+      console.error(err);
+      setScryStatus('Unable to preview cards right now.', 'danger');
+    }
+  }
+
+  async function applyScryChanges() {
+    if (!stateInput || !stateInput.value) {
+      setScryStatus('Shuffle a deck first.', 'warning');
+      return;
+    }
+    if (!scryCards.length) {
+      setScryStatus('Preview cards first.', 'warning');
+      return;
+    }
+    const mode = scryMode ? (scryMode.value || 'scry') : 'scry';
+    const countValue = scryCards.length;
+    const bottomOrder = [];
+    const graveyardOrder = [];
+    scryCards.forEach(function (_card, idx) {
+      const choice = scryChoices.get(idx) || 'top';
+      if (choice === 'bottom') {
+        bottomOrder.push(idx);
+      } else if (choice === 'graveyard') {
+        graveyardOrder.push(idx);
+      }
+    });
+    const payload = {
+      state: stateInput.value,
+      count: countValue,
+      keep_order: scryTopOrder,
+      bottom_order: bottomOrder,
+      graveyard_order: graveyardOrder,
+      choices: scryCards.map(function (_card, idx) {
+        return { index: idx, action: scryChoices.get(idx) || 'top' };
+      })
+    };
+    if (csrfToken) {
+      payload.csrf_token = csrfToken;
+    }
+    const endpoint = mode === 'surveil'
+      ? '{{ url_for("views.opening_hand_surveil") }}'
+      : '{{ url_for("views.opening_hand_scry") }}';
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || !data.ok) {
+        const detail = (data && data.error) ? data.error : `Unable to apply changes (HTTP ${response.status}).`;
+        setScryStatus(detail, 'danger');
+        return;
+      }
+      if (stateInput) {
+        stateInput.value = data.state;
+      }
+      if (handRemaining && typeof data.remaining === 'number') {
+        handRemaining.hidden = false;
+        handRemaining.textContent = data.remaining + ' cards remaining';
+      }
+      if (mode === 'surveil' && data.moved && Array.isArray(data.moved.graveyard)) {
+        data.moved.graveyard.forEach(function (card) {
+          const payloadCard = normalizeCard(card);
+          if (payloadCard) {
+            moveCardToBoard(payloadCard, 'graveyard');
+          }
+        });
+      }
+      setScryStatus('Applied.', 'success');
+      showMessage(`${mode === 'surveil' ? 'Surveil' : 'Scry'} applied.`, 'info');
+      updateScryAvailability();
+      if (scryModal) {
+        const ModalCtor = window.bootstrap && window.bootstrap.Modal
+          ? window.bootstrap.Modal
+          : (typeof bootstrap !== 'undefined' && bootstrap.Modal ? bootstrap.Modal : null);
+        const instance = ModalCtor ? ModalCtor.getOrCreateInstance(scryModal) : null;
+        if (instance) {
+          instance.hide();
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setScryStatus('Unable to apply changes.', 'danger');
+    }
+  }
+
   function removeCardById(collection, id) {
     if (!Array.isArray(collection)) {
       return null;
@@ -2080,6 +2501,23 @@
       allCards.sort(function (a, b) {
         return (isCreature(a) ? 1 : 0) - (isCreature(b) ? 1 : 0);
       });
+      const creatureCard = allCards.find(function (entry) {
+        return isCreature(entry);
+      });
+      if (creatureCard) {
+        stackWrap.dataset.creatureId = creatureCard.__uid;
+        const tapBtn = document.createElement('button');
+        tapBtn.type = 'button';
+        tapBtn.className = 'stack-tap-btn';
+        tapBtn.textContent = creatureCard.tapped ? 'Untap' : 'Tap';
+        tapBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          creatureCard.tapped = !creatureCard.tapped;
+          renderBoard();
+        });
+        stackWrap.appendChild(tapBtn);
+      }
       allCards.forEach(function (entry, idx) {
         const el = createCardElement(entry, 'board', zoneKey);
         if (!el) {
@@ -2971,6 +3409,7 @@
         if (drawBtn) {
           drawBtn.disabled = false;
         }
+        updateScryAvailability();
         showWarnings(data.warnings || []);
       } catch (err) {
         console.error(err);
@@ -3036,6 +3475,7 @@
         addDraw(data.card, data.remaining, data.deck_name);
         showMessage('');
         drawBtn.disabled = data.remaining <= 0;
+        updateScryAvailability();
       } catch (err) {
         console.error(err);
         showMessage('An unexpected error occurred while drawing.', 'danger');
@@ -3123,6 +3563,42 @@
 
     tokenPickerModal.addEventListener('hidden.bs.modal', function () {
       setTokenStatus('');
+    });
+  }
+
+  if (scryModal) {
+    scryModal.addEventListener('show.bs.modal', function () {
+      resetScryState();
+      if (scryCount) {
+        scryCount.value = '1';
+      }
+    });
+    scryModal.addEventListener('shown.bs.modal', function () {
+      if (scryCount) {
+        scryCount.focus({ preventScroll: true });
+      }
+      fetchScryPreview();
+    });
+    scryModal.addEventListener('hidden.bs.modal', function () {
+      resetScryState();
+    });
+  }
+
+  if (scryPreviewBtn) {
+    scryPreviewBtn.addEventListener('click', function () {
+      fetchScryPreview();
+    });
+  }
+
+  if (scryMode) {
+    scryMode.addEventListener('change', function () {
+      renderScryPreview();
+    });
+  }
+
+  if (scryApplyBtn) {
+    scryApplyBtn.addEventListener('click', function () {
+      applyScryChanges();
     });
   }
 

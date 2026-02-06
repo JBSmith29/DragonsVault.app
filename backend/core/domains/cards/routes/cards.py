@@ -118,6 +118,21 @@ def opening_hand_draw():
     return deck_service.opening_hand_draw()
 
 
+@views.post("/opening-hand/peek")
+def opening_hand_peek():
+    return deck_service.opening_hand_peek()
+
+
+@views.post("/opening-hand/scry")
+def opening_hand_scry():
+    return deck_service.opening_hand_scry()
+
+
+@views.post("/opening-hand/surveil")
+def opening_hand_surveil():
+    return deck_service.opening_hand_surveil()
+
+
 @views.get("/opening-hand/tokens/search")
 def opening_hand_token_search():
     return deck_service.opening_hand_token_search()
@@ -137,6 +152,9 @@ __all__ = [
     "opening_hand_play",
     "opening_hand_shuffle",
     "opening_hand_draw",
+    "opening_hand_peek",
+    "opening_hand_scry",
+    "opening_hand_surveil",
     "opening_hand_token_search",
     "decks_overview",
     "list_cards",

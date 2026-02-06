@@ -6057,6 +6057,154 @@ def opening_hand_draw():
     )
 
 
+def opening_hand_peek():
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("state") or ""
+    try:
+        count = int(payload.get("count") or 1)
+    except (TypeError, ValueError):
+        count = 1
+    count = max(1, min(count, 10))
+
+    state = _decode_state(token)
+    if not state:
+        return jsonify({"ok": False, "error": "Invalid or expired hand state."}), 400
+
+    deck = state["deck"]
+    index = state["index"]
+    deck_name = state["deck_name"]
+    remaining = len(deck) - index
+    if remaining <= 0:
+        return jsonify({"ok": False, "error": "No cards left in the deck."}), 400
+
+    count = min(count, remaining)
+    top_cards = deck[index:index + count]
+    placeholder = static_url("img/card-placeholder.svg")
+    payload_cards = [_client_card_payload(card, placeholder) for card in top_cards]
+
+    return jsonify(
+        {
+            "ok": True,
+            "cards": payload_cards,
+            "count": count,
+            "remaining": remaining,
+            "deck_name": deck_name,
+            "state": token,
+        }
+    )
+
+
+def opening_hand_scry():
+    return _opening_hand_reorder(action="scry")
+
+
+def opening_hand_surveil():
+    return _opening_hand_reorder(action="surveil")
+
+
+def _opening_hand_reorder(*, action: str):
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("state") or ""
+    try:
+        count = int(payload.get("count") or 1)
+    except (TypeError, ValueError):
+        count = 1
+    count = max(1, min(count, 10))
+
+    state = _decode_state(token)
+    if not state:
+        return jsonify({"ok": False, "error": "Invalid or expired hand state."}), 400
+
+    deck = state["deck"]
+    index = state["index"]
+    deck_name = state["deck_name"]
+    remaining = len(deck) - index
+    if remaining <= 0:
+        return jsonify({"ok": False, "error": "No cards left in the deck."}), 400
+
+    count = min(count, remaining)
+    top_cards = deck[index:index + count]
+
+    def _normalize_indices(raw_list):
+        out = []
+        seen = set()
+        for item in raw_list or []:
+            try:
+                idx = int(item)
+            except (TypeError, ValueError):
+                continue
+            if idx < 0 or idx >= count:
+                continue
+            if idx in seen:
+                continue
+            seen.add(idx)
+            out.append(idx)
+        return out
+
+    keep_order = _normalize_indices(payload.get("keep_order") or [])
+    bottom_order = _normalize_indices(payload.get("bottom_order") or [])
+    graveyard_order = _normalize_indices(payload.get("graveyard_order") or [])
+
+    choice_map = {}
+    for choice in payload.get("choices") or []:
+        try:
+            idx = int(choice.get("index"))
+        except (TypeError, ValueError):
+            continue
+        if idx < 0 or idx >= count:
+            continue
+        action_value = (choice.get("action") or "").strip().lower()
+        if action_value in {"top", "bottom", "graveyard"}:
+            choice_map[idx] = action_value
+
+    if not keep_order:
+        keep_order = [idx for idx in range(count) if choice_map.get(idx) != "bottom" and choice_map.get(idx) != "graveyard"]
+
+    keep_set = set(keep_order)
+
+    if action == "scry":
+        if not bottom_order:
+            bottom_order = [idx for idx in range(count) if idx not in keep_set]
+        else:
+            bottom_order = [idx for idx in bottom_order if idx not in keep_set]
+            bottom_order.extend([idx for idx in range(count) if idx not in keep_set and idx not in set(bottom_order)])
+        graveyard_order = []
+    else:
+        if not graveyard_order:
+            graveyard_order = [idx for idx in range(count) if idx not in keep_set]
+        else:
+            graveyard_order = [idx for idx in graveyard_order if idx not in keep_set]
+            graveyard_order.extend([idx for idx in range(count) if idx not in keep_set and idx not in set(graveyard_order)])
+        bottom_order = []
+
+    keep_cards = [top_cards[idx] for idx in keep_order if idx < len(top_cards)]
+    bottom_cards = [top_cards[idx] for idx in bottom_order if idx < len(top_cards)]
+    graveyard_cards = [top_cards[idx] for idx in graveyard_order if idx < len(top_cards)]
+
+    new_deck = deck[:index] + keep_cards + deck[index + count:]
+    if action == "scry":
+        new_deck.extend(bottom_cards)
+
+    state["deck"] = new_deck
+    new_token = _encode_state(state)
+
+    placeholder = static_url("img/card-placeholder.svg")
+    graveyard_payload = [_client_card_payload(card, placeholder) for card in graveyard_cards]
+    remaining = len(new_deck) - index
+
+    return jsonify(
+        {
+            "ok": True,
+            "state": new_token,
+            "remaining": remaining,
+            "deck_name": deck_name,
+            "moved": {
+                "graveyard": graveyard_payload,
+                "bottom": len(bottom_cards),
+            },
+        }
+    )
+
 def opening_hand_token_search():
     query = (request.args.get("q") or "").strip()
     if len(query) < 2:
@@ -6551,6 +6699,9 @@ __all__ = [
     "opening_hand_play",
     "opening_hand_shuffle",
     "opening_hand_draw",
+    "opening_hand_peek",
+    "opening_hand_scry",
+    "opening_hand_surveil",
     "opening_hand_token_search",
     "decks_overview",
     "list_cards",
