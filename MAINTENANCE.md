@@ -177,3 +177,8 @@ Card Data service (oracle-level DB):
 4) If caches are stale: run `fetch-scryfall-bulk`, `refresh-scryfall`, then `sync-spellbook-combos` (and `/api/cards/v1/scryfall/sync` if the card-data service is in use).  
 5) If jobs stuck: restart worker (`docker compose restart worker`) and re-run the command.  
 6) After code updates: `docker compose exec web flask db upgrade` and consider `fts-reindex`.
+
+## Schema / Migration Errors
+- Error pattern: `psycopg2.errors.UndefinedTable` / `relation "<table>" does not exist` in `web` logs.
+- Fix: apply migrations and confirm head: `docker compose exec web flask db upgrade`, then `docker compose exec web flask db current`.
+- Example: missing `friend_card_requests` means the `0026_add_friend_card_requests` migration has not been applied.
