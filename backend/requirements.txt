@@ -47,7 +47,7 @@ pytz==2025.2
 pyzstd==0.18.0
 RapidFuzz==3.14.1
 readability-lxml==0.8.4.1
-redis==5.1.0
+redis==7.1.0
 requests==2.32.5
 rq==1.16.2
 six==1.17.0
