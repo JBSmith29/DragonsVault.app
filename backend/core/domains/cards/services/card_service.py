@@ -2542,6 +2542,55 @@ def api_card(card_id):
     images.append({"small": im["small"], "normal": im["normal"], "large": im["large"]})
     info["scryfall_id"] = (best or {}).get("id")
 
+    printings: list[dict] = []
+    if have_cache:
+        oracle_id = card.oracle_id or (best or {}).get("oracle_id")
+        try:
+            variants = list(prints_for_oracle(oracle_id) or []) if oracle_id else []
+        except Exception:
+            variants = []
+        if not variants and best:
+            variants = [best]
+        ordered_prints = []
+        if best:
+            ordered_prints.append(best)
+        ordered_prints.extend([pr for pr in variants if pr is not best])
+        seen_prints: set[str] = set()
+        for pr in ordered_prints:
+            pid = pr.get("id") or ""
+            if pid and pid in seen_prints:
+                continue
+            if pid:
+                seen_prints.add(pid)
+            img_pack = _image_from_print(pr)
+            if not (img_pack.get("small") or img_pack.get("normal") or img_pack.get("large")):
+                continue
+            set_code = (pr.get("set") or "").upper()
+            collector_number = str(pr.get("collector_number") or "")
+            lang_code = str(pr.get("lang") or "").upper()
+            label_bits = [val for val in (set_code, collector_number, lang_code) if val]
+            label = " · ".join(label_bits) if label_bits else (pr.get("name") or card.name)
+            purchase = pr.get("purchase_uris") or {}
+            related = pr.get("related_uris") or {}
+            printings.append(
+                {
+                    "id": pid,
+                    "label": label,
+                    "set": set_code,
+                    "set_name": pr.get("set_name")
+                    or (set_name_for_code((pr.get("set") or "").lower()) if pr.get("set") else ""),
+                    "collector_number": collector_number,
+                    "lang": lang_code,
+                    "rarity": pr.get("rarity") or "",
+                    "released_at": pr.get("released_at") or "",
+                    "scryfall_uri": pr.get("scryfall_uri")
+                    or _scryfall_card_url(pr.get("set"), pr.get("collector_number")),
+                    "tcgplayer_url": purchase.get("tcgplayer") or related.get("tcgplayer") or "",
+                    "prices": pr.get("prices") or {},
+                    "image": img_pack.get("normal") or img_pack.get("large") or img_pack.get("small"),
+                }
+            )
+
     resp = jsonify(
         {
             "card": {
@@ -2554,6 +2603,7 @@ def api_card(card_id):
             },
             "info": info,
             "images": images,
+            "printings": printings,
         }
     )
     resp.cache_control.public = True

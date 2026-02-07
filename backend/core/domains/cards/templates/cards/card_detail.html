@@ -31,8 +31,9 @@
     }
     @media (hover:hover) { .flip-overlay:hover { background: rgba(0,0,0,.8); } }
 
-    .thumbs a { display: inline-block; border-radius: .35rem; overflow: hidden; border: 1px solid var(--bs-border-color); }
+    .thumbs a { display: inline-flex; flex-direction: column; align-items: center; gap: .35rem; border-radius: .35rem; overflow: hidden; border: 1px solid var(--bs-border-color); padding: .35rem; text-decoration: none; }
     .thumbs img { height: 96px; width: auto; display: block; object-fit: contain; }
+    .thumbs .thumb-label { font-size: .72rem; color: var(--bs-secondary-color); text-align: center; line-height: 1.2; max-width: 140px; }
 
     /* Scryfall symbols inline sizing */
     img[src*="svgs.scryfall.io/card-symbols/"] {
@@ -128,7 +129,7 @@
                   data-bs-toggle="collapse"
                   data-bs-target="#altArtCollapse"
                   aria-expanded="false" aria-controls="altArtCollapse">
-            Show Alternative Artworks (<span id="altArtCount">0</span>)
+            Show Printings (<span id="altArtCount">0</span>)
           </button>
 
           <!-- Hidden until a back face exists -->
@@ -468,7 +469,7 @@
     const n = getAltCount();
     if (countEl) countEl.textContent = String(n);
     toggleBtn.setAttribute('aria-expanded', String(!!isOpen));
-    toggleBtn.firstChild.textContent = (isOpen ? 'Hide Alternative Artworks (' : 'Show Alternative Artworks (');
+    toggleBtn.firstChild.textContent = (isOpen ? 'Hide Printings (' : 'Show Printings (');
   }
   let collapseInst = null;
   function ensureCollapse() {
@@ -531,19 +532,23 @@
     const altCount = Math.max(imgs.length - 1, 0);
 
     // Only show the button if there are 2+ alternates
-    const showBtn = altCount >= 2;
+    const showBtn = altCount >= 1;
     toggleBtn.classList.toggle('d-none', !showBtn);
     if (countEl) countEl.textContent = String(altCount);
 
     imgs.forEach((im, idx) => {
       if (idx === 0) return;
       const src = im.normal || im.small;
+      const label = im.label || '';
       const a = document.createElement('a');
       a.className = 'border';
       a.setAttribute('data-bs-target', '#artworkCarousel');
       a.setAttribute('data-bs-slide-to', String(idx));
       a.setAttribute('aria-label', `Go to artwork ${idx+1}`);
-      a.innerHTML = `<img src="${src}" alt="Alternative artwork ${idx+1}" loading="lazy">`;
+      a.innerHTML = `
+        <img src="${src}" alt="Printing ${idx+1}" loading="lazy">
+        <div class="thumb-label">${label}</div>
+      `;
       thumbsWrap.appendChild(a);
     });
     updateAltBtnLabel(collapseEl.classList.contains('show'));

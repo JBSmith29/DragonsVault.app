@@ -851,37 +851,52 @@ def api_scryfall_print(sid):
 
     images = []
     try:
-        variants = prints_lookup(oid) if (prints_lookup and oid) else [data]
+        variants = list(prints_lookup(oid) or []) if (prints_lookup and oid) else [data]
     except Exception:
         variants = [data]
 
+    if variants and data:
+        selected_id = data.get("id")
+        if selected_id:
+            variants = (
+                [v for v in variants if v.get("id") == selected_id]
+                + [v for v in variants if v.get("id") != selected_id]
+            )
+
     seen = set()
     for variant in variants or []:
-        vid = variant.get("illustration_id") or variant.get("id")
-        if not vid or vid in seen:
+        pid = variant.get("id")
+        if not pid or pid in seen:
             continue
-        seen.add(vid)
+        seen.add(pid)
         s, n, l = _img(variant)
         if not (s or n or l):
             continue
-        label_bits = []
-        if variant.get("set"):
-            label_bits.append((variant.get("set") or "").upper())
-        if variant.get("collector_number"):
-            label_bits.append(str(variant.get("collector_number")))
-        if variant.get("lang"):
-            label_bits.append(str(variant.get("lang")).upper())
+        set_code = (variant.get("set") or "").upper()
+        collector_number = str(variant.get("collector_number") or "")
+        lang = str(variant.get("lang") or "").upper()
+        label_bits = [v for v in (set_code, collector_number, lang) if v]
+        purchase = variant.get("purchase_uris") or {}
+        related = variant.get("related_uris") or {}
         images.append(
             {
-                "id": variant.get("id"),
+                "id": pid,
                 "small": s,
                 "normal": n,
                 "large": l,
                 "label": " Â· ".join(label_bits) if label_bits else (variant.get("name") or data.get("name") or ""),
+                "set": set_code,
+                "set_name": variant.get("set_name")
+                or (set_name_lookup(set_code.lower()) if (set_name_lookup and set_code) else None),
+                "collector_number": collector_number,
+                "lang": lang,
+                "rarity": variant.get("rarity"),
+                "released_at": variant.get("released_at"),
+                "scryfall_uri": variant.get("scryfall_uri"),
+                "tcgplayer_url": purchase.get("tcgplayer") or related.get("tcgplayer"),
+                "prices": variant.get("prices") or {},
             }
         )
-        if len(images) >= 12:
-            break
 
     info = {
         "id": data.get("id"),

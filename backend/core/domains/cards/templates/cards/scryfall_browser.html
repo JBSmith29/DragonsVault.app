@@ -29,6 +29,11 @@
     .sort-link { color:inherit; text-decoration:none; font-weight:600; display:inline-flex; align-items:center; gap:.2rem; }
     .sort-link:hover { color:var(--bs-primary); text-decoration:underline; }
     .sort-indicator { font-size:.75rem; opacity:.65; }
+    .sfb-print-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:.6rem; }
+    .sfb-print-card { border:1px solid var(--bs-border-color); border-radius:.6rem; padding:.35rem; background:var(--bs-body-bg); text-align:left; cursor:pointer; transition:all .15s ease; }
+    .sfb-print-card:hover { border-color: var(--bs-primary); box-shadow:0 0 0 2px rgba(13,110,253,.2); }
+    .sfb-print-card img { width:100%; height:auto; border-radius:.4rem; display:block; }
+    .sfb-print-card .label { font-size:.72rem; color:var(--bs-secondary-color); margin-top:.35rem; line-height:1.2; }
   </style>
 
   {% set sort_field = sort_field or 'name' %}
@@ -570,12 +575,15 @@
       : '<div class="card-art mb-3" style="height:320px;background:rgba(255,255,255,.05);"></div>';
 
     let gallery = '';
-    if (images.length > 1) {
-      gallery = `<div class="mb-3"><div class="fw-semibold">Other prints</div><div class="d-flex flex-wrap gap-2 mt-2">${images.slice(0,8).map(img => {
+    if (images.length > 0) {
+      gallery = `<div class="mb-3"><div class="fw-semibold">Printings</div><div class="sfb-print-grid mt-2">${images.map(img => {
         const label = img.label || '';
         const src = img.large || img.normal || img.small;
         if (!src) return '';
-        return `<button type="button" class="btn btn-outline-secondary btn-sm sfb-gallery" data-img="${src}">${label || 'Print'}</button>`;
+        return `<button type="button" class="sfb-print-card" data-img="${src}">
+          <img src="${src}" alt="${label || 'Printing'}" loading="lazy">
+          <div class="label">${label || 'Printing'}</div>
+        </button>`;
       }).join('')}</div></div>`;
     }
 
@@ -604,7 +612,7 @@
       </div>
     `;
 
-    bodyEl.querySelectorAll('.sfb-gallery').forEach(btn => {
+    bodyEl.querySelectorAll('.sfb-print-card').forEach(btn => {
       btn.addEventListener('click', () => {
         const target = btn.dataset.img;
         if (!target) return;
