@@ -912,6 +912,7 @@ def _commander_card_payload(name: Optional[str], oracle_id: Optional[str]) -> Op
             faces = (pr or {}).get("card_faces") or []
             if faces:
                 type_line = (faces[0] or {}).get("type_line") or ""
+    oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces((pr or {}).get("card_faces"))
 
     payload = {
         "name": resolved_name or (pr or {}).get("name") or "Commander",
@@ -925,6 +926,7 @@ def _commander_card_payload(name: Optional[str], oracle_id: Optional[str]) -> Op
         "image": imgs.get("normal") or imgs.get("large") or imgs.get("small") or placeholder,
         "hover": imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder,
         "type_line": type_line or "",
+        "oracle_text": oracle_text or "",
         "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
     }
     return payload
@@ -971,6 +973,8 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
                 Card.collector_number,
                 Card.oracle_id,
                 Card.quantity,
+                Card.type_line,
+                Card.oracle_text,
             )
         )
         .all()
@@ -1035,7 +1039,8 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
                 "back_large": back_imgs.get("large"),
                 "detail_url": detail_url,
                 "external_url": external_url,
-                "type_line": getattr(card, "type_line", "") or "",
+                "type_line": card.type_line or "",
+                "oracle_text": card.oracle_text or "",
             }
         )
     if not entries:
@@ -1116,6 +1121,7 @@ def _deck_entries_from_build_session(session_id: int) -> tuple[Optional[str], li
             continue
         imgs = _image_from_print(pr)
         back_imgs = _back_image_from_print(pr)
+        oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces((pr or {}).get("card_faces"))
 
         entries.append(
             {
@@ -1132,6 +1138,7 @@ def _deck_entries_from_build_session(session_id: int) -> tuple[Optional[str], li
                 "detail_url": None,
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
                 "type_line": (pr or {}).get("type_line") or "",
+                "oracle_text": oracle_text or "",
             }
         )
 
@@ -1179,6 +1186,7 @@ def _deck_entries_from_list(
             continue
         imgs = _image_from_print(pr)
         back_imgs = _back_image_from_print(pr)
+        oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces((pr or {}).get("card_faces"))
         entries.append(
             {
                 "name": resolved_name,
@@ -1194,6 +1202,7 @@ def _deck_entries_from_list(
                 "detail_url": None,
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
                 "type_line": (pr or {}).get("type_line") or "",
+                "oracle_text": oracle_text or "",
             }
         )
     if not entries:
@@ -1211,6 +1220,7 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
     back_image = entry.get("back_large") or entry.get("back_normal") or entry.get("back_small") or entry.get("back_image")
     back_hover = entry.get("back_large") or entry.get("back_normal") or entry.get("back_small") or entry.get("back_hover")
     detail_url = entry.get("detail_url") or entry.get("external_url")
+    uid = entry.get("uid")
     flags = _card_type_flags(entry.get("type_line"))
     payload = {
         "name": entry.get("name") or "Card",
@@ -1219,6 +1229,7 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
         "hover": hover,
         "detail_url": detail_url,
         "type_line": entry.get("type_line") or "",
+        "oracle_text": entry.get("oracle_text") or "",
         "is_creature": bool(flags["is_creature"]),
         "is_land": bool(flags["is_land"]),
         "is_instant": bool(flags["is_instant"]),
@@ -1226,6 +1237,8 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
         "is_permanent": bool(flags["is_permanent"]),
         "zone_hint": str(flags["zone_hint"]),
     }
+    if uid:
+        payload["uid"] = uid
     if back_image or back_hover:
         payload["back_image"] = back_image or back_hover
         payload["back_hover"] = back_hover or back_image
@@ -5855,6 +5868,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                 imgs = _image_from_print(pr)
                 back_imgs = _back_image_from_print(pr)
                 flags = _card_type_flags(type_line)
+                normalized_oracle_text = oracle_text or _oracle_text_from_faces(faces_json) or ""
                 entry_vm = OpeningHandCardVM(
                     value=value_token,
                     name=card_name,
@@ -5863,6 +5877,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                     back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
                     back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
                     type_line=type_line or "",
+                    oracle_text=normalized_oracle_text,
                     mana_value=mana_value,
                     is_creature=bool(flags["is_creature"]),
                     is_land=bool(flags["is_land"]),
@@ -5952,6 +5967,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                 back_imgs = _back_image_from_print(pr)
                 type_line = (pr or {}).get("type_line") or ""
                 mana_value = (pr or {}).get("cmc")
+                oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces((pr or {}).get("card_faces"))
                 flags = _card_type_flags(type_line)
                 name = (pr or {}).get("name") or oracle_id or "Card"
                 entry_vm = OpeningHandCardVM(
@@ -5962,6 +5978,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                     back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
                     back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
                     type_line=type_line,
+                    oracle_text=oracle_text or "",
                     mana_value=mana_value,
                     is_creature=bool(flags["is_creature"]),
                     is_land=bool(flags["is_land"]),
@@ -6254,6 +6271,104 @@ def opening_hand_draw():
             "deck_name": deck_name,
         }
     )
+
+
+def opening_hand_search():
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("state") or ""
+    state = _decode_state(token)
+    if not state:
+        return jsonify({"ok": False, "error": "Invalid or expired hand state."}), 400
+
+    action = (payload.get("action") or "list").lower()
+    criteria = payload.get("criteria") or {}
+    kind = (criteria.get("kind") or "").lower()
+    names = criteria.get("names") or []
+    names_lower = {str(name).strip().lower() for name in names if name}
+
+    if kind not in {"basic_land"}:
+        return jsonify({"ok": False, "error": "Unsupported search request."}), 400
+
+    deck = state.get("deck") or []
+    index = int(state.get("index") or 0)
+    remaining = deck[index:]
+
+    basic_land_names = {
+        "plains",
+        "island",
+        "swamp",
+        "mountain",
+        "forest",
+        "wastes",
+        "snow-covered plains",
+        "snow-covered island",
+        "snow-covered swamp",
+        "snow-covered mountain",
+        "snow-covered forest",
+        "snow-covered wastes",
+    }
+
+    def _matches(entry: dict) -> bool:
+        name = (entry.get("name") or "").strip().lower()
+        type_line = (entry.get("type_line") or "").lower()
+        if names_lower:
+            return name in names_lower
+        return "basic land" in type_line or name in basic_land_names
+
+    placeholder = static_url("img/card-placeholder.svg")
+
+    if action == "list":
+        grouped: dict[str, dict] = {}
+        for entry in remaining:
+            if not _matches(entry):
+                continue
+            name = entry.get("name") or "Card"
+            bucket = grouped.setdefault(name, {"count": 0, "entry": entry})
+            bucket["count"] += 1
+
+        results = []
+        for name, payload in grouped.items():
+            card_payload = _client_card_payload(payload["entry"], placeholder)
+            results.append({"name": name, "count": payload["count"], "card": card_payload})
+        results.sort(key=lambda item: (item.get("name") or "").lower())
+        return jsonify({"ok": True, "matches": results, "remaining": len(deck) - index})
+
+    if action == "take":
+        pick_uid = (payload.get("pick_uid") or "").strip() or None
+        pick_name = (payload.get("pick_name") or "").strip() or None
+        selected_index = None
+        for offset, entry in enumerate(remaining):
+            if not _matches(entry):
+                continue
+            if pick_uid and entry.get("uid") == pick_uid:
+                selected_index = index + offset
+                break
+            if pick_name and (entry.get("name") or "").strip().lower() == pick_name.lower():
+                selected_index = index + offset
+                break
+
+        if selected_index is None:
+            return jsonify({"ok": False, "error": "No matching card found."}), 404
+
+        selected = deck.pop(selected_index)
+        if index < len(deck):
+            random.shuffle(deck[index:])
+        state["deck"] = deck
+        state["index"] = index
+        new_token = _encode_state(state)
+        remaining_count = len(deck) - index
+        card_payload = _client_card_payload(selected, placeholder)
+
+        return jsonify(
+            {
+                "ok": True,
+                "card": card_payload,
+                "state": new_token,
+                "remaining": remaining_count,
+            }
+        )
+
+    return jsonify({"ok": False, "error": "Unsupported search request."}), 400
 
 
 def opening_hand_peek():
@@ -6898,6 +7013,7 @@ __all__ = [
     "opening_hand_play",
     "opening_hand_shuffle",
     "opening_hand_draw",
+    "opening_hand_search",
     "opening_hand_peek",
     "opening_hand_scry",
     "opening_hand_surveil",

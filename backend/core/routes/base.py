@@ -9,7 +9,7 @@ from functools import lru_cache
 import time
 from urllib.parse import urlsplit
 
-from flask import Blueprint, current_app, redirect, render_template, request, url_for, flash
+from flask import Blueprint, current_app, redirect, render_template, request, url_for, flash, jsonify, Response
 from flask_login import current_user
 try:
     from flask_limiter.util import get_remote_address  # type: ignore
@@ -748,6 +748,69 @@ def do_not_share():
 @views.route("/about")
 def about_page():
     return render_template("site/about.html")
+
+
+@views.route("/rules/magic")
+def magic_rules():
+    import json
+    from core.shared.utils.rules_cache import magic_rules_metadata, magic_rules_workbook
+
+    meta = magic_rules_metadata()
+    workbook = magic_rules_workbook()
+    return render_template(
+        "site/magic_rules.html",
+        rules_meta=meta,
+        rules_workbook_json=json.dumps(workbook),
+        rules_workbook=workbook,
+    )
+
+
+@views.get("/api/rules/search")
+def api_rules_search():
+    from core.shared.utils.rules_cache import search_magic_rules
+
+    query = (request.args.get("q") or "").strip()
+    limit_raw = request.args.get("limit")
+    try:
+        limit = int(limit_raw) if limit_raw is not None else 20
+    except (TypeError, ValueError):
+        limit = 20
+    limit = max(1, min(limit, 100))
+    matches = search_magic_rules(query, limit=limit) if query else []
+    return jsonify({"ok": True, "query": query, "matches": matches})
+
+
+@views.get("/api/rules/lookup")
+def api_rules_lookup():
+    from core.shared.utils.rules_cache import lookup_magic_rule
+
+    rule_number = (request.args.get("rule") or "").strip()
+    if not rule_number:
+        return jsonify({"ok": False, "error": "Missing rule."}), 400
+    line = lookup_magic_rule(rule_number)
+    if not line:
+        return jsonify({"ok": False, "error": "Rule not found."}), 404
+    return jsonify({"ok": True, "rule": rule_number, "text": line})
+
+
+@views.get("/api/rules/text")
+def api_rules_text():
+    from core.shared.utils.rules_cache import magic_rules_text
+
+    text = magic_rules_text()
+    if not text:
+        return jsonify({"ok": False, "error": "Rules text unavailable."}), 404
+    return Response(text, mimetype="text/plain")
+
+
+@views.get("/api/rules/workbook")
+def api_rules_workbook():
+    from core.shared.utils.rules_cache import magic_rules_workbook
+
+    workbook = magic_rules_workbook()
+    if not workbook:
+        return jsonify({"ok": False, "error": "Rules workbook unavailable."}), 404
+    return jsonify({"ok": True, "workbook": workbook})
 
 
 @views.route("/contact", methods=["GET", "POST"])

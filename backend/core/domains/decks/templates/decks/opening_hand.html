@@ -157,12 +157,49 @@
   .hand-card .card-flip-btn:focus-visible {
     background: rgba(15, 23, 42, 0.9);
   }
+  .hand-card .card-action-btn {
+    position: absolute;
+    top: 0.45rem;
+    left: 0.45rem;
+    z-index: 6;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.75);
+    color: rgba(226, 232, 240, 0.9);
+    border-radius: 999px;
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    line-height: 1;
+  }
+  .hand-card .card-action-btn:hover,
+  .hand-card .card-action-btn:focus-visible {
+    background: rgba(15, 23, 42, 0.9);
+  }
   .hand-card-grid .hand-card {
     width: clamp(120px, 16vw, 190px);
     max-width: none;
     flex: 0 0 auto;
     margin-left: -24px;
     scroll-snap-align: center;
+    position: relative;
+  }
+  .hand-card-grid {
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scroll-snap-type: x mandatory;
+  }
+  .hand-card-grid.hand-overflow .hand-card {
+    width: clamp(96px, 13vw, 150px);
+    margin-left: -18px;
+  }
+  .hand-card-grid::-webkit-scrollbar {
+    height: 8px;
+  }
+  .hand-card-grid::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+  }
+  .hand-card-grid::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.2);
   }
   .hand-card-grid .hand-card:first-child {
     margin-left: 0;
@@ -343,6 +380,12 @@
   .board-zone-strip .hand-card {
     flex: 0 0 auto;
   }
+  .board-zone-strip .hand-card:not(.card-tapped):hover,
+  .board-zone-strip .hand-card:not(.card-tapped):active {
+    border-color: rgba(148, 180, 255, 0.35);
+    transform: translateY(var(--hand-offset)) rotate(var(--hand-rotate)) scale(1);
+    box-shadow: 0 0.6rem 1.4rem rgba(15, 23, 42, 0.28);
+  }
   .board-zone-strip::-webkit-scrollbar {
     height: 6px;
   }
@@ -475,10 +518,10 @@
     right: 2rem;
     bottom: var(--hand-actions-safe);
     z-index: 1040;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     gap: 0.65rem;
     padding: 0.65rem 0.5rem;
     background: transparent;
@@ -502,12 +545,22 @@
     flex-wrap: wrap;
   }
   .opening-hand-actions .action-group-right {
-    margin-left: auto;
+    justify-self: end;
+  }
+  .opening-hand-actions .action-group-left {
+    justify-self: start;
   }
   @media (max-width: 992px) {
     .opening-hand-actions {
       left: 1rem;
       right: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .opening-hand-actions .action-group-right,
+    .opening-hand-actions .action-group-left {
+      justify-self: auto;
     }
   }
   @media (max-width: 576px) {
@@ -607,6 +660,49 @@
     max-height: 60vh;
     overflow-y: auto;
     padding-right: 4px;
+  }
+  .effect-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.85rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .effect-card-option {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.85rem;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 0.55rem;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .effect-card-option img {
+    width: 100%;
+    aspect-ratio: 0.718;
+    border-radius: 0.65rem;
+    object-fit: cover;
+  }
+  .effect-card-option .effect-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+  .effect-card-option .effect-subtitle {
+    font-size: 0.75rem;
+    color: rgba(148, 163, 184, 0.9);
+  }
+  .effect-card-option.is-selected {
+    border-color: rgba(96, 165, 250, 0.85);
+    box-shadow: 0 0.6rem 1.6rem rgba(37, 99, 235, 0.35);
+    transform: translateY(-2px);
+  }
+  .resolve-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.85rem;
   }
   .scry-preview {
     display: grid;
@@ -777,9 +873,6 @@
         <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
           Select New Deck
         </button>
-        <button class="btn btn-outline-secondary" type="button" id="resetBtn">
-          Reset
-        </button>
       </div>
       <div class="action-group action-group-right">
         <button class="btn btn-outline-info" type="button" id="scryBtn" data-bs-toggle="modal" data-bs-target="#scryModal" disabled>
@@ -790,6 +883,9 @@
         </button>
         <button class="btn btn-outline-success" type="button" id="untapAllBtn">
           Untap All
+        </button>
+        <button class="btn btn-outline-secondary" type="button" id="resetBtn">
+          Reset
         </button>
       </div>
     </div>
@@ -993,6 +1089,123 @@
 {% endcall %}
 
 {% call wrap_modal() %}
+<div class="modal fade" id="discardModal" tabindex="-1" aria-labelledby="discardModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="discardModalLabel">Choose Cards to Discard</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-2" id="discardModalHint"></div>
+        <div class="effect-card-grid" id="discardCardList"></div>
+        <div class="text-muted small mt-2" id="discardModalStatus"></div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" id="discardConfirmBtn" disabled>Discard</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
+<div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="searchModalLabel">Search Your Library</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-2" id="searchModalHint"></div>
+        <div class="effect-card-grid" id="searchResults"></div>
+        <div class="text-muted small mt-2" id="searchModalStatus"></div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
+<div class="modal fade" id="attachModal" tabindex="-1" aria-labelledby="attachModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="attachModalLabel">Attach to a Creature</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-2" id="attachModalHint"></div>
+        <div class="effect-card-grid" id="attachTargetList"></div>
+        <div class="text-muted small mt-2" id="attachModalStatus"></div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
+<div class="modal fade" id="resolveModal" tabindex="-1" aria-labelledby="resolveModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="resolveModalLabel">Resolve Effects</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-2" id="resolveCardHint"></div>
+        <div class="resolve-fields">
+          <div>
+            <label for="resolveEffectType" class="form-label">Effect</label>
+            <select id="resolveEffectType" class="form-select form-select-sm">
+              <option value="draw">Draw cards</option>
+              <option value="discard">Discard cards</option>
+              <option value="draw_discard">Draw then discard</option>
+              <option value="discard_draw">Discard then draw</option>
+              <option value="tokens">Create tokens</option>
+              <option value="search_hand">Search basic land to hand</option>
+              <option value="search_battlefield">Search basic land to battlefield (tapped)</option>
+              <option value="search_split">Search basics: battlefield + hand</option>
+              <option value="attach">Attach to creature</option>
+            </select>
+          </div>
+          <div id="resolveDrawField">
+            <label for="resolveDrawCount" class="form-label">Draw count</label>
+            <input type="number" id="resolveDrawCount" class="form-control form-control-sm" min="0" value="1">
+          </div>
+          <div id="resolveDiscardField">
+            <label for="resolveDiscardCount" class="form-label">Discard count</label>
+            <input type="number" id="resolveDiscardCount" class="form-control form-control-sm" min="0" value="1">
+          </div>
+          <div id="resolveTokenField">
+            <label for="resolveTokenCount" class="form-label">Token count</label>
+            <input type="number" id="resolveTokenCount" class="form-control form-control-sm" min="1" value="1">
+          </div>
+        </div>
+        <div class="text-muted small mt-2" id="resolveStatus"></div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="resolveApplyBtn">Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
 <div class="modal fade" id="scryModal" tabindex="-1" aria-labelledby="scryModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content bg-dark text-light border border-secondary">
@@ -1081,6 +1294,30 @@
   const tokenAllCustom = document.getElementById('tokenAllCustom');
   const tokenAllCustomBtn = document.getElementById('tokenAllCustomBtn');
   const tokenPickerStatus = document.getElementById('tokenPickerStatus');
+  const discardModal = document.getElementById('discardModal');
+  const discardCardList = document.getElementById('discardCardList');
+  const discardConfirmBtn = document.getElementById('discardConfirmBtn');
+  const discardModalHint = document.getElementById('discardModalHint');
+  const discardModalStatus = document.getElementById('discardModalStatus');
+  const searchModal = document.getElementById('searchModal');
+  const searchResults = document.getElementById('searchResults');
+  const searchModalHint = document.getElementById('searchModalHint');
+  const searchModalStatus = document.getElementById('searchModalStatus');
+  const attachModal = document.getElementById('attachModal');
+  const attachTargetList = document.getElementById('attachTargetList');
+  const attachModalHint = document.getElementById('attachModalHint');
+  const attachModalStatus = document.getElementById('attachModalStatus');
+  const resolveModal = document.getElementById('resolveModal');
+  const resolveCardHint = document.getElementById('resolveCardHint');
+  const resolveEffectType = document.getElementById('resolveEffectType');
+  const resolveDrawField = document.getElementById('resolveDrawField');
+  const resolveDiscardField = document.getElementById('resolveDiscardField');
+  const resolveTokenField = document.getElementById('resolveTokenField');
+  const resolveDrawCount = document.getElementById('resolveDrawCount');
+  const resolveDiscardCount = document.getElementById('resolveDiscardCount');
+  const resolveTokenCount = document.getElementById('resolveTokenCount');
+  const resolveApplyBtn = document.getElementById('resolveApplyBtn');
+  const resolveStatus = document.getElementById('resolveStatus');
   const untapAllBtn = document.getElementById('untapAllBtn');
   const scryBtn = document.getElementById('scryBtn');
   const scryModal = document.getElementById('scryModal');
@@ -1117,6 +1354,17 @@
   let scryCards = [];
   let scryChoices = new Map();
   let scryTopOrder = [];
+  let resolvingEffects = false;
+  let pendingDiscard = null;
+  let pendingSearch = null;
+  let pendingAttach = null;
+  let pendingTokenAdd = null;
+  let resolveTargetCard = null;
+  let resolveContext = null;
+  let activeWarnings = [];
+  const ruleHintCache = new Map();
+  const ruleWarningSet = new Set();
+  let landsPlayedThisTurn = 0;
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),
@@ -1420,6 +1668,7 @@
         back_image: entry.back_image || null,
         back_hover: entry.back_hover || entry.back_image || null,
         type_line: typeLine,
+        oracle_text: entry.oracle_text || '',
         mana_value: manaValueRaw,
         is_creature: Boolean(entry.is_creature),
         is_land: Boolean(entry.is_land),
@@ -1843,24 +2092,33 @@
   }
 
   function addTokenToBoard(token) {
-    const payload = normalizeCard({
-      name: token && token.name ? token.name : 'Token',
-      image: token && token.image ? token.image : placeholderImage,
-      hover: token && (token.hover || token.image) ? (token.hover || token.image) : placeholderImage,
-      type_line: token && token.type_line ? token.type_line : 'Token',
-      is_creature: Boolean(token && token.is_creature),
-      is_land: Boolean(token && token.is_land),
-      is_instant: Boolean(token && token.is_instant),
-      is_sorcery: Boolean(token && token.is_sorcery),
-      is_permanent: Boolean(token && token.is_permanent),
-      zone_hint: token && token.zone_hint ? token.zone_hint : 'permanents',
-    });
-    if (!payload) return;
-    moveCardToBoard(payload, 'permanents');
+    const count = pendingTokenAdd && pendingTokenAdd.count ? pendingTokenAdd.count : 1;
+    for (let i = 0; i < count; i += 1) {
+      const payload = normalizeCard({
+        name: token && token.name ? token.name : 'Token',
+        image: token && token.image ? token.image : placeholderImage,
+        hover: token && (token.hover || token.image) ? (token.hover || token.image) : placeholderImage,
+        type_line: token && token.type_line ? token.type_line : 'Token',
+        is_creature: Boolean(token && token.is_creature),
+        is_land: Boolean(token && token.is_land),
+        is_instant: Boolean(token && token.is_instant),
+        is_sorcery: Boolean(token && token.is_sorcery),
+        is_permanent: Boolean(token && token.is_permanent),
+        zone_hint: token && token.zone_hint ? token.zone_hint : 'permanents',
+      });
+      if (!payload) continue;
+      moveCardToBoard(payload, 'permanents');
+    }
     if (tokenModalInstance) {
       tokenModalInstance.hide();
     }
-    setTokenStatus('Token added to battlefield.', 'success');
+    if (pendingTokenAdd) {
+      const label = pendingTokenAdd.source ? ` for ${pendingTokenAdd.source}` : '';
+      setTokenStatus(`Created ${count} token${count === 1 ? '' : 's'}${label}.`, 'success');
+      pendingTokenAdd = null;
+    } else {
+      setTokenStatus('Token added to battlefield.', 'success');
+    }
   }
 
   function applyCardFace(card) {
@@ -1916,10 +2174,11 @@
   if (untapAllBtn) {
     untapAllBtn.addEventListener('click', function () {
       const changed = untapAllBoardCards();
+      landsPlayedThisTurn = 0;
       if (changed) {
-        showMessage('All permanents untapped.', 'info');
+        showMessage('All permanents untapped. Land play count reset.', 'info');
       } else {
-        showMessage('No tapped permanents on the battlefield.', 'info');
+        showMessage('No tapped permanents on the battlefield. Land play count reset.', 'info');
       }
     });
   }
@@ -1940,6 +2199,7 @@
     copy.flipped = Boolean(copy.flipped);
     applyCardFace(copy);
     copy.type_line = copy.type_line || card.type_line || card.typeLine || '';
+    copy.oracle_text = copy.oracle_text || card.oracle_text || card.oracleText || '';
     copy.tapped = Boolean(card.tapped);
     copy.is_creature = Boolean(copy.is_creature ?? card.is_creature ?? card.isCreature);
     copy.is_land = Boolean(copy.is_land ?? card.is_land ?? card.isLand);
@@ -1949,6 +2209,237 @@
     copy.zone_hint = copy.zone_hint || card.zone_hint || card.zoneHint || 'permanents';
 
     return copy;
+  }
+
+  function cardEntersTapped(card) {
+    if (!card) {
+      return false;
+    }
+    const text = String(card.oracle_text || '').toLowerCase();
+    if (!text) {
+      return false;
+    }
+    return text.includes('enters the battlefield tapped') || text.includes('enters tapped');
+  }
+
+  function getModalInstance(modalEl) {
+    const ModalCtor = window.bootstrap && window.bootstrap.Modal
+      ? window.bootstrap.Modal
+      : (typeof bootstrap !== 'undefined' && bootstrap.Modal ? bootstrap.Modal : null);
+    return modalEl && ModalCtor ? ModalCtor.getOrCreateInstance(modalEl) : null;
+  }
+
+  function parseCountToken(value) {
+    if (!value) return null;
+    const token = String(value).trim().toLowerCase();
+    if (token === 'a' || token === 'an' || token === 'one') return 1;
+    if (token === 'two') return 2;
+    if (token === 'three') return 3;
+    if (token === 'four') return 4;
+    if (token === 'five') return 5;
+    if (/^\d+$/.test(token)) return parseInt(token, 10);
+    return null;
+  }
+
+  function isTriggeredAbility(text) {
+    const lowered = String(text || '').toLowerCase();
+    return lowered.includes('whenever') || lowered.includes('at the beginning') || lowered.startsWith('when ');
+  }
+
+  function hasActivatedPrefix(text, index) {
+    if (index < 0) return false;
+    const prefix = text.slice(0, index);
+    const lastBreak = Math.max(prefix.lastIndexOf('.'), prefix.lastIndexOf('\n'));
+    const segment = prefix.slice(lastBreak + 1);
+    return segment.includes(':');
+  }
+
+  function detectDrawDiscardEffect(card) {
+    if (!card || !card.oracle_text) {
+      return null;
+    }
+    const text = String(card.oracle_text);
+    const lowered = text.toLowerCase();
+    if (isTriggeredAbility(text) && !lowered.includes('enters the battlefield')) {
+      return null;
+    }
+    const countToken = '(a|an|one|two|three|four|five|\\d+|x)';
+    const drawRe = new RegExp(`draw\\s+${countToken}\\s+card`, 'i');
+    const discardRe = new RegExp(`discard\\s+${countToken}\\s+card`, 'i');
+    const drawMatch = text.match(drawRe);
+    const discardMatch = text.match(discardRe);
+    if (!drawMatch && !discardMatch) {
+      return null;
+    }
+    const drawIdx = drawMatch ? lowered.indexOf(drawMatch[0].toLowerCase()) : -1;
+    const discardIdx = discardMatch ? lowered.indexOf(discardMatch[0].toLowerCase()) : -1;
+    if (hasActivatedPrefix(lowered, drawIdx) || hasActivatedPrefix(lowered, discardIdx)) {
+      return null;
+    }
+    const drawCount = drawMatch ? parseCountToken(drawMatch[1]) : 0;
+    const discardCount = discardMatch ? parseCountToken(discardMatch[1]) : 0;
+    const order = drawIdx !== -1 && discardIdx !== -1
+      ? (drawIdx <= discardIdx ? 'draw-then-discard' : 'discard-then-draw')
+      : (drawIdx !== -1 ? 'draw' : 'discard');
+    if ((drawMatch && drawMatch[1].toLowerCase() === 'x') || (discardMatch && discardMatch[1].toLowerCase() === 'x')) {
+      return { kind: 'draw-discard', order, drawCount: null, discardCount: null, index: Math.min(drawIdx !== -1 ? drawIdx : 9999, discardIdx !== -1 ? discardIdx : 9999) };
+    }
+    return {
+      kind: 'draw-discard',
+      order,
+      drawCount: drawCount || 0,
+      discardCount: discardCount || 0,
+      index: Math.min(drawIdx !== -1 ? drawIdx : 9999, discardIdx !== -1 ? discardIdx : 9999)
+    };
+  }
+
+  function detectTokenEffect(card) {
+    if (!card || !card.oracle_text) {
+      return null;
+    }
+    const text = String(card.oracle_text);
+    const lowered = text.toLowerCase();
+    if (!lowered.includes('token') || !lowered.includes('create')) {
+      return null;
+    }
+    if (isTriggeredAbility(text) && !lowered.includes('enters the battlefield')) {
+      return null;
+    }
+    const countToken = '(a|an|one|two|three|four|five|\\d+|x)';
+    const createRe = new RegExp(`create\\s+${countToken}`, 'i');
+    const createMatch = text.match(createRe);
+    const createIdx = lowered.indexOf('create');
+    if (hasActivatedPrefix(lowered, createIdx)) {
+      return null;
+    }
+    const thatMany = lowered.includes('that many');
+    const forEach = lowered.includes('for each') || lowered.includes('for every');
+    const countTokenValue = createMatch ? createMatch[1] : null;
+    const count = parseCountToken(countTokenValue);
+    const variable = (countTokenValue && countTokenValue.toLowerCase() === 'x') || thatMany || forEach;
+    return {
+      kind: 'tokens',
+      count: count || null,
+      variable,
+      index: createIdx !== -1 ? createIdx : 9999,
+    };
+  }
+
+  function detectSearchEffect(card) {
+    if (!card || !card.oracle_text) {
+      return null;
+    }
+    const text = String(card.oracle_text);
+    const lowered = text.toLowerCase();
+    if (!lowered.includes('search your library')) {
+      return null;
+    }
+    const searchIdx = lowered.indexOf('search your library');
+    if (hasActivatedPrefix(lowered, searchIdx)) {
+      return null;
+    }
+    if (isTriggeredAbility(text) && !lowered.includes('enters the battlefield')) {
+      return null;
+    }
+    const hasBasic = lowered.includes('basic land');
+    const basicNames = [
+      'plains',
+      'island',
+      'swamp',
+      'mountain',
+      'forest',
+      'wastes',
+      'snow-covered plains',
+      'snow-covered island',
+      'snow-covered swamp',
+      'snow-covered mountain',
+      'snow-covered forest',
+      'snow-covered wastes'
+    ];
+    const explicitBasics = basicNames.filter(function (name) {
+      return lowered.includes(name);
+    });
+    const names = hasBasic ? basicNames : explicitBasics;
+    if (!hasBasic && !explicitBasics.length) {
+      return null;
+    }
+    const countToken = '(a|an|one|two|three|four|five|\\d+|x)';
+    const countRe = new RegExp(
+      `search your library for (?:up to\\s+)?${countToken}\\s+basic land(?: card| cards)?`,
+      'i'
+    );
+    const countMatch = text.match(countRe);
+    const rawCount = countMatch ? countMatch[1] : null;
+    const parsedCount = rawCount ? parseCountToken(rawCount) : null;
+    const isVariable = rawCount && rawCount.toLowerCase() === 'x';
+    const count = parsedCount || 1;
+    const allowAny = lowered.includes('any number') && lowered.includes('basic land');
+    const battlefieldIdx = lowered.indexOf('onto the battlefield');
+    const handIdx = lowered.indexOf('into your hand');
+    const splitHint = lowered.includes('other')
+      || lowered.includes('another')
+      || lowered.includes('rest')
+      || lowered.includes('remaining');
+    const isSplit = battlefieldIdx !== -1 && handIdx !== -1 && (splitHint || count > 1);
+    if (isSplit) {
+      const battlefieldSegment = battlefieldIdx !== -1 ? lowered.slice(battlefieldIdx, battlefieldIdx + 80) : '';
+      const battlefieldTapped = battlefieldSegment.includes('tapped');
+      const remainderCount = (splitHint && (lowered.includes('rest') || lowered.includes('remaining')) && count > 1)
+        ? Math.max(1, count - 1)
+        : 1;
+      const steps = battlefieldIdx < handIdx
+        ? [
+          { destination: 'battlefield', tapped: battlefieldTapped, count: 1 },
+          { destination: 'hand', tapped: false, count: remainderCount }
+        ]
+        : [
+          { destination: 'hand', tapped: false, count: 1 },
+          { destination: 'battlefield', tapped: battlefieldTapped, count: remainderCount }
+        ];
+      return {
+        kind: 'search_split',
+        criteria: { kind: 'basic_land', names: names },
+        steps: steps,
+        index: searchIdx
+      };
+    }
+    const destination = battlefieldIdx !== -1
+      ? 'battlefield'
+      : (handIdx !== -1 ? 'hand' : 'hand');
+    const tapped = lowered.includes('tapped');
+    if (allowAny || isVariable || count > 1) {
+      return {
+        kind: 'search_multi',
+        criteria: { kind: 'basic_land', names: names },
+        destination,
+        tapped,
+        count: allowAny || isVariable ? null : count,
+        index: searchIdx
+      };
+    }
+    return {
+      kind: 'search',
+      criteria: { kind: 'basic_land', names: names },
+      destination,
+      tapped,
+      index: searchIdx
+    };
+  }
+
+  function buildAutoEffectQueue(card) {
+    const queue = [];
+    const drawDiscard = detectDrawDiscardEffect(card);
+    if (drawDiscard) queue.push(drawDiscard);
+    const tokenEffect = detectTokenEffect(card);
+    if (tokenEffect) queue.push(tokenEffect);
+    const searchEffect = detectSearchEffect(card);
+    if (searchEffect) queue.push(searchEffect);
+    if (!queue.length) {
+      return [];
+    }
+    return queue.sort(function (a, b) {
+      return (a.index || 0) - (b.index || 0);
+    });
   }
 
   function setCommanderSeed(cards) {
@@ -1990,6 +2481,7 @@
     if (!handWarnings) {
       return;
     }
+    activeWarnings = Array.isArray(warnings) ? warnings.slice() : [];
     if (!warnings || !warnings.length) {
       handWarnings.classList.add('d-none');
       handWarnings.textContent = '';
@@ -1997,6 +2489,850 @@
     }
     handWarnings.textContent = warnings.join(' ');
     handWarnings.className = 'alert alert-warning small mt-3';
+  }
+
+  function appendWarning(message) {
+    if (!message) {
+      return;
+    }
+    const next = Array.isArray(activeWarnings) ? activeWarnings.slice() : [];
+    if (!next.includes(message)) {
+      next.push(message);
+    }
+    showWarnings(next);
+  }
+
+  async function fetchRuleHint(ruleNumber) {
+    const key = String(ruleNumber || '').trim();
+    if (!key) {
+      return null;
+    }
+    if (ruleHintCache.has(key)) {
+      return ruleHintCache.get(key);
+    }
+    try {
+      const resp = await fetch(`/api/rules/lookup?rule=${encodeURIComponent(key)}`, {
+        credentials: 'same-origin',
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data || !data.ok) {
+        ruleHintCache.set(key, null);
+        return null;
+      }
+      ruleHintCache.set(key, data.text || null);
+      return data.text || null;
+    } catch (err) {
+      ruleHintCache.set(key, null);
+      return null;
+    }
+  }
+
+  function appendRuleWarning(ruleNumber, message) {
+    if (message) {
+      appendWarning(message);
+    }
+    const key = String(ruleNumber || '').trim();
+    if (!key || ruleWarningSet.has(key)) {
+      return;
+    }
+    ruleWarningSet.add(key);
+    fetchRuleHint(key).then(function (text) {
+      if (text) {
+        appendWarning(`Rule ${key}: ${text}`);
+      } else if (key) {
+        appendWarning(`Rule ${key}: See Magic Rules for details.`);
+      }
+    });
+  }
+
+  async function drawCards(count) {
+    if (!stateInput || !stateInput.value) {
+      showMessage('Shuffle a deck first.', 'warning');
+      return 0;
+    }
+    let drawn = 0;
+    for (let i = 0; i < count; i += 1) {
+      const payload = { state: stateInput.value };
+      if (csrfToken) {
+        payload.csrf_token = csrfToken;
+      }
+      try {
+        const response = await fetch('{{ url_for("views.opening_hand_draw") }}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data || !data.ok) {
+          const detail = (data && data.error) ? data.error : `Unable to draw (HTTP ${response.status}).`;
+          showMessage(detail, 'warning');
+          if (data && data.state && stateInput) {
+            stateInput.value = data.state;
+          }
+          if (data && typeof data.remaining === 'number' && handRemaining) {
+            handRemaining.hidden = false;
+            handRemaining.textContent = data.remaining + ' cards remaining';
+          }
+          break;
+        }
+        if (stateInput) {
+          stateInput.value = data.state;
+        }
+        if (handRemaining) {
+          handRemaining.hidden = false;
+          handRemaining.textContent = data.remaining + ' cards remaining';
+        }
+        if (drawBtn) {
+          drawBtn.disabled = data.remaining <= 0;
+        }
+        addDraw(data.card, data.remaining, data.deck_name);
+        drawn += 1;
+      } catch (err) {
+        console.error(err);
+        showMessage('An unexpected error occurred while drawing.', 'danger');
+        break;
+      }
+    }
+    return drawn;
+  }
+
+  function updateDiscardConfirmState(selectedIds, required) {
+    if (!discardConfirmBtn) return;
+    const count = selectedIds ? selectedIds.size : 0;
+    discardConfirmBtn.disabled = required > 0 && count !== required;
+    if (discardModalStatus) {
+      if (!required) {
+        discardModalStatus.textContent = '';
+      } else {
+        discardModalStatus.textContent = `Selected ${count} of ${required}.`;
+      }
+    }
+  }
+
+  function renderDiscardList(required, selectedIds) {
+    if (!discardCardList) return;
+    discardCardList.innerHTML = '';
+    if (!handCards.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No cards in hand.';
+      discardCardList.appendChild(empty);
+      updateDiscardConfirmState(selectedIds, required);
+      return;
+    }
+    handCards.forEach(function (card) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'effect-card-option';
+      btn.dataset.cardId = card.__uid;
+      if (selectedIds.has(card.__uid)) {
+        btn.classList.add('is-selected');
+      }
+
+      const img = document.createElement('img');
+      img.src = card.image || placeholderImage;
+      img.alt = card.name || 'Card';
+      const title = document.createElement('div');
+      title.className = 'effect-title';
+      title.textContent = card.name || 'Card';
+      const subtitle = document.createElement('div');
+      subtitle.className = 'effect-subtitle';
+      subtitle.textContent = card.type_line || '';
+
+      btn.appendChild(img);
+      btn.appendChild(title);
+      if (subtitle.textContent) {
+        btn.appendChild(subtitle);
+      }
+
+      btn.addEventListener('click', function () {
+        if (selectedIds.has(card.__uid)) {
+          selectedIds.delete(card.__uid);
+          btn.classList.remove('is-selected');
+        } else {
+          selectedIds.add(card.__uid);
+          btn.classList.add('is-selected');
+        }
+        updateDiscardConfirmState(selectedIds, required);
+      });
+      discardCardList.appendChild(btn);
+    });
+    updateDiscardConfirmState(selectedIds, required);
+  }
+
+  function promptDiscard(requiredCount, sourceName) {
+    return new Promise(function (resolve) {
+      const rawCount = Math.max(parseInt(requiredCount || 0, 10) || 0, 0);
+      const count = Math.min(rawCount, handCards.length);
+      const selectedIds = new Set();
+      pendingDiscard = { count: count, selected: selectedIds, resolve: resolve };
+      if (discardModalHint) {
+        discardModalHint.textContent = count
+          ? `Select ${count} card${count === 1 ? '' : 's'} to discard${sourceName ? ` for ${sourceName}.` : '.'}`
+          : 'Select cards to discard.';
+      }
+      renderDiscardList(count, selectedIds);
+      const instance = getModalInstance(discardModal);
+      if (instance) {
+        instance.show();
+      }
+    });
+  }
+
+  async function requestSearchMatches(criteria) {
+    if (!stateInput || !stateInput.value) {
+      showMessage('Shuffle a deck first.', 'warning');
+      return null;
+    }
+    const payload = { state: stateInput.value, action: 'list', criteria: criteria };
+    if (csrfToken) {
+      payload.csrf_token = csrfToken;
+    }
+    try {
+      const response = await fetch('{{ url_for("views.opening_hand_search") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || !data.ok) {
+        const detail = (data && data.error) ? data.error : `Unable to search (HTTP ${response.status}).`;
+        showMessage(detail, 'warning');
+        return null;
+      }
+      return data.matches || [];
+    } catch (err) {
+      console.error(err);
+      showMessage('Unable to search the library right now.', 'warning');
+      return null;
+    }
+  }
+
+  async function takeSearchCard(criteria, pickName) {
+    if (!stateInput || !stateInput.value) {
+      showMessage('Shuffle a deck first.', 'warning');
+      return null;
+    }
+    const payload = {
+      state: stateInput.value,
+      action: 'take',
+      criteria: criteria,
+      pick_name: pickName
+    };
+    if (csrfToken) {
+      payload.csrf_token = csrfToken;
+    }
+    try {
+      const response = await fetch('{{ url_for("views.opening_hand_search") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || !data.ok) {
+        const detail = (data && data.error) ? data.error : `Unable to fetch card (HTTP ${response.status}).`;
+        showMessage(detail, 'warning');
+        return null;
+      }
+      if (stateInput && data.state) {
+        stateInput.value = data.state;
+      }
+      if (handRemaining && typeof data.remaining === 'number') {
+        handRemaining.hidden = false;
+        handRemaining.textContent = data.remaining + ' cards remaining';
+      }
+      return data.card || null;
+    } catch (err) {
+      console.error(err);
+      showMessage('Unable to fetch a card from the library.', 'warning');
+      return null;
+    }
+  }
+
+  function renderSearchResults(matches, context) {
+    if (!searchResults) return;
+    searchResults.innerHTML = '';
+    if (!matches || !matches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No matching cards found.';
+      searchResults.appendChild(empty);
+      return;
+    }
+    matches.forEach(function (entry) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'effect-card-option';
+      const card = entry.card || {};
+      const img = document.createElement('img');
+      img.src = card.image || placeholderImage;
+      img.alt = card.name || entry.name || 'Card';
+      const title = document.createElement('div');
+      title.className = 'effect-title';
+      title.textContent = entry.name || card.name || 'Card';
+      const subtitle = document.createElement('div');
+      subtitle.className = 'effect-subtitle';
+      subtitle.textContent = entry.count ? `${entry.count} available` : '';
+      btn.appendChild(img);
+      btn.appendChild(title);
+      if (subtitle.textContent) {
+        btn.appendChild(subtitle);
+      }
+      btn.addEventListener('click', async function () {
+        const chosen = await takeSearchCard(context.criteria, entry.name || card.name || '');
+        if (!chosen) {
+          return;
+        }
+        const normalized = normalizeCard(chosen);
+        if (!normalized) {
+          return;
+        }
+        if (context.destination === 'hand') {
+          handCards.push(normalized);
+          renderHand();
+        } else {
+          if (context.tapped) {
+            normalized.tapped = true;
+          }
+          moveCardToBoard(normalized, 'lands');
+        }
+        showMessage(`Fetched ${normalized.name || 'card'}.`, 'success');
+        if (pendingSearch) {
+          pendingSearch.selection = normalized;
+        }
+        const instance = getModalInstance(searchModal);
+        if (instance) {
+          instance.hide();
+        } else if (pendingSearch && typeof pendingSearch.resolve === 'function') {
+          const resolve = pendingSearch.resolve;
+          pendingSearch = null;
+          resolve(normalized);
+        }
+      });
+      searchResults.appendChild(btn);
+    });
+  }
+
+  function promptSearch(criteria, destination, tapped, sourceName) {
+    return new Promise(async function (resolve) {
+      pendingSearch = {
+        criteria: criteria,
+        destination: destination,
+        tapped: tapped,
+        resolve: resolve,
+        selection: null
+      };
+      if (searchModalHint) {
+        searchModalHint.textContent = sourceName
+          ? `Searching for ${sourceName} effects. Choose a card to ${destination === 'hand' ? 'put into hand' : 'put onto the battlefield'}.`
+          : 'Choose a card to fetch.';
+      }
+      if (searchModalStatus) {
+        searchModalStatus.textContent = '';
+      }
+      const matches = await requestSearchMatches(criteria);
+      renderSearchResults(matches || [], pendingSearch);
+      const instance = getModalInstance(searchModal);
+      if (instance) {
+        instance.show();
+      }
+    });
+  }
+
+  function creatureTargets() {
+    const targets = [];
+    boardZones.forEach(function (zone) {
+      if (zone === 'graveyard' || zone === 'command') {
+        return;
+      }
+      (boardState[zone] || []).forEach(function (card) {
+        if (card && card.is_creature) {
+          targets.push({ card: card, zone: zone });
+        }
+      });
+    });
+    return targets;
+  }
+
+  function renderAttachTargets(targets, sourceName) {
+    if (!attachTargetList) return;
+    attachTargetList.innerHTML = '';
+    if (!targets.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No creatures available.';
+      attachTargetList.appendChild(empty);
+      return;
+    }
+    targets.forEach(function (target) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'effect-card-option';
+      const card = target.card;
+      const img = document.createElement('img');
+      img.src = card.image || placeholderImage;
+      img.alt = card.name || 'Creature';
+      const title = document.createElement('div');
+      title.className = 'effect-title';
+      title.textContent = card.name || 'Creature';
+      const subtitle = document.createElement('div');
+      subtitle.className = 'effect-subtitle';
+      subtitle.textContent = card.type_line || '';
+      btn.appendChild(img);
+      btn.appendChild(title);
+      if (subtitle.textContent) {
+        btn.appendChild(subtitle);
+      }
+      btn.addEventListener('click', function () {
+        const instance = getModalInstance(attachModal);
+        if (instance) {
+          instance.hide();
+        }
+        if (pendingAttach && typeof pendingAttach.resolve === 'function') {
+          const resolve = pendingAttach.resolve;
+          pendingAttach = null;
+          resolve(target);
+        }
+      });
+      attachTargetList.appendChild(btn);
+    });
+    if (attachModalHint) {
+      attachModalHint.textContent = sourceName
+        ? `Choose a creature to attach ${sourceName} to.`
+        : 'Choose a creature to attach to.';
+    }
+    if (attachModalStatus) {
+      attachModalStatus.textContent = '';
+    }
+  }
+
+  function promptAttachTarget(card) {
+    return new Promise(function (resolve) {
+      const targets = creatureTargets();
+      if (!targets.length) {
+        resolve(null);
+        return;
+      }
+      if (targets.length === 1) {
+        resolve(targets[0]);
+        return;
+      }
+      pendingAttach = { card: card, resolve: resolve };
+      renderAttachTargets(targets, card.name || '');
+      const instance = getModalInstance(attachModal);
+      if (instance) {
+        instance.show();
+      }
+    });
+  }
+
+  function requiresAutoAttach(card) {
+    if (!card) return false;
+    const typeLine = (card.type_line || '').toLowerCase();
+    const text = (card.oracle_text || '').toLowerCase();
+    if (typeLine.includes('aura')) {
+      return true;
+    }
+    if (typeLine.includes('equipment') && text.includes('attach')) {
+      if (text.includes('enters the battlefield') || text.includes('when ') || text.includes('as this enters')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function findTokenMatches(card) {
+    const text = (card && card.oracle_text ? card.oracle_text.toLowerCase() : '');
+    const tokens = tokensForDeck(currentDeckId()) || [];
+    const matches = tokens.filter(function (token) {
+      const name = (token.name || '').toLowerCase();
+      const typeLine = (token.type_line || '').toLowerCase();
+      return (name && text.includes(name)) || (typeLine && text.includes(typeLine));
+    });
+    if (matches.length) {
+      return matches;
+    }
+    const common = [
+      'treasure',
+      'clue',
+      'food',
+      'blood',
+      'map',
+      'powerstone',
+      'incubator',
+      'servo',
+      'thopter',
+      'construct',
+      'myr',
+      'saproling',
+      'squirrel',
+      'cat',
+      'dog',
+      'bird',
+      'bat',
+      'spirit',
+      'zombie',
+      'skeleton',
+      'vampire',
+      'human',
+      'soldier',
+      'warrior',
+      'cleric',
+      'knight',
+      'wizard',
+      'rogue',
+      'pirate',
+      'elf',
+      'goblin',
+      'orc',
+      'beast',
+      'elemental',
+      'angel',
+      'demon',
+      'dragon',
+      'wolf',
+      'bear',
+      'insect',
+      'spider',
+      'merfolk',
+      'fish',
+      'plant',
+      'treefolk',
+      'golem',
+      'giant',
+      'dinosaur',
+      'treasure',
+      'food'
+    ];
+    const hinted = common.find(function (token) { return text.includes(token); });
+    if (!hinted) {
+      return [];
+    }
+    return tokens.filter(function (token) {
+      return (token.name || '').toLowerCase().includes(hinted) || (token.type_line || '').toLowerCase().includes(hinted);
+    });
+  }
+
+  async function resolveTokenEffect(card, effect) {
+    let count = effect && typeof effect.count === 'number' ? effect.count : 1;
+    if (effect && effect.variable) {
+      const raw = window.prompt('How many tokens should be created?', '1');
+      const parsed = parseInt(raw || '0', 10) || 0;
+      if (parsed <= 0) {
+        return;
+      }
+      count = parsed;
+    }
+    if (!count || count <= 0) {
+      return;
+    }
+    const matches = findTokenMatches(card);
+    if (matches.length === 1) {
+      for (let i = 0; i < count; i += 1) {
+        addTokenToBoard(matches[0]);
+      }
+      showMessage(`Created ${count} token${count === 1 ? '' : 's'} from ${card.name || 'card'}.`, 'info');
+      return;
+    }
+    pendingTokenAdd = { count: count, source: card.name || 'card' };
+    if (tokenModalInstance) {
+      tokenModalInstance.show();
+    }
+    setTokenStatus(`Select a token to create for ${card.name || 'card'}.`, 'success');
+  }
+
+  async function resolveDrawDiscardEffect(card, effect) {
+    if (!effect) return;
+    const cardLabel = card && card.name ? card.name : '';
+    let drawCount = effect.drawCount;
+    let discardCount = effect.discardCount;
+    if (drawCount === null) {
+      const raw = window.prompt('How many cards to draw?', '1');
+      drawCount = parseInt(raw || '0', 10) || 0;
+    }
+    if (discardCount === null) {
+      const raw = window.prompt('How many cards to discard?', '1');
+      discardCount = parseInt(raw || '0', 10) || 0;
+    }
+    if (effect.order === 'draw-then-discard') {
+      if (drawCount > 0) {
+        await drawCards(drawCount);
+      }
+      if (discardCount > 0) {
+        await promptDiscard(discardCount, cardLabel);
+      }
+      return;
+    }
+    if (effect.order === 'discard-then-draw') {
+      if (discardCount > 0) {
+        await promptDiscard(discardCount, cardLabel);
+      }
+      if (drawCount > 0) {
+        await drawCards(drawCount);
+      }
+      return;
+    }
+    if (effect.order === 'draw' && drawCount > 0) {
+      await drawCards(drawCount);
+    } else if (effect.order === 'discard' && discardCount > 0) {
+      await promptDiscard(discardCount, cardLabel);
+    }
+  }
+
+  async function resolveSearchEffect(card, effect) {
+    if (!effect || !effect.criteria) return;
+    await promptSearch(effect.criteria, effect.destination, effect.tapped, card && card.name ? card.name : '');
+  }
+
+  async function resolveMultiSearchEffect(card, effect) {
+    if (!effect || !effect.criteria) return;
+    let total = effect.count;
+    if (!total || total <= 0) {
+      const raw = window.prompt('How many cards should be fetched?', '1');
+      total = parseInt(raw || '0', 10) || 0;
+    }
+    if (!total || total <= 0) {
+      return;
+    }
+    const baseName = card && card.name ? card.name : '';
+    for (let i = 0; i < total; i += 1) {
+      const label = total > 1 && baseName
+        ? `${baseName} (Pick ${i + 1} of ${total})`
+        : baseName;
+      const chosen = await promptSearch(effect.criteria, effect.destination, effect.tapped, label);
+      if (!chosen) {
+        break;
+      }
+    }
+  }
+
+  async function resolveSplitSearchEffect(card, effect) {
+    if (!effect || !effect.criteria || !Array.isArray(effect.steps)) return;
+    const sourceName = card && card.name ? card.name : '';
+    for (let i = 0; i < effect.steps.length; i += 1) {
+      const step = effect.steps[i];
+      const destinationLabel = step.destination === 'battlefield' ? 'Battlefield' : 'Hand';
+      const stepCount = Math.max(1, parseInt(step.count || 1, 10) || 1);
+      for (let pick = 0; pick < stepCount; pick += 1) {
+        const pickLabel = stepCount > 1
+          ? `${destinationLabel} (Pick ${pick + 1} of ${stepCount})`
+          : destinationLabel;
+        const label = sourceName ? `${sourceName} (${pickLabel})` : pickLabel;
+        const chosen = await promptSearch(effect.criteria, step.destination, step.tapped, label);
+        if (!chosen) {
+          return;
+        }
+      }
+    }
+  }
+
+  async function resolveAutoEffects(card) {
+    const queue = buildAutoEffectQueue(card);
+    if (!queue.length) {
+      const text = (card && card.oracle_text ? card.oracle_text.toLowerCase() : '');
+      if (text && (text.includes('draw') || text.includes('discard') || text.includes('create') || text.includes('search your library') || text.includes('attach'))) {
+        showMessage('No automatic effect matched. Use "Resolve Effects..." from the card menu to apply manually.', 'info');
+      }
+      return;
+    }
+    for (const action of queue) {
+      if (action.kind === 'draw-discard') {
+        await resolveDrawDiscardEffect(card, action);
+      } else if (action.kind === 'tokens') {
+        await resolveTokenEffect(card, action);
+      } else if (action.kind === 'search') {
+        await resolveSearchEffect(card, action);
+      } else if (action.kind === 'search_multi') {
+        await resolveMultiSearchEffect(card, action);
+      } else if (action.kind === 'search_split') {
+        await resolveSplitSearchEffect(card, action);
+      }
+    }
+  }
+
+  function updateResolveFields() {
+    if (!resolveEffectType) return;
+    const value = resolveEffectType.value;
+    if (resolveDrawField) {
+      resolveDrawField.style.display = (value === 'draw' || value === 'draw_discard' || value === 'discard_draw') ? '' : 'none';
+    }
+    if (resolveDiscardField) {
+      resolveDiscardField.style.display = (value === 'discard' || value === 'draw_discard' || value === 'discard_draw') ? '' : 'none';
+    }
+    if (resolveTokenField) {
+      resolveTokenField.style.display = value === 'tokens' ? '' : 'none';
+    }
+    if (resolveStatus) {
+      resolveStatus.textContent = '';
+    }
+  }
+
+  function openResolveModal(card, source) {
+    resolveTargetCard = card || null;
+    resolveContext = { card: card || null, source: source || 'board' };
+    if (resolveCardHint) {
+      const name = card && card.name ? card.name : 'Card';
+      const typeLine = card && card.type_line ? card.type_line : '';
+      resolveCardHint.textContent = typeLine ? `${name} — ${typeLine}` : name;
+    }
+    if (resolveEffectType) {
+      let choice = 'draw';
+      const queue = buildAutoEffectQueue(card || {});
+      if (queue.length) {
+        const first = queue[0];
+        if (first.kind === 'draw-discard') {
+          choice = first.order === 'discard-then-draw' ? 'discard_draw' : (first.order === 'draw-then-discard' ? 'draw_discard' : (first.order === 'discard' ? 'discard' : 'draw'));
+        } else if (first.kind === 'tokens') {
+          choice = 'tokens';
+        } else if (first.kind === 'search') {
+          choice = first.destination === 'battlefield' ? 'search_battlefield' : 'search_hand';
+        } else if (first.kind === 'search_multi') {
+          choice = first.destination === 'battlefield' ? 'search_battlefield' : 'search_hand';
+        } else if (first.kind === 'search_split') {
+          choice = 'search_split';
+        }
+      }
+      resolveEffectType.value = choice;
+    }
+    if (resolveDrawCount) resolveDrawCount.value = '1';
+    if (resolveDiscardCount) resolveDiscardCount.value = '1';
+    if (resolveTokenCount) resolveTokenCount.value = '1';
+    updateResolveFields();
+    const instance = getModalInstance(resolveModal);
+    if (instance) {
+      instance.show();
+    }
+  }
+
+  async function applyResolveEffect() {
+    if (!resolveContext || !resolveContext.card) {
+      return;
+    }
+    const card = resolveContext.card;
+    const effectType = resolveEffectType ? resolveEffectType.value : 'draw';
+    if (effectType === 'draw') {
+      const count = parseInt(resolveDrawCount ? resolveDrawCount.value : '1', 10) || 0;
+      if (count > 0) {
+        await drawCards(count);
+      }
+    } else if (effectType === 'discard') {
+      const count = parseInt(resolveDiscardCount ? resolveDiscardCount.value : '1', 10) || 0;
+      if (count > 0) {
+        await promptDiscard(count, card.name || '');
+      }
+    } else if (effectType === 'draw_discard') {
+      const drawCount = parseInt(resolveDrawCount ? resolveDrawCount.value : '1', 10) || 0;
+      const discardCount = parseInt(resolveDiscardCount ? resolveDiscardCount.value : '1', 10) || 0;
+      if (drawCount > 0) {
+        await drawCards(drawCount);
+      }
+      if (discardCount > 0) {
+        await promptDiscard(discardCount, card.name || '');
+      }
+    } else if (effectType === 'discard_draw') {
+      const drawCount = parseInt(resolveDrawCount ? resolveDrawCount.value : '1', 10) || 0;
+      const discardCount = parseInt(resolveDiscardCount ? resolveDiscardCount.value : '1', 10) || 0;
+      if (discardCount > 0) {
+        await promptDiscard(discardCount, card.name || '');
+      }
+      if (drawCount > 0) {
+        await drawCards(drawCount);
+      }
+    } else if (effectType === 'tokens') {
+      const count = parseInt(resolveTokenCount ? resolveTokenCount.value : '1', 10) || 0;
+      if (count > 0) {
+        await resolveTokenEffect(card, { kind: 'tokens', count: count, variable: false });
+      }
+    } else if (effectType === 'search_hand') {
+      await promptSearch({ kind: 'basic_land', names: [] }, 'hand', false, card.name || '');
+    } else if (effectType === 'search_battlefield') {
+      await promptSearch({ kind: 'basic_land', names: [] }, 'battlefield', true, card.name || '');
+    } else if (effectType === 'search_split') {
+      const firstPick = await promptSearch({ kind: 'basic_land', names: [] }, 'battlefield', true, card.name || '');
+      if (firstPick) {
+        await promptSearch({ kind: 'basic_land', names: [] }, 'hand', false, card.name || '');
+      }
+    } else if (effectType === 'attach') {
+      const target = await promptAttachTarget(card);
+      if (target) {
+        if (resolveContext.source === 'hand') {
+          const item = borrowCardFromSource(card.__uid, 'hand');
+          if (item) {
+            moveCardToBoard(item, target.zone, null, target.card.__uid);
+          }
+        } else {
+          moveCardToBoard(card, target.zone, null, target.card.__uid);
+        }
+      }
+    }
+    const instance = getModalInstance(resolveModal);
+    if (instance) {
+      instance.hide();
+    }
+  }
+
+  async function playCardFromHand(card, preferredZone, stackParentId) {
+    if (!card) return;
+    if (resolvingEffects) {
+      showMessage('Resolve the current effect first.', 'warning');
+      handCards.push(card);
+      renderHand();
+      return;
+    }
+    resolvingEffects = true;
+    try {
+      if (card.is_land) {
+        if (landsPlayedThisTurn >= 1) {
+          appendRuleWarning('305.2', 'You have already played a land this turn.');
+        }
+        landsPlayedThisTurn += 1;
+      }
+      const mustAttach = requiresAutoAttach(card);
+      if (stackParentId) {
+        moveCardToBoard(card, preferredZone, null, stackParentId);
+        await resolveAutoEffects(card);
+        return;
+      }
+      if (mustAttach) {
+        const targets = creatureTargets();
+        if (!targets.length) {
+          if ((card.type_line || '').toLowerCase().includes('aura')) {
+            moveCardToBoard(card, 'graveyard');
+            showMessage('No creature to attach. Aura fizzled to the graveyard.', 'warning');
+            return;
+          }
+          moveCardToBoard(card, preferredZone);
+          await resolveAutoEffects(card);
+          return;
+        }
+        const target = await promptAttachTarget(card);
+        if (!target) {
+          handCards.push(card);
+          renderHand();
+          showMessage('Attachment canceled.', 'info');
+          return;
+        }
+        moveCardToBoard(card, target.zone, null, target.card.__uid);
+        await resolveAutoEffects(card);
+        return;
+      }
+      moveCardToBoard(card, preferredZone);
+      await resolveAutoEffects(card);
+    } finally {
+      resolvingEffects = false;
+    }
   }
 
   function updateScryAvailability() {
@@ -2355,9 +3691,39 @@
       cardEl.appendChild(flipBtn);
     }
 
+    const actionBtn = document.createElement('button');
+    actionBtn.type = 'button';
+    actionBtn.className = 'card-action-btn';
+    actionBtn.setAttribute('aria-label', 'Card actions');
+    actionBtn.textContent = '⋯';
+    actionBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = actionBtn.getBoundingClientRect();
+      const fakeEvent = {
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        preventDefault: function () {},
+        stopPropagation: function () {},
+      };
+      openContextMenu(fakeEvent, card, source, zone || null);
+    });
+    cardEl.appendChild(actionBtn);
+
     cardEl.addEventListener('click', function (event) {
       if (event.detail > 1) {
         return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (target && target.closest('.card-action-btn, .card-flip-btn')) {
+        return;
+      }
+      if (source === 'board') {
+        const rect = cardEl.getBoundingClientRect();
+        const offsetY = typeof event.clientY === 'number' ? event.clientY - rect.top : null;
+        if (offsetY !== null && offsetY < 28) {
+          return;
+        }
       }
       handleCardInteraction(cardEl.dataset.cardId, source, zone || null);
     });
@@ -2587,6 +3953,9 @@
       emptyText: 'Shuffle a deck to see your opening seven.',
       emptyClass: 'text-muted small'
     });
+    if (handGrid) {
+      handGrid.classList.toggle('hand-overflow', handCards.length > 9);
+    }
     applyHandFan();
   }
 
@@ -2687,10 +4056,16 @@
       return;
     }
     const zone = preferredZone && boardState[preferredZone] ? preferredZone : classifyCard(card);
+    const fromZone = card.boardZone || null;
+    const enteringBattlefield = !fromZone || fromZone === 'graveyard' || fromZone === 'command';
+    const isBattlefieldZone = zone === 'creatures' || zone === 'permanents' || zone === 'lands';
     removeCardFromBoard(card.__uid);
     card.boardZone = zone;
     card.lastBoardZone = zone;
     card.stack_parent = stackParentId || null;
+    if (isBattlefieldZone && enteringBattlefield && cardEntersTapped(card)) {
+      card.tapped = true;
+    }
     if (zone === 'graveyard' || zone === 'command') {
       card.tapped = false;
     }
@@ -2753,7 +4128,11 @@
     }
 
     const stackParent = beforeId && beforeId !== cardId ? beforeId : null;
-    moveCardToBoard(card, targetZone, beforeId, stackParent);
+    if (source === 'hand') {
+      playCardFromHand(card, targetZone, stackParent);
+    } else {
+      moveCardToBoard(card, targetZone, beforeId, stackParent);
+    }
     dragContext = null;
     clearActiveDropTarget();
     closeContextMenu();
@@ -2968,6 +4347,18 @@
           renderBoard();
         }
       });
+      if (currentZone !== 'graveyard') {
+        options.push({
+          label: 'Sacrifice',
+          action: function () {
+            const item = borrowCardFromSource(cardId, 'board');
+            if (!item) {
+              return;
+            }
+            moveCardToBoard(item, 'graveyard');
+          }
+        });
+      }
       if (card.back_image) {
         options.push({
           label: card.flipped ? 'Show Front' : 'Show Back',
@@ -2991,6 +4382,15 @@
       });
     }
 
+    if (card && card.oracle_text) {
+      options.push({
+        label: 'Resolve Effects...',
+        action: function () {
+          openResolveModal(card, source);
+        }
+      });
+    }
+
     if (!isBoardCard && card.back_image) {
       options.push({
         label: card.flipped ? 'Show Front' : 'Show Back',
@@ -3002,7 +4402,7 @@
 
     if (currentZone !== 'graveyard') {
       options.push({
-        label: 'Move to Graveyard',
+        label: source === 'hand' ? 'Discard' : 'Move to Graveyard',
         action: function () {
           const item = borrowCardFromSource(cardId, isBoardCard ? 'board' : source);
           if (!item) {
@@ -3121,7 +4521,7 @@
     }
   }
 
-  function handleCardInteraction(cardId, source, zone) {
+  async function handleCardInteraction(cardId, source, zone) {
     if (!cardId) {
       return;
     }
@@ -3155,7 +4555,7 @@
       return;
     }
 
-    moveCardToBoard(card);
+    await playCardFromHand(card);
     closeContextMenu();
   }
 
@@ -3179,6 +4579,8 @@
     }
     showMessage('');
     showWarnings([]);
+    ruleWarningSet.clear();
+    landsPlayedThisTurn = 0;
     closeContextMenu();
     updateActionVisibility();
   }
@@ -3228,6 +4630,7 @@
       const inferredBackImage = selectedOption ? (selectedOption.back_image || null) : null;
       const inferredBackHover = selectedOption ? (selectedOption.back_hover || selectedOption.back_image || null) : null;
       const inferredTypeLine = selectedOption ? selectedOption.type_line : '';
+      const inferredOracleText = selectedOption ? (selectedOption.oracle_text || '') : '';
       const inferredIsCreature = selectedOption ? Boolean(selectedOption.is_creature) : false;
       const inferredIsLand = selectedOption ? Boolean(selectedOption.is_land) : false;
       const inferredIsInstant = selectedOption ? Boolean(selectedOption.is_instant) : false;
@@ -3242,6 +4645,7 @@
         back_image: inferredBackImage,
         back_hover: inferredBackHover,
         type_line: inferredTypeLine,
+        oracle_text: inferredOracleText,
         is_creature: inferredIsCreature,
         is_land: inferredIsLand,
         is_instant: inferredIsInstant,
@@ -3410,6 +4814,8 @@
           drawBtn.disabled = false;
         }
         updateScryAvailability();
+        ruleWarningSet.clear();
+        landsPlayedThisTurn = 0;
         showWarnings(data.warnings || []);
       } catch (err) {
         console.error(err);
@@ -3563,6 +4969,99 @@
 
     tokenPickerModal.addEventListener('hidden.bs.modal', function () {
       setTokenStatus('');
+      pendingTokenAdd = null;
+    });
+  }
+
+  if (discardConfirmBtn) {
+    discardConfirmBtn.addEventListener('click', function () {
+      if (!pendingDiscard) {
+        return;
+      }
+      const required = pendingDiscard.count || 0;
+      const selected = Array.from(pendingDiscard.selected || []);
+      if (required && selected.length !== required) {
+        updateDiscardConfirmState(pendingDiscard.selected, required);
+        return;
+      }
+      const discarded = [];
+      selected.forEach(function (cardId) {
+        const card = removeCardById(handCards, cardId);
+        if (card) {
+          moveCardToBoard(card, 'graveyard');
+          discarded.push(card);
+        }
+      });
+      renderHand();
+      renderBoard();
+      const instance = getModalInstance(discardModal);
+      if (instance) {
+        instance.hide();
+      }
+      if (pendingDiscard && typeof pendingDiscard.resolve === 'function') {
+        const resolve = pendingDiscard.resolve;
+        pendingDiscard = null;
+        resolve(discarded);
+      } else {
+        pendingDiscard = null;
+      }
+    });
+  }
+
+  if (discardModal) {
+    discardModal.addEventListener('hidden.bs.modal', function () {
+      if (pendingDiscard && typeof pendingDiscard.resolve === 'function') {
+        const resolve = pendingDiscard.resolve;
+        pendingDiscard = null;
+        resolve([]);
+      } else {
+        pendingDiscard = null;
+      }
+    });
+  }
+
+  if (searchModal) {
+    searchModal.addEventListener('hidden.bs.modal', function () {
+      if (pendingSearch && typeof pendingSearch.resolve === 'function') {
+        const resolve = pendingSearch.resolve;
+        const selection = pendingSearch.selection || null;
+        pendingSearch = null;
+        resolve(selection);
+      } else {
+        pendingSearch = null;
+      }
+    });
+  }
+
+  if (attachModal) {
+    attachModal.addEventListener('hidden.bs.modal', function () {
+      if (pendingAttach && typeof pendingAttach.resolve === 'function') {
+        const resolve = pendingAttach.resolve;
+        pendingAttach = null;
+        resolve(null);
+      } else {
+        pendingAttach = null;
+      }
+    });
+  }
+
+  if (resolveEffectType) {
+    resolveEffectType.addEventListener('change', updateResolveFields);
+  }
+
+  if (resolveApplyBtn) {
+    resolveApplyBtn.addEventListener('click', function () {
+      applyResolveEffect();
+    });
+  }
+
+  if (resolveModal) {
+    resolveModal.addEventListener('hidden.bs.modal', function () {
+      resolveTargetCard = null;
+      resolveContext = null;
+      if (resolveStatus) {
+        resolveStatus.textContent = '';
+      }
     });
   }
 

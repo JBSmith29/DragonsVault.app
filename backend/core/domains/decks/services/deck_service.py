@@ -441,6 +441,12 @@ def opening_hand_draw():
     return card_service.opening_hand_draw()
 
 
+def opening_hand_search():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_search()
+
+
 def opening_hand_peek():
     from core.domains.cards.services import card_service
 
@@ -481,6 +487,7 @@ __all__ = [
     "opening_hand",
     "opening_hand_play",
     "opening_hand_draw",
+    "opening_hand_search",
     "opening_hand_peek",
     "opening_hand_scry",
     "opening_hand_surveil",

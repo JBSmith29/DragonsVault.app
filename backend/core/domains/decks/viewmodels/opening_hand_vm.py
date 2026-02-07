@@ -14,6 +14,7 @@ class OpeningHandCardVM:
     image: str
     hover: str
     type_line: str
+    oracle_text: Optional[str]
     mana_value: Optional[float]
     is_creature: bool
     is_land: bool
@@ -33,6 +34,7 @@ class OpeningHandCardVM:
             "back_image": self.back_image,
             "back_hover": self.back_hover,
             "type_line": self.type_line,
+            "oracle_text": self.oracle_text,
             "mana_value": self.mana_value,
             "is_creature": self.is_creature,
             "is_land": self.is_land,

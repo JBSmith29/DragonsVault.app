@@ -1002,6 +1002,16 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'views.magic_rules' %}active{% endif %}"
+               href="{{ url_for('views.magic_rules') }}"
+               title="Magic Rules"
+               aria-label="Magic Rules"
+               data-endpoints="views.magic_rules">
+              <i class="bi bi-journal-text" aria-hidden="true"></i>
+              <span class="sidebar-label">Magic Rules</span>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'views.import_csv' %}active{% endif %}"
                href="{{ url_for('views.import_csv') }}"
                title="Import / Export"

@@ -118,6 +118,11 @@ def opening_hand_draw():
     return deck_service.opening_hand_draw()
 
 
+@views.post("/opening-hand/search")
+def opening_hand_search():
+    return deck_service.opening_hand_search()
+
+
 @views.post("/opening-hand/peek")
 def opening_hand_peek():
     return deck_service.opening_hand_peek()
@@ -152,6 +157,7 @@ __all__ = [
     "opening_hand_play",
     "opening_hand_shuffle",
     "opening_hand_draw",
+    "opening_hand_search",
     "opening_hand_peek",
     "opening_hand_scry",
     "opening_hand_surveil",

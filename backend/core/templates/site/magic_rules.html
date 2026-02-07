@@ -1,0 +1,1468 @@
+{% extends "base.html" %}
+{% block title %}Magic Rules - DragonsVault{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Magic Comprehensive Rules</h1>
+      <p class="text-muted small mb-0">
+        {% if rules_meta and rules_meta.effective_date %}
+          Effective {{ rules_meta.effective_date }}.
+        {% else %}
+          Official comprehensive rules text.
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-outline-theme btn-sm" type="button" id="rulesLoadBtn">Load Rules</button>
+      <a class="btn btn-outline-secondary btn-sm"
+         href="{{ url_for('static', filename='docs/' ~ (rules_meta.filename if rules_meta and rules_meta.filename else 'MagicCompRules-2026-01-16.txt')) }}"
+         download>
+        Download Text
+      </a>
+    </div>
+  </div>
+
+  <section class="rules-card mb-3 frequent-rules">
+    <h2>Frequent Rules</h2>
+    <div class="rules-card-meta">Quick references for Commander, the layer system, and the stack.</div>
+
+    <details class="rules-section" open>
+      <summary class="rules-section-title">
+        <span>Commander Quick Rules</span>
+        <span class="rules-section-meta">2 groups</span>
+      </summary>
+      <div class="rules-section-body is-solo">
+        <div class="rules-section-rules">
+          <div class="rule-line">
+            <div class="rule-text">Deck Construction Rules</div>
+            <div class="rule-notes">
+              <div class="rule-note">Players choose a legendary creature as the commander for their deck.</div>
+              <div class="rule-note">A card’s color identity is its color plus any mana symbols in its rules text; it’s fixed before the game.</div>
+              <div class="rule-note">Cards in a deck may not include any colors outside the commander’s color identity.</div>
+              <div class="rule-note">Commander decks contain exactly 100 cards including the commander (companion is a 101st card if used).</div>
+              <div class="rule-note">Except basic lands, no two cards share the same English name unless a card says otherwise.</div>
+            </div>
+          </div>
+          <div class="rule-line">
+            <div class="rule-text">Play Rules</div>
+            <div class="rule-notes">
+              <div class="rule-note">Players begin the game with 40 life.</div>
+              <div class="rule-note">Commanders start in the command zone; casting again costs an additional {2} each time.</div>
+              <div class="rule-note">If a commander would go to the graveyard or exile, its owner may move it to the command zone.</div>
+              <div class="rule-note">If a commander would go to hand or library, its owner may put it into the command zone instead.</div>
+              <div class="rule-note">Commander status is a property of the physical card (CR 109.3), not a copyable characteristic.</div>
+              <div class="rule-note">A player dealt 21 combat damage by a single commander loses the game.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="rules-section" open>
+      <summary class="rules-section-title">
+        <span>Layer System (CR 613)</span>
+        <span class="rules-section-meta">7 layers</span>
+      </summary>
+      <div class="rules-section-body is-solo">
+        <div class="rules-section-rules">
+          <div class="rule-line"><div class="rule-text">1. Copy effects</div><div class="rule-notes"><div class="rule-note">Copiable values and face-down changes.</div></div></div>
+          <div class="rule-line"><div class="rule-text">2. Control-changing effects</div><div class="rule-notes"><div class="rule-note">Who controls the object.</div></div></div>
+          <div class="rule-line"><div class="rule-text">3. Text-changing effects</div><div class="rule-notes"><div class="rule-note">Rules text edits and swaps.</div></div></div>
+          <div class="rule-line"><div class="rule-text">4. Type-changing effects</div><div class="rule-notes"><div class="rule-note">Card type, subtype, supertype.</div></div></div>
+          <div class="rule-line"><div class="rule-text">5. Color-changing effects</div><div class="rule-notes"><div class="rule-note">Color overrides and additions.</div></div></div>
+          <div class="rule-line"><div class="rule-text">6. Ability add/remove</div><div class="rule-notes"><div class="rule-note">Abilities gained/lost, keyword counters.</div></div></div>
+          <div class="rule-line">
+            <div class="rule-text">7. Power/Toughness</div>
+            <div class="rule-notes">
+              <div class="rule-note">7a: Characteristic-defining abilities that set P/T.</div>
+              <div class="rule-note">7b: Effects that set P/T to a specific value.</div>
+              <div class="rule-note">7c: Modifiers and counters that change P/T.</div>
+              <div class="rule-note">7d: Effects that switch power and toughness.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="rules-section" open>
+      <summary class="rules-section-title">
+        <span>The Stack (CR 405)</span>
+        <span class="rules-section-meta">5 steps</span>
+      </summary>
+      <div class="rules-section-body is-solo">
+        <div class="rules-section-rules">
+          <div class="rule-line"><div class="rule-text">1. Put on the stack</div><div class="rule-notes"><div class="rule-note">Casting a spell or activating/triggering an ability adds it on top.</div></div></div>
+          <div class="rule-line"><div class="rule-text">2. Last in, first out</div><div class="rule-notes"><div class="rule-note">The most recent object resolves first when everyone passes priority.</div></div></div>
+          <div class="rule-line"><div class="rule-text">3. APNAP ordering</div><div class="rule-notes"><div class="rule-note">Simultaneous additions go active player first, then others in turn order.</div></div></div>
+          <div class="rule-line"><div class="rule-text">4. What’s on the stack</div><div class="rule-notes"><div class="rule-note">Spells use card characteristics; abilities use their text and controller.</div></div></div>
+          <div class="rule-line"><div class="rule-text">5. What bypasses it</div><div class="rule-notes"><div class="rule-note">Static abilities, mana abilities, special actions, turn-based and state-based actions.</div></div></div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <script type="application/json" id="rulesWorkbookInline">{{ rules_workbook_json | default('[]', true) | safe }}</script>
+
+  <div class="rules-layout">
+    <aside class="rules-sidebar">
+      <div class="rules-sidebar-header">Sections</div>
+      <div class="rules-sidebar-body" id="rulesNav">
+        {% if rules_workbook %}
+          {% for chapter in rules_workbook %}
+            <div class="rules-nav-group" data-chapter-id="{{ chapter.id }}">
+              <button
+                type="button"
+                data-target-id="{{ chapter.id }}"
+                data-chapter-id="{{ chapter.id }}"
+                class="rules-nav-chapter {% if loop.first %}is-active{% endif %}"
+                aria-expanded="false"
+                aria-controls="rules-nav-{{ chapter.id }}"
+              >
+                {{ chapter.title }}
+              </button>
+              <div class="rules-nav-sections" id="rules-nav-{{ chapter.id }}" hidden>
+                {% for section in chapter.sections %}
+                  <button type="button" data-target-id="{{ section.id }}" data-parent-id="{{ chapter.id }}" class="rules-nav-section">{{ section.title }}</button>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </aside>
+    <div class="rules-main">
+      <div class="card border-0 shadow-sm rules-search-card">
+        <div class="card-body">
+          <label for="rulesSearchInput" class="form-label">Search rules</label>
+          <div class="input-group">
+            <input type="search" class="form-control" id="rulesSearchInput" placeholder="Search by rule number or keyword (example: 305.2, land)">
+            <button class="btn btn-primary" type="button" id="rulesSearchBtn">Search</button>
+            <button class="btn btn-outline-secondary" type="button" id="rulesClearBtn">Clear</button>
+          </div>
+          <div class="rules-controls">
+            <div class="rules-controls-left">
+              <button class="btn btn-outline-secondary btn-sm" type="button" id="rulesExpandAllBtn">Expand All</button>
+              <button class="btn btn-outline-secondary btn-sm" type="button" id="rulesCollapseAllBtn">Collapse All</button>
+              <button class="btn btn-outline-theme btn-sm" type="button" id="rulesFilterToggle" data-active="false">Filter Workbook</button>
+            </div>
+            <div class="rules-controls-right">
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control" id="rulesJumpInput" placeholder="Jump to rule (e.g., 603.1)">
+                <button class="btn btn-outline-primary" type="button" id="rulesJumpBtn">Go</button>
+              </div>
+            </div>
+          </div>
+          <div class="text-muted small mt-2" id="rulesSearchStatus">Load the rules, then search by rule number or keyword.</div>
+          <div class="list-group mt-3" id="rulesSearchResults"></div>
+        </div>
+      </div>
+      <div class="text-muted small" id="rulesWorkbookStatus">
+        {% if rules_workbook %}
+          Rules ready. Use search or the section list to navigate.
+        {% else %}
+          Click “Load Rules” to build a sectioned view of the rules.
+        {% endif %}
+      </div>
+      <main class="rules-workbook" id="rulesWorkbook">
+        {% if rules_workbook %}
+          {% for chapter in rules_workbook %}
+            <section class="rules-card" id="{{ chapter.id }}">
+              <h2>{{ chapter.title }}</h2>
+              <div class="rules-card-meta">
+                {{ chapter.section_count or (chapter.sections | length) }} section{% if (chapter.section_count or (chapter.sections | length)) != 1 %}s{% endif %}
+                • {{ chapter.rule_count or 0 }} rule{% if (chapter.rule_count or 0) != 1 %}s{% endif %}
+              </div>
+              {% for section in chapter.sections %}
+                {% set has_notes = section.notes and (section.notes | length) > 0 %}
+                {% set has_rules = section.rules and (section.rules | length) > 0 %}
+                <details class="rules-section" id="{{ section.id }}" {% if loop.first %}open{% endif %}>
+                  <summary class="rules-section-title">
+                    <span>{{ section.title }}</span>
+                    <span class="rules-section-meta">{{ section.rule_count or (section.rules | length) }} rule{% if (section.rule_count or (section.rules | length)) != 1 %}s{% endif %}</span>
+                  </summary>
+                  <div class="rules-section-body{% if not has_notes or not has_rules %} is-solo{% endif %}">
+                    {% if has_notes %}
+                      <div class="rules-section-notes">
+                        {% for note in section.notes %}
+                          <div class="text-muted small mb-2">{{ note }}</div>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                    {% if has_rules %}
+                      <div class="rules-section-rules">
+                        {% for rule in section.rules %}
+                          <div class="rule-line" id="{{ rule.id }}" data-rule-number="{{ rule.number }}" tabindex="0">
+                            <div class="rule-text">{{ rule.text }}</div>
+                            {% if rule.notes %}
+                              <div class="rule-notes">
+                                {% for note in rule.notes %}
+                                  <div class="rule-note">{{ note }}</div>
+                                {% endfor %}
+                              </div>
+                            {% endif %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                </details>
+              {% endfor %}
+            </section>
+          {% endfor %}
+        {% endif %}
+      </main>
+    </div>
+  </div>
+</div>
+
+<style>
+  .rules-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .rules-controls-left,
+  .rules-controls-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .rules-controls .btn.is-active {
+    border-color: rgba(96, 165, 250, 0.9);
+    color: #e2e8f0;
+    background: rgba(59, 130, 246, 0.25);
+  }
+  .collapsible-card {
+    overflow: hidden;
+  }
+  .collapsible-summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.85rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: rgba(2, 6, 23, 0.6);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  }
+  .collapsible-summary::-webkit-details-marker {
+    display: none;
+  }
+  .collapsible-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(226, 232, 240, 0.9);
+  }
+  .collapsible-sub {
+    font-size: 0.8rem;
+    color: rgba(148, 163, 184, 0.8);
+  }
+  .collapsible-card[open] .collapsible-summary {
+    background: rgba(15, 23, 42, 0.75);
+  }
+  .commander-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.95));
+  }
+  .commander-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .commander-section-title {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.7rem;
+    color: rgba(148, 163, 184, 0.85);
+    margin-bottom: 0.5rem;
+  }
+  .commander-item {
+    border-left: 3px solid rgba(59, 130, 246, 0.6);
+    padding-left: 0.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: rgba(226, 232, 240, 0.92);
+  }
+  .rules-cheatsheet {
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+  }
+  .cheatsheet-header {
+    margin-bottom: 0.75rem;
+  }
+  .cheatsheet-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(240px, 1.4fr) minmax(0, 1fr);
+  }
+  .cheatsheet-list {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .cheatsheet-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(2, 6, 23, 0.6);
+  }
+  .cheatsheet-row.sub {
+    margin-left: 2rem;
+    background: rgba(30, 41, 59, 0.4);
+  }
+  .cheatsheet-number {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #0f172a;
+    background: #93c5fd;
+  }
+  .cheatsheet-number.is-sub {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.75rem;
+    background: #38bdf8;
+  }
+  .cheatsheet-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .cheatsheet-sub {
+    font-size: 0.82rem;
+    color: rgba(226, 232, 240, 0.78);
+  }
+  .cheatsheet-notes {
+    display: grid;
+    gap: 0.6rem;
+    color: rgba(226, 232, 240, 0.8);
+    font-size: 0.85rem;
+  }
+  .cheatsheet-note {
+    padding: 0.6rem 0.7rem;
+    border-radius: 0.6rem;
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.45);
+  }
+  .rules-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+  .rules-main {
+    display: grid;
+    gap: 1rem;
+  }
+  .rules-sidebar {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.9rem;
+    padding: 0.75rem;
+    position: sticky;
+    top: 1.5rem;
+    height: max-content;
+    max-height: calc(100vh - 3rem);
+    overflow: auto;
+  }
+  .rules-sidebar-header {
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(148, 163, 184, 0.9);
+    margin-bottom: 0.5rem;
+  }
+  .rules-sidebar-body {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .rules-nav-group {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .rules-nav-sections {
+    display: grid;
+    gap: 0.35rem;
+    padding-left: 0.5rem;
+  }
+  .rules-sidebar-body button {
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: rgba(226, 232, 240, 0.9);
+    font-size: 0.85rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 0.4rem;
+  }
+  .rules-sidebar-body .rules-nav-chapter {
+    font-weight: 600;
+  }
+  .rules-sidebar-body .rules-nav-section {
+    padding-left: 1rem;
+    font-size: 0.78rem;
+    color: rgba(148, 163, 184, 0.95);
+  }
+  .rules-sidebar-body button:hover,
+  .rules-sidebar-body button.is-active {
+    background: rgba(59, 130, 246, 0.25);
+    color: #e2e8f0;
+  }
+  .rules-workbook {
+    display: grid;
+    gap: 1rem;
+  }
+  .rules-card {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.5);
+  }
+  .rules-card.is-hidden {
+    display: none;
+  }
+  .rules-card h2 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .rules-card-meta {
+    font-size: 0.8rem;
+    color: rgba(148, 163, 184, 0.8);
+    margin-bottom: 0.75rem;
+  }
+  .rules-section {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(2, 6, 23, 0.5);
+    margin-bottom: 0.75rem;
+  }
+  .rules-section.is-hidden {
+    display: none;
+  }
+  .rules-section[open] {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+  }
+  .rules-section-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    cursor: pointer;
+  }
+  .rules-section > summary {
+    list-style: none;
+  }
+  .rules-section-title::-webkit-details-marker {
+    display: none;
+  }
+  .rules-section-meta {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(148, 163, 184, 0.8);
+  }
+  .rules-section-body {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .rules-section-body.is-solo {
+    grid-template-columns: 1fr;
+  }
+  .rules-section-notes {
+    color: rgba(226, 232, 240, 0.75);
+    font-size: 0.85rem;
+  }
+  .rules-section-rules {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.65rem;
+    padding: 0.6rem;
+    background: rgba(15, 23, 42, 0.55);
+  }
+  .rules-notes {
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .rule-line {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 0.4rem;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  }
+  .rule-text {
+    font-weight: 500;
+  }
+  .rule-notes {
+    border-left: 2px solid rgba(148, 163, 184, 0.3);
+    padding-left: 0.6rem;
+    color: rgba(226, 232, 240, 0.78);
+    font-size: 0.8rem;
+  }
+  .rule-note {
+    margin-bottom: 0.25rem;
+  }
+  .rule-line:hover {
+    border-color: rgba(148, 163, 184, 0.4);
+    transform: translateY(-1px);
+  }
+  .rule-line.highlight {
+    border-color: rgba(96, 165, 250, 0.9);
+    background: rgba(59, 130, 246, 0.2);
+  }
+  .rule-line.is-hidden {
+    display: none;
+  }
+  .rules-result {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    color: #e2e8f0;
+    cursor: pointer;
+  }
+  .rules-result small {
+    color: rgba(148, 163, 184, 0.9);
+  }
+  @media (min-width: 992px) {
+    .rules-section-body {
+      grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr);
+      align-items: start;
+    }
+    .rules-section-body.is-solo {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 992px) {
+    .rules-layout {
+      grid-template-columns: 1fr;
+    }
+    .rules-sidebar {
+      position: static;
+      max-height: none;
+    }
+    .cheatsheet-grid {
+      grid-template-columns: 1fr;
+    }
+    .cheatsheet-row.sub {
+      margin-left: 1rem;
+    }
+  }
+</style>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  const searchInput = document.getElementById('rulesSearchInput');
+  const searchBtn = document.getElementById('rulesSearchBtn');
+  const clearBtn = document.getElementById('rulesClearBtn');
+  const loadBtn = document.getElementById('rulesLoadBtn');
+  const expandBtn = document.getElementById('rulesExpandAllBtn');
+  const collapseBtn = document.getElementById('rulesCollapseAllBtn');
+  const filterBtn = document.getElementById('rulesFilterToggle');
+  const jumpInput = document.getElementById('rulesJumpInput');
+  const jumpBtn = document.getElementById('rulesJumpBtn');
+  const statusEl = document.getElementById('rulesSearchStatus');
+  const resultsEl = document.getElementById('rulesSearchResults');
+  const navEl = document.getElementById('rulesNav');
+  const workbookEl = document.getElementById('rulesWorkbook');
+  const workbookStatusEl = document.getElementById('rulesWorkbookStatus');
+  let rulesData = [];
+  let ruleMap = new Map();
+  let workbookReady = false;
+  let lastQuery = '';
+  let lastMatches = [];
+
+  const rulesUrl = '{{ url_for('static', filename='docs/' ~ (rules_meta.filename if rules_meta and rules_meta.filename else 'MagicCompRules-2026-01-16.txt')) }}';
+  const rulesApiUrl = '{{ url_for("views.api_rules_text") }}';
+  const rulesWorkbookApiUrl = '{{ url_for("views.api_rules_workbook") }}';
+  const rulesStorageKey = `dv_rules_${(rulesUrl || 'magic_rules').split('/').pop()}`;
+  const rulesStorageMetaKey = `${rulesStorageKey}_meta`;
+  const inlineWorkbookEl = document.getElementById('rulesWorkbookInline');
+  let inlineWorkbookData = null;
+  if (inlineWorkbookEl) {
+    try {
+      inlineWorkbookData = JSON.parse(inlineWorkbookEl.textContent || '[]');
+    } catch (err) {
+      console.error('Failed to parse inline workbook JSON', err);
+      inlineWorkbookData = null;
+    }
+  }
+  const hasInlineWorkbook = Array.isArray(inlineWorkbookData) && inlineWorkbookData.length > 0;
+
+  function slugify(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64) || 'section';
+  }
+
+  function parseRules(text) {
+    const lines = text.replace(/^\ufeff/, '').split(/\r\n|\n|\r/);
+    const chapters = [];
+    let currentChapter = null;
+    let currentSub = null;
+    let introBucket = null;
+    let inContents = false;
+    let contentsEnded = false;
+    let lastRule = null;
+    let inGlossary = false;
+    let inCredits = false;
+    let glossaryCurrent = null;
+
+    const chapterRe = /^(\d+)\.\s+(.+)/;
+    const subRe = /^(\d{3})\.\s+(.+)/;
+    const ruleRe = /^(\d{3}\.\d+[a-z]?)\b/;
+    const glossaryTermRe = /^[A-Za-z0-9"()\\[\\]/:+,&\\-\\s]+$/;
+    const glossaryNumberedRe = /^\d+\./;
+
+    const ensureChapter = (title) => {
+      const existing = chapters.find((chapter) => chapter.title === title);
+      if (existing) {
+        currentChapter = existing;
+        currentSub = null;
+        return existing;
+      }
+      const chapter = {
+        title,
+        id: `chapter-${slugify(title)}`,
+        sections: [],
+      };
+      chapters.push(chapter);
+      currentChapter = chapter;
+      currentSub = null;
+      return chapter;
+    };
+
+    const ensureSub = (title) => {
+      if (!currentChapter) {
+        currentChapter = ensureChapter('Miscellaneous');
+      }
+      const existing = currentChapter.sections.find((section) => section.title === title);
+      if (existing) {
+        currentSub = existing;
+        return existing;
+      }
+      const section = {
+        title,
+        id: `section-${slugify((currentChapter.title || '') + '-' + title)}`,
+        rules: [],
+        notes: [],
+      };
+      currentChapter.sections.push(section);
+      currentSub = section;
+      return section;
+    };
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const raw = lines[i] || '';
+      const line = raw.trim();
+      if (!line) {
+        continue;
+      }
+      if (line === 'Contents') {
+        inContents = true;
+        contentsEnded = false;
+        continue;
+      }
+      if (inContents) {
+        if (line === 'Credits') {
+          contentsEnded = true;
+        }
+        if (contentsEnded && chapterRe.test(line)) {
+          inContents = false;
+        } else if (line === 'Glossary' || line === 'Credits' || chapterRe.test(line)) {
+          continue;
+        } else {
+          continue;
+        }
+      }
+
+      if (line === 'Introduction') {
+        introBucket = ensureChapter('Introduction');
+        ensureSub('Overview');
+        lastRule = null;
+        inGlossary = false;
+        inCredits = false;
+        glossaryCurrent = null;
+        continue;
+      }
+      if (line === 'Glossary') {
+        ensureChapter('Glossary');
+        ensureSub('Glossary');
+        lastRule = null;
+        inGlossary = true;
+        inCredits = false;
+        glossaryCurrent = null;
+        continue;
+      }
+      if (line === 'Credits') {
+        ensureChapter('Credits');
+        ensureSub('Credits');
+        lastRule = null;
+        inGlossary = false;
+        inCredits = true;
+        glossaryCurrent = null;
+        continue;
+      }
+
+      if (inGlossary) {
+        const isTerm = !glossaryNumberedRe.test(line)
+          && !line.endsWith('.')
+          && glossaryTermRe.test(line);
+        if (isTerm) {
+          const existing = currentSub.rules.find((rule) => rule.number === line);
+          if (existing) {
+            glossaryCurrent = existing;
+          } else {
+            glossaryCurrent = {
+              id: `rule-glossary-${slugify(line)}`,
+              number: line,
+              text: line,
+              notes: [],
+              kind: 'glossary',
+            };
+            currentSub.rules.push(glossaryCurrent);
+          }
+        } else {
+          if (!glossaryCurrent) {
+            glossaryCurrent = {
+              id: `rule-glossary-${slugify('entry')}-${currentSub.rules.length + 1}`,
+              number: 'Glossary Entry',
+              text: 'Glossary Entry',
+              notes: [],
+              kind: 'glossary',
+            };
+            currentSub.rules.push(glossaryCurrent);
+          }
+          const lastNote = glossaryCurrent.notes[glossaryCurrent.notes.length - 1];
+          if (line !== lastNote) {
+            glossaryCurrent.notes.push(line);
+          }
+        }
+        continue;
+      }
+
+      if (inCredits) {
+        const lastNote = currentSub.notes[currentSub.notes.length - 1];
+        if (line !== lastNote) {
+          currentSub.notes.push(line);
+        }
+        continue;
+      }
+
+      let match = subRe.exec(line);
+      if (match) {
+        ensureSub(`${match[1]}. ${match[2]}`);
+        lastRule = null;
+        continue;
+      }
+      match = chapterRe.exec(line);
+      if (match) {
+        ensureChapter(`${match[1]}. ${match[2]}`);
+        lastRule = null;
+        continue;
+      }
+      match = ruleRe.exec(line);
+      if (match) {
+        if (!currentSub) {
+          if (!currentChapter) {
+            currentChapter = ensureChapter('Rules');
+          }
+          currentSub = ensureSub('General');
+        }
+        const existingRule = currentSub.rules.find((rule) => rule.number === match[1]);
+        if (existingRule) {
+          lastRule = existingRule;
+          continue;
+        }
+        const rule = {
+          id: `rule-${match[1].replace(/\./g, '-')}`,
+          number: match[1],
+          text: line,
+          notes: [],
+        };
+        currentSub.rules.push(rule);
+        lastRule = rule;
+        continue;
+      }
+
+      if (!currentSub) {
+        if (!currentChapter) {
+          currentChapter = introBucket || ensureChapter('Introduction');
+        }
+        currentSub = ensureSub('Overview');
+      }
+
+      if (currentChapter && line === currentChapter.title) {
+        continue;
+      }
+      if (currentSub && line === currentSub.title) {
+        continue;
+      }
+
+      if (currentSub.rules && currentSub.rules.length) {
+        if (!lastRule) {
+          lastRule = currentSub.rules[currentSub.rules.length - 1];
+        }
+        if (lastRule) {
+          const lastNote = lastRule.notes && lastRule.notes[lastRule.notes.length - 1];
+          if (line !== lastNote) {
+            lastRule.notes.push(line);
+          }
+          continue;
+        }
+      }
+
+      const lastSectionNote = currentSub.notes[currentSub.notes.length - 1];
+      if (line !== lastSectionNote) {
+        currentSub.notes.push(line);
+      }
+    }
+
+    return chapters;
+  }
+
+  function buildRuleMap(chapters) {
+    const map = new Map();
+    chapters.forEach((chapter) => {
+      chapter.sections.forEach((section) => {
+        section.rules.forEach((rule) => {
+          map.set(rule.number, rule);
+        });
+      });
+    });
+    return map;
+  }
+
+  function countChapterRules(chapter) {
+    return chapter.sections.reduce((total, section) => total + (section.rules || []).length, 0);
+  }
+
+  function countTotalRules(chapters) {
+    return chapters.reduce((total, chapter) => total + countChapterRules(chapter), 0);
+  }
+
+  function ensureSectionOpen(ruleEl) {
+    const details = ruleEl ? ruleEl.closest('details') : null;
+    if (details && !details.open) {
+      details.open = true;
+    }
+  }
+
+  function highlightRule(ruleEl, shouldScroll) {
+    if (!ruleEl) return;
+    document.querySelectorAll('.rule-line').forEach((node) => node.classList.remove('highlight'));
+    ruleEl.classList.add('highlight');
+    ensureSectionOpen(ruleEl);
+    if (shouldScroll) {
+      ruleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  function setActiveNavButton(activeBtn) {
+    if (!navEl || !activeBtn) return;
+    navEl.querySelectorAll('button').forEach((btn) => btn.classList.remove('is-active'));
+    activeBtn.classList.add('is-active');
+  }
+
+  function setChapterExpanded(chapterBtn, expanded) {
+    if (!chapterBtn) return;
+    const group = chapterBtn.closest('.rules-nav-group');
+    if (!group) return;
+    const sectionWrap = group.querySelector('.rules-nav-sections');
+    if (!sectionWrap) return;
+    sectionWrap.hidden = !expanded;
+    chapterBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+
+  function scrollToTargetId(targetId) {
+    if (!targetId) return false;
+    const target = document.getElementById(targetId);
+    if (!target) return false;
+    const findScrollContainer = (node) => {
+      let current = node && node.parentElement ? node.parentElement : null;
+      while (current) {
+        const style = window.getComputedStyle(current);
+        const canScrollY = /auto|scroll/.test(style.overflowY || '');
+        if (canScrollY && current.scrollHeight - current.clientHeight > 2) {
+          return current;
+        }
+        current = current.parentElement;
+      }
+      return document.scrollingElement || document.documentElement;
+    };
+    if (target.tagName && target.tagName.toLowerCase() === 'details') {
+      target.open = true;
+    } else {
+      const details = target.querySelector && target.querySelector('details');
+      if (details && details.tagName.toLowerCase() === 'details') {
+        details.open = true;
+      }
+    }
+    const scroller = findScrollContainer(target);
+    if (scroller && scroller !== document.scrollingElement && scroller !== document.documentElement && scroller.contains(target)) {
+      const scrollerRect = scroller.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const offset = targetRect.top - scrollerRect.top + scroller.scrollTop;
+      scroller.scrollTo({ top: Math.max(0, offset - 12), behavior: 'smooth' });
+    } else {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    return true;
+  }
+
+  function bindNavButtons() {
+    if (!navEl || navEl.dataset.bound === 'true') return;
+    navEl.dataset.bound = 'true';
+    navEl.addEventListener('click', function (event) {
+      const rawTarget = event.target;
+      const elementTarget = rawTarget instanceof Element ? rawTarget : rawTarget && rawTarget.parentElement;
+      const btn = elementTarget ? elementTarget.closest('button[data-target-id]') : null;
+      if (!btn || !navEl.contains(btn)) return;
+      const targetId = btn.dataset.targetId;
+      if (btn.classList.contains('rules-nav-chapter')) {
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        setChapterExpanded(btn, !expanded);
+      } else {
+        const parentId = btn.dataset.parentId;
+        if (parentId) {
+          const parentBtn = navEl.querySelector(`.rules-nav-chapter[data-chapter-id="${parentId}"]`);
+          if (parentBtn) {
+            setChapterExpanded(parentBtn, true);
+          }
+        }
+      }
+      if (!scrollToTargetId(targetId) && !workbookReady) {
+        loadWorkbook().then(() => {
+          const selector = `button[data-target-id="${targetId}"]`;
+          const refreshedBtn = navEl.querySelector(selector);
+          if (refreshedBtn) setActiveNavButton(refreshedBtn);
+          scrollToTargetId(targetId);
+        });
+      } else {
+        setActiveNavButton(btn);
+      }
+    });
+  }
+
+  function renderNav(chapters) {
+    if (!navEl) return;
+    navEl.innerHTML = '';
+    chapters.forEach((chapter, idx) => {
+      const group = document.createElement('div');
+      group.className = 'rules-nav-group';
+      group.dataset.chapterId = chapter.id;
+
+      const chapterBtn = document.createElement('button');
+      chapterBtn.type = 'button';
+      chapterBtn.textContent = chapter.title;
+      chapterBtn.dataset.targetId = chapter.id;
+      chapterBtn.dataset.chapterId = chapter.id;
+      chapterBtn.classList.add('rules-nav-chapter');
+      if (idx === 0) chapterBtn.classList.add('is-active');
+      chapterBtn.setAttribute('aria-expanded', 'false');
+      chapterBtn.setAttribute('aria-controls', `rules-nav-${chapter.id}`);
+
+      const sectionsWrap = document.createElement('div');
+      sectionsWrap.className = 'rules-nav-sections';
+      sectionsWrap.id = `rules-nav-${chapter.id}`;
+      sectionsWrap.hidden = true;
+
+      (chapter.sections || []).forEach((section) => {
+        const sectionBtn = document.createElement('button');
+        sectionBtn.type = 'button';
+        sectionBtn.textContent = section.title;
+        sectionBtn.dataset.targetId = section.id;
+        sectionBtn.dataset.parentId = chapter.id;
+        sectionBtn.classList.add('rules-nav-section');
+        sectionsWrap.appendChild(sectionBtn);
+      });
+
+      group.appendChild(chapterBtn);
+      group.appendChild(sectionsWrap);
+      navEl.appendChild(group);
+    });
+    bindNavButtons();
+  }
+
+  function renderWorkbook(chapters) {
+    if (!workbookEl) return;
+    workbookEl.innerHTML = '';
+    chapters.forEach((chapter) => {
+      const card = document.createElement('section');
+      card.className = 'rules-card';
+      card.id = chapter.id;
+
+      const heading = document.createElement('h2');
+      heading.textContent = chapter.title;
+      card.appendChild(heading);
+
+      const meta = document.createElement('div');
+      meta.className = 'rules-card-meta';
+      const ruleCount = countChapterRules(chapter);
+      meta.textContent = `${chapter.sections.length} section${chapter.sections.length === 1 ? '' : 's'} • ${ruleCount} rule${ruleCount === 1 ? '' : 's'}`;
+      card.appendChild(meta);
+
+      chapter.sections.forEach((section) => {
+        const sectionEl = document.createElement('details');
+        sectionEl.className = 'rules-section';
+        sectionEl.id = section.id;
+        sectionEl.open = section === chapter.sections[0];
+        const title = document.createElement('summary');
+        title.className = 'rules-section-title';
+        const titleText = document.createElement('span');
+        titleText.textContent = section.title;
+        const titleMeta = document.createElement('span');
+        titleMeta.className = 'rules-section-meta';
+        titleMeta.textContent = `${section.rules.length} rule${section.rules.length === 1 ? '' : 's'}`;
+        title.appendChild(titleText);
+        title.appendChild(titleMeta);
+        sectionEl.appendChild(title);
+
+        const body = document.createElement('div');
+        body.className = 'rules-section-body';
+        const hasNotes = section.notes && section.notes.length;
+        const hasRules = section.rules && section.rules.length;
+        if (!hasNotes || !hasRules) {
+          body.classList.add('is-solo');
+        }
+
+        if (hasNotes) {
+          const notesWrap = document.createElement('div');
+          notesWrap.className = 'rules-section-notes';
+          section.notes.forEach((note) => {
+            const noteEl = document.createElement('div');
+            noteEl.className = 'text-muted small mb-2';
+            noteEl.textContent = note;
+            notesWrap.appendChild(noteEl);
+          });
+          body.appendChild(notesWrap);
+        }
+
+        if (hasRules) {
+          const rulesWrap = document.createElement('div');
+          rulesWrap.className = 'rules-section-rules';
+          section.rules.forEach((rule) => {
+            const ruleEl = document.createElement('div');
+            ruleEl.className = 'rule-line';
+            ruleEl.id = rule.id;
+            ruleEl.dataset.ruleNumber = rule.number;
+            ruleEl.tabIndex = 0;
+            const textEl = document.createElement('div');
+            textEl.className = 'rule-text';
+            textEl.textContent = rule.text;
+            ruleEl.appendChild(textEl);
+            if (rule.notes && rule.notes.length) {
+              const notesEl = document.createElement('div');
+              notesEl.className = 'rule-notes';
+              rule.notes.forEach((note) => {
+                const noteEl = document.createElement('div');
+                noteEl.className = 'rule-note';
+                noteEl.textContent = note;
+                notesEl.appendChild(noteEl);
+              });
+              ruleEl.appendChild(notesEl);
+            }
+            rulesWrap.appendChild(ruleEl);
+          });
+          body.appendChild(rulesWrap);
+        }
+
+        sectionEl.appendChild(body);
+        card.appendChild(sectionEl);
+      });
+      workbookEl.appendChild(card);
+    });
+  }
+
+  async function loadWorkbook(forceFetch) {
+    if (workbookReady) {
+      return;
+    }
+    if (workbookStatusEl) {
+      workbookStatusEl.textContent = 'Loading rules workbook...';
+    }
+    try {
+      let sourceLabel = '';
+      if (hasInlineWorkbook) {
+        rulesData = inlineWorkbookData;
+        sourceLabel = 'inline workbook';
+      } else {
+        let text = '';
+        const cached = window.localStorage ? localStorage.getItem(rulesStorageKey) : null;
+        const hasCached = Boolean(cached && cached.length > 1000);
+        if (!forceFetch && hasCached) {
+          text = cached;
+          sourceLabel = 'cache';
+        } else {
+          try {
+            const workbookResp = await fetch(rulesWorkbookApiUrl, { credentials: 'same-origin' });
+            if (workbookResp.ok) {
+              const payload = await workbookResp.json();
+              if (payload && payload.workbook) {
+                rulesData = payload.workbook;
+                sourceLabel = 'server workbook';
+              }
+            }
+          } catch (err) {
+            // ignore
+          }
+          if (!rulesData.length) {
+            try {
+              const apiResp = await fetch(rulesApiUrl, { credentials: 'same-origin' });
+              if (apiResp.ok) {
+                text = await apiResp.text();
+                sourceLabel = 'server';
+              }
+            } catch (err) {
+              text = '';
+            }
+            if (!text) {
+              try {
+                const resp = await fetch(rulesUrl, { credentials: 'same-origin' });
+                if (resp.ok) {
+                  text = await resp.text();
+                  sourceLabel = 'static';
+                }
+              } catch (err) {
+                text = '';
+              }
+            }
+            if (window.localStorage && text) {
+              try {
+                localStorage.setItem(rulesStorageKey, text);
+                localStorage.setItem(rulesStorageMetaKey, String(Date.now()));
+              } catch (err) {
+                // ignore storage issues (quota, privacy mode)
+              }
+            }
+            rulesData = text ? parseRules(text) : [];
+          }
+        }
+      }
+
+      const totalRules = countTotalRules(rulesData);
+      if (!rulesData.length || totalRules === 0) {
+        if (workbookStatusEl) {
+          workbookStatusEl.textContent = 'Rules could not be loaded. Please press Load Rules to try again.';
+        }
+        return;
+      }
+      ruleMap = buildRuleMap(rulesData);
+      renderNav(rulesData);
+      renderWorkbook(rulesData);
+      workbookReady = true;
+      if (loadBtn) {
+        loadBtn.textContent = 'Load Rules';
+      }
+      if (workbookStatusEl) {
+        const sourceNote = sourceLabel ? `Loaded from ${sourceLabel}.` : 'Loaded.';
+        workbookStatusEl.textContent = `${sourceNote} ${totalRules} rules ready. Tip: click any rule to highlight it.`;
+      }
+      if (statusEl) {
+        statusEl.textContent = 'Workbook loaded. Search by rule number or keyword.';
+      }
+    } catch (err) {
+      console.error('Rules workbook error', err);
+      if (workbookStatusEl) {
+        workbookStatusEl.textContent = 'Unable to load the rules workbook.';
+      }
+    }
+  }
+
+  function refreshWorkbook() {
+    if (workbookStatusEl) {
+      workbookStatusEl.textContent = 'Refreshing rules workbook...';
+    }
+    if (window.localStorage) {
+      localStorage.removeItem(rulesStorageKey);
+      localStorage.removeItem(rulesStorageMetaKey);
+    }
+    rulesData = [];
+    ruleMap = new Map();
+    workbookReady = false;
+    loadWorkbook(true);
+  }
+
+  function renderResults(matches) {
+    if (!resultsEl) return;
+    resultsEl.innerHTML = '';
+    if (!matches || !matches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No matches found.';
+      resultsEl.appendChild(empty);
+      return;
+    }
+    matches.forEach((match) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'rules-result';
+      const line = document.createElement('small');
+      if (match.number) {
+        line.textContent = isRuleNumber(match.number)
+          ? `Rule ${match.number}`
+          : `Glossary — ${match.number}`;
+      } else {
+        line.textContent = 'Match';
+      }
+      const text = document.createElement('div');
+      text.textContent = match.text || '';
+      wrap.appendChild(line);
+      wrap.appendChild(text);
+      wrap.addEventListener('click', function () {
+        if (match.id) {
+          const el = document.getElementById(match.id);
+          if (el) {
+            highlightRule(el, true);
+          }
+        }
+      });
+      resultsEl.appendChild(wrap);
+    });
+  }
+
+  function localSearch(query) {
+    const needle = query.toLowerCase();
+    const results = [];
+    rulesData.forEach((chapter) => {
+      chapter.sections.forEach((section) => {
+        section.rules.forEach((rule) => {
+          const haystack = [rule.text].concat(rule.notes || []).join(' ').toLowerCase();
+          if (haystack.includes(needle) || rule.number.includes(needle)) {
+            results.push(rule);
+          }
+        });
+      });
+    });
+    return results.slice(0, 25);
+  }
+
+  function isRuleNumber(value) {
+    return /^\d{3}\./.test(String(value || '').trim());
+  }
+
+  async function searchRules() {
+    const query = (searchInput && searchInput.value || '').trim();
+    if (!query) {
+      if (statusEl) statusEl.textContent = 'Load the rules, then search by rule number or keyword.';
+      renderResults([]);
+      lastQuery = '';
+      lastMatches = [];
+      if (filterBtn && filterBtn.dataset.active === 'true') {
+        clearFilter();
+      }
+      return;
+    }
+    if (!workbookReady) {
+      await loadWorkbook();
+    }
+    if (statusEl) statusEl.textContent = 'Searching...';
+    const matches = localSearch(query);
+    lastQuery = query;
+    lastMatches = matches;
+    renderResults(matches);
+    if (filterBtn && filterBtn.dataset.active === 'true') {
+      applyFilter(matches);
+    }
+    if (statusEl) {
+      statusEl.textContent = matches.length
+        ? `Showing ${matches.length} match${matches.length === 1 ? '' : 'es'}.`
+        : 'No matches found.';
+    }
+  }
+
+  function clearFilter() {
+    document.querySelectorAll('.rule-line').forEach((node) => node.classList.remove('is-hidden'));
+    document.querySelectorAll('.rules-section').forEach((node) => node.classList.remove('is-hidden'));
+    document.querySelectorAll('.rules-card').forEach((node) => node.classList.remove('is-hidden'));
+  }
+
+  function applyFilter(matches) {
+    if (!matches || !matches.length) {
+      clearFilter();
+      if (workbookStatusEl) {
+        workbookStatusEl.textContent = 'No matches to filter yet. Try a new search.';
+      }
+      return;
+    }
+    const matchIds = new Set(matches.map((match) => match.id));
+    document.querySelectorAll('.rule-line').forEach((node) => {
+      if (!matchIds.has(node.id)) {
+        node.classList.add('is-hidden');
+      } else {
+        node.classList.remove('is-hidden');
+      }
+    });
+    document.querySelectorAll('.rules-section').forEach((node) => {
+      const hasVisible = node.querySelector('.rule-line:not(.is-hidden)');
+      node.classList.toggle('is-hidden', !hasVisible);
+      if (hasVisible && node.tagName.toLowerCase() === 'details') {
+        node.open = true;
+      }
+    });
+    document.querySelectorAll('.rules-card').forEach((node) => {
+      const hasVisible = node.querySelector('.rules-section:not(.is-hidden)');
+      node.classList.toggle('is-hidden', !hasVisible);
+    });
+    if (workbookStatusEl) {
+      workbookStatusEl.textContent = `Filtered to ${matches.length} matching rule${matches.length === 1 ? '' : 's'}.`;
+    }
+  }
+
+  function toggleFilter() {
+    if (!filterBtn) return;
+    const isActive = filterBtn.dataset.active === 'true';
+    if (isActive) {
+      filterBtn.dataset.active = 'false';
+      filterBtn.classList.remove('is-active');
+      filterBtn.textContent = 'Filter Workbook';
+      clearFilter();
+      if (workbookStatusEl) {
+        workbookStatusEl.textContent = 'Tip: click any rule to highlight it.';
+      }
+      return;
+    }
+    filterBtn.dataset.active = 'true';
+    filterBtn.classList.add('is-active');
+    filterBtn.textContent = 'Show All';
+    applyFilter(lastMatches);
+  }
+
+  function jumpToRule() {
+    const query = (jumpInput && jumpInput.value || '').trim();
+    if (!query) return;
+    if (!workbookReady) {
+      loadWorkbook().then(() => jumpToRule());
+      return;
+    }
+    let rule = ruleMap.get(query);
+    if (!rule) {
+      for (const candidate of ruleMap.values()) {
+        if (candidate.number && candidate.number.startsWith(query)) {
+          rule = candidate;
+          break;
+        }
+      }
+    }
+    if (rule && rule.id) {
+      const el = document.getElementById(rule.id);
+      if (el) {
+        highlightRule(el, true);
+      }
+    } else if (statusEl) {
+      statusEl.textContent = `No rule found for ${query}.`;
+    }
+  }
+
+  function setAllSections(open) {
+    document.querySelectorAll('.rules-section').forEach((section) => {
+      if (section.tagName.toLowerCase() === 'details') {
+        section.open = open;
+      }
+    });
+  }
+
+  if (loadBtn) {
+    loadBtn.addEventListener('click', function () {
+      refreshWorkbook();
+    });
+  }
+  if (expandBtn) {
+    expandBtn.addEventListener('click', function () {
+      if (!workbookReady) {
+        loadWorkbook().then(() => setAllSections(true));
+        return;
+      }
+      setAllSections(true);
+    });
+  }
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', function () {
+      if (!workbookReady) {
+        loadWorkbook().then(() => setAllSections(false));
+        return;
+      }
+      setAllSections(false);
+    });
+  }
+  if (filterBtn) {
+    filterBtn.addEventListener('click', function () {
+      if (!workbookReady) {
+        loadWorkbook().then(() => toggleFilter());
+        return;
+      }
+      toggleFilter();
+    });
+  }
+  if (jumpBtn) jumpBtn.addEventListener('click', jumpToRule);
+  if (jumpInput) {
+    jumpInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        jumpToRule();
+      }
+    });
+  }
+  if (searchBtn) searchBtn.addEventListener('click', searchRules);
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      if (searchInput) searchInput.value = '';
+      renderResults([]);
+      if (statusEl) statusEl.textContent = 'Load the rules, then search by rule number or keyword.';
+      document.querySelectorAll('.rule-line').forEach((node) => node.classList.remove('highlight'));
+      if (filterBtn && filterBtn.dataset.active === 'true') {
+        filterBtn.dataset.active = 'false';
+        filterBtn.classList.remove('is-active');
+        filterBtn.textContent = 'Filter Workbook';
+        clearFilter();
+      }
+    });
+  }
+  if (searchInput) {
+    searchInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        searchRules();
+      }
+    });
+  }
+  if (workbookEl) {
+    workbookEl.addEventListener('click', function (event) {
+      const target = event.target.closest('.rule-line');
+      if (!target) return;
+      highlightRule(target, false);
+    });
+    workbookEl.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const target = event.target.closest('.rule-line');
+      if (!target) return;
+      event.preventDefault();
+      highlightRule(target, false);
+    });
+  }
+  bindNavButtons();
+  loadWorkbook();
+})();
+</script>
+{% endblock %}
