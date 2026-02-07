@@ -295,13 +295,26 @@ let gameData = {
   availableDecks: {{ guest_deck_options|tojson }}
 };
 
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
-  // Set today's date
-  document.getElementById('playedAt').value = new Date().toISOString().split('T')[0];
-  
-  // Populate player quick select
+function initQuickLog() {
+  const playedAt = document.getElementById('playedAt');
+  if (!playedAt || playedAt.dataset.quickLogInit === '1') return;
+  playedAt.dataset.quickLogInit = '1';
+  if (!playedAt.value) {
+    playedAt.value = new Date().toISOString().split('T')[0];
+  }
   populatePlayerQuickSelect();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initQuickLog);
+} else {
+  initQuickLog();
+}
+
+document.addEventListener('htmx:afterSwap', (event) => {
+  if (event.target && event.target.id === 'main') {
+    initQuickLog();
+  }
 });
 
 // Step Navigation

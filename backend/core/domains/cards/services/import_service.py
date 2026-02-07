@@ -32,14 +32,7 @@ from extensions import db
 from models import Card, Folder, UserFriend
 from shared.service_result import ServiceResult
 from core.domains.users.services.audit import record_audit_event
-from core.domains.cards.services.csv_importer import (
-    EXPECTED,
-    FileValidationError,
-    HeaderValidationError,
-    preview_csv,
-    read_import_headers,
-    resolve_header_mapping,
-)
+from core.domains.cards.services.csv_importer import FileValidationError, HeaderValidationError
 from shared.jobs.jobs import enqueue_csv_import
 from shared.events.live_updates import latest_job_events
 from core.domains.cards.services.scryfall_cache import ensure_cache_loaded, find_by_set_cn, find_by_set_cn_loose, metadata_from_print, search_prints
@@ -52,18 +45,6 @@ MAX_IMPORT_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB 
 IMPORT_UPLOAD_RETENTION_HOURS = int(os.getenv("IMPORT_UPLOAD_RETENTION_HOURS", 24))
 
 _MANUAL_LINE_RE = re.compile(r"^\s*(\d+)\s*[xX]?\s+(.*)$")
-
-IMPORT_MAPPING_FIELDS = [
-    {"key": "name", "label": "Card name", "required": True},
-    {"key": "set_code", "label": "Set code", "required": True},
-    {"key": "collector_number", "label": "Collector number", "required": True},
-    {"key": "qty", "label": "Quantity", "required": False},
-    {"key": "folder", "label": "Folder name", "required": False},
-    {"key": "folder_category", "label": "Folder category", "required": False},
-    {"key": "lang", "label": "Language", "required": False},
-    {"key": "is_foil", "label": "Foil / finish", "required": False},
-]
-
 
 def _store_import_notification(level: str, message: str, session_obj) -> None:
     session_obj["last_import_notification"] = {"level": level, "message": message}
@@ -191,54 +172,6 @@ def _validate_upload_path(filepath: str) -> str:
     return str(resolved)
 
 
-def _parse_mapping_from_request() -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    for spec in IMPORT_MAPPING_FIELDS:
-        key = spec["key"]
-        value = (request.form.get(f"map_{key}") or "").strip()
-        if value:
-            mapping[key] = value
-    return mapping
-
-
-def _mapping_context(
-    headers: list[str],
-    mapping_override: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    mapping, missing_required, invalid_overrides = resolve_header_mapping(
-        headers,
-        mapping_override,
-        allow_missing=True,
-    )
-    selected = {}
-    for spec in IMPORT_MAPPING_FIELDS:
-        key = spec["key"]
-        selected[key] = (mapping_override or {}).get(key) or mapping.get(key, "")
-    missing_labels = [
-        spec["label"]
-        for spec in IMPORT_MAPPING_FIELDS
-        if spec["key"] in missing_required
-    ]
-    return {
-        "mapping_fields": IMPORT_MAPPING_FIELDS,
-        "mapping_headers": headers,
-        "mapping_selected": selected,
-        "mapping_missing": missing_required,
-        "mapping_missing_labels": missing_labels,
-        "mapping_invalid": {field: header for field, header in invalid_overrides},
-        "mapping_expected": EXPECTED,
-    }
-
-
-def _mapping_field_errors(missing_required: list[str], invalid_overrides: dict[str, str]) -> dict[str, str]:
-    errors: dict[str, str] = {}
-    for key in missing_required:
-        errors[f"map_{key}"] = "Required field"
-    for key, header in invalid_overrides.items():
-        errors[f"map_{key}"] = f"Header '{header}' not found"
-    return errors
-
-
 def _save_upload_if_present(file) -> str | None:
     """Return saved path or None if no file provided."""
     if not file or not getattr(file, "filename", ""):
@@ -356,29 +289,6 @@ def _base_import_context(session_obj, *, quantity_mode: str, notification=None, 
     return context
 
 
-def _preview_context(
-    session_obj,
-    *,
-    filepath: str,
-    quantity_mode: str,
-    mapping_override: dict[str, str] | None = None,
-    field_errors: dict[str, str] | None = None,
-    form_errors: list[str] | None = None,
-) -> dict:
-    preview = preview_csv(filepath, default_folder="Unsorted", max_rows=100)
-    mapping_ctx = _mapping_context(preview.headers, mapping_override)
-    return _base_import_context(
-        session_obj,
-        quantity_mode=quantity_mode,
-        preview=preview,
-        filepath=filepath,
-        preview_filename=Path(filepath).name,
-        field_errors=field_errors or {},
-        form_errors=form_errors or [],
-        **mapping_ctx,
-    )
-
-
 def _json_error(message: str, *, field_errors: dict[str, str] | None = None, status: int = 400) -> Response:
     payload = {"ok": False, "error": message}
     if field_errors:
@@ -390,7 +300,7 @@ def _json_error(message: str, *, field_errors: dict[str, str] | None = None, sta
 
 
 def handle_import_csv(*, session_obj) -> ServiceResult:
-    """Upload route that powers CSV/XLS collection imports and dry-run previews."""
+    """Upload route that powers CSV/XLS collection imports."""
     if request.method == "GET":
         notification = session_obj.pop("last_import_notification", None)
         return ServiceResult(
@@ -404,75 +314,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
 
     action = (request.form.get("import_action") or request.form.get("action") or "").strip().lower()
     quantity_mode = _normalize_quantity_mode(request.form.get("quantity_mode"))
-
-    if action == "preview":
-        file = request.files.get("file")
-        saved = None
-        field_errors: dict[str, str] = {}
-        form_errors: list[str] = []
-        try:
-            saved = _save_upload_if_present(file)
-            if not saved:
-                field_errors["file"] = "Please choose a CSV or Excel file."
-                form_errors.append(field_errors["file"])
-                return ServiceResult(
-                    template="cards/import.html",
-                    context=_base_import_context(
-                        session_obj,
-                        quantity_mode=quantity_mode,
-                        field_errors=field_errors,
-                        form_errors=form_errors,
-                    ),
-                )
-
-            saved = _validate_upload_path(saved)
-            return ServiceResult(
-                template="cards/import.html",
-                context=_preview_context(
-                    session_obj,
-                    filepath=saved,
-                    quantity_mode=quantity_mode,
-                ),
-            )
-
-        except (FileValidationError, HeaderValidationError) as exc:
-            current_app.logger.warning("Preview failed due to file validation: %s", exc)
-            db.session.rollback()
-            field_errors["file"] = str(exc)
-            form_errors.append(str(exc))
-            if saved:
-                try:
-                    os.remove(saved)
-                except Exception:
-                    pass
-            return ServiceResult(
-                template="cards/import.html",
-                context=_base_import_context(
-                    session_obj,
-                    quantity_mode=quantity_mode,
-                    field_errors=field_errors,
-                    form_errors=form_errors,
-                ),
-            )
-        except Exception as exc:
-            current_app.logger.exception("Preview failed")
-            db.session.rollback()
-            field_errors["file"] = f"Could not read file: {exc}"
-            form_errors.append(field_errors["file"])
-            if saved:
-                try:
-                    os.remove(saved)
-                except Exception:
-                    pass
-            return ServiceResult(
-                template="cards/import.html",
-                context=_base_import_context(
-                    session_obj,
-                    quantity_mode=quantity_mode,
-                    field_errors=field_errors,
-                    form_errors=form_errors,
-                ),
-            )
 
     if action == "retry":
         wants_json = (
@@ -514,7 +355,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
 
         overwrite = bool(last_job.get("overwrite"))
         quantity_mode = _normalize_quantity_mode(last_job.get("quantity_mode"))
-        mapping_override = last_job.get("mapping") or None
 
         try:
             owner_name_preferred = None
@@ -530,7 +370,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
                 overwrite=overwrite,
                 owner_user_id=current_user.id if current_user.is_authenticated else None,
                 owner_username=owner_name_preferred,
-                mapping_override=mapping_override,
                 run_async=True,
             )
         except (HeaderValidationError, FileValidationError) as err:
@@ -639,52 +478,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
         overwrite = (action == "overwrite") or (quantity_mode == "purge")
         filename = os.path.basename(filepath)
         run_async = wants_json or (request.form.get("import_async") == "1")
-        mapping_override = _parse_mapping_from_request()
-        mapping_override = mapping_override or None
-
-        if mapping_override:
-            try:
-                headers = read_import_headers(filepath)
-                mapping, missing_required, invalid_overrides = resolve_header_mapping(
-                    headers,
-                    mapping_override,
-                    allow_missing=True,
-                )
-            except (HeaderValidationError, FileValidationError) as exc:
-                message = str(exc)
-                if wants_json:
-                    return ServiceResult(response=_json_error(message, field_errors={"file": message}))
-                return ServiceResult(
-                    template="cards/import.html",
-                    context=_base_import_context(
-                        session_obj,
-                        quantity_mode=quantity_mode,
-                        field_errors={"file": message},
-                        form_errors=[message],
-                    ),
-                )
-
-            invalid_map = {field: header for field, header in invalid_overrides}
-            if missing_required or invalid_overrides:
-                field_errors = _mapping_field_errors(missing_required, invalid_map)
-                form_errors = ["Map required columns before importing."]
-                if wants_json:
-                    return ServiceResult(
-                        response=_json_error("Fix the column mapping before importing.", field_errors=field_errors)
-                    )
-                return ServiceResult(
-                    template="cards/import.html",
-                    context=_preview_context(
-                        session_obj,
-                        filepath=filepath,
-                        quantity_mode=quantity_mode,
-                        mapping_override=mapping_override,
-                        field_errors=field_errors,
-                        form_errors=form_errors,
-                    ),
-                )
-            mapping_override = mapping
-
         try:
             owner_name_preferred = None
             if current_user.is_authenticated:
@@ -700,7 +493,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
                 overwrite=overwrite,
                 owner_user_id=current_user.id if current_user.is_authenticated else None,
                 owner_username=owner_name_preferred,
-                mapping_override=mapping_override,
                 run_async=run_async,
             )
         except (HeaderValidationError, FileValidationError) as err:
@@ -730,7 +522,6 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
             "filepath": filepath,
             "quantity_mode": quantity_mode,
             "overwrite": overwrite,
-            "mapping": mapping_override or {},
             "created_at": int(time.time()),
             "filename": filename,
         }

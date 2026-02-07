@@ -150,17 +150,12 @@
               <label for="file" class="form-label">Choose CSV or Excel file</label>
               <input class="form-control{% if field_errors.file %} is-invalid{% endif %}" type="file" id="file" name="file"
                      accept=".csv,.tsv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                     {% if not preview %}required{% endif %}>
+                     required>
               <div class="invalid-feedback" id="fileError">{{ field_errors.file }}</div>
               <div class="form-text">
                 Supports DragonShield exports and ManaBox binder exports. Files are limited to 10MB to keep imports fast and safe.
                 ManaBox&#8217;s &#8220;Binder Name&#8221; maps to folders, and &#8220;Binder Type&#8221; switches between deck and collection buckets automatically.
-                Use Preview &amp; map to confirm column assignments before you import.
               </div>
-              {% if preview_filename %}
-                <div class="form-text text-success">Using saved upload: {{ preview_filename }}</div>
-                <input type="hidden" name="filepath" value="{{ filepath }}">
-              {% endif %}
             </div>
             <div class="col-12">
               <label class="form-label">Import mode</label>
@@ -197,10 +192,7 @@
           </div>
 
           <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-            <button type="submit" class="btn btn-outline-secondary" id="btn-preview" data-import-action="preview">
-              Preview &amp; map
-            </button>
-            <button type="submit" class="btn btn-primary btn-progress" id="btn-import" data-import-action="confirm">
+            <button type="submit" class="btn btn-primary btn-progress" id="btn-import">
               <span class="btn-progress__icon" aria-hidden="true">
                 <i class="bi bi-upload btn-progress__idle"></i>
                 <span class="spinner-border spinner-border-sm btn-progress__spinner" role="status"></span>
@@ -227,80 +219,6 @@
             </div>
           </div>
         </div>
-        {% if preview %}
-          <div class="card border-0 shadow-sm mt-3">
-            <div class="card-header d-flex align-items-center gap-2">
-              <i class="bi bi-eye"></i>
-              <span>Preview &amp; column mapping</span>
-            </div>
-            <div class="card-body">
-              <p class="text-muted small mb-3">
-                Showing {{ preview.rows|length }} row{% if preview.rows|length != 1 %}s{% endif %}. Map columns to the required fields before importing.
-              </p>
-              {% if mapping_missing_labels or mapping_invalid %}
-                <div class="alert alert-warning">
-                  {% if mapping_missing_labels %}
-                    Missing required mappings: {{ mapping_missing_labels | join(', ') }}.
-                  {% endif %}
-                  {% if mapping_invalid %}
-                    Please fix invalid mappings before importing.
-                  {% endif %}
-                </div>
-              {% endif %}
-              <div class="row g-3">
-                {% for spec in mapping_fields %}
-                  {% set map_key = 'map_' ~ spec.key %}
-                  <div class="col-12 col-md-6">
-                    <label class="form-label" for="map-{{ spec.key }}">
-                      {{ spec.label }}
-                      {% if spec.required %}
-                        <span class="text-danger">*</span>
-                      {% endif %}
-                    </label>
-                    <select
-                      class="form-select{% if field_errors.get(map_key) %} is-invalid{% endif %}"
-                      name="map_{{ spec.key }}"
-                      id="map-{{ spec.key }}"
-                      data-map-field="{{ spec.key }}"
-                    >
-                      <option value="">-- Not mapped --</option>
-                      {% for header in mapping_headers %}
-                        <option value="{{ header }}" {% if mapping_selected.get(spec.key) == header %}selected{% endif %}>
-                          {{ header }}
-                        </option>
-                      {% endfor %}
-                    </select>
-                    <div class="invalid-feedback" id="map-{{ spec.key }}-error">{{ field_errors.get(map_key) }}</div>
-                    {% set accepted = mapping_expected.get(spec.key) %}
-                    {% if accepted %}
-                      <div class="form-text">Accepted: {{ accepted | join(', ') }}</div>
-                    {% endif %}
-                  </div>
-                {% endfor %}
-              </div>
-              <div class="table-responsive mt-3">
-                <table class="table table-sm table-striped align-middle">
-                  <thead>
-                    <tr>
-                      {% for header in preview.headers %}
-                        <th scope="col">{{ header }}</th>
-                      {% endfor %}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in preview.rows[:8] %}
-                      <tr>
-                        {% for header in preview.headers %}
-                          <td>{{ row.get(header) }}</td>
-                        {% endfor %}
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        {% endif %}
       </form>
     </div>
 
@@ -927,13 +845,8 @@
     }
 
     function handleAsyncSubmit(event) {
-      const submitter = event?.submitter;
-      const requestedAction = submitter?.dataset?.importAction || actionInput?.value || "confirm";
       if (actionInput) {
-        actionInput.value = requestedAction;
-      }
-      if (requestedAction === "preview") {
-        return;
+        actionInput.value = "confirm";
       }
       if (event) {
         event.preventDefault();

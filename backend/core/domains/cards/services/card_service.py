@@ -121,8 +121,10 @@ from core.domains.decks.viewmodels.deck_vm import (
 )
 from core.domains.users.viewmodels.dashboard_vm import (
     DashboardActionVM,
+    DashboardCollectionStatsVM,
     DashboardModeOptionVM,
     DashboardStatTileVM,
+    DashboardTopCardVM,
     DashboardViewModel,
 )
 from core.domains.decks.viewmodels.folder_vm import CollectionBucketVM, FolderOptionVM, FolderVM, SharedFolderEntryVM
@@ -473,6 +475,139 @@ def _dashboard_card_stats(
         }
 
     return request_cached(cache_key, _load)
+
+
+def _dashboard_price_to_float(value: object | None) -> float | None:
+    if value in (None, "", 0, "0", "0.0", "0.00"):
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if num > 0 else None
+
+
+def _dashboard_price_value(prices: dict | None, is_foil: bool) -> float | None:
+    if not prices:
+        return None
+    keys = ("usd_foil", "usd", "usd_etched") if is_foil else ("usd", "usd_foil", "usd_etched")
+    for key in keys:
+        val = _dashboard_price_to_float(prices.get(key))
+        if val is not None:
+            return val
+    for key in ("eur", "eur_foil", "tix"):
+        val = _dashboard_price_to_float(prices.get(key))
+        if val is not None:
+            return val
+    return None
+
+
+def _dashboard_price_text(prices: dict | None, is_foil: bool) -> str | None:
+    if not prices:
+        return None
+
+    def _fmt(value: object | None, prefix: str) -> str | None:
+        if value in (None, "", 0, "0", "0.0", "0.00"):
+            return None
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            return None
+        if num <= 0:
+            return None
+        return f"{prefix}{num:,.2f}".replace(",", "")
+
+    if is_foil:
+        value = _fmt(prices.get("usd_foil"), "$") or _fmt(prices.get("usd"), "$") or _fmt(prices.get("usd_etched"), "$")
+        if value:
+            return value
+        value = _fmt(prices.get("eur_foil"), "EUR ") or _fmt(prices.get("eur"), "EUR ")
+        if value:
+            return value
+    else:
+        value = _fmt(prices.get("usd"), "$") or _fmt(prices.get("usd_foil"), "$") or _fmt(prices.get("usd_etched"), "$")
+        if value:
+            return value
+        value = _fmt(prices.get("eur"), "EUR ") or _fmt(prices.get("eur_foil"), "EUR ")
+        if value:
+            return value
+
+    return _fmt(prices.get("tix"), "TIX ")
+
+
+def _dashboard_top_cards(user_id: int | None, folder_ids: list[int]) -> list[DashboardTopCardVM]:
+    if not user_id or not folder_ids:
+        return []
+    cache_key = f"dashboard_top_cards:{user_id}:{cache_epoch()}"
+
+    def _load() -> list[DashboardTopCardVM]:
+        cards = (
+            Card.query.options(
+                load_only(
+                    Card.id,
+                    Card.name,
+                    Card.set_code,
+                    Card.collector_number,
+                    Card.oracle_id,
+                    Card.lang,
+                    Card.is_foil,
+                    Card.folder_id,
+                ),
+                selectinload(Card.folder).load_only(
+                    Folder.id,
+                    Folder.name,
+                ),
+            )
+            .join(Folder, Folder.id == Card.folder_id)
+            .filter(
+                Card.folder_id.in_(folder_ids),
+                Folder.is_proxy.is_(False),
+            )
+            .all()
+        )
+        if not cards:
+            return []
+        if not sc.cache_ready():
+            sc.ensure_cache_loaded()
+        print_map = _bulk_print_lookup(cards)
+        ranked: list[tuple[float, str, DashboardTopCardVM]] = []
+        for card in cards:
+            pr = print_map.get(card.id, {}) or {}
+            prices = pr.get("prices") or {}
+            value = _dashboard_price_value(prices, bool(card.is_foil))
+            if value is None:
+                continue
+            price_text = _dashboard_price_text(prices, bool(card.is_foil))
+            images = _image_from_print(pr)
+            image = images.get("normal") or images.get("large") or images.get("small")
+            folder = getattr(card, "folder", None)
+            folder_name = folder.name if folder and folder.name else "Unknown folder"
+            printing_label = None
+            set_code = (card.set_code or "").strip().upper()
+            collector_number = str(card.collector_number or "").strip()
+            if set_code and collector_number:
+                printing_label = f"{set_code} #{collector_number}"
+            elif set_code:
+                printing_label = set_code
+            ranked.append(
+                (
+                    float(value),
+                    (card.name or "").lower(),
+                    DashboardTopCardVM(
+                        id=card.id,
+                        name=card.name or "",
+                        image=image,
+                        price_text=price_text,
+                        folder_name=folder_name,
+                        card_href=url_for("views.card_detail", card_id=card.id),
+                        printing_label=printing_label,
+                    ),
+                )
+            )
+        ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [vm for _, __, vm in ranked[:10]]
+
+    return _cache_fetch(cache_key, 300, _load)
 
 
 def _prefetch_commander_cards(folder_map: dict[int, Folder]) -> dict[int, Card]:
@@ -1972,10 +2107,10 @@ def dashboard():
     mode_meta = _DASHBOARD_MODES.get(mode, _DASHBOARD_MODES[_DEFAULT_DASHBOARD_MODE])
     owner_id = current_user.id if current_user and getattr(current_user, "is_authenticated", False) else None
 
-    folder_ids: list[int] = []
+    user_folder_ids: list[int] = []
     collection_ids: list[int] = []
     if owner_id:
-        folder_ids = [
+        user_folder_ids = [
             fid
             for (fid,) in db.session.query(Folder.id)
             .filter(Folder.owner_user_id == owner_id)
@@ -1993,7 +2128,7 @@ def dashboard():
         ]
 
     stats_key = str(session.get("_user_id") or "anon")
-    stats = _dashboard_card_stats(stats_key, tuple(sorted(folder_ids)), tuple(sorted(collection_ids)))
+    stats = _dashboard_card_stats(stats_key, tuple(sorted(user_folder_ids)), tuple(sorted(collection_ids)))
     total_qty = stats["qty"]
     unique_names = stats["unique_names"]
     set_count = stats["sets"]
@@ -2021,6 +2156,7 @@ def dashboard():
         for (rid, rname, rrows, rqty) in deck_rows
     ]
     collection_qty = stats["collection_qty"]
+    collection_bucket_count = len(collection_ids)
 
     deck_vms: list[DeckVM] = []
     placeholder_thumb = static_url("img/card-placeholder.svg")
@@ -2053,8 +2189,8 @@ def dashboard():
         )
 
     if decks:
-        folder_ids = [d["id"] for d in decks]
-        folder_map = {f.id: f for f in Folder.query.filter(Folder.id.in_(folder_ids)).all()}
+        deck_folder_ids = [d["id"] for d in decks]
+        folder_map = {f.id: f for f in Folder.query.filter(Folder.id.in_(deck_folder_ids)).all()}
         commander_cards = _prefetch_commander_cards(folder_map)
         epoch = cache_epoch()
 
@@ -2224,6 +2360,13 @@ def dashboard():
         ),
     ]
 
+    collection_stats = DashboardCollectionStatsVM(
+        total_qty=int(total_qty or 0),
+        collection_qty=int(collection_qty or 0),
+        unique_names=int(unique_names or 0),
+        set_count=int(set_count or 0),
+        collection_bucket_count=int(collection_bucket_count or 0),
+    )
 
     collection_actions = [
         DashboardActionVM(
@@ -2257,6 +2400,10 @@ def dashboard():
             icon="bi bi-list-check",
         ),
     ]
+
+    collection_top_cards: list[DashboardTopCardVM] = []
+    if mode == "collection":
+        collection_top_cards = _dashboard_top_cards(owner_id, user_folder_ids)
 
     deck_actions = [
         DashboardActionVM(
@@ -2301,6 +2448,8 @@ def dashboard():
         collection_actions=collection_actions,
         deck_actions=deck_actions,
         decks=deck_vms,
+        collection_stats=collection_stats,
+        collection_top_cards=collection_top_cards,
     )
 
     return render_template("dashboard.html", dashboard=dashboard_vm)

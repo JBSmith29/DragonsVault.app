@@ -4,17 +4,16 @@ from models import Card, Folder
 from core.domains.cards.services.csv_importer import process_csv
 
 
-def test_import_csv_upload(client, create_user):
+def test_import_page_loads(client, create_user):
     user, password = create_user(email="importer@example.com", is_admin=True)
     client.post(
         "/login",
         data={"identifier": user.email, "password": password},
         follow_redirects=True,
     )
-    dummy_csv = io.BytesIO(b"Card Name,Set,Quantity\nLightning Bolt,M11,4")
-    data = {"file": (dummy_csv, "test.csv"), "action": "preview"}
-    response = client.post("/import", data=data, content_type="multipart/form-data")
+    response = client.get("/import")
     assert response.status_code == 200
+    assert b"Import / Export Cards" in response.data
 
 
 def test_import_confirm_runs_inline(client, create_user, app):

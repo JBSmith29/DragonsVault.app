@@ -15,13 +15,6 @@ from pathlib import Path
 from core.domains.cards.services.scryfall_cache import cache_exists, load_cache, find_by_set_cn, metadata_from_print
 from shared.events.live_updates import emit_import_event
 
-# --- NEW: lightweight struct for preview data ---
-@dataclass
-class PreviewData:
-    headers: List[str]
-    rows: List[Dict[str, Any]]
-# ------------------------------------------------
-
 # --- NEW: lazy-load helper for the Scryfall cache ---
 _CACHE_READY: Optional[bool] = None
 IMPORT_ENABLE_SCRYFALL_LOOKUPS = os.getenv("IMPORT_ENABLE_SCRYFALL_LOOKUPS", "1").lower() in {"1", "true", "yes", "on"}
@@ -946,26 +939,6 @@ def _open_table(filepath: str) -> tuple[Iterable[Dict[str, Any]], list[str], Opt
             for r in reader:
                 yield r
         return _gen(), list(reader.fieldnames), delimiter
-
-# --- PREVIEW API (raw rows with original headers) ---
-def preview_csv(filepath: str, default_folder: str = "Unsorted", max_rows: int = 100) -> PreviewData:
-    rows_iter, headers, _delimiter = _open_table(filepath)
-    if not headers:
-        raise HeaderValidationError([
-            "No headers found. Include columns such as 'Name', 'Set Code', 'Collector Number'."
-        ])
-
-    rows: List[Dict[str, Any]] = []
-    for row in rows_iter:
-        if not any((str(v or "").strip() for v in row.values())):
-            continue
-        rows.append({h: row.get(h, "") for h in headers})
-        if len(rows) >= max_rows:
-            break
-
-    return PreviewData(headers=headers, rows=rows)
-# --- END PREVIEW API ---
-
 
 def _log_import_summary(
     stats: ImportStats,

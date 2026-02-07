@@ -276,8 +276,9 @@
   }
 
   // Initialize all current cyclers
-  function initAll() {
-    document.querySelectorAll('.js-prints-cycler').forEach(initCycler);
+  function initAll(root) {
+    const scope = root instanceof Element ? root : document;
+    scope.querySelectorAll('.js-prints-cycler').forEach(initCycler);
   }
 
   // Keyboard handler (single, global)
@@ -305,6 +306,10 @@
   } else {
     initAll();
   }
+
+  ["htmx:afterSwap", "htmx:afterSettle", "htmx:load"].forEach((ev) => {
+    document.addEventListener(ev, (e) => initAll(e && e.target));
+  });
 
   // In case content is added dynamically later (htmx/turbo, etc.)
   // you can call window.initPrintCyclers() to re-scan.

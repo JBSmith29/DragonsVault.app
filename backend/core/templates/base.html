@@ -6,6 +6,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="csp-nonce" content="{{ csp_nonce() }}">
     <script nonce="{{ csp_nonce() }}">
       // Provide a global CSRF token helper for all inline scripts
       (function(){
@@ -44,6 +45,7 @@
     {# HTMX powers dynamic fragments throughout the app. #}
     <!-- HTMX 2.x (CDN) -->
     <script defer src="https://unpkg.com/htmx.org@2.0.2"></script>
+    <script defer src="{{ static_url('js/htmx-config.js') }}"></script>
 
     <!-- Minimal indicator styles + sidebar/layout CSS -->
     <style>
@@ -1513,13 +1515,23 @@
           // Build clean URL with URLSearchParams
           const formData = new FormData(form);
           const params = new URLSearchParams();
-          
-          // Add each form field to params (automatically handles duplicates)
+          const grouped = new Map();
+
           for (const [key, value] of formData.entries()) {
-            if (value && value.toString().trim()) {
-              params.set(key, value.toString().trim());
-            }
+            if (!value || !value.toString().trim()) continue;
+            const v = value.toString().trim();
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(v);
           }
+
+          grouped.forEach((values, key) => {
+            if (values.length <= 1) {
+              params.set(key, values[0]);
+              return;
+            }
+            const unique = Array.from(new Set(values));
+            unique.forEach((v) => params.append(key, v));
+          });
           
           // Build the target URL
           const action = form.getAttribute('action') || window.location.pathname;

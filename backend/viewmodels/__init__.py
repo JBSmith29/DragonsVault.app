@@ -11,8 +11,10 @@ from .card_vm import (
 from .deck_vm import DeckCommanderVM, DeckOwnerSummaryVM, DeckVM
 from .dashboard_vm import (
     DashboardActionVM,
+    DashboardCollectionStatsVM,
     DashboardModeOptionVM,
     DashboardStatTileVM,
+    DashboardTopCardVM,
     DashboardViewModel,
 )
 from .folder_vm import CollectionBucketVM, FolderCardVM, FolderOptionVM, FolderVM
@@ -25,8 +27,10 @@ __all__ = [
     "DeckOwnerSummaryVM",
     "DeckVM",
     "DashboardActionVM",
+    "DashboardCollectionStatsVM",
     "DashboardModeOptionVM",
     "DashboardStatTileVM",
+    "DashboardTopCardVM",
     "DashboardViewModel",
     "CollectionBucketVM",
     "FolderCardVM",

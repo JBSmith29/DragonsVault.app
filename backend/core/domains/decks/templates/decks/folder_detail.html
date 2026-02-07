@@ -19,10 +19,6 @@
      data-counts-url="{{ url_for('views.folder_counts', folder_id=folder.id) }}">
 
 <style>
-  :root {
-    /* Adjustable spacing to keep modal above Bulk bar */
-    --bulk-bar-height: 220px;
-  }
   .cards-table { table-layout:auto; width:100%; }
   .cards-table > :not(caption) > * > * { padding-top:.85rem; padding-bottom:.85rem; }
   .cards-table thead th { border-bottom:1px solid var(--bs-border-color); background:transparent !important; }
@@ -361,69 +357,6 @@
   .synergy-card .vr{
     height:48px;
     opacity:.25;
-  }
-
-  .printing-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
-    gap:.65rem;
-  }
-  .printing-grid-container{
-    max-height:45vh;
-    overflow-y:auto;
-    padding-right:.25rem;
-  }
-  /* Ensure modal never overlaps the Bulk Action bar */
-  #editPrintingModal .modal-dialog {
-    margin-top: max(0px, calc(var(--bs-modal-margin, 1.75rem) - 100px));
-    margin-bottom: var(--bulk-bar-height, 220px);
-  }
-  #editPrintingModal .modal-content {
-    max-height: calc(100vh - 20px);
-    display: flex;
-    flex-direction: column;
-  }
-  #editPrintingModal .modal-body {
-    overflow-y: auto;
-  }
-  .printing-option-tile{
-    width:100%;
-    border:1px solid var(--bs-border-color);
-    border-radius:.65rem;
-    padding:.4rem;
-    background:var(--bs-body-bg);
-    cursor:pointer;
-    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-  }
-  .printing-option-tile.active{
-    border-color: rgba(var(--bs-primary-rgb), .5);
-    box-shadow:0 0 0 3px rgba(var(--bs-primary-rgb), .2);
-  }
-  .printing-option-tile:hover{
-    transform:translateY(-2px);
-    box-shadow:0 .6rem 1.4rem rgba(0,0,0,.18);
-  }
-  .printing-thumb-wrap{
-    position:relative;
-    width:100%;
-    padding-top:130%;
-    overflow:hidden;
-    border-radius:.45rem;
-    background:var(--bs-tertiary-bg);
-  }
-  .printing-thumb{
-    position:absolute;
-    top:0; left:0; width:100%; height:100%;
-    object-fit:cover;
-    border-radius:.45rem;
-    box-shadow:0 .35rem .85rem rgba(0,0,0,.16);
-  }
-  .printing-thumb.placeholder{
-    background: var(--bs-secondary-bg);
-    border: 1px dashed var(--bs-border-color);
-  }
-  .printing-meta{
-    margin-top:.5rem;
   }
 
   .type-pill {
@@ -1855,7 +1788,6 @@
         </div>
       </div>
       <div class="col-12 col-lg-5 d-flex gap-2 justify-content-end flex-wrap mt-2 mt-lg-0">
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="folderActionEditBtn" disabled>Edit printing</button>
         <button type="button" class="btn btn-outline-danger btn-sm" id="folderActionDelete" disabled>
           Delete selected
         </button>
@@ -2144,7 +2076,6 @@
   const bulkMoveBtn = document.getElementById('folderActionMoveBtn');
   const bulkDeleteBtn = document.getElementById('folderActionDelete');
   const bottomDeleteBtn = document.getElementById('folderBottomDelete');
-  const bulkEditBtn = document.getElementById('folderActionEditBtn');
   const selectAllToggle = document.getElementById('folderSelectAll');
   const folderRoot = document.getElementById('folderDetailRoot');
   const bulkDeleteUrl = folderRoot?.dataset?.bulkDeleteUrl || "{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}";
@@ -2209,8 +2140,6 @@
     if (bulkMoveBtn) bulkMoveBtn.disabled = !count || !targetSet;
     if (bulkDeleteBtn) bulkDeleteBtn.disabled = !count;
     if (bottomDeleteBtn) bottomDeleteBtn.disabled = !count;
-    if (bulkEditBtn) bulkEditBtn.disabled = count !== 1;
-    if (bulkEditBtn) bulkEditBtn.classList.toggle('d-none', count !== 1);
     if (selectAllToggle) {
       const allBoxes = Array.from(rowCheckboxes);
       selectAllToggle.checked = count && count === allBoxes.length;
@@ -2334,13 +2263,6 @@
         bulkMoveBtn.disabled = false;
         setBulkStatus('Move failed. Please try again.', 'danger');
       }
-    });
-
-    bulkEditBtn?.addEventListener('click', () => {
-      const checked = selectedCheckboxes();
-      if (checked.length !== 1) return;
-      const row = checked[0].closest('.deck-row');
-      openEditModalForRow(row);
     });
 
     // Initialize state after paint
@@ -2506,162 +2428,6 @@
   // initial filter pass so tags/types are respected on load
   applyFilters();
 
-  // --- Edit printing helpers ---
-  const printingGrid = document.getElementById('printingOptionsGrid');
-  const printingEmpty = document.getElementById('printingGridEmpty');
-  const printingInput = document.getElementById('printingSelectInput');
-  const foilingInput = document.getElementById('foilingSelectInput');
-  const foilingWrap = document.getElementById('foilingSelectWrapper');
-  const foilingHelp = document.getElementById('foilingAvailability');
-  const editPrintingModal = document.getElementById('editPrintingModal');
-
-  function renderPrintingOptions(options, current) {
-    if (!printingGrid) return;
-    printingGrid.innerHTML = '';
-    printingEmpty?.classList.toggle('d-none', !!(options && options.length));
-    const fragment = document.createDocumentFragment();
-    (options || []).forEach(opt => {
-      const tile = document.createElement('button');
-      tile.type = 'button';
-      tile.className = 'printing-option-tile text-start';
-      tile.dataset.value = opt.value;
-      tile.dataset.finishes = (opt.finishes || []).join(',');
-      const imgSrc = opt.image_small
-        || opt.image_normal
-        || opt.hover_image
-        || opt.image
-        || opt.image_uri
-        || opt.img
-        || opt.normal
-        || opt.small
-        || '';
-      tile.innerHTML = `
-        <div class="printing-thumb-wrap">
-          ${imgSrc ? `<img src="${imgSrc}" alt="${opt.set || ''}" class="printing-thumb" data-hover-src="${imgSrc}">`
-                   : `<div class="printing-thumb placeholder"></div>`}
-        </div>
-        <div class="printing-meta">
-          <div class="fw-semibold">${opt.set || ''} · ${opt.collector_number || ''}</div>
-          <div class="small text-muted">${opt.set_name || ''}</div>
-        </div>
-      `;
-      if (current && current === opt.value) tile.classList.add('active');
-      tile.addEventListener('click', () => {
-        printingGrid.querySelectorAll('.printing-option-tile').forEach(el => el.classList.remove('active'));
-        tile.classList.add('active');
-        printingInput.value = opt.value;
-        setFoilingOptions(opt.finishes || []);
-      });
-      fragment.appendChild(tile);
-    });
-    printingGrid.appendChild(fragment);
-    if (current) {
-      printingInput.value = current;
-    } else if (options && options.length) {
-      printingInput.value = options[0].value;
-      setFoilingOptions(options[0].finishes || []);
-    }
-  }
-
-  function setFoilingOptions(finishes) {
-    const opts = Array.isArray(finishes) ? finishes : [];
-    const hasFoil = opts.includes('foil');
-    const hasNonfoil = opts.includes('nonfoil') || (!opts.length);
-    const menu = foilingWrap?.querySelector('.dropdown-menu');
-    if (!menu) return;
-    menu.querySelectorAll('[data-dv-select-option]').forEach(btn => {
-      const val = btn.getAttribute('data-value');
-      const allow = (val === 'foil' && hasFoil) || (val === 'nonfoil' && hasNonfoil);
-      btn.classList.toggle('d-none', !allow);
-      if (!allow && foilingInput.value === val) {
-        foilingInput.value = hasNonfoil ? 'nonfoil' : (hasFoil ? 'foil' : 'nonfoil');
-      }
-    });
-    if (foilingHelp) {
-      foilingHelp.textContent = opts.length ? `Available: ${opts.join(', ')}` : 'Foiling not specified for this print.';
-    }
-  }
-
-  async function fetchPrintingOptions(cardId) {
-    const res = await fetch(`/api/card/${cardId}/printing-options`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  }
-
-  function openEditModalForRow(row) {
-    const cardId = row?.dataset?.cardId;
-    if (!cardId) return;
-    document.getElementById('editPrintingCardId').value = cardId;
-    document.getElementById('editPrintingCardName').textContent = row.getAttribute('data-name') || 'Card';
-    document.getElementById('editPrintingOwnedQty').textContent = row.getAttribute('data-qty') || '1';
-    const qtyInput = document.getElementById('editPrintingQty');
-    if (qtyInput) {
-      const max = parseInt(row.getAttribute('data-qty'), 10) || 1;
-      qtyInput.value = Math.min(1, max) || 1;
-      qtyInput.max = max;
-    }
-    renderPrintingOptions([], '');
-    setFoilingOptions([]);
-    if (editPrintingModal && typeof bootstrap !== 'undefined') {
-      const modal = bootstrap.Modal.getOrCreateInstance(editPrintingModal);
-      modal.show();
-    }
-    fetchPrintingOptions(cardId)
-      .then(data => {
-        renderPrintingOptions(data?.options || [], data?.current || '');
-        if (data?.current_finish) foilingInput.value = data.current_finish;
-        if (data?.finishes) setFoilingOptions(data.finishes);
-      })
-      .catch(err => {
-        console.error('Failed to load printing options', err);
-        if (printingEmpty) printingEmpty.classList.remove('d-none');
-        if (printingGrid) printingGrid.innerHTML = '';
-      });
-  }
-
-  if (editPrintingModal) {
-    document.getElementById('editPrintingForm')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const cardId = document.getElementById('editPrintingCardId')?.value;
-      const printingValue = printingInput.value;
-      const finishValue = foilingInput.value || 'nonfoil';
-      const qtyInputEl = document.getElementById('editPrintingQty');
-      const maxQty = parseInt(qtyInputEl?.max || '1', 10) || 1;
-      const qty = Math.min(parseInt(qtyInputEl?.value, 10) || 1, maxQty);
-      if (!cardId || !printingValue) {
-        return;
-      }
-      document.getElementById('editPrintingSubmit').disabled = true;
-      try {
-        const res = await fetch(`/api/card/${cardId}/update-printing`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ printing: printingValue, finish: finishValue, quantity: qty }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.success) throw new Error(data?.message || `HTTP ${res.status}`);
-        if (window.DV && window.DV.scroll && typeof window.DV.scroll.reload === 'function') {
-          window.DV.scroll.reload();
-        } else {
-          window.location.reload();
-        }
-      } catch (err) {
-        console.error('Update failed', err);
-        const alert = document.getElementById('editPrintingAlert');
-        if (alert) {
-          alert.textContent = 'Update failed. Please try again.';
-          alert.classList.remove('d-none');
-        }
-      } finally {
-        document.getElementById('editPrintingSubmit').disabled = false;
-      }
-    });
-    editPrintingModal.addEventListener('hidden.bs.modal', () => {
-      clearAllSelections();
-      if (bulkBar) updateBulkBar();
-    });
-  }
-
   function hideBulkBar() {
     rowCheckboxes.forEach(cb => { cb.checked = false; });
     updateBulkBar();
@@ -2675,31 +2441,6 @@
     if (link && link.getAttribute('href') && !link.getAttribute('href').startsWith('#')) {
       hideBulkBar();
     }
-  });
-
-  // Ensure single-selection modal works even when bulk bar is absent
-  if (!bulkBar) {
-    rowCheckboxes.forEach(chk => {
-      chk.addEventListener('change', () => {
-        if (chk.checked && selectedCheckboxes().length === 1) {
-          const row = chk.closest('.deck-row');
-          openEditModalForRow(row);
-        }
-      });
-      chk.addEventListener('click', evt => evt.stopPropagation());
-    });
-  }
-
-  // Always trigger printing popup on single-selection, even if handlers above change
-  rowCheckboxes.forEach(chk => {
-    if (chk.dataset.dvPrintBound === '1') return;
-    chk.dataset.dvPrintBound = '1';
-    chk.addEventListener('change', () => {
-      if (chk.checked && selectedCheckboxes().length === 1) {
-        const row = chk.closest('.deck-row');
-        openEditModalForRow(row);
-      }
-    });
   });
 
   if (typePills.length) {
@@ -2822,94 +2563,6 @@
       img.removeEventListener('error', onErr);
     });
   });
-})();
-</script>
-
-{# Edit printing modal for folder cards #}
-{% from "macros/modal_wrapper.html" import wrap_modal %}
-{% call wrap_modal() %}
-<div class="modal fade" id="editPrintingModal" tabindex="-1" aria-labelledby="editPrintingLabel" aria-hidden="true" role="dialog" aria-modal="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content bg-body text-body border border-secondary-subtle rounded-4">
-      <div class="modal-header border-secondary-subtle">
-        <div>
-          <p class="text-muted small mb-1">Update printing</p>
-          <h5 class="modal-title" id="editPrintingLabel">Edit printing</h5>
-        </div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form id="editPrintingForm">
-        <div class="modal-body">
-          <div id="editPrintingAlert" class="alert alert-warning d-none mb-3"></div>
-            <div class="border rounded-3 p-3 bg-body-tertiary mb-3">
-              <div class="d-flex align-items-center gap-3 flex-wrap">
-                <div>
-                  <div class="small text-muted">Card</div>
-                  <div class="fw-semibold" id="editPrintingCardName">Loading…</div>
-                </div>
-                <div class="vr d-none d-md-block"></div>
-                <div>
-                  <div class="small text-muted">Owned quantity</div>
-                  <div class="fw-semibold" id="editPrintingOwnedQty">—</div>
-                </div>
-              </div>
-            </div>
-            <input type="hidden" id="editPrintingCardId" name="card_id" value="">
-            <div class="mb-3">
-              <label class="form-label">Printing</label>
-              <input type="hidden" id="printingSelectInput" value="">
-              <div id="printingGridEmpty" class="text-muted small d-none">No printings found for this card.</div>
-              <div class="printing-grid-container">
-                <div class="printing-grid" id="printingOptionsGrid"></div>
-              </div>
-            <div class="form-text">Pick the exact set, collector number, language, and variant. Scroll the grid below to see more printings.</div>
-          </div>
-          <div class="mb-3">
-            <label for="foilingSelectToggle" class="form-label">Foiling</label>
-            <div class="dropdown dv-select w-100" data-dv-select="card-foiling" id="foilingSelectWrapper">
-              <input type="hidden" id="foilingSelectInput" data-dv-select-input value="nonfoil">
-              <button class="btn dv-select-toggle w-100 justify-content-between" type="button" id="foilingSelectToggle" data-bs-toggle="dropdown" aria-expanded="false">
-                <span data-dv-select-label>Nonfoil</span>
-                <i class="bi bi-chevron-down"></i>
-              </button>
-              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="foilingSelectToggle">
-                <li><button class="dropdown-item active" type="button" data-dv-select-option data-value="nonfoil" data-label="Nonfoil">Nonfoil</button></li>
-                <li><button class="dropdown-item" type="button" data-dv-select-option data-value="foil" data-label="Foil">Foil</button></li>
-              </ul>
-            </div>
-            <div class="form-text" id="foilingAvailability">Select a printing to see available finishes.</div>
-          </div>
-          <div class="mb-3">
-            <label for="editPrintingQty" class="form-label">Quantity</label>
-            <input type="number" min="1" step="1" class="form-control" id="editPrintingQty" value="1">
-            <div class="form-text" id="editPrintingQtyHelp">Defaulting to 1 copy.</div>
-          </div>
-        </div>
-        <div class="modal-footer border-secondary-subtle">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="editPrintingSubmit">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{% endcall %}
-
-<script nonce="{{ csp_nonce() }}">
-// Automatically adjust modal bottom margin based on Bulk bar height
-(function () {
-  const bar = document.getElementById('folderActionBar');
-  if (!bar) return;
-
-  const root = document.documentElement;
-
-  function updateBarHeight() {
-    const height = bar.offsetHeight || 0;
-    root.style.setProperty('--bulk-bar-height', (height + 100) + 'px');
-  }
-
-  updateBarHeight();
-  window.addEventListener('resize', updateBarHeight);
 })();
 </script>
 

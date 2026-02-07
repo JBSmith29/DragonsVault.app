@@ -31,6 +31,26 @@ class DashboardStatTileVM:
 
 
 @dataclass(slots=True)
+class DashboardCollectionStatsVM:
+    total_qty: int
+    collection_qty: int
+    unique_names: int
+    set_count: int
+    collection_bucket_count: int
+
+
+@dataclass(slots=True)
+class DashboardTopCardVM:
+    id: int
+    name: str
+    image: str | None
+    price_text: str | None
+    folder_name: str
+    card_href: str
+    printing_label: str | None = None
+
+
+@dataclass(slots=True)
 class DashboardViewModel:
     mode: str
     mode_label: str
@@ -42,3 +62,5 @@ class DashboardViewModel:
     collection_actions: list[DashboardActionVM] = field(default_factory=list)
     deck_actions: list[DashboardActionVM] = field(default_factory=list)
     decks: list[DeckVM] = field(default_factory=list)
+    collection_stats: DashboardCollectionStatsVM | None = None
+    collection_top_cards: list[DashboardTopCardVM] = field(default_factory=list)

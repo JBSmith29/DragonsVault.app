@@ -15,7 +15,7 @@ from core.routes.base import limiter_key_user_or_ip, views
 @limiter.limit("20 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def import_csv():
-    """Upload route that powers CSV/XLS collection imports and dry-run previews."""
+    """Upload route that powers CSV/XLS collection imports."""
     result = import_service.handle_import_csv(session_obj=session)
     if result.response is not None:
         return result.response
