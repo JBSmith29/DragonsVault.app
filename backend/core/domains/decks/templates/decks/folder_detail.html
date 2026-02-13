@@ -18,7 +18,7 @@
      data-bulk-move-url="{{ url_for('views.bulk_move_cards') }}"
      data-counts-url="{{ url_for('views.folder_counts', folder_id=folder.id) }}">
 
-<style>
+<style nonce="{{ csp_nonce() }}">
   .cards-table { table-layout:auto; width:100%; }
   .cards-table > :not(caption) > * > * { padding-top:.85rem; padding-bottom:.85rem; }
   .cards-table thead th { border-bottom:1px solid var(--bs-border-color); background:transparent !important; }
@@ -60,6 +60,7 @@
   .badge.badge-folder.badge-folder-mythic   { background-color: rgba(var(--bs-danger-rgb), 1);    color:#fff; }
 
   .col-art{ width:56px; }
+  .col-select-narrow{ width:40px; }
   .col-colors{ width:auto; min-width:unset; white-space:nowrap; }
   .col-cmc{ width:80px; min-width:72px; font-variant-numeric: tabular-nums; text-align:center; }
   .cmc-chip{
@@ -75,6 +76,41 @@
 
   .pip-row{ gap:.25rem; }
   .pip{ height:1.05em; vertical-align:text-bottom; }
+  .tap-icon-img{ height:1rem; width:auto; }
+
+  .folder-type-view{ column-count:1; column-gap:1.5rem; }
+  @media (min-width: 992px){ .folder-type-view{ column-count:2; } }
+  .folder-type-group{ border-top:1px solid var(--bs-border-color); padding-top:.5rem; margin-top:.75rem; break-inside:avoid; }
+  .folder-type-header{ display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+  .folder-type-header .type-label{
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    font-size:.75rem;
+    color:var(--bs-secondary-color);
+  }
+  .folder-type-list{ display:flex; flex-direction:column; gap:.25rem; margin-top:.35rem; }
+  .folder-type-row{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:.5rem;
+    padding:.15rem 0;
+    border-bottom:1px dashed rgba(var(--bs-secondary-rgb), .25);
+  }
+  .folder-type-row:last-child{ border-bottom:0; }
+  .folder-type-qty{
+    width:2.75rem;
+    text-align:right;
+    font-weight:600;
+    font-variant-numeric: tabular-nums;
+  }
+  .folder-type-name{ flex:1 1 200px; min-width:0; font-weight:600; }
+  .folder-type-name a{ color:inherit; text-decoration:none; }
+  .folder-type-name a:hover{ text-decoration:underline; }
+  .folder-type-meta{ display:flex; align-items:center; gap:.5rem; }
+  .folder-type-cost{ display:inline-flex; align-items:center; gap:.25rem; }
+  .folder-type-cmc{ min-width:2.75rem; text-align:right; }
 
   .summary-row{ --gap: 1rem; display:grid; gap:var(--gap); grid-template-columns: 1fr; }
   @media (min-width:992px){ .summary-row{ grid-template-columns: repeat(3, 1fr); } }
@@ -458,6 +494,9 @@
     border-radius:.65rem .65rem 0 0;
     transition:height .18s ease;
   }
+  {% for pct in range(0, 101) %}
+  .curve-bar .fill.h-pct-{{ pct }}{ height:{{ pct }}%; }
+  {% endfor %}
   .curve-label{ font-size:.9rem; color:var(--bs-secondary-color); }
   .curve-count{
     position:absolute;
@@ -550,8 +589,16 @@
 
   .offcanvas-end.w-500 { width:500px; }
   .offcanvas .card-art { width:100%; height:auto; border-radius:.5rem; display:block; margin:0 auto; background:#111; }
+  .offcanvas .card-art-placeholder{ width:100%; height:420px; opacity:.25; }
   .small-muted { font-size:.875rem; color:#6c757d; }
   .detail-label { font-weight:600; color:#6c757d; width:140px; }
+  .commander-img-thumb{ max-width:180px; }
+  .tag-filter-input{ max-width:220px; }
+  .cmdr-filter-input{ max-width:240px; }
+  .legend-thumb-placeholder{ width:100%; height:100%; opacity:.35; }
+  .token-thumb-placeholder{ width:96px; height:96px; opacity:.25; }
+  .art-thumb-placeholder{ width:48px; height:64px; opacity:.25; }
+  .clipboard-helper{ position:fixed; opacity:0; pointer-events:none; }
 
   .commander-card{
     background: transparent !important;
@@ -753,8 +800,7 @@
                   {% for cm in commander_media_list %}
                     <img src="{{ cm.image }}"
                          alt="{{ cm.name or 'Commander art' }}"
-                         class="commander-img"
-                         style="max-width: 180px;"
+                         class="commander-img commander-img-thumb"
                          {% if cm.hover %}data-hover-src="{{ cm.hover }}"{% endif %}>
                   {% endfor %}
                 </div>
@@ -900,10 +946,9 @@
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div class="text-muted small">Choose a tag to classify this deck.</div>
             <input id="tagFilter"
-                   class="form-control form-control-sm"
+                   class="form-control form-control-sm tag-filter-input"
                    placeholder="Filter tags..."
-                   autocomplete="off"
-                   style="max-width: 220px;">
+                   autocomplete="off">
           </div>
           {% if folder.deck_tag %}
             {% set formatted_deck_tag = folder_tag_category ~ ': ' ~ folder.deck_tag if folder_tag_category else folder.deck_tag %}
@@ -1036,9 +1081,8 @@
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
               <div class="fw-semibold">Legendary creatures in this deck</div>
               <input id="cmdrFilter"
-                     class="form-control form-control-sm"
-                     placeholder="Filter by name..."
-                     style="max-width:240px;">
+                     class="form-control form-control-sm cmdr-filter-input"
+                     placeholder="Filter by name...">
             </div>
             {% if commander_candidates and commander_candidates|length %}
               <div id="cmdrList" class="legend-grid">
@@ -1051,7 +1095,7 @@
                            alt="{{ r.name }} thumbnail"
                            loading="lazy">
                     {% else %}
-                      <div class="bg-secondary-subtle rounded" style="width:100%;height:100%;opacity:.35;"></div>
+                      <div class="bg-secondary-subtle rounded legend-thumb-placeholder"></div>
                     {% endif %}
                   </div>
                   <div class="legend-body">
@@ -1332,7 +1376,7 @@
         <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
           {% for c, pip, n in mana_pip_dist %}
             <span class="pill d-inline-flex align-items-center">
-              {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+              {% if pip %}<img src="{{ pip }}" alt="{{ c }}" class="me-1 pip">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
               <span class="fw-semibold">{{ n }}</span>
             </span>
           {% endfor %}
@@ -1345,9 +1389,9 @@
           {% for c, pip, n in land_mana_sources %}
             <span class="pill d-inline-flex align-items-center">
               {% if pip %}
-                <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
+                <img src="{{ pip }}" alt="{{ c }}" class="me-1 pip">
               {% elif c in ['C', 'Colorless'] %}
-                <img src="{{ static_url('symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+                <img src="{{ static_url('symbols/C.svg') }}" alt="C" class="me-1 pip">
               {% else %}
                 <span class="me-1">{{ c }}</span>
               {% endif %}
@@ -1370,7 +1414,10 @@
                       data-cmc-label="{{ row.label }}"
                       aria-pressed="false">
                 <div class="curve-bar">
-                  <div class="fill" style="height: {{ row.pct }}%;"></div>
+                  {% set curve_fill_pct = row.pct|default(0)|round(0, 'floor')|int %}
+                  {% if curve_fill_pct < 0 %}{% set curve_fill_pct = 0 %}{% endif %}
+                  {% if curve_fill_pct > 100 %}{% set curve_fill_pct = 100 %}{% endif %}
+                  <div class="fill h-pct-{{ curve_fill_pct }}"></div>
                   <div class="curve-count">{{ row.count }}</div>
                 </div>
                 <div class="curve-label">{{ row.label }}</div>
@@ -1396,6 +1443,139 @@
     <div class="stat-card"><div class="label">Total Quantity</div><div class="value" data-stat-total>{{ total_qty }}</div></div>
     <div class="stat-card"><div class="label">Total Value</div><div class="value">${{ '{:,.2f}'.format(total_value_usd or 0) }}</div></div>
   </div>
+
+  {% if is_deck_folder %}
+    <div class="card mb-4" id="folderSynergy">
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+          <div>
+            <h5 class="card-title mb-1">Synergy Recommendations</h5>
+            <p class="text-muted small mb-0">EDHREC-powered additions based on your commander.</p>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            {% if edhrec_tag_label %}
+              <span class="badge bg-secondary-subtle text-secondary-emphasis">Tag: {{ edhrec_tag_label }}</span>
+            {% endif %}
+            {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+              <form method="post" action="{{ url_for('views.refresh_folder_edhrec', folder_id=folder.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-primary" type="submit">Refresh EDHREC</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+        {% if not edhrec_commander_ready %}
+          <div class="text-muted small">Set a commander to see EDHREC recommendations.</div>
+        {% elif not edhrec_ready %}
+          <div class="text-muted small">EDHREC data is not available yet. Ask an admin to refresh the cache.</div>
+        {% elif not edhrec_sections %}
+          <div class="text-muted small">No EDHREC recommendations found for this commander.</div>
+        {% else %}
+          <p class="text-muted small mb-3">Cards already in this deck are labeled.</p>
+          <div class="build-rec-list">
+            {% for section in edhrec_sections %}
+              <details class="build-rec-section"{% if section.default_open %} open{% endif %}>
+                <summary class="build-rec-summary">
+                  <span class="fw-semibold">{{ section.label }}</span>
+                  <span class="text-muted small">{{ section.count }} cards</span>
+                </summary>
+                <p class="text-muted small mb-3">{{ section.description }}</p>
+                <div class="row g-3">
+                  {% for rec in section.cards %}
+                    <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+                      <div class="card h-100 build-rec-card">
+                        {% if rec.image %}
+                          <img src="{{ rec.image }}"
+                               class="card-img-top build-card-img"
+                               alt="{{ rec.name }}"
+                               data-hover-src="{{ rec.image }}">
+                        {% endif %}
+                        <div class="card-body">
+                          <div class="d-flex align-items-start justify-content-between gap-2">
+                            {% set rec_href = url_for('views.scryfall_browser', q=rec.name, unique='1') %}
+                            <div class="build-rec-title">
+                              <a href="{{ rec_href }}"
+                                 class="text-decoration-none text-reset rec-card-title"
+                                 data-hover-src="{{ rec.image or '' }}">
+                                {{ rec.name }}
+                              </a>
+                            </div>
+                            {% if rec.in_deck %}
+                              <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">In Deck</span>
+                            {% endif %}
+                          </div>
+                          {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}
+                            <div class="d-flex text-muted small">
+                              {% if rec.synergy_percent is not none %}
+                                <span>Synergy {{ rec.synergy_percent }}%</span>
+                              {% endif %}
+                              {% if rec.inclusion_percent is not none %}
+                                {% set inclusion_value = rec.inclusion_percent|float %}
+                                {% if inclusion_value < 0 %}
+                                  {% set inclusion_display = 0 %}
+                                {% elif inclusion_value > 100 %}
+                                  {% set inclusion_display = 100 %}
+                                {% else %}
+                                  {% set inclusion_display = rec.inclusion_percent %}
+                                {% endif %}
+                                <span class="ms-auto">Incl {{ inclusion_display }}%</span>
+                              {% endif %}
+                            </div>
+                          {% endif %}
+                          {% if rec.price_text %}
+                            <div class="text-muted small mt-1">{{ rec.price_text }}</div>
+                          {% endif %}
+                          {% if rec.reasons %}
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                              {% for reason in rec.reasons %}
+                                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">{{ reason }}</span>
+                              {% endfor %}
+                            </div>
+                          {% endif %}
+                          {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+                            <div class="form-check mt-2">
+                              <input class="form-check-input build-add-checkbox"
+                                     type="checkbox"
+                                     form="folderBuildAddForm"
+                                     name="card_oracle_id"
+                                     value="{{ rec.oracle_id }}"
+                                     id="buildAdd-{{ section.key }}-{{ loop.index0 }}">
+                              <label class="form-check-label small" for="buildAdd-{{ section.key }}-{{ loop.index0 }}">Add to Build</label>
+                            </div>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </details>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if is_deck_folder and edhrec_sections and current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+    <div class="card mb-4" id="folderBuildAdditions">
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+          <div>
+            <h5 class="card-title mb-1">Potential Adds to Build</h5>
+            <p class="text-muted small mb-0">Select cards in the recommendations above, then start a Build-A-Deck session with those additions.</p>
+          </div>
+        </div>
+        <form method="post"
+              action="{{ url_for('views.send_to_build', folder_id=folder.id) }}"
+              id="folderBuildAddForm"
+              data-hx-boost="false">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-primary" type="submit" id="folderBuildAddBtn" disabled>Start Build with Selected</button>
+          <div class="text-muted small mt-2" id="folderBuildAddHint">Select one or more cards above to enable.</div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
 
   {# ===== Tokens section ===== #}
   {% if deck_tokens and deck_tokens|length %}
@@ -1445,7 +1625,7 @@
                                  data-hover-src="{{ tok_large or tok_normal or tok_img }}"
                                {% endif %}>
                         {% else %}
-                          <div class="bg-secondary-subtle rounded" style="width:96px;height:96px;opacity:.25;"></div>
+                          <div class="bg-secondary-subtle rounded token-thumb-placeholder"></div>
                         {% endif %}
                       </a>
                     </div>
@@ -1474,7 +1654,7 @@
                                   aria-expanded="true"
                                   aria-controls="{{ creator_collapse_id }}"
                                   title="Show token creators">
-                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
+                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" class="tap-icon-img">
                           </button>
                           <span class="small text-muted fw-semibold">Token Creator</span>
                         </div>
@@ -1499,7 +1679,7 @@
                       <div class="collapse mt-2" id="{{ collapse_id }}">
                         <div class="small mb-1 text-muted d-flex align-items-center gap-2">
                           <span class="badge bg-light text-dark border">
-                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1rem;width:auto;">
+                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" class="tap-icon-img">
                           </span>
                           <span>Token Creator</span>
                         </div>
@@ -1560,6 +1740,10 @@
         </div>
         <div class="col-12 col-md-7 text-md-end">
           <div class="d-inline-flex flex-wrap gap-2 justify-content-md-end">
+            <div class="btn-group" role="group" aria-label="Card list view">
+              <button type="button" class="btn btn-outline-secondary btn-sm folder-view-toggle active" data-folder-view-toggle data-view="table" aria-pressed="true">Table</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm folder-view-toggle" data-folder-view-toggle data-view="type" aria-pressed="false">Type</button>
+            </div>
             <button id="copyDeckListBtn" class="btn btn-outline-secondary btn-sm" type="button">Copy to clipboard</button>
             <div class="btn-group">
               <button class="btn btn-primary btn-sm export-format" type="button" data-export-format="csv">
@@ -1648,11 +1832,12 @@
   {% set foil_dir = 'asc' if sort!='foil' or direction=='desc' else 'desc' %}
   {% set qty_dir  = 'asc' if sort!='qty'  or direction=='desc' else 'desc' %}
 
-  <div class="table-responsive">
+  <div id="folderTableView">
+    <div class="table-responsive">
     <table class="table table-sm align-middle cards-table" id="folderCardsTable">
       <thead>
         <tr>
-          <th class="text-center" style="width:40px;">
+          <th class="text-center col-select-narrow">
             <input class="form-check-input" type="checkbox" id="folderSelectAll">
           </th>
           <th class="col-art">Art</th>
@@ -1699,7 +1884,7 @@
                        alt="art"
                        data-hover-src="{{ hover_art }}">
                 {% else %}
-                  <div class="bg-secondary-subtle rounded" style="width:48px;height:64px;opacity:.25;"></div>
+                  <div class="bg-secondary-subtle rounded art-thumb-placeholder"></div>
                 {% endif %}
               </td>
               <td>
@@ -1757,6 +1942,60 @@
     </button>
   </div>
 </div>
+
+  <div id="folderTypeView" class="d-none">
+    <div class="folder-type-view">
+      {% for group in card_groups %}
+        {% if group.cards and group.cards|length %}
+          <div class="folder-type-group">
+            <div class="folder-type-header">
+              <span class="type-label">{{ group.label }}</span>
+              {% set total_count = group.cards | sum(attribute='quantity') %}
+              <span class="text-muted small">{{ total_count }} cards</span>
+            </div>
+            <div class="folder-type-list">
+              {% for card in group.cards %}
+                {% set hover_art = card.hover_image %}
+                <div class="folder-type-row"
+                     data-card-id="{{ card.id }}"
+                     data-name="{{ card.display_name | e }}"
+                     data-type="{{ card.type_line | e }}"
+                     data-tags="{{ card.data_tags }}"
+                     data-cmc-bucket="{{ card.cmc_bucket }}"
+                     data-qty="{{ card.quantity or 1 }}">
+                  <div class="folder-type-qty">{{ card.quantity or 1 }}</div>
+                  <div class="folder-type-name"
+                       data-card-name="{{ card.display_name | e }}"
+                       {% if hover_art %}data-hover-src="{{ hover_art }}"{% endif %}>
+                    <a href="{{ url_for('views.card_detail', card_id=card.id) }}"
+                       class="deck-name-link"
+                       {% if hover_art %}data-hover-src="{{ hover_art }}"{% endif %}>
+                      {{ card.display_name }}
+                    </a>
+                  </div>
+                  <div class="folder-type-meta">
+                    <div class="folder-type-cost">
+                      {% if card.color_icons and card.color_icons|length %}
+                        <span class="pip-row">
+                          {% for src in card.color_icons %}<img class="pip" src="{{ src }}" alt="color">{% endfor %}
+                        </span>
+                      {% else %}
+                        <span class="pip-row"><img class="pip" src="{{ static_url('symbols/C.svg') }}" alt="{C}"></span>
+                      {% endif %}
+                    </div>
+                    <div class="folder-type-cmc small text-muted">
+                      <span class="cmc-chip">{{ card.cmc_display }}</span>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  <div id="cardFilterEmptyStateType" class="text-muted text-center py-4 d-none">No cards match that search.</div>
 </div>
 
 <div class="card-action-bar d-none" id="folderActionBar">
@@ -1907,7 +2146,7 @@
     return `<span class="pip-row">${
       arr.map(c => {
         const L = String(c || '').toUpperCase();
-        return `<img class="mana mana-sm" src="{{ static_url('symbols') }}/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
+        return `<img class="mana mana-sm" src="{{ static_url('symbols') }}/${L}.svg" alt="${L}">`;
       }).join('')
     }</span>`;
   }
@@ -2010,7 +2249,7 @@
     contentEl.innerHTML = `
       <div class="mb-3">
         ${img ? `<img class="d-block card-art" src="${esc(img)}" alt="${esc(name)}">`
-               : `<div class="bg-secondary-subtle rounded" style="width:100%;height:420px;opacity:.25;"></div>`}
+               : `<div class="bg-secondary-subtle rounded card-art-placeholder"></div>`}
       </div>
       <div class="mb-3">
         <div class="d-flex gap-2 mb-1"><div class="detail-label">Name</div><div>${esc(name)}</div></div>
@@ -2058,9 +2297,15 @@
   // Card name filter
   let rows = Array.from(document.querySelectorAll('#folderCardsTable .deck-row'));
   const emptyState = document.getElementById('cardFilterEmptyState');
+  const typeEmptyState = document.getElementById('cardFilterEmptyStateType');
+  const tableView = document.getElementById('folderTableView');
+  const typeView = document.getElementById('folderTypeView');
+  const viewToggles = Array.from(document.querySelectorAll('[data-folder-view-toggle]'));
+  let typeRows = Array.from(document.querySelectorAll('#folderTypeView .folder-type-row'));
+  const typeGroups = Array.from(document.querySelectorAll('#folderTypeView .folder-type-group'));
   const cardGroups = [];
   const nameFilterInput = document.getElementById('cardNameFilter');
-  const typePills = Array.from(document.querySelectorAll('.type-pill'));
+  const typePills = Array.from(document.querySelectorAll('.type-pill[data-type]'));
   const typeHint = document.getElementById('typeFilterHint');
   const typeHintLabel = typeHint ? typeHint.querySelector('[data-type-name]') : null;
   const typeClearBtn = document.getElementById('typeFilterClear');
@@ -2069,6 +2314,10 @@
   const cmcHintLabel = cmcHint ? cmcHint.querySelector('[data-cmc-label]') : null;
   const cmcClearBtn = document.getElementById('cmcFilterClear');
   const copyDeckListBtn = document.getElementById('copyDeckListBtn');
+  const buildAddForm = document.getElementById('folderBuildAddForm');
+  const buildAddBtn = document.getElementById('folderBuildAddBtn');
+  const buildAddHint = document.getElementById('folderBuildAddHint');
+  const buildAddBoxes = Array.from(document.querySelectorAll('.build-add-checkbox'));
   const bulkBar = document.getElementById('folderActionBar');
   const bulkSummary = document.getElementById('folderActionSummary');
   const bulkStatus = document.getElementById('folderActionStatus');
@@ -2092,6 +2341,10 @@
 
   function refreshRows() {
     rows = Array.from(document.querySelectorAll('#folderCardsTable .deck-row'));
+  }
+
+  function refreshTypeRows() {
+    typeRows = Array.from(document.querySelectorAll('#folderTypeView .folder-type-row'));
   }
 
   function refreshCheckboxes() {
@@ -2192,10 +2445,10 @@
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       ids.forEach(id => {
-        const row = document.querySelector(`[data-card-id="${id}"]`);
-        row?.remove();
+        document.querySelectorAll(`#folderCardsTable [data-card-id="${id}"], #folderTypeView [data-card-id="${id}"]`).forEach(el => el.remove());
       });
       refreshRows();
+      refreshTypeRows();
       refreshCheckboxes();
       updateGroupCounts();
       updateStatsFromRows();
@@ -2248,10 +2501,10 @@
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         ids.forEach(id => {
-          const row = document.querySelector(`[data-card-id="${id}"]`);
-          row?.remove();
+          document.querySelectorAll(`#folderCardsTable [data-card-id="${id}"], #folderTypeView [data-card-id="${id}"]`).forEach(el => el.remove());
         });
         refreshRows();
+        refreshTypeRows();
         refreshCheckboxes();
         updateGroupCounts();
         updateStatsFromRows();
@@ -2324,8 +2577,7 @@
       const fallbackCopy = () => {
         const temp = document.createElement('textarea');
         temp.value = listText;
-        temp.style.position = 'fixed';
-        temp.style.opacity = '0';
+        temp.classList.add('clipboard-helper');
         document.body.appendChild(temp);
         temp.select();
         const ok = document.execCommand('copy');
@@ -2390,8 +2642,10 @@
 
   function applyFilters() {
     rows = Array.from(document.querySelectorAll('#folderCardsTable .deck-row')).filter(r => r.isConnected);
+    typeRows = Array.from(document.querySelectorAll('#folderTypeView .folder-type-row')).filter(r => r.isConnected);
     const query = (nameFilterInput?.value || '').trim().toLowerCase();
     let visibleCount = 0;
+    let typeVisibleCount = 0;
     const isFiltering = !!query || !!activeType || !!activeCmc;
 
     rows.forEach(row => {
@@ -2409,10 +2663,78 @@
       }
     });
 
+    typeRows.forEach(row => {
+      const name = (row.getAttribute('data-name') || '').toLowerCase();
+      const types = (row.getAttribute('data-type') || '').toLowerCase();
+      const tags = (row.getAttribute('data-tags') || '').toLowerCase();
+      const cmcBucket = row.getAttribute('data-cmc-bucket') || '';
+      const nameMatch = !query || name.includes(query) || types.includes(query) || tags.includes(query);
+      const typeMatch = !activeType || types.includes(activeType);
+      const cmcMatch = !activeCmc || cmcBucket === activeCmc;
+      const match = nameMatch && typeMatch && cmcMatch;
+      row.classList.toggle('d-none', !match);
+      if (match) {
+        typeVisibleCount += 1;
+      }
+    });
+
+    if (typeGroups.length) {
+      typeGroups.forEach(group => {
+        const hasVisible = !!group.querySelector('.folder-type-row:not(.d-none)');
+        group.classList.toggle('d-none', !hasVisible);
+      });
+    }
+
+    const tableActive = !tableView || !tableView.classList.contains('d-none');
+    const typeActive = !!typeView && !typeView.classList.contains('d-none');
     if (emptyState) {
-      emptyState.classList.toggle('d-none', visibleCount > 0 || !isFiltering);
+      emptyState.classList.toggle('d-none', !tableActive || visibleCount > 0 || !isFiltering);
+    }
+    if (typeEmptyState) {
+      typeEmptyState.classList.toggle('d-none', !typeActive || typeVisibleCount > 0 || !isFiltering);
     }
     updateStatsFromRows();
+  }
+
+
+  function setFolderView(view) {
+    const mode = (view || '').toLowerCase() === 'type' ? 'type' : 'table';
+    const showTable = mode === 'table';
+    if (tableView) tableView.classList.toggle('d-none', !showTable);
+    if (typeView) typeView.classList.toggle('d-none', showTable);
+    viewToggles.forEach(btn => {
+      const active = (btn.dataset.view || '') === mode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    if (!showTable) {
+      hideBulkBar();
+    }
+    applyFilters();
+  }
+
+  if (viewToggles.length) {
+    viewToggles.forEach(btn => {
+      btn.addEventListener('click', () => setFolderView(btn.dataset.view));
+    });
+  }
+
+  function updateBuildAddState() {
+    if (!buildAddBtn) return;
+    const count = buildAddBoxes.filter(cb => cb.checked).length;
+    buildAddBtn.disabled = count === 0;
+    if (buildAddHint) {
+      buildAddHint.textContent = count
+        ? `${count} card${count === 1 ? '' : 's'} selected.`
+        : 'Select one or more cards above to enable.';
+    }
+  }
+
+  if (buildAddBoxes.length && buildAddBtn) {
+    buildAddBoxes.forEach(cb => {
+      cb.addEventListener('change', updateBuildAddState);
+    });
+    updateBuildAddState();
   }
 
   if (nameFilterInput) {
@@ -2521,7 +2843,7 @@
     const q = (value || '').toLowerCase().trim();
     items.forEach(el => {
       const n = el.getAttribute('data-name') || '';
-      el.style.display = (!q || n.includes(q)) ? '' : 'none';
+      el.classList.toggle('d-none', !!q && !n.includes(q));
     });
   }
 
@@ -2557,9 +2879,9 @@
         triedLarge = true; img.src = src.replace('/normal/', '/large/'); return;
       }
       // give up: hide broken image, show a neutral placeholder via background color
-      img.style.display = 'none';
+      img.classList.add('d-none');
       const wrap = img.closest('.legend-thumb-wrap');
-      if (wrap) wrap.innerHTML = '<div class="bg-secondary-subtle rounded" style="width:100%;height:100%;opacity:.35;"></div>';
+      if (wrap) wrap.innerHTML = '<div class="bg-secondary-subtle rounded legend-thumb-placeholder"></div>';
       img.removeEventListener('error', onErr);
     });
   });

@@ -453,6 +453,12 @@ def opening_hand_peek():
     return card_service.opening_hand_peek()
 
 
+def opening_hand_hideaway():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_hideaway()
+
+
 def opening_hand_scry():
     from core.domains.cards.services import card_service
 
@@ -489,6 +495,7 @@ __all__ = [
     "opening_hand_draw",
     "opening_hand_search",
     "opening_hand_peek",
+    "opening_hand_hideaway",
     "opening_hand_scry",
     "opening_hand_surveil",
     "opening_hand_shuffle",

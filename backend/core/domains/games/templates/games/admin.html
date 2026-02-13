@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Game Administration{% endblock %}
 {% block content %}
-<style>
+<style nonce="{{ csp_nonce() }}">
   .admin-card {
     border: 1px solid var(--bs-border-color);
     border-radius: 1rem;

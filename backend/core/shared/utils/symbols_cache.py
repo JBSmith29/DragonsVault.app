@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import requests
+from markupsafe import Markup, escape
 from core.shared.utils.assets import static_url
 
 # Where we store JSON + SVGs (always under backend/static/symbols)
@@ -162,16 +163,24 @@ def render_mana_html(text: Optional[str], use_local: bool = True) -> str:
     if not text:
         return "—"
     src_map = get_symbol_src_map(use_local=use_local)
-
-    def repl(m):
-        sym = m.group(0)
+    out = Markup("")
+    last = 0
+    for match in MANA_RE.finditer(text):
+        if match.start() > last:
+            out += escape(text[last:match.start()])
+        sym = match.group(0)
         src = src_map.get(sym)
-        alt = sym
+        alt = escape(sym)
         if not src:
-            return alt  # fallback to plain text
-        return f'<img class="mana" src="{src}" alt="{alt}" title="{alt}">'
-
-    return MANA_RE.sub(repl, text)
+            out += alt  # fallback to plain text
+        else:
+            out += Markup(
+                f'<img class="mana" src="{escape(src)}" alt="{alt}" title="{alt}">'
+            )
+        last = match.end()
+    if last < len(text):
+        out += escape(text[last:])
+    return out
 
 def render_oracle_html(text: Optional[str], use_local: bool = True) -> str:
     """
@@ -180,8 +189,7 @@ def render_oracle_html(text: Optional[str], use_local: bool = True) -> str:
     if not text:
         return "—"
     html = render_mana_html(text, use_local=use_local)
-    html = html.replace("\n", "<br>")
-    return html
+    return Markup(str(html).replace("\n", "<br>"))
 
 def colors_to_icons(colors: Optional[List[str]], use_local: bool = True) -> List[str]:
     """

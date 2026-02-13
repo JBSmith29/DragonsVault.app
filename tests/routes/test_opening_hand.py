@@ -91,3 +91,36 @@ def test_opening_hand_state_tamper_and_cross_user(client, create_user, app):
     assert cross_resp.status_code == 400
     cross_payload = cross_resp.get_json() or {}
     assert cross_payload.get("ok") is False
+
+
+def test_opening_hand_hideaway(client, create_user, app):
+    user, password = create_user(email="hideaway@example.com", username="hideaway")
+    deck_id = _create_deck(app, user, name="Hideaway Deck")
+
+    _login(client, user.email, password)
+    resp = client.post("/opening-hand/shuffle", json={"deck_id": str(deck_id)})
+    assert resp.status_code == 200
+    payload = resp.get_json() or {}
+    state_token = payload.get("state")
+    remaining = payload.get("remaining")
+    assert state_token
+    assert remaining is not None
+
+    peek = client.post("/opening-hand/peek", json={"state": state_token, "count": 3})
+    assert peek.status_code == 200
+    peek_payload = peek.get_json() or {}
+    assert peek_payload.get("ok") is True
+    cards = peek_payload.get("cards") or []
+    assert len(cards) > 0
+    pick_uid = cards[0].get("uid")
+    assert pick_uid
+
+    hideaway = client.post(
+        "/opening-hand/hideaway",
+        json={"state": state_token, "count": 3, "pick_uid": pick_uid},
+    )
+    assert hideaway.status_code == 200
+    hideaway_payload = hideaway.get_json() or {}
+    assert hideaway_payload.get("ok") is True
+    assert hideaway_payload.get("hidden")
+    assert hideaway_payload.get("remaining") == remaining - 1

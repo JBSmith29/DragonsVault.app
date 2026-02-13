@@ -40,6 +40,7 @@ def login():
             return render_template("auth/login.html", identifier=identifier, disable_hx=True)
 
         login_user(user, remember=False, fresh=True)
+        session.permanent = True
         session["user_is_admin"] = bool(user.is_admin)
         user.last_login_at = utcnow()
         db.session.commit()

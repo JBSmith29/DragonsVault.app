@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - DragonsVault{% endblock %}
 {% block content %}
-<style>
+<style nonce="{{ csp_nonce() }}">
   .section-label {
     font-size: 0.8rem;
     letter-spacing: 0.04em;

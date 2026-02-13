@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+<style nonce="{{ csp_nonce() }}">
+  .sharing-actions-col { width: 160px; }
+</style>
 <div class="container py-4">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
@@ -87,7 +90,7 @@
             <thead>
               <tr>
                 <th>User</th>
-                <th class="text-end" style="width: 160px;">Actions</th>
+                <th class="text-end sharing-actions-col">Actions</th>
               </tr>
             </thead>
             <tbody>

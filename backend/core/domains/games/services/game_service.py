@@ -35,7 +35,11 @@ from core.shared.utils.time import utcnow
 from shared.validation import ValidationError, log_validation_error, parse_optional_positive_int, parse_positive_int
 
 
-def _accessible_deck_options(owner_user_id: int | None = None) -> list[dict[str, Any]]:
+def _accessible_deck_options(
+    owner_user_id: int | None = None,
+    *,
+    commander_only: bool = False,
+) -> list[dict[str, Any]]:
     query = (
         db.session.query(
             Folder.id,
@@ -54,6 +58,8 @@ def _accessible_deck_options(owner_user_id: int | None = None) -> list[dict[str,
     )
     if owner_user_id is not None:
         query = query.filter(Folder.owner_user_id == owner_user_id)
+    if commander_only:
+        query = query.filter(Folder.commander_name.isnot(None), Folder.commander_name != "")
     rows = (
         query.group_by(Folder.id, Folder.name, Folder.commander_name, Folder.owner, Folder.is_proxy)
         .order_by(func.lower(Folder.name))
@@ -70,6 +76,14 @@ def _accessible_deck_options(owner_user_id: int | None = None) -> list[dict[str,
             label = f"{label} · Proxy"
         options.append({"id": row.id, "label": label, "ref": f"folder:{row.id}"})
     return options
+
+
+def accessible_deck_options(
+    owner_user_id: int | None = None,
+    *,
+    commander_only: bool = False,
+) -> list[dict[str, Any]]:
+    return _accessible_deck_options(owner_user_id, commander_only=commander_only)
 
 
 def _roster_players(owner_user_id: int) -> list[dict[str, Any]]:

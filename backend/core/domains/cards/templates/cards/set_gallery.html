@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
-<style>
+<style nonce="{{ csp_nonce() }}">
 .gallery-card {
     border: 1px solid var(--bs-border-color);
     background: var(--bs-body-bg);

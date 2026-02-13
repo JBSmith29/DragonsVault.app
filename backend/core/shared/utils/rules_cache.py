@@ -310,8 +310,32 @@ def search_magic_rules(query: str, *, limit: int = 20) -> List[Dict[str, Any]]:
     needle = query.strip().lower()
     if not needle:
         return []
-    lines = _load_rules_lines()
     matches: List[Dict[str, Any]] = []
+    try:
+        workbook = magic_rules_workbook()
+    except Exception:
+        workbook = []
+    if workbook:
+        for chapter in workbook:
+            for section in chapter.get("sections", []):
+                for rule in section.get("rules", []):
+                    haystack = " ".join([rule.get("text", "")] + list(rule.get("notes") or [])).lower()
+                    number = str(rule.get("number") or "")
+                    if needle in haystack or (number and needle in number.lower()):
+                        matches.append(
+                            {
+                                "id": rule.get("id"),
+                                "number": number,
+                                "text": rule.get("text"),
+                                "notes": rule.get("notes") or [],
+                                "chapter": chapter.get("title"),
+                                "section": section.get("title"),
+                                "kind": rule.get("kind", "rule"),
+                            }
+                        )
+                        if len(matches) >= limit:
+                            return matches
+    lines = _load_rules_lines()
     for idx, line in enumerate(lines, start=1):
         if needle in line.lower():
             matches.append({"line": idx, "text": line})

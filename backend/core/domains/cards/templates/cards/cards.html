@@ -2,6 +2,11 @@
 {% extends "base.html" %}
 {% from "shared/components/macros.html" import slug, folder_badge %}
 {% from "shared/components/pagination.html" import render_pagination %}
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ static_url('css/cards.css') }}">
+{% endblock %}
+
 {% block content %}
 {% set back_to = request.full_path %}
 {% if back_to and back_to.endswith('?') %}
@@ -26,100 +31,6 @@
     {%- set tl = (t or '')|lower -%}
     <span class="badge badge-type badge-type-{{ tl }}">{{ t }}</span>
   {%- endmacro %}
-
-  {# Local styling keeps the listing layout self-contained. #}
-  <style>
-    .pagination .page-link { display:inline-block; width:auto; }
-
-    .offcanvas-end.w-500 { width:500px; }
-    #cardDrawer .offcanvas-body { overflow-y:auto; }
-    .offcanvas .card-art {
-      width:100%;
-      max-width:360px;
-      max-height:360px;
-      height:auto;
-      object-fit:contain;
-      border-radius:.5rem;
-      display:block;
-      margin:0 auto;
-      background:#111;
-    }
-
-    .card-row { cursor:pointer; }
-    .card-row a.card-link { cursor:pointer; text-decoration:none; }
-    .col-select { width:36px; min-width:36px; text-align:center; }
-
-    .small-muted { font-size:.875rem; color:#6c757d; }
-    .detail-label { font-weight:600; color:#6c757d; width:140px; }
-
-    .card-thumb { display:block; }
-    .col-colors { width:170px; min-width:170px; white-space:nowrap; }
-    .col-tags { min-width:160px; max-width:240px; }
-    .col-tags .badge { margin:0 .25rem .25rem 0; }
-    .drawer-cycler { position:relative; }
-    .drawer-cycler .nav-btn {
-      position:absolute; top:50%; transform:translateY(-50%);
-      background:rgba(0,0,0,.6); color:#fff; border:0; padding:.35rem .5rem; border-radius:.375rem;
-    }
-    .drawer-cycler .prev { left:.25rem; }
-    .drawer-cycler .next { right:.25rem; }
-    .drawer-cycler .nav-btn:disabled { opacity:.35; cursor:not-allowed; }
-
-    .cmdr-star { font-size: 1.15rem; line-height: 1; opacity: .45; }
-    .cmdr-star.active { opacity: 1; color: var(--bs-warning); }
-    .btn-star { padding: 0; border: 0; background: transparent; }
-    .col-star { width: 40px; min-width: 40px; text-align:center; }
-
-    .vr { height: 1.25em; opacity: .25; }
-
-    /* —— Flip button overlay (added) —— */
-    .flip-face-btn{
-      position:absolute; top:.35rem; left:.35rem; z-index:6;
-      padding:.25rem .5rem; font-weight:700; line-height:1; border-radius:.5rem;
-      border:1px solid rgba(255,255,255,.3);
-      background:rgba(0,0,0,.55); color:#fff;
-    }
-    @media (hover:hover){ .flip-face-btn:hover{ background:rgba(0,0,0,.72);} }
-
-    /* Floating action bar for card actions */
-    .card-action-bar {
-      position:fixed;
-      bottom:1rem;
-      left:0;
-      right:0;
-      z-index:1030;
-      pointer-events:none;
-    }
-    .card-action-bar .bar-surface {
-      pointer-events:auto;
-      margin:0 auto;
-      max-width:1100px;
-      background:var(--bs-body-bg);
-      border:1px solid var(--bs-border-color-translucent);
-      border-radius:1rem;
-      box-shadow:0 .75rem 2.5rem rgba(0,0,0,.25);
-      padding:.85rem 1rem;
-    }
-    .card-action-bar .bar-title {
-      font-weight:600;
-      font-size:.95rem;
-    }
-    .card-action-bar .muted {
-      color:var(--bs-secondary-color);
-    }
-    .card-action-bar .quantity-wrap { max-width:120px; }
-    .card-action-bar .bar-grid { row-gap:.5rem; }
-    .page-section-with-bar { padding-bottom:160px; }
-    .printing-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; }
-    .printing-card { border:1px solid var(--bs-border-color); border-radius:.75rem; padding:.65rem; background:var(--bs-body-bg); transition:all .15s ease; cursor:pointer; }
-    .printing-card.active { border-color: var(--bs-primary); box-shadow:0 0 0 3px rgba(13,110,253,.25); }
-    .printing-card .thumb { border-radius:.5rem; background:var(--bs-secondary-bg); width:100%; }
-    .printing-card .meta { font-size:.9rem; margin-top:.5rem; }
-    .printing-card .badge { font-size:.75rem; }
-    .cards-table thead th[data-col] { cursor: grab; }
-    .cards-table thead th.col-dragging { opacity: .6; }
-    .cards-table thead th.col-drop-target { outline: 2px dashed rgba(108,117,125,.4); outline-offset: -4px; }
-  </style>
 
   {# Search + filter form controls the query params for the list view. #}
   <!-- Filters -->
@@ -286,9 +197,9 @@
 
           <div class="vr d-none d-sm-block"></div>
           <div class="btn-group btn-group-sm" role="group" aria-label="Type matching mode">
-            <input type="radio" class="btn-check" name="type_mode" id="tm_contains" value="contains" {% if type_mode_local != 'exact' %}checked{% endif %} onchange="this.form.submit()">
+            <input type="radio" class="btn-check" name="type_mode" id="tm_contains" value="contains" {% if type_mode_local != 'exact' %}checked{% endif %}>
             <label class="btn btn-outline-secondary" for="tm_contains">Contains</label>
-            <input type="radio" class="btn-check" name="type_mode" id="tm_exact" value="exact" {% if type_mode_local == 'exact' %}checked{% endif %} onchange="this.form.submit()">
+            <input type="radio" class="btn-check" name="type_mode" id="tm_exact" value="exact" {% if type_mode_local == 'exact' %}checked{% endif %}>
             <label class="btn btn-outline-secondary" for="tm_exact">Exact</label>
           </div>
 
@@ -309,16 +220,16 @@
             <div class="form-check form-check-inline">
               <input class="form-check-input" type="checkbox" id="c_{{ c }}" name="color" value="{{ c }}" {% if c in (selected_colors or []) %}checked{% endif %}>
               <label class="form-check-label" for="c_{{ c }}">
-                <img class="mana mana-sm" src="{{ static_url('symbols/' ~ up ~ '.svg') }}" alt="{{ up }}" onerror="this.outerHTML='{{ up }}'">
+                <img class="mana mana-sm" src="{{ static_url('symbols/' ~ up ~ '.svg') }}" alt="{{ up }}">
                 <span class="visually-hidden">{{ up }}</span>
               </label>
             </div>
           {% endfor %}
           <div class="vr d-none d-lg-block"></div>
           <div class="btn-group btn-group-sm" role="group" aria-label="Color matching mode">
-            <input type="radio" class="btn-check" name="color_mode" id="cm_contains" value="contains" {% if color_mode != 'exact' %}checked{% endif %} onchange="this.form.submit()">
+            <input type="radio" class="btn-check" name="color_mode" id="cm_contains" value="contains" {% if color_mode != 'exact' %}checked{% endif %}>
             <label class="btn btn-outline-secondary" for="cm_contains">Contains</label>
-            <input type="radio" class="btn-check" name="color_mode" id="cm_exact" value="exact" {% if color_mode == 'exact' %}checked{% endif %} onchange="this.form.submit()">
+            <input type="radio" class="btn-check" name="color_mode" id="cm_exact" value="exact" {% if color_mode == 'exact' %}checked{% endif %}>
             <label class="btn btn-outline-secondary" for="cm_exact">Exactly</label>
           </div>
           <div class="vr d-none d-lg-block"></div>
@@ -349,8 +260,7 @@
                    id="f_collection"
                    name="collection"
                    value="1"
-                   {% if collection_flag %}checked{% endif %}
-                   onchange="this.form.submit()">
+                   {% if collection_flag %}checked{% endif %}>
             <label class="form-check-label" for="f_collection">Collection</label>
           </div>
           {% if current_user.is_authenticated %}
@@ -360,8 +270,7 @@
                      id="f_show_friends"
                      name="show_friends"
                      value="1"
-                     {% if show_friends %}checked{% endif %}
-                     onchange="this.form.submit()">
+                     {% if show_friends %}checked{% endif %}>
               <label class="form-check-label" for="f_show_friends">Show Friends Cards</label>
             </div>
           {% endif %}
@@ -402,7 +311,7 @@
           <span>Columns</span>
           <i class="bi bi-chevron-down" aria-hidden="true"></i>
         </button>
-        <div class="dropdown-menu dropdown-menu-end dv-select-menu p-3" style="min-width:220px;">
+        <div class="dropdown-menu dropdown-menu-end dv-select-menu p-3 cards-columns-menu">
           <div class="small text-muted mb-2">Show columns</div>
           {% if move_folder_options %}
             <div class="form-check">
@@ -602,7 +511,7 @@
                   </div>
                 </td>
               {% endif %}
-              <td style="width:52px;" data-col="art">
+              <td data-col="art">
                 {% if card.image_small %}
                   <img decoding="async" src="{{ card.image_small }}" alt="" width="48" height="auto" loading="lazy" class="rounded card-thumb" {% if hover_src %}data-hover-src="{{ hover_src }}"{% endif %}>
                 {% else %}
@@ -667,7 +576,7 @@
               <td class="col-colors" data-col="colors">
                 <span class="pip-row">
                   {% for C in card.color_letters %}
-                    <img class="mana mana-sm" src="{{ static_url('symbols/' ~ C ~ '.svg') }}" alt="{{ C }}" onerror="this.outerHTML='{{ C }}'">
+                    <img class="mana mana-sm" src="{{ static_url('symbols/' ~ C ~ '.svg') }}" alt="{{ C }}">
                   {% endfor %}
                 </span>
               </td>
@@ -906,9 +815,20 @@
 
     const colorExact = () => !!form.querySelector('input[name="color_mode"][value="exact"]:checked');
 
+    const submitOnChange = (selector) => {
+      form.querySelectorAll(selector).forEach((input) => {
+        input.addEventListener('change', scheduleSubmit);
+      });
+    };
+
     form.querySelectorAll('input[name="type"]').forEach((input) => {
       input.addEventListener('change', scheduleSubmit);
     });
+
+    submitOnChange('input[name="type_mode"]');
+    submitOnChange('input[name="color_mode"]');
+    submitOnChange('#f_collection');
+    submitOnChange('#f_show_friends');
 
     form.querySelectorAll('input[name="color"]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -917,6 +837,7 @@
       });
     });
   }
+
 
   // Per-page selector (matches dv-select UI)
   const cardsPerForm = document.getElementById('cardsPerForm');
@@ -1148,6 +1069,67 @@
       .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   }
 
+  const SAFE_PROTOCOLS = new Set(['http:', 'https:']);
+  const SCRYFALL_HOSTS = new Set(['scryfall.com', 'www.scryfall.com', 'api.scryfall.com']);
+
+  function normalizeUrl(value) {
+    if (!value) return null;
+    try {
+      return new URL(String(value), window.location.origin);
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function safeScryfallUrl(value) {
+    const url = normalizeUrl(value);
+    if (!url || !SAFE_PROTOCOLS.has(url.protocol)) return '';
+    if (!SCRYFALL_HOSTS.has(url.hostname)) return '';
+    return url.toString();
+  }
+
+  function safeImageUrl(value) {
+    const url = normalizeUrl(value);
+    if (!url || !SAFE_PROTOCOLS.has(url.protocol)) return '';
+    return url.toString();
+  }
+
+  function sanitizeManaOracleHtml(raw) {
+    if (!raw) return '';
+    const template = document.createElement('template');
+    template.innerHTML = String(raw);
+    const allowedTags = new Set(['IMG', 'BR']);
+    const allowedImgAttrs = new Set(['src', 'alt', 'title', 'class']);
+    const elements = Array.from(template.content.querySelectorAll('*'));
+    elements.forEach((el) => {
+      if (!allowedTags.has(el.tagName)) {
+        const parent = el.parentNode;
+        if (!parent) return;
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        parent.removeChild(el);
+        return;
+      }
+      Array.from(el.attributes).forEach((attr) => {
+        if (el.tagName === 'IMG') {
+          if (!allowedImgAttrs.has(attr.name)) el.removeAttribute(attr.name);
+        } else {
+          el.removeAttribute(attr.name);
+        }
+      });
+      if (el.tagName === 'IMG') {
+        const safeSrc = safeImageUrl(el.getAttribute('src'));
+        if (!safeSrc) {
+          const altText = el.getAttribute('alt') || '';
+          el.replaceWith(document.createTextNode(altText));
+          return;
+        }
+        el.setAttribute('src', safeSrc);
+        el.setAttribute('class', 'mana');
+      }
+    });
+    return template.innerHTML;
+  }
+
   function normalizeImages(payload) {
     const out = [];
     if (Array.isArray(payload?.images)) out.push(...payload.images);
@@ -1162,7 +1144,11 @@
       label: i?.label || null
     })).filter(i => i.small || i.normal || i.large);
   }
-  const imgSrc   = (img) => img.large || img.normal || img.small || null;
+  const imgSrc   = (img) => {
+    const raw = img.large || img.normal || img.small || null;
+    const safe = safeImageUrl(raw);
+    return safe || null;
+  };
   const imgLabel = (img) => img?.label || '';
   const MISSING_TEXT = '&mdash;';
 
@@ -1174,7 +1160,7 @@
     return `<span class="pip-row">${
       source.map(c => {
         const L = String(c || '').toUpperCase();
-        return `<img class="mana mana-sm" src="{{ static_url('symbols') }}/${L}.svg" alt="${L}" onerror="this.outerHTML='${L}'">`;
+        return `<img class="mana mana-sm" src="{{ static_url('symbols') }}/${L}.svg" alt="${L}">`;
       }).join('')
     }</span>`;
   }
@@ -1195,11 +1181,13 @@
   function renderScryfallButtons(info) {
     if (!info) return '';
     const buttons = [];
-    if (info.scryfall_uri) {
-      buttons.push(`<a class="btn btn-sm btn-outline-primary" href="${info.scryfall_uri}" target="_blank" rel="noopener">View on Scryfall</a>`);
+    const cardUrl = safeScryfallUrl(info.scryfall_uri);
+    const setUrl = safeScryfallUrl(info.scryfall_set_uri);
+    if (cardUrl) {
+      buttons.push(`<a class="btn btn-sm btn-outline-primary" href="${esc(cardUrl)}" target="_blank" rel="noopener noreferrer">View on Scryfall</a>`);
     }
-    if (info.scryfall_set_uri) {
-      buttons.push(`<a class="btn btn-sm btn-outline-secondary" href="${info.scryfall_set_uri}" target="_blank" rel="noopener">View Set</a>`);
+    if (setUrl) {
+      buttons.push(`<a class="btn btn-sm btn-outline-secondary" href="${esc(setUrl)}" target="_blank" rel="noopener noreferrer">View Set</a>`);
     }
     return buttons.length ? `<div class="d-flex flex-wrap gap-2 mt-2">${buttons.join('')}</div>` : '';
   }
@@ -1211,12 +1199,13 @@
       const label = pr?.label || '';
       const meta = label || [pr?.set, pr?.collector_number, pr?.lang].filter(Boolean).join(' · ') || 'Printing';
       const rarity = pr?.rarity ? String(pr.rarity).toUpperCase() : '';
-      const href = pr?.scryfall_uri ? esc(pr.scryfall_uri) : '';
-      const open = href ? `<a class="printing-card text-start d-block text-decoration-none" href="${href}" target="_blank" rel="noopener">` : `<div class="printing-card text-start">`;
+      const href = safeScryfallUrl(pr?.scryfall_uri);
+      const open = href ? `<a class="printing-card text-start d-block text-decoration-none" href="${esc(href)}" target="_blank" rel="noopener noreferrer">` : `<div class="printing-card text-start">`;
       const close = href ? `</a>` : `</div>`;
-      const imgHtml = img
-        ? `<img class="thumb" src="${esc(img)}" alt="${esc(meta)}" loading="lazy">`
-        : `<div class="thumb" style="height:140px;"></div>`;
+      const safeImg = safeImageUrl(img);
+      const imgHtml = safeImg
+        ? `<img class="thumb" src="${esc(safeImg)}" alt="${esc(meta)}" loading="lazy">`
+        : `<div class="thumb thumb-placeholder"></div>`;
       return `${open}
         ${imgHtml}
         <div class="meta">
@@ -1234,10 +1223,11 @@
   function buildCyclerHTML(images) {
     if (!images.length) return `<div class="text-center small text-muted mb-3">No image available</div>`;
     const first = images[0], src = imgSrc(first), label = imgLabel(first);
+    if (!src) return `<div class="text-center small text-muted mb-3">No image available</div>`;
     return `
       <div class="drawer-cycler mb-3" data-count="${images.length}" data-index="0">
         <button type="button" class="nav-btn prev" aria-label="Previous">◀</button>
-        <img class="d-block card-art" id="drawerMainImg" src="${src}" alt="${esc(label)}">
+        <img class="d-block card-art" id="drawerMainImg" src="${esc(src)}" alt="${esc(label)}">
         <button type="button" class="nav-btn next" aria-label="Next">▶</button>
         <div class="small-muted text-center mt-1" id="drawerImgLabel">${esc(label)}</div>
       </div>`;
@@ -1254,7 +1244,7 @@
     function show(i) {
       idx = ((i % N) + N) % N;
       const im = images[idx];
-      imgEl.src = imgSrc(im);
+      imgEl.src = imgSrc(im) || '';
       capEl.textContent = imgLabel(im) || '';
       // when cycling art, always reset any flipped state
       imgEl.dataset.face = '0';
@@ -1366,13 +1356,15 @@
     const quantityHtml = card?.quantity !== undefined && card?.quantity !== null ? esc(card.quantity) : MISSING_TEXT;
     const scryButtons = renderScryfallButtons(info);
     const printingsHtml = renderPrintings(payload?.printings || []);
+    const manaHtml = sanitizeManaOracleHtml(info?.mana_cost_html);
+    const oracleHtml = sanitizeManaOracleHtml(info?.oracle_text_html);
 
     contentEl.innerHTML = `
       ${buildCyclerHTML(images)}
-      ${info?.mana_cost_html
-        ? `<div class="mb-2"><div class="fw-semibold">Mana Cost</div><div>${info.mana_cost_html}</div></div>` : ''}
-      ${info?.oracle_text_html
-        ? `<div class="mb-3"><div class="fw-semibold">Card Text</div><div>${info.oracle_text_html}</div></div>` : ''}
+      ${manaHtml
+        ? `<div class="mb-2"><div class="fw-semibold">Mana Cost</div><div>${manaHtml}</div></div>` : ''}
+      ${oracleHtml
+        ? `<div class="mb-3"><div class="fw-semibold">Card Text</div><div>${oracleHtml}</div></div>` : ''}
       <div class="mb-3">
         ${buildDetailRow('Type', typeHtml)}
         ${buildDetailRow('Colors', colorsHtml)}
@@ -1665,21 +1657,34 @@
         btn.dataset.finishes = (opt.finishes || []).join(',');
 
         const img = document.createElement('img');
-        img.src = opt.image || placeholder;
+        img.src = safeImageUrl(opt.image) || placeholder;
         img.alt = opt.set ? `${opt.set} #${opt.collector_number || ''}` : 'Printing';
         img.loading = 'lazy';
         img.className = 'thumb w-100';
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.innerHTML = `
-          <div class="fw-semibold">${opt.set || ''} #${opt.collector_number || ''}</div>
-          <div class="text-muted small">${(opt.set_name || '').replace(/</g,'&lt;')}</div>
-          <div class="d-flex flex-wrap gap-1 mt-1">
-            <span class="badge text-bg-light text-dark">${(opt.lang || 'EN').toUpperCase()}</span>
-            ${(opt.promo_types || []).map(p => `<span class="badge bg-secondary-subtle text-secondary-emphasis">${p}</span>`).join('')}
-          </div>
-        `;
+        const title = document.createElement('div');
+        title.className = 'fw-semibold';
+        title.textContent = `${opt.set || ''} #${opt.collector_number || ''}`;
+        const setName = document.createElement('div');
+        setName.className = 'text-muted small';
+        setName.textContent = opt.set_name || '';
+        const badges = document.createElement('div');
+        badges.className = 'd-flex flex-wrap gap-1 mt-1';
+        const lang = document.createElement('span');
+        lang.className = 'badge text-bg-light text-dark';
+        lang.textContent = (opt.lang || 'EN').toUpperCase();
+        badges.appendChild(lang);
+        (opt.promo_types || []).forEach((p) => {
+          const badge = document.createElement('span');
+          badge.className = 'badge bg-secondary-subtle text-secondary-emphasis';
+          badge.textContent = p;
+          badges.appendChild(badge);
+        });
+        meta.appendChild(title);
+        meta.appendChild(setName);
+        meta.appendChild(badges);
 
         btn.appendChild(img);
         btn.appendChild(meta);

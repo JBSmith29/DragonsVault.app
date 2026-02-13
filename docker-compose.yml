@@ -118,6 +118,46 @@ services:
       retries: 5
       start_period: 20s
 
+  game-engine:
+    build:
+      context: .
+      dockerfile: backend/microservices/game-engine/Dockerfile
+    command: >-
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers ${GAME_ENGINE_CONCURRENCY:-2}
+      --threads ${GAME_ENGINE_THREADS:-2}
+      --worker-class gthread
+      --timeout ${GAME_ENGINE_TIMEOUT:-90}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-100}
+      --access-logfile -
+      --error-logfile -
+      --log-level info
+      "game_engine.app:create_app()"
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      SERVICE_NAME: game-engine
+      DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
+      DATABASE_SCHEMA: game_engine
+      RULES_VERSION: v1
+      AUTH_SCHEMA: public
+      AUTH_TABLE: users
+      CARD_DATA_BASE_URL: http://card-data:5000/v1
+      GAME_ENGINE_SHARED_SECRET: ${GAME_ENGINE_SHARED_SECRET:?set_in_env_file}
+    depends_on:
+      - postgres
+      - pgbouncer
+      - card-data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/readyz', timeout=5).getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   folder-service:
     build:
       context: .
@@ -293,6 +333,8 @@ services:
       EDHREC_SERVICE_URL: http://edhrec-service:5000
       EDHREC_SERVICE_HTTP_TIMEOUT: ${EDHREC_SERVICE_HTTP_TIMEOUT:-300}
       EDHREC_SERVICE_CACHE_TTL: ${EDHREC_SERVICE_CACHE_TTL:-600}
+      GAME_ENGINE_URL: ${GAME_ENGINE_URL:-http://game-engine:5000}
+      GAME_ENGINE_SHARED_SECRET: ${GAME_ENGINE_SHARED_SECRET:?set_in_env_file}
       DJANGO_API_URL: http://django-api:5000
       WEB_CONCURRENCY: "12"
       WEB_THREADS: "3"

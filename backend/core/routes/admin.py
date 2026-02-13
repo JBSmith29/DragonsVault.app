@@ -818,6 +818,7 @@ def _handle_impersonate_user(target_endpoint: str):
         },
     )
     login_user(target_user, remember=False, fresh=True)
+    session.permanent = True
     session["user_is_admin"] = bool(target_user.is_admin)
     flash(f"Now impersonating {target_user.username or target_user.email}.", "info")
     return redirect(url_for("views.dashboard"))
@@ -2182,6 +2183,7 @@ def admin_impersonate_stop():
         return redirect(url_for("views.dashboard"))
 
     login_user(admin_user, remember=False, fresh=True)
+    session.permanent = True
     session["user_is_admin"] = bool(admin_user.is_admin)
     session.pop("impersonator_id", None)
     session.pop("impersonated_user_id", None)

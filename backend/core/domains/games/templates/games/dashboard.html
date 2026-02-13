@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Games Dashboard{% endblock %}
 {% block content %}
-<style>
+<style nonce="{{ csp_nonce() }}">
   .metric-card {
     border: 1px solid var(--bs-border-color);
     border-radius: 0.9rem;

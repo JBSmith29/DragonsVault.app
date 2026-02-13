@@ -56,6 +56,12 @@ def send_to_build(folder_id: int):
     return folder_service.send_to_build(folder_id)
 
 
+@views.post("/folders/<int:folder_id>/edhrec/refresh")
+@login_required
+def refresh_folder_edhrec(folder_id: int):
+    return folder_service.refresh_folder_edhrec(folder_id)
+
+
 @views.get("/folders/<int:folder_id>/cards.json")
 @login_required
 def folder_cards_json(folder_id):
@@ -135,6 +141,7 @@ __all__ = [
     "folder_sharing",
     "rename_proxy_deck",
     "send_to_build",
+    "refresh_folder_edhrec",
     "set_commander",
     "set_folder_commander",
     "set_folder_owner",

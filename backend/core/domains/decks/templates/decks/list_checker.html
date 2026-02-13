@@ -171,7 +171,7 @@
       <table class="table table-sm align-middle table-hover cards-table">
         <thead>
           <tr>
-            <th style="min-width: 220px;">Card</th>
+            <th class="checker-col-card">Card</th>
             <th class="col-num text-center">Requested</th>
             <th class="col-num text-center">Available</th>
             <th class="col-num text-center">Missing</th>
@@ -246,8 +246,9 @@
   {% endif %}
 </div>
 
-<style>
+<style nonce="{{ csp_nonce() }}">
   .col-num { width: 130px; min-width: 110px; white-space: nowrap; }
+  .checker-col-card { min-width: 220px; }
   .small-muted { color: #6c757d; }
   .row-have    { background: var(--bs-success-bg-subtle); }
   .row-partial { background: var(--bs-warning-bg-subtle); }

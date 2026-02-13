@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from flask_login import login_required
+from flask import jsonify, render_template, request
+from flask_login import current_user, login_required
 
-from core.domains.games.services import game_service, games_enhanced
+from core.domains.cards.services import scryfall_cache as sc
+from core.domains.games.services import game_engine_client, game_service, games_enhanced
 from core.routes.base import views
+from core.shared.utils.assets import static_url
 
 
 @views.route("/games")
@@ -42,6 +45,158 @@ def games_quick_log():
 @login_required
 def games_overview():
     return game_service.games_overview()
+
+
+@views.route("/games/engine")
+@login_required
+def game_engine():
+    return render_template(
+        "games/game_engine.html",
+        engine_enabled=game_engine_client.engine_service_enabled(),
+        deck_options=game_service.accessible_deck_options(current_user.id, commander_only=True),
+    )
+
+
+@views.route("/games/engine/play")
+@login_required
+def game_engine_table():
+    game_id = (request.args.get("game_id") or "").strip()
+    return render_template(
+        "games/game_engine_table.html",
+        engine_enabled=game_engine_client.engine_service_enabled(),
+        game_id=game_id,
+    )
+
+
+@views.post("/api/game-engine/games")
+@login_required
+def api_game_engine_create():
+    payload = request.get_json(silent=True) or {}
+    format_name = (payload.get("format") or "commander").strip().lower()
+    players_raw = payload.get("players") or []
+    players = [int(p) for p in players_raw if str(p).isdigit()]
+    try:
+        result = game_engine_client.create_game(current_user.id, format_name=format_name, players=players or None)
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
+
+
+@views.get("/api/game-engine/ping")
+@login_required
+def api_game_engine_ping():
+    try:
+        result = game_engine_client.ping(current_user.id)
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
+
+
+@views.get("/api/game-engine/decks/options")
+@login_required
+def api_game_engine_deck_options():
+    options = game_service.accessible_deck_options(current_user.id, commander_only=True)
+    return jsonify({"ok": True, "result": {"options": options}})
+
+
+@views.post("/api/game-engine/games/<game_id>/join")
+@login_required
+def api_game_engine_join(game_id: str):
+    try:
+        result = game_engine_client.join_game(current_user.id, game_id)
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
+
+
+@views.get("/api/game-engine/games/<game_id>")
+@login_required
+def api_game_engine_get(game_id: str):
+    try:
+        result = game_engine_client.get_game(current_user.id, game_id)
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
+
+
+@views.get("/api/game-engine/games/<game_id>/events")
+@login_required
+def api_game_engine_events(game_id: str):
+    since = request.args.get("since", type=int)
+    try:
+        result = game_engine_client.list_events(current_user.id, game_id, since=since)
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
+
+
+@views.post("/api/game-engine/cards/images")
+@login_required
+def api_game_engine_card_images():
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get("oracle_ids") or []
+    oracle_ids = [str(oid).strip() for oid in raw_ids if oid]
+    if not oracle_ids:
+        return jsonify({"ok": True, "result": {"images": {}}})
+
+    placeholder = static_url("img/card-back-placeholder.png")
+    images: dict[str, dict[str, str]] = {}
+    try:
+        sc.ensure_cache_loaded()
+    except Exception:
+        # Cache failure shouldn't block the UI; we fall back to placeholders.
+        for oid in oracle_ids:
+            images[oid] = {"small": placeholder, "normal": placeholder, "large": placeholder}
+        return jsonify({"ok": True, "result": {"images": images}})
+
+    for oid in oracle_ids:
+        img_pack = {}
+        try:
+            prints = sc.prints_for_oracle(oid) or []
+            if prints:
+                img_pack = sc.image_for_print(prints[0]) or {}
+        except Exception:
+            img_pack = {}
+        small = img_pack.get("small") or img_pack.get("normal") or img_pack.get("large") or placeholder
+        normal = img_pack.get("normal") or img_pack.get("large") or small or placeholder
+        large = img_pack.get("large") or img_pack.get("normal") or normal or placeholder
+        images[oid] = {"small": small, "normal": normal, "large": large}
+
+    return jsonify({"ok": True, "result": {"images": images}})
+
+
+@views.post("/api/game-engine/games/<game_id>/actions")
+@login_required
+def api_game_engine_action(game_id: str):
+    payload = request.get_json(silent=True) or {}
+    action_type = (payload.get("action_type") or "").strip()
+    action_payload = payload.get("payload") or {}
+    if not action_type:
+        return jsonify({"ok": False, "error": "action_type_required"}), 400
+    try:
+        result = game_engine_client.submit_action(
+            current_user.id,
+            game_id,
+            action_type=action_type,
+            payload=action_payload,
+        )
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
+
+
+@views.post("/api/game-engine/decks/from-folder")
+@login_required
+def api_game_engine_sync_deck():
+    payload = request.get_json(silent=True) or {}
+    folder_id = payload.get("folder_id")
+    if not folder_id:
+        return jsonify({"ok": False, "error": "folder_id_required"}), 400
+    try:
+        result = game_engine_client.sync_deck_from_folder(current_user.id, int(folder_id))
+    except game_engine_client.GameEngineError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify({"ok": True, "result": result})
 
 
 @views.route("/games/manual-decks/update", methods=["POST"])
@@ -160,5 +315,7 @@ __all__ = [
     "games_edit",
     "games_delete",
     "games_bulk_delete",
+    "api_game_engine_ping",
+    "api_game_engine_deck_options",
     "games_detail",
 ]

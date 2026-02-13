@@ -128,6 +128,11 @@ def opening_hand_peek():
     return deck_service.opening_hand_peek()
 
 
+@views.post("/opening-hand/hideaway")
+def opening_hand_hideaway():
+    return deck_service.opening_hand_hideaway()
+
+
 @views.post("/opening-hand/scry")
 def opening_hand_scry():
     return deck_service.opening_hand_scry()
@@ -159,6 +164,7 @@ __all__ = [
     "opening_hand_draw",
     "opening_hand_search",
     "opening_hand_peek",
+    "opening_hand_hideaway",
     "opening_hand_scry",
     "opening_hand_surveil",
     "opening_hand_token_search",

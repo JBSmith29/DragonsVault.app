@@ -3,7 +3,7 @@
 {% block title %}build-a-deck{% endblock %}
 
 {% block content %}
-<style>
+<style nonce="{{ csp_nonce() }}">
   /* Ensure the build drawer overlays the high z-index build-landing header cards. */
   #buildDrawer.offcanvas {
     z-index: 6100;
@@ -292,7 +292,7 @@
                   <td class="text-end">
                     <div class="d-inline-flex gap-2">
                       <a class="btn btn-sm btn-outline-primary" href="{{ url_for('views.build_session', session_id=build.id) }}">resume</a>
-                      <form method="post" action="{{ url_for('views.build_session_delete', session_id=build.id) }}" onsubmit="return confirm('Delete this build session? This cannot be undone.');">
+                      <form method="post" action="{{ url_for('views.build_session_delete', session_id=build.id) }}" data-confirm="Delete this build session? This cannot be undone.">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="btn btn-sm btn-outline-danger" type="submit">delete</button>
                       </form>

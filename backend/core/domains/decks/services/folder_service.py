@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import secrets
+import threading
 from collections import Counter
 from functools import lru_cache
 from typing import Any, Dict, List, Set, Optional, Sequence
@@ -35,6 +36,7 @@ from core.domains.decks.services.deck_tags import (
     clear_folder_deck_tags,
     get_deck_tag_category,
     get_deck_tag_groups,
+    resolve_deck_tag_from_slug,
     set_folder_deck_tag,
 )
 from core.domains.decks.services.commander_brackets import (
@@ -51,6 +53,9 @@ from core.domains.decks.services.commander_brackets import (
 from core.domains.decks.services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from shared.auth import ensure_folder_access
 from core.domains.decks.services.deck_service import deck_curve_missing, deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
+from core.domains.decks.services.build_recommendation_service import build_recommendation_sections
+from core.domains.decks.services.edhrec_cache_service import cache_ready as edhrec_cache_ready
+from core.domains.decks.services.edhrec.edhrec_ingestion_service import ingest_commander_tag_data
 from core.domains.decks.services.build_session_service import ensure_build_session_tables
 from shared.database import get_or_404
 from shared.validation import ValidationError, log_validation_error, parse_positive_int, parse_positive_int_list
@@ -812,6 +817,37 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     folder_tag_category = get_deck_tag_category(folder.deck_tag)
     is_deck_folder = bool(folder and not folder.is_collection)
 
+    deck_oracle_ids = {
+        (card.oracle_id or '').strip()
+        for card in deck_cards
+        if getattr(card, 'oracle_id', None)
+    }
+    edhrec_ready = edhrec_cache_ready()
+    edhrec_sections: list[dict] = []
+    edhrec_tag_label = resolve_deck_tag_from_slug(folder.deck_tag) if folder.deck_tag else None
+    edhrec_commander_ready = False
+    if is_deck_folder:
+        commander_oracle_id = primary_commander_oracle_id(folder.commander_oracle_id)
+        if not commander_oracle_id and folder.commander_name:
+            try:
+                commander_oracle_id = unique_oracle_by_name(primary_commander_name(folder.commander_name) or folder.commander_name) or ''
+            except Exception:
+                commander_oracle_id = ''
+        edhrec_commander_ready = bool(commander_oracle_id)
+        if edhrec_ready and edhrec_commander_ready:
+            tags = [edhrec_tag_label] if edhrec_tag_label else []
+            edhrec_sections = build_recommendation_sections(
+                commander_oracle_id,
+                tags,
+                sort_mode='synergy',
+            )
+            if deck_oracle_ids and edhrec_sections:
+                for section in edhrec_sections:
+                    for card in section.get('cards') or []:
+                        oracle_id = (card.get('oracle_id') or '').strip()
+                        if oracle_id:
+                            card['in_deck'] = oracle_id in deck_oracle_ids
+
     base_types = ["Artifact", "Battle", "Creature", "Enchantment", "Instant", "Land", "Planeswalker", "Sorcery"]
     card_vms: list[FolderCardVM] = []
     for card in deck_cards:
@@ -960,6 +996,10 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         move_targets=move_targets,
         is_deck_folder=is_deck_folder,
         commander_media_list=commander_media_list,
+        edhrec_ready=edhrec_ready,
+        edhrec_sections=edhrec_sections,
+        edhrec_tag_label=edhrec_tag_label,
+        edhrec_commander_ready=edhrec_commander_ready,
     )
 
 
@@ -1394,12 +1434,71 @@ def rename_proxy_deck(folder_id: int):
     return redirect(request.referrer or url_for("views.folder_detail", folder_id=folder_id))
 
 
+def refresh_folder_edhrec(folder_id: int):
+    folder = get_or_404(Folder, folder_id)
+    ensure_folder_access(folder, write=True)
+    if folder.is_collection:
+        flash("EDHREC recommendations are only available for deck folders.", "warning")
+        return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+    commander_oracle_id = primary_commander_oracle_id(folder.commander_oracle_id)
+    commander_name = primary_commander_name(folder.commander_name) or folder.commander_name
+    if not commander_oracle_id and commander_name:
+        try:
+            sc.ensure_cache_loaded()
+            commander_oracle_id = sc.unique_oracle_by_name(commander_name) or None
+        except Exception:
+            commander_oracle_id = None
+    if commander_oracle_id and not commander_name:
+        try:
+            prints = sc.prints_for_oracle(commander_oracle_id) or []
+        except Exception:
+            prints = []
+        if prints:
+            commander_name = (prints[0].get("name") or "").strip() or commander_name
+
+    if not commander_oracle_id and not commander_name:
+        flash("Set a commander before refreshing EDHREC data.", "warning")
+        return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+    tag_label = resolve_deck_tag_from_slug(folder.deck_tag) if folder.deck_tag else None
+    tags = [tag_label] if tag_label else []
+
+    def _runner():
+        from app import create_app
+
+        app = create_app()
+        with app.app_context():
+            try:
+                ingest_commander_tag_data(
+                    commander_oracle_id or "",
+                    commander_name,
+                    tags,
+                    force_refresh=True,
+                )
+            except Exception:
+                current_app.logger.error("Failed to refresh EDHREC data for folder %s.", folder.id, exc_info=True)
+
+    thread = threading.Thread(
+        target=_runner,
+        name=f"folder-edhrec-{folder.id}",
+        daemon=True,
+    )
+    thread.start()
+
+    flash("EDHREC refresh queued. Reload in a moment to see updates.", "info")
+    return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+
 def send_to_build(folder_id: int):
     folder = get_or_404(Folder, folder_id)
     ensure_folder_access(folder, write=True)
     if folder.is_collection:
         flash("Collection folders cannot be sent to Build-A-Deck.", "warning")
         return redirect(url_for("views.folder_detail", folder_id=folder.id))
+
+    extra_oracles = [val.strip() for val in request.form.getlist("card_oracle_id") if str(val or "").strip()]
+    extra_counts = Counter(extra_oracles)
 
     commander_oracle_id = primary_commander_oracle_id(folder.commander_oracle_id)
     commander_name = primary_commander_name(folder.commander_name) or folder.commander_name
@@ -1440,6 +1539,7 @@ def send_to_build(folder_id: int):
     )
     added = 0
     commander_present = False
+    entry_map: dict[str, BuildSessionCard] = {}
     for oracle_id, qty in rows:
         if not oracle_id:
             continue
@@ -1448,24 +1548,43 @@ def send_to_build(folder_id: int):
         qty = int(qty or 0)
         if qty <= 0:
             continue
-        db.session.add(
-            BuildSessionCard(
-                session_id=session.id,
-                card_oracle_id=str(oracle_id),
-                quantity=qty,
-            )
+        entry = BuildSessionCard(
+            session_id=session.id,
+            card_oracle_id=str(oracle_id),
+            quantity=qty,
         )
+        db.session.add(entry)
+        entry_map[str(oracle_id)] = entry
         added += qty
 
     if commander_oracle_id and not commander_present:
-        db.session.add(
-            BuildSessionCard(
+        if str(commander_oracle_id) in entry_map:
+            entry_map[str(commander_oracle_id)].quantity += 1
+        else:
+            entry = BuildSessionCard(
                 session_id=session.id,
                 card_oracle_id=str(commander_oracle_id),
                 quantity=1,
             )
-        )
+            db.session.add(entry)
+            entry_map[str(commander_oracle_id)] = entry
         added += 1
+
+    if extra_counts:
+        for oracle_id, qty in extra_counts.items():
+            if not oracle_id or qty <= 0:
+                continue
+            if oracle_id in entry_map:
+                entry_map[oracle_id].quantity += int(qty)
+            else:
+                db.session.add(
+                    BuildSessionCard(
+                        session_id=session.id,
+                        card_oracle_id=str(oracle_id),
+                        quantity=int(qty),
+                    )
+                )
+            added += int(qty)
 
     try:
         db.session.commit()
@@ -1477,6 +1596,7 @@ def send_to_build(folder_id: int):
 
     flash(f"Build session created with {added} cards.", "success")
     return redirect(url_for("views.build_session", session_id=session.id))
+
 
 
 def folder_cards_json(folder_id):
@@ -1807,6 +1927,7 @@ __all__ = [
     "set_folder_proxy",
     "rename_proxy_deck",
     "send_to_build",
+    "refresh_folder_edhrec",
     "set_commander",
     "set_folder_tag",
     "set_folder_commander",

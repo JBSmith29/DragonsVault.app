@@ -14,7 +14,7 @@
   </div>
 
   <!-- Mirror folder_detail summary-row grid so stats always sit in three columns. -->
-  <style>
+  <style nonce="{{ csp_nonce() }}">
     .build-session .summary-row{ --gap: 1rem; display:grid; gap:var(--gap); grid-template-columns: 1fr; }
     @media (min-width:992px){ .build-session .summary-row{ grid-template-columns: repeat(3, 1fr); } }
     .build-session .summary-row > div{ min-width:0; }
@@ -84,9 +84,27 @@
     .build-session .build-type-name{ font-weight:600; }
     .build-session .build-type-cost{ display:inline-flex; align-items:center; gap:0.2rem; white-space:nowrap; }
     .build-session .build-type-cost .mana{ height:1em; }
+    .build-session .summary-mana-icon{ height:1.1em; width:auto; }
     .build-session .build-type-price{ min-width:3.25rem; text-align:right; }
     .build-session .build-type-remove{ padding:0.15rem 0.45rem; font-size:0.75rem; }
     .build-session .build-edhrec-progress{ min-width: 220px; max-width: 320px; }
+    .build-session .build-progress-slim{ height:6px; }
+    .build-session .build-progress-fill-zero{ width:0%; }
+    .build-session .build-manual-qty-input{ max-width: 90px; }
+    .build-session .build-type-qty-input{ width: 56px; }
+    .build-session .build-type-progress .progress-bar{ background-color: var(--build-type-color, #0d6efd); }
+    .build-session .type-bar-artifact{ --build-type-color:#94A3B8; }
+    .build-session .type-bar-battle{ --build-type-color:#F97316; }
+    .build-session .type-bar-creature{ --build-type-color:#198754; }
+    .build-session .type-bar-enchantment{ --build-type-color:#8B5CF6; }
+    .build-session .type-bar-instant{ --build-type-color:#0EA5E9; }
+    .build-session .type-bar-land{ --build-type-color:#8B5E3C; }
+    .build-session .type-bar-planeswalker{ --build-type-color:#EAB308; }
+    .build-session .type-bar-sorcery{ --build-type-color:#EF4444; }
+    {% for pct in range(0, 101) %}
+    .build-session .pct-w-{{ pct }}{ width:{{ pct }}%; }
+    .build-session .pct-h-{{ pct }}{ height:{{ pct }}%; }
+    {% endfor %}
     .build-session .build-list-grid{
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -390,13 +408,12 @@
           </div>
           <div class="d-flex justify-content-end">
             <div id="buildEdhrecProgress" class="build-edhrec-progress d-none">
-              <div class="progress" style="height:6px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated"
+              <div class="progress build-progress-slim">
+                <div class="progress-bar progress-bar-striped progress-bar-animated build-progress-fill-zero"
                      role="progressbar"
                      aria-valuemin="0"
                      aria-valuemax="100"
-                     aria-valuenow="0"
-                     style="width:0%;"></div>
+                     aria-valuenow="0"></div>
               </div>
               <div class="small text-muted mt-1" id="buildEdhrecEta">Estimated time: ~{{ edhrec_estimate_seconds }}s</div>
             </div>
@@ -649,12 +666,11 @@
                 <input type="text" class="form-control form-control-sm" id="buildManualCardName" name="card_name" placeholder="Sol Ring">
                 <div class="d-flex align-items-center gap-2 mt-2">
                   <input type="number"
-                         class="form-control form-control-sm text-center"
+                         class="form-control form-control-sm text-center build-manual-qty-input"
                          name="card_quantity"
                          value="1"
                          min="1"
-                         step="1"
-                         style="max-width: 90px;">
+                         step="1">
                   <button class="btn btn-sm btn-outline-primary flex-grow-1" type="submit">Add Card</button>
                 </div>
               </form>
@@ -714,7 +730,7 @@
             <div class="d-flex flex-wrap align-items-center justify-content-center gap-2">
               {% for c, pip, n in mana_pip_dist %}
                 <span class="pill d-inline-flex align-items-center">
-                  {% if pip %}<img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
+                  {% if pip %}<img src="{{ pip }}" alt="{{ c }}" class="me-1 summary-mana-icon">{% else %}<span class="me-1">{{ c }}</span>{% endif %}
                   <span class="fw-semibold">{{ n }}</span>
                 </span>
               {% endfor %}
@@ -727,9 +743,9 @@
               {% for c, pip, n in land_mana_sources %}
                 <span class="pill d-inline-flex align-items-center">
                   {% if pip %}
-                    <img src="{{ pip }}" alt="{{ c }}" style="height:1.1em;" class="me-1">
+                    <img src="{{ pip }}" alt="{{ c }}" class="me-1 summary-mana-icon">
                   {% elif c in ['C', 'Colorless'] %}
-                    <img src="{{ static_url('symbols/C.svg') }}" alt="C" style="height:1.1em;" class="me-1">
+                    <img src="{{ static_url('symbols/C.svg') }}" alt="C" class="me-1 summary-mana-icon">
                   {% else %}
                     <span class="me-1">{{ c }}</span>
                   {% endif %}
@@ -752,7 +768,10 @@
                           data-cmc-label="{{ row.label }}"
                           aria-pressed="false">
                     <div class="curve-bar">
-                      <div class="fill" style="height: {{ row.pct }}%;"></div>
+                      {% set curve_fill_pct = row.pct|default(0)|round(0, 'floor')|int %}
+                      {% if curve_fill_pct < 0 %}{% set curve_fill_pct = 0 %}{% endif %}
+                      {% if curve_fill_pct > 100 %}{% set curve_fill_pct = 100 %}{% endif %}
+                      <div class="fill pct-h-{{ curve_fill_pct }}"></div>
                       <div class="curve-count">{{ row.count }}</div>
                     </div>
                     <div class="curve-label">{{ row.label }}</div>
@@ -820,11 +839,10 @@
                           <input type="hidden" name="card_oracle_id" value="{{ card.oracle_id }}">
                           <input type="number"
                                  name="quantity"
-                                 class="form-control form-control-sm text-center"
+                                 class="form-control form-control-sm text-center build-type-qty-input"
                                  value="{{ card.quantity }}"
                                  min="1"
-                                 step="1"
-                                 style="width: 56px;">
+                                 step="1">
                           <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
                         </form>
                         <div class="build-type-name"
@@ -949,16 +967,6 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="close"></button>
       </div>
       <div class="modal-body">
-        {% set TYPE_COLOR_FALLBACKS = {
-          'Artifact': '#94A3B8',
-          'Battle': '#F97316',
-          'Creature': '#198754',
-          'Enchantment': '#8B5CF6',
-          'Instant': '#0EA5E9',
-          'Land': '#8B5E3C',
-          'Planeswalker': '#EAB308',
-          'Sorcery': '#EF4444'
-        } %}
         <div class="row g-4">
           <div class="col-12 col-lg-6">
             <h6 class="text-uppercase text-muted fw-semibold small mb-2">Build Distribution</h6>
@@ -969,13 +977,17 @@
                   <div class="d-flex flex-column gap-2">
                     {% for t, n in deck_type_distribution %}
                       {% set pct = ((n * 100) / total) | round(0, 'floor') if total else 0 %}
+                      {% set pct_int = pct|int %}
+                      {% if pct_int < 0 %}{% set pct_int = 0 %}{% endif %}
+                      {% if pct_int > 100 %}{% set pct_int = 100 %}{% endif %}
+                      {% set type_class = t|lower|replace(' ', '-')|replace('/', '-') %}
                       <div>
                         <div class="d-flex justify-content-between small">
                           <span>{{ t }}</span>
                           <span>{{ n }} ({{ pct }}%)</span>
                         </div>
-                        <div class="progress" style="height:6px;">
-                          <div class="progress-bar" style="width: {{ pct }}%; background-color: {{ TYPE_COLOR_FALLBACKS.get(t, '#0d6efd') }};"></div>
+                        <div class="progress build-progress-slim build-type-progress">
+                          <div class="progress-bar pct-w-{{ pct_int }} type-bar-{{ type_class }}"></div>
                         </div>
                       </div>
                     {% endfor %}
@@ -996,13 +1008,17 @@
                   <div class="d-flex flex-column gap-2">
                     {% for t, n in edhrec_type_distribution %}
                       {% set pct = ((n * 100) / total) | round(0, 'floor') if total else 0 %}
+                      {% set pct_int = pct|int %}
+                      {% if pct_int < 0 %}{% set pct_int = 0 %}{% endif %}
+                      {% if pct_int > 100 %}{% set pct_int = 100 %}{% endif %}
+                      {% set type_class = t|lower|replace(' ', '-')|replace('/', '-') %}
                       <div>
                         <div class="d-flex justify-content-between small">
                           <span>{{ t }}</span>
                           <span>{{ n }} ({{ pct }}%)</span>
                         </div>
-                        <div class="progress" style="height:6px;">
-                          <div class="progress-bar" style="width: {{ pct }}%; background-color: {{ TYPE_COLOR_FALLBACKS.get(t, '#0d6efd') }};"></div>
+                        <div class="progress build-progress-slim build-type-progress">
+                          <div class="progress-bar pct-w-{{ pct_int }} type-bar-{{ type_class }}"></div>
                         </div>
                       </div>
                     {% endfor %}

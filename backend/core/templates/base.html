@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="{{ static_url('css/styles.css') }}" media="all">
     <link rel="stylesheet" href="{{ static_url('css/components.css') }}?v=20260102-1" media="all">
     <link rel="stylesheet" href="{{ static_url('css/roles.css') }}" media="all">
+    {% block styles %}{% endblock %}
 
   {# Progressive enhancement scripts (instant page for prefetching). #}
   <!-- Perf helpers -->
@@ -48,7 +49,7 @@
     <script defer src="{{ static_url('js/htmx-config.js') }}"></script>
 
     <!-- Minimal indicator styles + sidebar/layout CSS -->
-    <style>
+    <style nonce="{{ csp_nonce() }}">
       :root {
         --sidebar-w: 260px;
         --app-header-h: 96px;
@@ -110,6 +111,12 @@
       }
       .htmx-indicator { display: none; }
       .htmx-indicator.htmx-request { display: block; }
+      .global-indicator {
+        position: fixed;
+        top: calc(var(--app-header-h, 96px) + 1rem);
+        right: 1rem;
+        z-index: 1080;
+      }
 
       .layout-shell {
         display: grid;
@@ -942,6 +949,16 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.game_engine', 'views.game_engine_table'] %}active{% endif %}"
+               href="{{ url_for('views.game_engine') }}"
+               title="Game Engine"
+               aria-label="Game Engine"
+               data-endpoints="views.game_engine,views.game_engine_table">
+              <i class="bi bi-cpu" aria-hidden="true"></i>
+              <span class="sidebar-label">Game Engine</span>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.build_landing', 'views.build_session'] %}active{% endif %}"
                href="{{ url_for('views.build_landing') }}"
                title="Build-A-Deck"
@@ -1115,9 +1132,8 @@
 
     <!-- Global loading indicator for boosted nav/search -->
     <div id="global-indicator"
-         class="htmx-indicator alert alert-secondary shadow-sm"
-         role="status"
-         style="position:fixed; top:calc(var(--app-header-h, 96px) + 1rem); right:1rem; z-index:1080;">
+         class="htmx-indicator alert alert-secondary shadow-sm global-indicator"
+         role="status">
       Loading...
     </div>
 
@@ -1175,6 +1191,27 @@
         document.addEventListener("shown.bs.offcanvas", (event) => {
           applyOffcanvasOffset(event.target);
         });
+      })();
+    </script>
+    <script nonce="{{ csp_nonce() }}">
+      (function () {
+        const replaceBrokenMana = (img) => {
+          if (!(img instanceof HTMLImageElement)) return;
+          if (!img.classList.contains("mana")) return;
+          const altText = img.getAttribute("alt") || "";
+          if (!altText) {
+            img.remove();
+            return;
+          }
+          img.replaceWith(document.createTextNode(altText));
+        };
+
+        document.addEventListener("error", (event) => {
+          const target = event.target;
+          if (target instanceof HTMLImageElement && target.classList.contains("mana")) {
+            replaceBrokenMana(target);
+          }
+        }, true);
       })();
     </script>
     <script nonce="{{ csp_nonce() }}">
@@ -1507,6 +1544,9 @@
     <script src="{{ static_url('js/prints-cycler.js') }}" defer></script>
     <script src="{{ static_url('js/face-flip.js') }}" defer></script>
     <script src="{{ static_url('js/card-hover.js') }}" defer></script>
+    <script src="{{ static_url('js/magic-rules.js') }}?v=20260208-1" defer></script>
+    <script src="{{ static_url('js/game-engine.js') }}?v=20260208-3" defer></script>
+    <script src="{{ static_url('js/game-engine-table.js') }}?v=20260209-19" defer></script>
     
     <!-- Global form parameter cleanup -->
     <script nonce="{{ csp_nonce() }}">

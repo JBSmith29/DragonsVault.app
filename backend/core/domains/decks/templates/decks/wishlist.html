@@ -4,10 +4,24 @@
 
 <h1 class="mb-3">Wishlist</h1>
 
-<style>
+<style nonce="{{ csp_nonce() }}">
   .wishlist-view-toggle .btn {
     min-width: 80px;
   }
+  .wishlist-search-group {
+    max-width: 360px;
+  }
+  .wl-col-select { width:36px; }
+  .wl-col-card { min-width:260px; }
+  .wl-col-color { width:120px; }
+  .wl-col-location { width:220px; }
+  .wl-col-requested { width:120px; }
+  .wl-col-missing { width:110px; }
+  .wl-col-status { width:120px; }
+  .wl-col-order { width:240px; }
+  .wl-col-actions { width:260px; }
+  .wl-requested-input { max-width:80px; }
+  .wl-order-input { min-width:160px; max-width:260px; }
   .wishlist-gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -126,7 +140,7 @@
     <li class="nav-item"><a class="nav-link {% if status_filter == 'removed' %}active{% endif %}" href="{{ url_for('views.wishlist', status='removed', sort=sort, dir=direction, per=per_page, page=1) }}" data-filter="removed">Removed</a></li>
   </ul>
 
-  <div class="input-group input-group-sm" style="max-width: 360px;">
+  <div class="input-group input-group-sm wishlist-search-group">
     <span class="input-group-text">Search</span>
     <input type="search" class="form-control" id="wl-search" placeholder="Card name..." />
     <button class="btn btn-outline-secondary" type="button" id="wl-clear">Clear</button>
@@ -176,17 +190,17 @@
   <table class="table table-sm align-middle table-hover cards-table" id="wl-table">
     <thead>
       <tr>
-        <th style="width:36px;" class="text-center">
+        <th class="text-center wl-col-select">
           <input class="form-check-input" type="checkbox" id="wlSelectAll" aria-label="Select all wishlist items">
         </th>
-        <th style="min-width:260px;"><a href="{{ sort_url('name', name_dir) }}">Card</a></th>
-        <th class="text-center" style="width:120px;"><a href="{{ sort_url('color', color_dir) }}">Color ID</a></th>
-        <th style="width:220px;"><a href="{{ sort_url('location', location_dir) }}">Location</a></th>
-        <th class="text-center" style="width:120px;"><a href="{{ sort_url('requested', requested_dir) }}">Requested</a></th>
-        <th class="text-center" style="width:110px;"><a href="{{ sort_url('missing', missing_dir) }}">Missing</a></th>
-        <th style="width:120px;"><a href="{{ sort_url('status', status_dir) }}">Status</a></th>
-        <th style="width:240px;"><a href="{{ sort_url('order', order_dir) }}">Order</a></th>
-        <th style="width:260px;">Actions</th>
+        <th class="wl-col-card"><a href="{{ sort_url('name', name_dir) }}">Card</a></th>
+        <th class="text-center wl-col-color"><a href="{{ sort_url('color', color_dir) }}">Color ID</a></th>
+        <th class="wl-col-location"><a href="{{ sort_url('location', location_dir) }}">Location</a></th>
+        <th class="text-center wl-col-requested"><a href="{{ sort_url('requested', requested_dir) }}">Requested</a></th>
+        <th class="text-center wl-col-missing"><a href="{{ sort_url('missing', missing_dir) }}">Missing</a></th>
+        <th class="wl-col-status"><a href="{{ sort_url('status', status_dir) }}">Status</a></th>
+        <th class="wl-col-order"><a href="{{ sort_url('order', order_dir) }}">Order</a></th>
+        <th class="wl-col-actions">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -252,9 +266,9 @@
                 hx-boost="false">
             <input type="number"
                    name="requested_qty"
-                   class="form-control form-control-sm text-center"
+                   class="form-control form-control-sm text-center wl-requested-input"
                    value="{{ it.requested_qty or 0 }}"
-                   min="0" style="max-width:80px;">
+                   min="0">
             <button type="submit" class="btn btn-primary btn-sm">Save</button>
           </form>
         </td>
@@ -331,10 +345,9 @@
                 hx-boost="false">
             <input type="text"
                    name="order_ref"
-                   class="form-control form-control-sm"
+                   class="form-control form-control-sm wl-order-input"
                    placeholder="Order # or URL"
-                   value="{{ order_ref }}"
-                   style="min-width: 160px; max-width: 260px;">
+                   value="{{ order_ref }}">
             <button type="submit" class="btn btn-outline-primary btn-sm">Save</button>
           </form>
         </td>
@@ -569,7 +582,7 @@
 
 </div>
 
-<style>
+<style nonce="{{ csp_nonce() }}">
   #wl-filters .nav-link { cursor: pointer; }
 
   .wl-row-actions { max-width: 100%; }
@@ -617,7 +630,7 @@
       const statusOk = (mode === 'all') || (status === mode);
       const searchOk = !q || name.includes(q);
       const visible = statusOk && searchOk;
-      tr.style.display = visible ? '' : 'none';
+      tr.classList.toggle('d-none', !visible);
       if (!visible) {
         const cb = tr.querySelector('.wl-select');
         if (cb && cb.checked) {

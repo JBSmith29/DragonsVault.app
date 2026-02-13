@@ -3,7 +3,7 @@
 {% set page_title = "Edit Commander Game" if is_edit else "Log Commander Game" %}
 {% block title %}{{ page_title }}{% endblock %}
 {% block content %}
-<style>
+<style nonce="{{ csp_nonce() }}">
   .seat-card { border: 1px solid var(--bs-border-color); border-radius: 0.8rem; padding: 1rem; background: rgba(255,255,255,0.02); }
   .seat-card[data-hidden="true"] { display: none; }
   .seat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }

@@ -43,7 +43,7 @@
   {% set back_to = request.full_path %}
   {% if back_to and back_to.endswith('?') %}{% set back_to = back_to[:-1] %}{% endif %}
 
-  <style>
+  <style nonce="{{ csp_nonce() }}">
     .calc-card-grid .calc-card {
       display: flex;
       align-items: center;

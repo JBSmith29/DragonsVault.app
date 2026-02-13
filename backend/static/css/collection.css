@@ -1,0 +1,70 @@
+/* Header chips */
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  background: var(--bs-secondary-bg);
+}
+
+/* Type Breakdown tiles */
+.type-tile {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.95rem;
+  min-height: 96px;
+  padding: 1rem 1.1rem;
+}
+
+.type-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.type-icon-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 72px;
+}
+
+.type-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  color: var(--bs-primary);
+}
+
+.type-icon i {
+  font-size: 1.25rem;
+}
+
+.type-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.type-name {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.type-count.badge {
+  font-weight: 700;
+}

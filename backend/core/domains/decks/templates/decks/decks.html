@@ -3,7 +3,7 @@
 {% block content %}
 
 {# Table-specific tweaks for the decks overview page #}
-<style>
+<style nonce="{{ csp_nonce() }}">
   .col-ci-pips { width:170px; min-width:170px; white-space:nowrap; }
 
   .deck-bracket { display:inline-flex; align-items:center; gap:.2rem; white-space:nowrap; }
@@ -185,6 +185,9 @@
   }
   .modal.tag-picker-modal .tag-option.active {
     box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.35);
+  }
+  .modal.tag-picker-modal .deck-tag-filter-input {
+    max-width: 220px;
   }
   .type-pill {
     cursor: pointer;

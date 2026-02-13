@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container py-4">
+  <style nonce="{{ csp_nonce() }}">
+    .manual-import-col-printing { width: 260px; }
+    .manual-import-col-finish { width: 140px; }
+    .manual-import-col-folder { width: 220px; }
+  </style>
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
       <h1 class="mb-1">Manual Import Wizard</h1>
@@ -150,9 +155,9 @@
               <thead>
                 <tr>
                   <th>Card</th>
-                  <th style="width: 260px;">Printing</th>
-                  <th style="width: 140px;">Finish</th>
-                  <th style="width: 220px;">Folder</th>
+                  <th class="manual-import-col-printing">Printing</th>
+                  <th class="manual-import-col-finish">Finish</th>
+                  <th class="manual-import-col-folder">Folder</th>
                 </tr>
               </thead>
               <tbody>

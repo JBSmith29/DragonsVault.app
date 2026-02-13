@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Game {{ game.id }}{% endblock %}
 {% block content %}
-<style>
+<style nonce="{{ csp_nonce() }}">
   .detail-card { border: 1px solid var(--bs-border-color); border-radius: 0.85rem; padding: 1rem 1.1rem; background: rgba(255,255,255,0.02); }
   .seat-row { border: 1px solid var(--bs-border-color); border-radius: 0.7rem; padding: 0.8rem; margin-bottom: 0.75rem; background: rgba(255,255,255,0.02); }
   .seat-row:last-child { margin-bottom: 0; }

@@ -167,7 +167,7 @@ def _configure_login_manager(app: Flask) -> None:
     login_manager.init_app(app)
     login_manager.login_view = "views.login"
     login_manager.login_message_category = "warning"
-    login_manager.session_protection = "strong"
+    login_manager.session_protection = app.config.get("SESSION_PROTECTION", "basic")
 
     def _extract_token(req):
         auth_header = req.headers.get("Authorization", "")
@@ -777,7 +777,7 @@ def create_app():
         Talisman(
             app,
             content_security_policy=csp,
-            content_security_policy_nonce_in=["script-src"],
+            content_security_policy_nonce_in=["script-src", "style-src"],
             force_https=app.config.get("TALISMAN_FORCE_HTTPS", not app.debug),
             session_cookie_secure=app.config.get("SESSION_COOKIE_SECURE", True),
             session_cookie_samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),

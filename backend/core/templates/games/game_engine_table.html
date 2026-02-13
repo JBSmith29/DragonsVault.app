@@ -1,0 +1,968 @@
+{% extends "base.html" %}
+{% block title %}Game Table - DragonsVault{% endblock %}
+
+{% block content %}
+<style nonce="{{ csp_nonce() }}">
+  .table-shell {
+    position: relative;
+    isolation: isolate;
+  }
+  .table-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 1.75rem;
+    background:
+      radial-gradient(circle at 10% 15%, rgba(56, 189, 248, 0.18), transparent 45%),
+      radial-gradient(circle at 85% 5%, rgba(248, 113, 113, 0.18), transparent 40%),
+      radial-gradient(circle at 65% 90%, rgba(34, 197, 94, 0.14), transparent 45%);
+    opacity: 0.9;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .table-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 1.75rem;
+    background:
+      linear-gradient(120deg, rgba(15, 23, 42, 0.45), transparent 55%),
+      repeating-linear-gradient(
+        120deg,
+        rgba(148, 163, 184, 0.06),
+        rgba(148, 163, 184, 0.06) 1px,
+        transparent 1px,
+        transparent 12px
+      );
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .table-hero {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.75rem 2rem;
+    border-radius: 1.5rem;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.88));
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 20px 55px rgba(15, 23, 42, 0.45);
+    margin-bottom: 1.75rem;
+    overflow: hidden;
+  }
+  .table-kicker {
+    font-size: 0.7rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.6);
+    margin-bottom: 0.4rem;
+  }
+  .table-hero h1 {
+    font-family: 'Beleren', serif;
+    font-size: clamp(1.8rem, 2.5vw, 2.4rem);
+    margin: 0 0 0.4rem;
+  }
+  .table-hero p {
+    margin: 0;
+    color: rgba(226, 232, 240, 0.72);
+    font-size: 0.95rem;
+  }
+  .table-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .table-stage {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 2.8fr) minmax(0, 1.3fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .table-main {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .table-surface,
+  .table-panel {
+    background: rgba(15, 23, 42, 0.86);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 1.25rem;
+    padding: 1.15rem 1.25rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.35);
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(6px);
+  }
+  .table-surface.is-active-focus {
+    border-color: rgba(56, 189, 248, 0.65);
+    box-shadow: 0 22px 45px rgba(14, 116, 144, 0.3);
+  }
+  .table-surface.is-manual-focus {
+    border-color: rgba(249, 115, 22, 0.65);
+    box-shadow: 0 22px 45px rgba(249, 115, 22, 0.24);
+  }
+  .table-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(148, 163, 184, 0.08), transparent 45%);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .table-surface.engine-missing {
+    border-style: dashed;
+  }
+  .engine-missing-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .engine-missing-actions .form-control {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: rgba(226, 232, 240, 0.9);
+    border-radius: 0.75rem;
+  }
+  @media (max-width: 720px) {
+    .engine-missing-actions {
+      grid-template-columns: 1fr;
+    }
+  }
+  .surface-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .surface-header h2,
+  .table-panel h2 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: rgba(226, 232, 240, 0.7);
+    margin: 0;
+  }
+  .shortcut-hint {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.5);
+  }
+  .surface-meta {
+    font-size: 0.75rem;
+    color: rgba(148, 163, 184, 0.7);
+  }
+  .table-section {
+    margin-bottom: 1.1rem;
+  }
+  .table-section:last-child {
+    margin-bottom: 0;
+  }
+  .status-banner {
+    border-radius: 0.8rem;
+    padding: 0.65rem 0.75rem;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-left: 3px solid rgba(148, 163, 184, 0.6);
+    font-size: 0.85rem;
+  }
+  .status-banner.text-danger {
+    color: #fecaca;
+    border-left-color: rgba(248, 113, 113, 0.8);
+  }
+  .status-banner.text-success {
+    color: #d1fae5;
+    border-left-color: rgba(34, 197, 94, 0.8);
+  }
+  .status-banner.text-warning {
+    color: #fef3c7;
+    border-left-color: rgba(251, 191, 36, 0.85);
+  }
+  .status-banner.text-muted {
+    color: rgba(226, 232, 240, 0.7);
+  }
+  .turn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    background: rgba(15, 23, 42, 0.7);
+  }
+  .turn-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+  }
+  .turn-badge {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: rgba(226, 232, 240, 0.75);
+    background: rgba(15, 23, 42, 0.6);
+  }
+  .turn-badge.is-active {
+    border-color: rgba(56, 189, 248, 0.7);
+    color: rgba(186, 230, 253, 0.95);
+  }
+  .turn-badge.is-priority {
+    border-color: rgba(34, 197, 94, 0.7);
+    color: rgba(187, 247, 208, 0.95);
+  }
+  .turn-pulse .turn-pill {
+    animation: turnPulse 0.6s ease;
+  }
+  @keyframes turnPulse {
+    0% {
+      transform: translateY(-2px);
+      box-shadow: 0 0 0 rgba(56, 189, 248, 0.0);
+    }
+    50% {
+      transform: translateY(0);
+      box-shadow: 0 10px 22px rgba(56, 189, 248, 0.35);
+    }
+    100% {
+      transform: translateY(0);
+      box-shadow: 0 0 0 rgba(56, 189, 248, 0.0);
+    }
+  }
+  .opponent-row {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(190px, 1fr);
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+  }
+  .opponent-card {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 1rem;
+    padding: 0.75rem;
+    min-height: 90px;
+    display: grid;
+    gap: 0.35rem;
+    cursor: pointer;
+  }
+  .opponent-card.is-active {
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 12px 24px rgba(56, 189, 248, 0.2);
+  }
+  .opponent-card.is-priority {
+    border-color: rgba(34, 197, 94, 0.65);
+  }
+  .opponent-card.is-viewing {
+    border-color: rgba(249, 115, 22, 0.65);
+    box-shadow: 0 12px 24px rgba(249, 115, 22, 0.2);
+  }
+  .opponent-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .opponent-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .turn-tag {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: rgba(226, 232, 240, 0.75);
+    background: rgba(15, 23, 42, 0.7);
+  }
+  .turn-tag.is-active {
+    border-color: rgba(56, 189, 248, 0.7);
+    color: rgba(186, 230, 253, 0.95);
+  }
+  .turn-tag.is-priority {
+    border-color: rgba(34, 197, 94, 0.7);
+    color: rgba(187, 247, 208, 0.95);
+  }
+  .turn-tag.is-viewing {
+    border-color: rgba(249, 115, 22, 0.7);
+    color: rgba(254, 215, 170, 0.95);
+  }
+  .board-focus {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .board-focus .focus-pill {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: rgba(226, 232, 240, 0.75);
+    background: rgba(15, 23, 42, 0.6);
+  }
+  .selection-pill {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    color: rgba(226, 232, 240, 0.7);
+    background: rgba(15, 23, 42, 0.45);
+  }
+  .selection-pill.is-empty {
+    opacity: 0.7;
+  }
+  .opponent-head strong {
+    font-size: 0.9rem;
+  }
+  .seat-pill {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: rgba(226, 232, 240, 0.7);
+  }
+  .battlefield-zone {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+    min-height: 240px;
+    align-content: start;
+    padding: 0.4rem 0.1rem 0;
+    overflow: visible;
+  }
+  .hand-zone {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(170px, 1fr);
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.4rem;
+  }
+  .zone-strip {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .zone-chip {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+  }
+  .table-card {
+    background: linear-gradient(160deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.9));
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.9rem;
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    color: #e2e8f0;
+    display: grid;
+    gap: 0.35rem;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+  }
+  .table-card.has-art {
+    padding: 0;
+    overflow: hidden;
+    min-height: 215px;
+    background: rgba(15, 23, 42, 0.9);
+  }
+  .table-card .card-art {
+    width: 100%;
+    aspect-ratio: 63 / 88;
+    object-fit: cover;
+    display: block;
+  }
+  .table-card .card-overlay {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 0.5rem 0.6rem 0.6rem;
+    background: linear-gradient(
+      to top,
+      rgba(15, 23, 42, 0.9),
+      rgba(15, 23, 42, 0.2) 70%,
+      transparent
+    );
+    display: grid;
+    gap: 0.2rem;
+  }
+  .table-card:hover {
+    border-color: rgba(56, 189, 248, 0.65);
+    box-shadow: 0 14px 24px rgba(14, 116, 144, 0.25);
+    transform: translateY(-2px);
+  }
+  .table-card.is-selected {
+    border-color: rgba(34, 197, 94, 0.75);
+    box-shadow: 0 16px 26px rgba(34, 197, 94, 0.28);
+  }
+  .table-card.is-tapped {
+    opacity: 0.75;
+  }
+  .table-card.is-commander {
+    border-color: rgba(251, 191, 36, 0.8);
+    box-shadow: 0 18px 28px rgba(251, 191, 36, 0.22);
+  }
+  .commander-flag {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    z-index: 2;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid rgba(251, 191, 36, 0.7);
+    color: rgba(254, 243, 199, 0.95);
+    background: rgba(120, 53, 15, 0.6);
+  }
+  .card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .card-cost {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: rgba(226, 232, 240, 0.8);
+    white-space: nowrap;
+  }
+  .card-type {
+    color: rgba(226, 232, 240, 0.7);
+    font-size: 0.75rem;
+  }
+  .card-meta {
+    font-size: 0.72rem;
+    color: rgba(148, 163, 184, 0.9);
+  }
+  .card-status {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(251, 191, 36, 0.85);
+  }
+  .seat-summary {
+    display: grid;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+  }
+  .seat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.5rem;
+  }
+  .seat-stat {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.45rem 0.6rem;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .seat-stat.is-wide {
+    grid-column: 1 / -1;
+  }
+  .seat-stat span {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(226, 232, 240, 0.6);
+  }
+  .seat-stat strong {
+    font-size: 1rem;
+  }
+  .card-detail {
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.9rem;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.4rem;
+    min-height: 140px;
+  }
+  .card-detail__name {
+    font-family: 'Beleren', serif;
+    font-size: 1rem;
+  }
+  .card-detail__type {
+    font-size: 0.8rem;
+    color: rgba(226, 232, 240, 0.7);
+  }
+  .card-detail__text {
+    font-size: 0.82rem;
+    color: rgba(226, 232, 240, 0.8);
+    white-space: pre-wrap;
+  }
+  .card-detail__meta {
+    font-size: 0.75rem;
+    color: rgba(148, 163, 184, 0.8);
+  }
+  .action-dock {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .action-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.5rem;
+  }
+  .log-list {
+    max-height: 220px;
+    overflow-y: auto;
+    display: grid;
+    gap: 0.5rem;
+    scroll-behavior: smooth;
+  }
+  .log-badge {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.55);
+    color: rgba(191, 219, 254, 0.95);
+    background: rgba(30, 64, 175, 0.35);
+    display: none;
+  }
+  .log-badge.is-visible {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .log-filter {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+  }
+  .log-item {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.82rem;
+    color: rgba(226, 232, 240, 0.75);
+  }
+  .choice-panel {
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.9rem;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.65rem;
+  }
+  .choice-options {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .choice-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .combat-panel {
+    display: grid;
+    gap: 0.65rem;
+  }
+  .life-board {
+    display: grid;
+    gap: 0.7rem;
+  }
+  .life-toolbar {
+    display: grid;
+    gap: 0.35rem;
+    margin-bottom: 0.65rem;
+  }
+  .life-toolbar label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(226, 232, 240, 0.6);
+  }
+  .life-toolbar .form-select {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: rgba(226, 232, 240, 0.9);
+    border-radius: 0.7rem;
+  }
+  .life-toolbar .form-text {
+    font-size: 0.7rem;
+    color: rgba(226, 232, 240, 0.6);
+  }
+  .life-row {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.85rem;
+    padding: 0.6rem 0.7rem;
+    display: grid;
+    gap: 0.45rem;
+    cursor: pointer;
+  }
+  .life-row.is-active {
+    border-color: rgba(56, 189, 248, 0.55);
+  }
+  .life-row.is-priority {
+    border-color: rgba(34, 197, 94, 0.6);
+  }
+  .life-row.is-viewing {
+    border-color: rgba(249, 115, 22, 0.6);
+    box-shadow: 0 12px 24px rgba(249, 115, 22, 0.18);
+  }
+  .life-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .life-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .life-total {
+    font-size: 1.35rem;
+    font-weight: 700;
+  }
+  .life-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .life-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .life-set {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  .life-set .form-control {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: rgba(226, 232, 240, 0.9);
+    border-radius: 0.65rem;
+  }
+  .life-commander {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .life-commander-summary {
+    font-size: 0.75rem;
+    color: rgba(226, 232, 240, 0.7);
+  }
+  .life-commander-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .commander-chip {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: rgba(226, 232, 240, 0.75);
+    background: rgba(15, 23, 42, 0.6);
+  }
+  .commander-chip strong {
+    margin-left: 0.25rem;
+    font-size: 0.75rem;
+  }
+  .life-commander-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .life-commander-source {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(148, 163, 184, 0.9);
+  }
+  .life-commander-controls .btn {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.7rem;
+  }
+  .blocker-group {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.65rem;
+    display: grid;
+    gap: 0.4rem;
+  }
+  @media (max-width: 1200px) {
+    .table-stage {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 900px) {
+    .table-hero {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+  @media (max-width: 720px) {
+    .hand-zone {
+      grid-auto-columns: minmax(140px, 1fr);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .table-card {
+      transition: none;
+    }
+    .turn-pulse .turn-pill {
+      animation: none;
+    }
+    .log-list {
+      scroll-behavior: auto;
+    }
+  }
+</style>
+
+<div
+  id="gameEngineTable"
+  class="container-fluid py-4 table-shell"
+  data-game-id="{{ game_id or '' }}"
+  data-user-id="{{ current_user.id }}"
+  data-engine-enabled="{{ 'true' if engine_enabled else 'false' }}"
+  data-game-url="{{ url_for('views.api_game_engine_get', game_id='__GAME__') }}"
+  data-actions-url="{{ url_for('views.api_game_engine_action', game_id='__GAME__') }}"
+  data-events-url="{{ url_for('views.api_game_engine_events', game_id='__GAME__') }}"
+  data-images-url="{{ url_for('views.api_game_engine_card_images') }}"
+>
+  <div class="table-hero">
+    <div>
+      <div class="table-kicker">Game Table</div>
+      <h1>Battlefield Control</h1>
+      <p id="engineTableSubtitle">Choose a lobby to begin. Your table updates in real time.</p>
+    </div>
+    <div class="table-hero-actions">
+      <a class="btn btn-outline-light" href="{{ url_for('views.game_engine') }}">Back to Lobby</a>
+      <button class="btn btn-primary" type="button" id="engineTableRefresh">Refresh Table</button>
+    </div>
+  </div>
+
+  {% if not game_id %}
+    <div class="alert alert-warning">No lobby ID provided. Go back to the lobby and open a table.</div>
+    <div class="table-surface engine-missing" id="engineMissingCard">
+      <div class="surface-header">
+        <div>
+          <h2>Open a Lobby</h2>
+          <div class="surface-meta">Paste a lobby ID or use the most recent lobby.</div>
+        </div>
+      </div>
+      <div class="engine-missing-actions">
+        <input class="form-control" type="text" id="engineMissingGameId" placeholder="Enter lobby ID">
+        <button class="btn btn-outline-primary" type="button" id="engineMissingOpenBtn">Open Table</button>
+        <button class="btn btn-outline-secondary" type="button" id="engineMissingUseLastBtn">Use Last Lobby</button>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="table-stage">
+    <section class="table-main">
+      <div class="table-surface">
+        <div class="surface-header">
+          <h2>Opponents</h2>
+          <div class="surface-meta">Seats, life, commander damage, and hand sizes.</div>
+        </div>
+        <div class="opponent-row" id="engineOpponents"></div>
+      </div>
+
+      <div class="table-surface">
+        <div class="surface-header">
+          <div>
+            <h2>Battlefield</h2>
+            <div class="surface-meta">Select attackers and blockers. Click an opponent to view their battlefield.</div>
+          </div>
+          <div class="board-focus">
+            <span class="focus-pill" id="engineBattlefieldFocus">Showing: You</span>
+            <span class="selection-pill is-empty" id="engineSelectionCount">Selected: 0</span>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="engineBoardFollowBtn">Follow Turn</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="engineBoardMineBtn">My Board</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="engineBoardActiveBtn">Active Board</button>
+          </div>
+        </div>
+        <div class="battlefield-zone" id="engineBattlefield"></div>
+      </div>
+
+      <div class="table-surface">
+        <div class="surface-header">
+          <h2>Your Hand</h2>
+          <div class="surface-meta">Click a card to cast or play.</div>
+        </div>
+        <div class="hand-zone" id="engineHand"></div>
+      </div>
+
+      <div class="table-surface">
+        <div class="surface-header">
+          <h2>Zones</h2>
+          <div class="surface-meta">Library, graveyard, exile, command.</div>
+        </div>
+        <div class="zone-strip" id="engineZones"></div>
+      </div>
+    </section>
+
+    <aside class="table-aside">
+      <div class="table-panel">
+        <div class="table-section">
+          <h2>Turn & Priority</h2>
+          <div class="d-flex flex-wrap gap-2" id="engineTurnPills"></div>
+          <div class="mt-2" id="engineTurnMeta"></div>
+          <div class="mt-2" id="engineLastEvent"></div>
+          <div class="mt-3 shortcut-hint">Shortcuts: F follow, M mine, A active, C clear, Esc clear</div>
+        </div>
+        <div class="table-section">
+          <div class="status-banner text-muted" id="engineStatus">Waiting for game data.</div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="table-section">
+          <h2>Your Seat</h2>
+          <div class="seat-summary" id="enginePlayerSummary"></div>
+        </div>
+        <div class="table-section">
+          <h2>Selected Card</h2>
+          <div class="card-detail" id="engineCardDetail">
+            <div class="card-detail__name" id="engineCardDetailName">Select a card</div>
+            <div class="card-detail__type" id="engineCardDetailType"></div>
+            <div class="card-detail__text" id="engineCardDetailText"></div>
+            <div class="card-detail__meta" id="engineCardDetailMeta"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="table-section">
+          <h2>Life & Commander</h2>
+          <div class="life-toolbar">
+            <label for="engineCommanderSource">Commander Source</label>
+            <select class="form-select form-select-sm" id="engineCommanderSource"></select>
+            <div class="form-text">Use +/- to adjust commander damage from the selected source.</div>
+          </div>
+          <div class="life-board" id="engineLifeBoard"></div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="table-section">
+          <h2>Actions</h2>
+          <div class="action-dock">
+            <div class="action-row">
+              <button class="btn btn-outline-secondary" type="button" id="engineDrawBtn">Draw</button>
+              <button class="btn btn-outline-secondary" type="button" id="enginePassBtn">Pass Priority</button>
+              <button class="btn btn-outline-secondary" type="button" id="engineResolveBtn">Resolve Stack</button>
+              <button class="btn btn-outline-secondary" type="button" id="engineClearSelectionBtn">Clear Selection</button>
+            </div>
+            <div class="action-row">
+              <button class="btn btn-outline-primary" type="button" id="enginePlayLandBtn">Play Land</button>
+              <button class="btn btn-outline-primary" type="button" id="engineCastSpellBtn">Cast Spell</button>
+              <button class="btn btn-outline-primary" type="button" id="engineCommanderBtn">Toggle Commander</button>
+              <button class="btn btn-outline-success" type="button" id="engineStartBtn">Start Game</button>
+            </div>
+            <div class="action-row">
+              <button class="btn btn-outline-warning" type="button" id="engineMulliganBtn">Mulligan</button>
+              <button class="btn btn-outline-warning" type="button" id="engineKeepBtn">Keep Hand</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-section">
+          <h2>Combat</h2>
+          <div class="combat-panel">
+            <label class="form-label" for="engineDefenderSelect">Defender</label>
+            <select class="form-select" id="engineDefenderSelect">
+              <option value="">Select defender</option>
+            </select>
+            <button class="btn btn-outline-primary" type="button" id="engineDeclareAttackersBtn">Declare Attackers</button>
+            <button class="btn btn-outline-primary" type="button" id="engineDeclareBlockersBtn">Declare Blockers</button>
+            <button class="btn btn-outline-primary" type="button" id="engineCombatDamageBtn">Resolve Combat Damage</button>
+            <div id="engineBlockerAssignments"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="table-section">
+          <h2>Stack</h2>
+          <div class="log-list" id="engineStack"></div>
+        </div>
+
+        <div class="table-section">
+          <h2>Choices</h2>
+          <div id="engineChoices"></div>
+        </div>
+
+        <div class="table-section">
+          <div class="d-flex align-items-center justify-content-between">
+            <h2>Events</h2>
+            <div class="log-toolbar">
+              <select class="log-filter" id="engineEventsFilter">
+                <option value="all">All</option>
+                <option value="combat">Combat</option>
+                <option value="life">Life</option>
+                <option value="commander">Commander</option>
+                <option value="game">Game</option>
+                <option value="choices">Choices</option>
+                <option value="other">Other</option>
+              </select>
+              <span class="log-badge" id="engineEventsBadge">New events</span>
+            </div>
+          </div>
+          <div class="log-list" id="engineEvents"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

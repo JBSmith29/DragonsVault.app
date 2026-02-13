@@ -2403,6 +2403,12 @@ def dashboard():
             icon="bi bi-file-earmark-arrow-up",
         ),
         DashboardActionVM(
+            label="Dragonshield",
+            href="https://mtg.dragonshield.com",
+            icon="bi bi-shield",
+            external=True,
+        ),
+        DashboardActionVM(
             label="Wishlist",
             href=url_for("views.wishlist"),
             icon="bi bi-heart",
@@ -6286,7 +6292,7 @@ def opening_hand_search():
     names = criteria.get("names") or []
     names_lower = {str(name).strip().lower() for name in names if name}
 
-    if kind not in {"basic_land"}:
+    if kind not in {"basic_land", "land"}:
         return jsonify({"ok": False, "error": "Unsupported search request."}), 400
 
     deck = state.get("deck") or []
@@ -6313,7 +6319,9 @@ def opening_hand_search():
         type_line = (entry.get("type_line") or "").lower()
         if names_lower:
             return name in names_lower
-        return "basic land" in type_line or name in basic_land_names
+        if kind == "basic_land":
+            return "basic land" in type_line or name in basic_land_names
+        return "land" in type_line
 
     placeholder = static_url("img/card-placeholder.svg")
 
@@ -6404,6 +6412,72 @@ def opening_hand_peek():
             "remaining": remaining,
             "deck_name": deck_name,
             "state": token,
+        }
+    )
+
+
+def opening_hand_hideaway():
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("state") or ""
+    try:
+        count = int(payload.get("count") or 4)
+    except (TypeError, ValueError):
+        count = 4
+    count = max(1, min(count, 20))
+    pick_uid = (payload.get("pick_uid") or "").strip() or None
+    pick_index = payload.get("pick_index")
+
+    state = _decode_state(token)
+    if not state:
+        return jsonify({"ok": False, "error": "Invalid or expired hand state."}), 400
+
+    deck = state["deck"]
+    index = state["index"]
+    deck_name = state["deck_name"]
+    remaining = len(deck) - index
+    if remaining <= 0:
+        return jsonify({"ok": False, "error": "No cards left in the deck."}), 400
+
+    count = min(count, remaining)
+    top_cards = deck[index:index + count]
+    selected_idx = None
+    if pick_uid:
+        for idx, entry in enumerate(top_cards):
+            if entry.get("uid") == pick_uid:
+                selected_idx = idx
+                break
+    if selected_idx is None and pick_index is not None:
+        try:
+            idx = int(pick_index)
+        except (TypeError, ValueError):
+            idx = None
+        if idx is not None and 0 <= idx < len(top_cards):
+            selected_idx = idx
+
+    if selected_idx is None:
+        return jsonify({"ok": False, "error": "Choose a card to hide away."}), 400
+
+    chosen = top_cards[selected_idx]
+    remainder = [entry for idx, entry in enumerate(top_cards) if idx != selected_idx]
+    random.shuffle(remainder)
+
+    new_deck = deck[:index] + deck[index + count:]
+    new_deck.extend(remainder)
+    state["deck"] = new_deck
+    new_token = _encode_state(state)
+    remaining = len(new_deck) - index
+
+    placeholder = static_url("img/card-placeholder.svg")
+    chosen_payload = _client_card_payload(chosen, placeholder)
+
+    return jsonify(
+        {
+            "ok": True,
+            "state": new_token,
+            "remaining": remaining,
+            "deck_name": deck_name,
+            "hidden": chosen_payload,
+            "bottom": len(remainder),
         }
     )
 
@@ -7015,6 +7089,7 @@ __all__ = [
     "opening_hand_draw",
     "opening_hand_search",
     "opening_hand_peek",
+    "opening_hand_hideaway",
     "opening_hand_scry",
     "opening_hand_surveil",
     "opening_hand_token_search",

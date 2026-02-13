@@ -42,7 +42,7 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
   </div>
 
-  <style>
+  <style nonce="{{ csp_nonce() }}">
     .folder-export-grid {
       display: grid;
       gap: 0.75rem;
@@ -114,6 +114,9 @@
         background: rgba(25, 135, 84, 0.08);
       }
     }
+    .import-progress-bar-initial { width: 0%; }
+    .folder-category-col { width: 260px; }
+    .folder-proxy-col { width: 100px; }
   </style>
 
   <div class="row g-4">
@@ -208,7 +211,7 @@
               <span class="small fw-semibold" id="importProgressLabel">Working</span>
             </div>
             <div class="progress progress-striped" role="progressbar" aria-label="Import progress" aria-valuemin="0" aria-valuemax="100">
-              <div class="progress-bar progress-bar-striped progress-bar-animated" id="importProgressBar" style="width: 0%;" aria-valuenow="0"></div>
+              <div class="progress-bar progress-bar-striped progress-bar-animated import-progress-bar-initial" id="importProgressBar" aria-valuenow="0"></div>
             </div>
             <div class="small text-muted mt-1">This may take a minute for larger binders. Please keep this tab open.</div>
             <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
@@ -452,8 +455,8 @@
             <thead>
               <tr>
                 <th>Name</th>
-                <th style="width:260px;">Category</th>
-                <th class="text-center" style="width:100px;">Proxy</th>
+                <th class="folder-category-col">Category</th>
+                <th class="text-center folder-proxy-col">Proxy</th>
               </tr>
             </thead>
             <tbody>

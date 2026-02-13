@@ -2,7 +2,14 @@
 {% block title %}Magic Rules - DragonsVault{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div
+  id="rulesApp"
+  class="container py-4"
+  data-rules-url="{{ url_for('static', filename='docs/' ~ (rules_meta.filename if rules_meta and rules_meta.filename else 'MagicCompRules-2026-01-16.txt')) }}"
+  data-rules-api-url="{{ url_for('views.api_rules_text') }}"
+  data-rules-search-api-url="{{ url_for('views.api_rules_search') }}"
+  data-rules-workbook-api-url="{{ url_for('views.api_rules_workbook') }}"
+>
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>
       <h1 class="h3 mb-1">Magic Comprehensive Rules</h1>
@@ -28,7 +35,7 @@
     <h2>Frequent Rules</h2>
     <div class="rules-card-meta">Quick references for Commander, the layer system, and the stack.</div>
 
-    <details class="rules-section" open>
+    <details class="rules-section">
       <summary class="rules-section-title">
         <span>Commander Quick Rules</span>
         <span class="rules-section-meta">2 groups</span>
@@ -60,7 +67,7 @@
       </div>
     </details>
 
-    <details class="rules-section" open>
+    <details class="rules-section">
       <summary class="rules-section-title">
         <span>Layer System (CR 613)</span>
         <span class="rules-section-meta">7 layers</span>
@@ -86,7 +93,7 @@
       </div>
     </details>
 
-    <details class="rules-section" open>
+    <details class="rules-section">
       <summary class="rules-section-title">
         <span>The Stack (CR 405)</span>
         <span class="rules-section-meta">5 steps</span>
@@ -177,7 +184,7 @@
               {% for section in chapter.sections %}
                 {% set has_notes = section.notes and (section.notes | length) > 0 %}
                 {% set has_rules = section.rules and (section.rules | length) > 0 %}
-                <details class="rules-section" id="{{ section.id }}" {% if loop.first %}open{% endif %}>
+                <details class="rules-section" id="{{ section.id }}">
                   <summary class="rules-section-title">
                     <span>{{ section.title }}</span>
                     <span class="rules-section-meta">{{ section.rule_count or (section.rules | length) }} rule{% if (section.rule_count or (section.rules | length)) != 1 %}s{% endif %}</span>
@@ -217,7 +224,7 @@
   </div>
 </div>
 
-<style>
+<style nonce="{{ csp_nonce() }}">
   .rules-controls {
     display: flex;
     flex-wrap: wrap;
@@ -405,9 +412,24 @@
     font-size: 0.85rem;
     padding: 0.35rem 0.4rem;
     border-radius: 0.4rem;
+    width: 100%;
   }
   .rules-sidebar-body .rules-nav-chapter {
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .rules-sidebar-body .rules-nav-chapter::after {
+    content: '▸';
+    font-size: 0.8rem;
+    opacity: 0.6;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+  }
+  .rules-sidebar-body .rules-nav-chapter[aria-expanded="true"]::after {
+    transform: rotate(90deg);
+    opacity: 0.9;
   }
   .rules-sidebar-body .rules-nav-section {
     padding-left: 1rem;
@@ -428,6 +450,7 @@
     border-radius: 0.9rem;
     padding: 1rem;
     background: rgba(15, 23, 42, 0.5);
+    scroll-margin-top: calc(var(--app-header-h, 96px) + 1.5rem);
   }
   .rules-card.is-hidden {
     display: none;
@@ -447,6 +470,7 @@
     padding: 0.75rem;
     background: rgba(2, 6, 23, 0.5);
     margin-bottom: 0.75rem;
+    scroll-margin-top: calc(var(--app-header-h, 96px) + 1.25rem);
   }
   .rules-section.is-hidden {
     display: none;
@@ -509,6 +533,7 @@
     font-size: 0.85rem;
     cursor: pointer;
     transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+    scroll-margin-top: calc(var(--app-header-h, 96px) + 1.5rem);
   }
   .rule-text {
     font-weight: 500;
@@ -570,899 +595,4 @@
   }
 </style>
 
-<script nonce="{{ csp_nonce() }}">
-(function () {
-  const searchInput = document.getElementById('rulesSearchInput');
-  const searchBtn = document.getElementById('rulesSearchBtn');
-  const clearBtn = document.getElementById('rulesClearBtn');
-  const loadBtn = document.getElementById('rulesLoadBtn');
-  const expandBtn = document.getElementById('rulesExpandAllBtn');
-  const collapseBtn = document.getElementById('rulesCollapseAllBtn');
-  const filterBtn = document.getElementById('rulesFilterToggle');
-  const jumpInput = document.getElementById('rulesJumpInput');
-  const jumpBtn = document.getElementById('rulesJumpBtn');
-  const statusEl = document.getElementById('rulesSearchStatus');
-  const resultsEl = document.getElementById('rulesSearchResults');
-  const navEl = document.getElementById('rulesNav');
-  const workbookEl = document.getElementById('rulesWorkbook');
-  const workbookStatusEl = document.getElementById('rulesWorkbookStatus');
-  let rulesData = [];
-  let ruleMap = new Map();
-  let workbookReady = false;
-  let lastQuery = '';
-  let lastMatches = [];
-
-  const rulesUrl = '{{ url_for('static', filename='docs/' ~ (rules_meta.filename if rules_meta and rules_meta.filename else 'MagicCompRules-2026-01-16.txt')) }}';
-  const rulesApiUrl = '{{ url_for("views.api_rules_text") }}';
-  const rulesWorkbookApiUrl = '{{ url_for("views.api_rules_workbook") }}';
-  const rulesStorageKey = `dv_rules_${(rulesUrl || 'magic_rules').split('/').pop()}`;
-  const rulesStorageMetaKey = `${rulesStorageKey}_meta`;
-  const inlineWorkbookEl = document.getElementById('rulesWorkbookInline');
-  let inlineWorkbookData = null;
-  if (inlineWorkbookEl) {
-    try {
-      inlineWorkbookData = JSON.parse(inlineWorkbookEl.textContent || '[]');
-    } catch (err) {
-      console.error('Failed to parse inline workbook JSON', err);
-      inlineWorkbookData = null;
-    }
-  }
-  const hasInlineWorkbook = Array.isArray(inlineWorkbookData) && inlineWorkbookData.length > 0;
-
-  function slugify(text) {
-    return String(text || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 64) || 'section';
-  }
-
-  function parseRules(text) {
-    const lines = text.replace(/^\ufeff/, '').split(/\r\n|\n|\r/);
-    const chapters = [];
-    let currentChapter = null;
-    let currentSub = null;
-    let introBucket = null;
-    let inContents = false;
-    let contentsEnded = false;
-    let lastRule = null;
-    let inGlossary = false;
-    let inCredits = false;
-    let glossaryCurrent = null;
-
-    const chapterRe = /^(\d+)\.\s+(.+)/;
-    const subRe = /^(\d{3})\.\s+(.+)/;
-    const ruleRe = /^(\d{3}\.\d+[a-z]?)\b/;
-    const glossaryTermRe = /^[A-Za-z0-9"()\\[\\]/:+,&\\-\\s]+$/;
-    const glossaryNumberedRe = /^\d+\./;
-
-    const ensureChapter = (title) => {
-      const existing = chapters.find((chapter) => chapter.title === title);
-      if (existing) {
-        currentChapter = existing;
-        currentSub = null;
-        return existing;
-      }
-      const chapter = {
-        title,
-        id: `chapter-${slugify(title)}`,
-        sections: [],
-      };
-      chapters.push(chapter);
-      currentChapter = chapter;
-      currentSub = null;
-      return chapter;
-    };
-
-    const ensureSub = (title) => {
-      if (!currentChapter) {
-        currentChapter = ensureChapter('Miscellaneous');
-      }
-      const existing = currentChapter.sections.find((section) => section.title === title);
-      if (existing) {
-        currentSub = existing;
-        return existing;
-      }
-      const section = {
-        title,
-        id: `section-${slugify((currentChapter.title || '') + '-' + title)}`,
-        rules: [],
-        notes: [],
-      };
-      currentChapter.sections.push(section);
-      currentSub = section;
-      return section;
-    };
-
-    for (let i = 0; i < lines.length; i += 1) {
-      const raw = lines[i] || '';
-      const line = raw.trim();
-      if (!line) {
-        continue;
-      }
-      if (line === 'Contents') {
-        inContents = true;
-        contentsEnded = false;
-        continue;
-      }
-      if (inContents) {
-        if (line === 'Credits') {
-          contentsEnded = true;
-        }
-        if (contentsEnded && chapterRe.test(line)) {
-          inContents = false;
-        } else if (line === 'Glossary' || line === 'Credits' || chapterRe.test(line)) {
-          continue;
-        } else {
-          continue;
-        }
-      }
-
-      if (line === 'Introduction') {
-        introBucket = ensureChapter('Introduction');
-        ensureSub('Overview');
-        lastRule = null;
-        inGlossary = false;
-        inCredits = false;
-        glossaryCurrent = null;
-        continue;
-      }
-      if (line === 'Glossary') {
-        ensureChapter('Glossary');
-        ensureSub('Glossary');
-        lastRule = null;
-        inGlossary = true;
-        inCredits = false;
-        glossaryCurrent = null;
-        continue;
-      }
-      if (line === 'Credits') {
-        ensureChapter('Credits');
-        ensureSub('Credits');
-        lastRule = null;
-        inGlossary = false;
-        inCredits = true;
-        glossaryCurrent = null;
-        continue;
-      }
-
-      if (inGlossary) {
-        const isTerm = !glossaryNumberedRe.test(line)
-          && !line.endsWith('.')
-          && glossaryTermRe.test(line);
-        if (isTerm) {
-          const existing = currentSub.rules.find((rule) => rule.number === line);
-          if (existing) {
-            glossaryCurrent = existing;
-          } else {
-            glossaryCurrent = {
-              id: `rule-glossary-${slugify(line)}`,
-              number: line,
-              text: line,
-              notes: [],
-              kind: 'glossary',
-            };
-            currentSub.rules.push(glossaryCurrent);
-          }
-        } else {
-          if (!glossaryCurrent) {
-            glossaryCurrent = {
-              id: `rule-glossary-${slugify('entry')}-${currentSub.rules.length + 1}`,
-              number: 'Glossary Entry',
-              text: 'Glossary Entry',
-              notes: [],
-              kind: 'glossary',
-            };
-            currentSub.rules.push(glossaryCurrent);
-          }
-          const lastNote = glossaryCurrent.notes[glossaryCurrent.notes.length - 1];
-          if (line !== lastNote) {
-            glossaryCurrent.notes.push(line);
-          }
-        }
-        continue;
-      }
-
-      if (inCredits) {
-        const lastNote = currentSub.notes[currentSub.notes.length - 1];
-        if (line !== lastNote) {
-          currentSub.notes.push(line);
-        }
-        continue;
-      }
-
-      let match = subRe.exec(line);
-      if (match) {
-        ensureSub(`${match[1]}. ${match[2]}`);
-        lastRule = null;
-        continue;
-      }
-      match = chapterRe.exec(line);
-      if (match) {
-        ensureChapter(`${match[1]}. ${match[2]}`);
-        lastRule = null;
-        continue;
-      }
-      match = ruleRe.exec(line);
-      if (match) {
-        if (!currentSub) {
-          if (!currentChapter) {
-            currentChapter = ensureChapter('Rules');
-          }
-          currentSub = ensureSub('General');
-        }
-        const existingRule = currentSub.rules.find((rule) => rule.number === match[1]);
-        if (existingRule) {
-          lastRule = existingRule;
-          continue;
-        }
-        const rule = {
-          id: `rule-${match[1].replace(/\./g, '-')}`,
-          number: match[1],
-          text: line,
-          notes: [],
-        };
-        currentSub.rules.push(rule);
-        lastRule = rule;
-        continue;
-      }
-
-      if (!currentSub) {
-        if (!currentChapter) {
-          currentChapter = introBucket || ensureChapter('Introduction');
-        }
-        currentSub = ensureSub('Overview');
-      }
-
-      if (currentChapter && line === currentChapter.title) {
-        continue;
-      }
-      if (currentSub && line === currentSub.title) {
-        continue;
-      }
-
-      if (currentSub.rules && currentSub.rules.length) {
-        if (!lastRule) {
-          lastRule = currentSub.rules[currentSub.rules.length - 1];
-        }
-        if (lastRule) {
-          const lastNote = lastRule.notes && lastRule.notes[lastRule.notes.length - 1];
-          if (line !== lastNote) {
-            lastRule.notes.push(line);
-          }
-          continue;
-        }
-      }
-
-      const lastSectionNote = currentSub.notes[currentSub.notes.length - 1];
-      if (line !== lastSectionNote) {
-        currentSub.notes.push(line);
-      }
-    }
-
-    return chapters;
-  }
-
-  function buildRuleMap(chapters) {
-    const map = new Map();
-    chapters.forEach((chapter) => {
-      chapter.sections.forEach((section) => {
-        section.rules.forEach((rule) => {
-          map.set(rule.number, rule);
-        });
-      });
-    });
-    return map;
-  }
-
-  function countChapterRules(chapter) {
-    return chapter.sections.reduce((total, section) => total + (section.rules || []).length, 0);
-  }
-
-  function countTotalRules(chapters) {
-    return chapters.reduce((total, chapter) => total + countChapterRules(chapter), 0);
-  }
-
-  function ensureSectionOpen(ruleEl) {
-    const details = ruleEl ? ruleEl.closest('details') : null;
-    if (details && !details.open) {
-      details.open = true;
-    }
-  }
-
-  function highlightRule(ruleEl, shouldScroll) {
-    if (!ruleEl) return;
-    document.querySelectorAll('.rule-line').forEach((node) => node.classList.remove('highlight'));
-    ruleEl.classList.add('highlight');
-    ensureSectionOpen(ruleEl);
-    if (shouldScroll) {
-      ruleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
-
-  function setActiveNavButton(activeBtn) {
-    if (!navEl || !activeBtn) return;
-    navEl.querySelectorAll('button').forEach((btn) => btn.classList.remove('is-active'));
-    activeBtn.classList.add('is-active');
-  }
-
-  function setChapterExpanded(chapterBtn, expanded) {
-    if (!chapterBtn) return;
-    const group = chapterBtn.closest('.rules-nav-group');
-    if (!group) return;
-    const sectionWrap = group.querySelector('.rules-nav-sections');
-    if (!sectionWrap) return;
-    sectionWrap.hidden = !expanded;
-    chapterBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  }
-
-  function scrollToTargetId(targetId) {
-    if (!targetId) return false;
-    const target = document.getElementById(targetId);
-    if (!target) return false;
-    const findScrollContainer = (node) => {
-      let current = node && node.parentElement ? node.parentElement : null;
-      while (current) {
-        const style = window.getComputedStyle(current);
-        const canScrollY = /auto|scroll/.test(style.overflowY || '');
-        if (canScrollY && current.scrollHeight - current.clientHeight > 2) {
-          return current;
-        }
-        current = current.parentElement;
-      }
-      return document.scrollingElement || document.documentElement;
-    };
-    if (target.tagName && target.tagName.toLowerCase() === 'details') {
-      target.open = true;
-    } else {
-      const details = target.querySelector && target.querySelector('details');
-      if (details && details.tagName.toLowerCase() === 'details') {
-        details.open = true;
-      }
-    }
-    const scroller = findScrollContainer(target);
-    if (scroller && scroller !== document.scrollingElement && scroller !== document.documentElement && scroller.contains(target)) {
-      const scrollerRect = scroller.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const offset = targetRect.top - scrollerRect.top + scroller.scrollTop;
-      scroller.scrollTo({ top: Math.max(0, offset - 12), behavior: 'smooth' });
-    } else {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-    return true;
-  }
-
-  function bindNavButtons() {
-    if (!navEl || navEl.dataset.bound === 'true') return;
-    navEl.dataset.bound = 'true';
-    navEl.addEventListener('click', function (event) {
-      const rawTarget = event.target;
-      const elementTarget = rawTarget instanceof Element ? rawTarget : rawTarget && rawTarget.parentElement;
-      const btn = elementTarget ? elementTarget.closest('button[data-target-id]') : null;
-      if (!btn || !navEl.contains(btn)) return;
-      const targetId = btn.dataset.targetId;
-      if (btn.classList.contains('rules-nav-chapter')) {
-        const expanded = btn.getAttribute('aria-expanded') === 'true';
-        setChapterExpanded(btn, !expanded);
-      } else {
-        const parentId = btn.dataset.parentId;
-        if (parentId) {
-          const parentBtn = navEl.querySelector(`.rules-nav-chapter[data-chapter-id="${parentId}"]`);
-          if (parentBtn) {
-            setChapterExpanded(parentBtn, true);
-          }
-        }
-      }
-      if (!scrollToTargetId(targetId) && !workbookReady) {
-        loadWorkbook().then(() => {
-          const selector = `button[data-target-id="${targetId}"]`;
-          const refreshedBtn = navEl.querySelector(selector);
-          if (refreshedBtn) setActiveNavButton(refreshedBtn);
-          scrollToTargetId(targetId);
-        });
-      } else {
-        setActiveNavButton(btn);
-      }
-    });
-  }
-
-  function renderNav(chapters) {
-    if (!navEl) return;
-    navEl.innerHTML = '';
-    chapters.forEach((chapter, idx) => {
-      const group = document.createElement('div');
-      group.className = 'rules-nav-group';
-      group.dataset.chapterId = chapter.id;
-
-      const chapterBtn = document.createElement('button');
-      chapterBtn.type = 'button';
-      chapterBtn.textContent = chapter.title;
-      chapterBtn.dataset.targetId = chapter.id;
-      chapterBtn.dataset.chapterId = chapter.id;
-      chapterBtn.classList.add('rules-nav-chapter');
-      if (idx === 0) chapterBtn.classList.add('is-active');
-      chapterBtn.setAttribute('aria-expanded', 'false');
-      chapterBtn.setAttribute('aria-controls', `rules-nav-${chapter.id}`);
-
-      const sectionsWrap = document.createElement('div');
-      sectionsWrap.className = 'rules-nav-sections';
-      sectionsWrap.id = `rules-nav-${chapter.id}`;
-      sectionsWrap.hidden = true;
-
-      (chapter.sections || []).forEach((section) => {
-        const sectionBtn = document.createElement('button');
-        sectionBtn.type = 'button';
-        sectionBtn.textContent = section.title;
-        sectionBtn.dataset.targetId = section.id;
-        sectionBtn.dataset.parentId = chapter.id;
-        sectionBtn.classList.add('rules-nav-section');
-        sectionsWrap.appendChild(sectionBtn);
-      });
-
-      group.appendChild(chapterBtn);
-      group.appendChild(sectionsWrap);
-      navEl.appendChild(group);
-    });
-    bindNavButtons();
-  }
-
-  function renderWorkbook(chapters) {
-    if (!workbookEl) return;
-    workbookEl.innerHTML = '';
-    chapters.forEach((chapter) => {
-      const card = document.createElement('section');
-      card.className = 'rules-card';
-      card.id = chapter.id;
-
-      const heading = document.createElement('h2');
-      heading.textContent = chapter.title;
-      card.appendChild(heading);
-
-      const meta = document.createElement('div');
-      meta.className = 'rules-card-meta';
-      const ruleCount = countChapterRules(chapter);
-      meta.textContent = `${chapter.sections.length} section${chapter.sections.length === 1 ? '' : 's'} • ${ruleCount} rule${ruleCount === 1 ? '' : 's'}`;
-      card.appendChild(meta);
-
-      chapter.sections.forEach((section) => {
-        const sectionEl = document.createElement('details');
-        sectionEl.className = 'rules-section';
-        sectionEl.id = section.id;
-        sectionEl.open = section === chapter.sections[0];
-        const title = document.createElement('summary');
-        title.className = 'rules-section-title';
-        const titleText = document.createElement('span');
-        titleText.textContent = section.title;
-        const titleMeta = document.createElement('span');
-        titleMeta.className = 'rules-section-meta';
-        titleMeta.textContent = `${section.rules.length} rule${section.rules.length === 1 ? '' : 's'}`;
-        title.appendChild(titleText);
-        title.appendChild(titleMeta);
-        sectionEl.appendChild(title);
-
-        const body = document.createElement('div');
-        body.className = 'rules-section-body';
-        const hasNotes = section.notes && section.notes.length;
-        const hasRules = section.rules && section.rules.length;
-        if (!hasNotes || !hasRules) {
-          body.classList.add('is-solo');
-        }
-
-        if (hasNotes) {
-          const notesWrap = document.createElement('div');
-          notesWrap.className = 'rules-section-notes';
-          section.notes.forEach((note) => {
-            const noteEl = document.createElement('div');
-            noteEl.className = 'text-muted small mb-2';
-            noteEl.textContent = note;
-            notesWrap.appendChild(noteEl);
-          });
-          body.appendChild(notesWrap);
-        }
-
-        if (hasRules) {
-          const rulesWrap = document.createElement('div');
-          rulesWrap.className = 'rules-section-rules';
-          section.rules.forEach((rule) => {
-            const ruleEl = document.createElement('div');
-            ruleEl.className = 'rule-line';
-            ruleEl.id = rule.id;
-            ruleEl.dataset.ruleNumber = rule.number;
-            ruleEl.tabIndex = 0;
-            const textEl = document.createElement('div');
-            textEl.className = 'rule-text';
-            textEl.textContent = rule.text;
-            ruleEl.appendChild(textEl);
-            if (rule.notes && rule.notes.length) {
-              const notesEl = document.createElement('div');
-              notesEl.className = 'rule-notes';
-              rule.notes.forEach((note) => {
-                const noteEl = document.createElement('div');
-                noteEl.className = 'rule-note';
-                noteEl.textContent = note;
-                notesEl.appendChild(noteEl);
-              });
-              ruleEl.appendChild(notesEl);
-            }
-            rulesWrap.appendChild(ruleEl);
-          });
-          body.appendChild(rulesWrap);
-        }
-
-        sectionEl.appendChild(body);
-        card.appendChild(sectionEl);
-      });
-      workbookEl.appendChild(card);
-    });
-  }
-
-  async function loadWorkbook(forceFetch) {
-    if (workbookReady) {
-      return;
-    }
-    if (workbookStatusEl) {
-      workbookStatusEl.textContent = 'Loading rules workbook...';
-    }
-    try {
-      let sourceLabel = '';
-      if (hasInlineWorkbook) {
-        rulesData = inlineWorkbookData;
-        sourceLabel = 'inline workbook';
-      } else {
-        let text = '';
-        const cached = window.localStorage ? localStorage.getItem(rulesStorageKey) : null;
-        const hasCached = Boolean(cached && cached.length > 1000);
-        if (!forceFetch && hasCached) {
-          text = cached;
-          sourceLabel = 'cache';
-        } else {
-          try {
-            const workbookResp = await fetch(rulesWorkbookApiUrl, { credentials: 'same-origin' });
-            if (workbookResp.ok) {
-              const payload = await workbookResp.json();
-              if (payload && payload.workbook) {
-                rulesData = payload.workbook;
-                sourceLabel = 'server workbook';
-              }
-            }
-          } catch (err) {
-            // ignore
-          }
-          if (!rulesData.length) {
-            try {
-              const apiResp = await fetch(rulesApiUrl, { credentials: 'same-origin' });
-              if (apiResp.ok) {
-                text = await apiResp.text();
-                sourceLabel = 'server';
-              }
-            } catch (err) {
-              text = '';
-            }
-            if (!text) {
-              try {
-                const resp = await fetch(rulesUrl, { credentials: 'same-origin' });
-                if (resp.ok) {
-                  text = await resp.text();
-                  sourceLabel = 'static';
-                }
-              } catch (err) {
-                text = '';
-              }
-            }
-            if (window.localStorage && text) {
-              try {
-                localStorage.setItem(rulesStorageKey, text);
-                localStorage.setItem(rulesStorageMetaKey, String(Date.now()));
-              } catch (err) {
-                // ignore storage issues (quota, privacy mode)
-              }
-            }
-            rulesData = text ? parseRules(text) : [];
-          }
-        }
-      }
-
-      const totalRules = countTotalRules(rulesData);
-      if (!rulesData.length || totalRules === 0) {
-        if (workbookStatusEl) {
-          workbookStatusEl.textContent = 'Rules could not be loaded. Please press Load Rules to try again.';
-        }
-        return;
-      }
-      ruleMap = buildRuleMap(rulesData);
-      renderNav(rulesData);
-      renderWorkbook(rulesData);
-      workbookReady = true;
-      if (loadBtn) {
-        loadBtn.textContent = 'Load Rules';
-      }
-      if (workbookStatusEl) {
-        const sourceNote = sourceLabel ? `Loaded from ${sourceLabel}.` : 'Loaded.';
-        workbookStatusEl.textContent = `${sourceNote} ${totalRules} rules ready. Tip: click any rule to highlight it.`;
-      }
-      if (statusEl) {
-        statusEl.textContent = 'Workbook loaded. Search by rule number or keyword.';
-      }
-    } catch (err) {
-      console.error('Rules workbook error', err);
-      if (workbookStatusEl) {
-        workbookStatusEl.textContent = 'Unable to load the rules workbook.';
-      }
-    }
-  }
-
-  function refreshWorkbook() {
-    if (workbookStatusEl) {
-      workbookStatusEl.textContent = 'Refreshing rules workbook...';
-    }
-    if (window.localStorage) {
-      localStorage.removeItem(rulesStorageKey);
-      localStorage.removeItem(rulesStorageMetaKey);
-    }
-    rulesData = [];
-    ruleMap = new Map();
-    workbookReady = false;
-    loadWorkbook(true);
-  }
-
-  function renderResults(matches) {
-    if (!resultsEl) return;
-    resultsEl.innerHTML = '';
-    if (!matches || !matches.length) {
-      const empty = document.createElement('div');
-      empty.className = 'text-muted small';
-      empty.textContent = 'No matches found.';
-      resultsEl.appendChild(empty);
-      return;
-    }
-    matches.forEach((match) => {
-      const wrap = document.createElement('div');
-      wrap.className = 'rules-result';
-      const line = document.createElement('small');
-      if (match.number) {
-        line.textContent = isRuleNumber(match.number)
-          ? `Rule ${match.number}`
-          : `Glossary — ${match.number}`;
-      } else {
-        line.textContent = 'Match';
-      }
-      const text = document.createElement('div');
-      text.textContent = match.text || '';
-      wrap.appendChild(line);
-      wrap.appendChild(text);
-      wrap.addEventListener('click', function () {
-        if (match.id) {
-          const el = document.getElementById(match.id);
-          if (el) {
-            highlightRule(el, true);
-          }
-        }
-      });
-      resultsEl.appendChild(wrap);
-    });
-  }
-
-  function localSearch(query) {
-    const needle = query.toLowerCase();
-    const results = [];
-    rulesData.forEach((chapter) => {
-      chapter.sections.forEach((section) => {
-        section.rules.forEach((rule) => {
-          const haystack = [rule.text].concat(rule.notes || []).join(' ').toLowerCase();
-          if (haystack.includes(needle) || rule.number.includes(needle)) {
-            results.push(rule);
-          }
-        });
-      });
-    });
-    return results.slice(0, 25);
-  }
-
-  function isRuleNumber(value) {
-    return /^\d{3}\./.test(String(value || '').trim());
-  }
-
-  async function searchRules() {
-    const query = (searchInput && searchInput.value || '').trim();
-    if (!query) {
-      if (statusEl) statusEl.textContent = 'Load the rules, then search by rule number or keyword.';
-      renderResults([]);
-      lastQuery = '';
-      lastMatches = [];
-      if (filterBtn && filterBtn.dataset.active === 'true') {
-        clearFilter();
-      }
-      return;
-    }
-    if (!workbookReady) {
-      await loadWorkbook();
-    }
-    if (statusEl) statusEl.textContent = 'Searching...';
-    const matches = localSearch(query);
-    lastQuery = query;
-    lastMatches = matches;
-    renderResults(matches);
-    if (filterBtn && filterBtn.dataset.active === 'true') {
-      applyFilter(matches);
-    }
-    if (statusEl) {
-      statusEl.textContent = matches.length
-        ? `Showing ${matches.length} match${matches.length === 1 ? '' : 'es'}.`
-        : 'No matches found.';
-    }
-  }
-
-  function clearFilter() {
-    document.querySelectorAll('.rule-line').forEach((node) => node.classList.remove('is-hidden'));
-    document.querySelectorAll('.rules-section').forEach((node) => node.classList.remove('is-hidden'));
-    document.querySelectorAll('.rules-card').forEach((node) => node.classList.remove('is-hidden'));
-  }
-
-  function applyFilter(matches) {
-    if (!matches || !matches.length) {
-      clearFilter();
-      if (workbookStatusEl) {
-        workbookStatusEl.textContent = 'No matches to filter yet. Try a new search.';
-      }
-      return;
-    }
-    const matchIds = new Set(matches.map((match) => match.id));
-    document.querySelectorAll('.rule-line').forEach((node) => {
-      if (!matchIds.has(node.id)) {
-        node.classList.add('is-hidden');
-      } else {
-        node.classList.remove('is-hidden');
-      }
-    });
-    document.querySelectorAll('.rules-section').forEach((node) => {
-      const hasVisible = node.querySelector('.rule-line:not(.is-hidden)');
-      node.classList.toggle('is-hidden', !hasVisible);
-      if (hasVisible && node.tagName.toLowerCase() === 'details') {
-        node.open = true;
-      }
-    });
-    document.querySelectorAll('.rules-card').forEach((node) => {
-      const hasVisible = node.querySelector('.rules-section:not(.is-hidden)');
-      node.classList.toggle('is-hidden', !hasVisible);
-    });
-    if (workbookStatusEl) {
-      workbookStatusEl.textContent = `Filtered to ${matches.length} matching rule${matches.length === 1 ? '' : 's'}.`;
-    }
-  }
-
-  function toggleFilter() {
-    if (!filterBtn) return;
-    const isActive = filterBtn.dataset.active === 'true';
-    if (isActive) {
-      filterBtn.dataset.active = 'false';
-      filterBtn.classList.remove('is-active');
-      filterBtn.textContent = 'Filter Workbook';
-      clearFilter();
-      if (workbookStatusEl) {
-        workbookStatusEl.textContent = 'Tip: click any rule to highlight it.';
-      }
-      return;
-    }
-    filterBtn.dataset.active = 'true';
-    filterBtn.classList.add('is-active');
-    filterBtn.textContent = 'Show All';
-    applyFilter(lastMatches);
-  }
-
-  function jumpToRule() {
-    const query = (jumpInput && jumpInput.value || '').trim();
-    if (!query) return;
-    if (!workbookReady) {
-      loadWorkbook().then(() => jumpToRule());
-      return;
-    }
-    let rule = ruleMap.get(query);
-    if (!rule) {
-      for (const candidate of ruleMap.values()) {
-        if (candidate.number && candidate.number.startsWith(query)) {
-          rule = candidate;
-          break;
-        }
-      }
-    }
-    if (rule && rule.id) {
-      const el = document.getElementById(rule.id);
-      if (el) {
-        highlightRule(el, true);
-      }
-    } else if (statusEl) {
-      statusEl.textContent = `No rule found for ${query}.`;
-    }
-  }
-
-  function setAllSections(open) {
-    document.querySelectorAll('.rules-section').forEach((section) => {
-      if (section.tagName.toLowerCase() === 'details') {
-        section.open = open;
-      }
-    });
-  }
-
-  if (loadBtn) {
-    loadBtn.addEventListener('click', function () {
-      refreshWorkbook();
-    });
-  }
-  if (expandBtn) {
-    expandBtn.addEventListener('click', function () {
-      if (!workbookReady) {
-        loadWorkbook().then(() => setAllSections(true));
-        return;
-      }
-      setAllSections(true);
-    });
-  }
-  if (collapseBtn) {
-    collapseBtn.addEventListener('click', function () {
-      if (!workbookReady) {
-        loadWorkbook().then(() => setAllSections(false));
-        return;
-      }
-      setAllSections(false);
-    });
-  }
-  if (filterBtn) {
-    filterBtn.addEventListener('click', function () {
-      if (!workbookReady) {
-        loadWorkbook().then(() => toggleFilter());
-        return;
-      }
-      toggleFilter();
-    });
-  }
-  if (jumpBtn) jumpBtn.addEventListener('click', jumpToRule);
-  if (jumpInput) {
-    jumpInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        jumpToRule();
-      }
-    });
-  }
-  if (searchBtn) searchBtn.addEventListener('click', searchRules);
-  if (clearBtn) {
-    clearBtn.addEventListener('click', function () {
-      if (searchInput) searchInput.value = '';
-      renderResults([]);
-      if (statusEl) statusEl.textContent = 'Load the rules, then search by rule number or keyword.';
-      document.querySelectorAll('.rule-line').forEach((node) => node.classList.remove('highlight'));
-      if (filterBtn && filterBtn.dataset.active === 'true') {
-        filterBtn.dataset.active = 'false';
-        filterBtn.classList.remove('is-active');
-        filterBtn.textContent = 'Filter Workbook';
-        clearFilter();
-      }
-    });
-  }
-  if (searchInput) {
-    searchInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        searchRules();
-      }
-    });
-  }
-  if (workbookEl) {
-    workbookEl.addEventListener('click', function (event) {
-      const target = event.target.closest('.rule-line');
-      if (!target) return;
-      highlightRule(target, false);
-    });
-    workbookEl.addEventListener('keydown', function (event) {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      const target = event.target.closest('.rule-line');
-      if (!target) return;
-      event.preventDefault();
-      highlightRule(target, false);
-    });
-  }
-  bindNavButtons();
-  loadWorkbook();
-})();
-</script>
 {% endblock %}
