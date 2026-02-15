@@ -4,6 +4,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import re
 import shutil
 import sqlite3
 import uuid
@@ -394,6 +395,29 @@ def _ensure_folder_notes_column():
         logging.getLogger(__name__).warning("Unable to add notes column automatically: %s", exc)
 
 
+
+def _ensure_folder_sleeve_color_column():
+    """Add the sleeve_color column if it is missing."""
+    try:
+        engine = db.engine
+    except Exception:
+        return
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("folder")}
+    except Exception:
+        return
+
+    if "sleeve_color" in columns:
+        return
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE folder ADD COLUMN sleeve_color VARCHAR(64)"))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Unable to add sleeve_color column automatically: %s", exc)
+
+
 def _ensure_folder_sharing_columns():
     """Add sharing-related columns to folder if missing."""
     if not _fallback_enabled():
@@ -709,6 +733,7 @@ def create_app():
         "views.readyz",
         "views.metrics",
         "views.overall_health",
+        "views.gamedashboard",
         "views.terms_of_service",
         "views.privacy_policy",
         "views.accessibility_statement",
@@ -785,8 +810,30 @@ def create_app():
     elif not _talisman_available and app.config.get("ENABLE_TALISMAN", True):
         app.logger.warning("Flask-Talisman not installed; CSP/HSTS disabled.")
 
-    if "csp_nonce" not in app.jinja_env.globals:
-        app.jinja_env.globals["csp_nonce"] = lambda: ""
+    # Reuse the active document nonce for HTMX fragment responses.
+    # Without this, strict nonce-only CSP can block page-specific inline <style>/<script>
+    # after boosted navigation because each request gets a fresh server nonce.
+    nonce_re = re.compile(r"^[A-Za-z0-9+/_=-]{8,200}$")
+    base_csp_nonce = app.jinja_env.globals.get("csp_nonce")
+
+    def csp_nonce_for_templates() -> str:
+        if has_request_context() and request.headers.get("HX-Request") == "true":
+            header_nonce = (request.headers.get("X-CSP-Nonce") or "").strip()
+            if header_nonce and nonce_re.fullmatch(header_nonce):
+                return header_nonce
+        if callable(base_csp_nonce):
+            try:
+                nonce_value = base_csp_nonce()
+            except Exception:
+                nonce_value = ""
+            if isinstance(nonce_value, str):
+                return nonce_value
+            if nonce_value is None:
+                return ""
+            return str(nonce_value)
+        return ""
+
+    app.jinja_env.globals["csp_nonce"] = csp_nonce_for_templates
 
     # --- Jinja bytecode cache (safe on Windows) ---
     try:
@@ -827,6 +874,7 @@ def create_app():
         # Ensure legacy columns exist even outside bootstrap
         if fallback:
             _ensure_folder_notes_column()
+            _ensure_folder_sleeve_color_column()
             _ensure_folder_sharing_columns()
             _ensure_folder_share_table()
             _ensure_wishlist_columns()

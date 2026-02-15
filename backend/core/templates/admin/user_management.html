@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+<style nonce="{{ csp_nonce() }}">
+  .admin-users-col-actions { width: 320px; }
+</style>
 <div class="container py-4">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
@@ -29,7 +32,7 @@
               <th scope="col">Role</th>
               <th scope="col">Last active</th>
               <th scope="col">Owned folders</th>
-              <th scope="col" style="width: 320px;">Actions</th>
+              <th scope="col" class="admin-users-col-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -78,7 +81,7 @@
                         class="btn btn-outline-danger btn-sm"
                         type="submit"
                         {% if deletion_disabled %}disabled{% endif %}
-                        onclick="return confirm({{ ('Delete %s? This cannot be undone.' % user.email)|tojson }});"
+                        data-confirm="{{ ('Delete %s? This cannot be undone.' % user.email) }}"
                       >
                         Delete
                       </button>
@@ -100,7 +103,7 @@
                         class="btn btn-outline-warning btn-sm"
                         type="submit"
                         {% if impersonate_disabled %}disabled{% endif %}
-                        onclick="return confirm({{ ('Impersonate %s? You can return to admin from the banner.' % user.email)|tojson }});"
+                        data-confirm="{{ ('Impersonate %s? You can return to admin from the banner.' % user.email) }}"
                       >
                         Impersonate
                       </button>

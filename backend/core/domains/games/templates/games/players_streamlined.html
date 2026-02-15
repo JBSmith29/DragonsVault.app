@@ -31,6 +31,9 @@
     border: 1px solid var(--bs-border-color);
     font-size: 0.85rem;
   }
+  .player-chip-dashed {
+    border-style: dashed;
+  }
   .deck-badge {
     font-size: 0.7rem;
     padding: 0.2rem 0.5rem;
@@ -186,7 +189,7 @@
               </div>
             {% endfor %}
             {% if pod.members|length < 4 %}
-              <button class="player-chip border-dashed" onclick="addPlayerToPod({{ pod.id }})" style="border-style: dashed;">
+              <button class="player-chip border-dashed player-chip-dashed" onclick="addPlayerToPod({{ pod.id }})">
                 <i class="bi bi-plus"></i>
                 <span>Add Player</span>
               </button>

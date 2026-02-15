@@ -23,15 +23,15 @@
   {% if card %}
     {% set imgs = (card.images if card.images is defined and card.images else []) %}
     {% if imgs|length > 1 %}
-      <div class="d-flex align-items-center" style="gap:{{ size * 0.08 }}px;">
+      <div class="d-flex align-items-center cmdr-chip-stack">
         {% for img in imgs %}
           {% set src = img.small or img.normal or img.large or card.image_small or card.small or static_url('img/card-back-small.jpg') %}
           {% set altcore = img.alt or card.alt or card.name or 'Commander' %}
           <img
             src="{{ src }}"
             alt="{{ altcore }} (Commander)"
-            class="cmdr-thumb"
-            style="width: {{ size * 0.9 }}px; height:auto; border-radius:.5rem; box-shadow:0 0.25rem 0.75rem rgba(0,0,0,.35);"
+            class="cmdr-thumb cmdr-chip-thumb cmdr-chip-thumb-shadow"
+            width="{{ (size * 0.9)|round(0, 'floor')|int }}"
             loading="lazy" referrerpolicy="no-referrer">
         {% endfor %}
       </div>
@@ -44,8 +44,8 @@
       <img
         src="{{ src }}"
         alt="{{ altcore }} (Commander)"
-        class="cmdr-thumb"
-        style="width: {{ size }}px; height:auto; border-radius:.5rem;"
+        class="cmdr-thumb cmdr-chip-thumb"
+        width="{{ size|int }}"
         loading="lazy" referrerpolicy="no-referrer">
     {% endif %}
   {% endif %}

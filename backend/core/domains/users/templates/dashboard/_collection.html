@@ -25,13 +25,13 @@
 
 {% set top_cards = dashboard.collection_top_cards %}
 <div class="d-flex align-items-center justify-content-between mb-2">
-  <div class="section-label mb-0">Top 10 cards</div>
-  <div class="small text-muted">Highest priced cards across your folders.</div>
+  <div class="section-label mb-0">Top 10 Most Valuable Cards</div>
+  <div class="small text-muted">Sorted by latest known price across your collection.</div>
 </div>
 {% if top_cards and top_cards|length %}
-  <div class="row g-3 mb-4">
+  <div class="top-cards-grid mb-4">
     {% for card in top_cards %}
-      <div class="col-12 col-sm-6 col-lg-4 col-xl-3 top-card-col">
+      <div class="top-card-col">
         <a class="tile top-card d-block h-100 hover-lift card-hover-shadow" href="{{ card.card_href }}">
           <div class="top-card-media">
             {% if card.image %}
@@ -46,12 +46,12 @@
           <div class="top-card-body">
             <div class="top-card-name text-truncate" title="{{ card.name }}">{{ card.name }}</div>
             <div class="top-card-meta">
-              <span class="top-card-meta-label">Folder</span>
+              <span class="top-card-meta-label">Folder:</span>
               <span class="top-card-folder text-truncate" title="{{ card.folder_name }}">{{ card.folder_name }}</span>
             </div>
             {% if card.printing_label %}
               <div class="top-card-meta">
-                <span class="top-card-meta-label">Printing</span>
+                <span class="top-card-meta-label">Printing:</span>
                 <span class="top-card-printing">{{ card.printing_label }}</span>
               </div>
             {% endif %}
@@ -62,6 +62,6 @@
   </div>
 {% else %}
   <div class="alert alert-secondary mb-4">
-    No priced cards yet. Add cards or refresh pricing data to see top values.
+    No priced cards found yet. Add cards or refresh pricing data to see your top values.
   </div>
 {% endif %}

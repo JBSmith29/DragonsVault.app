@@ -175,6 +175,41 @@ def _color_letters_list(value) -> list[str]:
     return [ch for ch in raw if ch in {"W", "U", "B", "R", "G"}]
 
 
+_MANA_SYMBOL_RE = re.compile(r"\{([^}]+)\}")
+_WUBRG = ("W", "U", "B", "R", "G")
+
+
+def _artifact_production_colors(oracle_text: str | None) -> set[str]:
+    if not oracle_text:
+        return set()
+    upper = oracle_text.upper()
+    if "ADD" not in upper:
+        return set()
+
+    out: set[str] = set()
+    for sym in _MANA_SYMBOL_RE.findall(oracle_text):
+        symbol = sym.upper()
+        for ch in _WUBRG:
+            if ch in symbol:
+                out.add(ch)
+
+    if "ANY COLOR" in upper:
+        out.update(_WUBRG)
+    return out
+
+
+def _effective_color_identity(type_line: str | None, oracle_text: str | None, colors: list[str]) -> list[str]:
+    base = [ch for ch in _WUBRG if ch in set(colors or [])]
+    if "artifact" not in (type_line or "").lower():
+        return base
+
+    produced = _artifact_production_colors(oracle_text)
+    if not produced:
+        return base
+
+    return [ch for ch in _WUBRG if ch in (set(base) | produced)]
+
+
 def _card_type_flags(type_line: str | None) -> dict[str, object]:
     lowered = (type_line or "").lower()
     is_land = "land" in lowered
@@ -2532,6 +2567,7 @@ def api_card(card_id):
     mana_cost = _mana_cost_from_faces(getattr(card, "faces_json", None))
     colors = _color_letters_list(getattr(card, "colors", None))
     color_identity = _color_letters_list(getattr(card, "color_identity", None)) or colors
+    color_identity = _effective_color_identity(getattr(card, "type_line", None), oracle_text, color_identity)
     if not colors:
         colors = color_identity
 
@@ -6815,6 +6851,7 @@ def card_detail(card_id):
     mana_cost = _mana_cost_from_faces(getattr(card, "faces_json", None))
     colors = _color_letters_list(getattr(card, "colors", None))
     color_identity = _color_letters_list(getattr(card, "color_identity", None)) or colors
+    color_identity = _effective_color_identity(getattr(card, "type_line", None), oracle_text, color_identity)
     if not colors:
         colors = color_identity
 

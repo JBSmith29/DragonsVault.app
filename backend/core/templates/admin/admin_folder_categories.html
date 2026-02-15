@@ -7,6 +7,15 @@
     width: 100%;
     justify-content: space-between;
   }
+  .folders-col-select { width:4%; }
+  .folders-col-folder { width:26%; }
+  .folders-col-category { width:28%; }
+  .folders-col-owner { width:20%; }
+  .folders-col-proxy { width:10%; }
+  .folders-col-public { width:10%; }
+  .folders-col-sleeve { width:20%; min-width:220px; white-space:nowrap; }
+  .folders-sleeve-input { min-width:200px; }
+  .folders-col-actions { width:6%; }
 </style>
 <div class="container py-4">
   <h1 class="mb-3">{{ page_title or "Folder Categories" }}</h1>
@@ -40,22 +49,22 @@
         <thead>
           <tr>
             {% if allow_delete %}
-            <th style="width:4%;" class="text-center">
+            <th class="text-center folders-col-select">
               <input class="form-check-input" type="checkbox" id="select-all-folders" aria-label="Select all folders">
             </th>
             {% endif %}
-            <th style="width:26%;">Folder</th>
-            <th style="width:28%;">Category</th>
+            <th class="folders-col-folder">Folder</th>
+            <th class="folders-col-category">Category</th>
             {% if show_owner_field %}
-            <th style="width:20%;">Owner</th>
+            <th class="folders-col-owner">Owner</th>
             {% endif %}
-            <th style="width:10%;" class="text-center">Proxy</th>
+            <th class="text-center folders-col-proxy">Proxy</th>
             {% if show_public_toggle %}
-            <th style="width:10%;" class="text-center">Public</th>
+            <th class="text-center folders-col-public">Public</th>
             {% endif %}
-            <th style="width:16%;">Notes</th>
+            <th class="folders-col-sleeve">Sleeve Color</th>
             {% if allow_delete %}
-            <th style="width:6%;" class="text-center">Actions</th>
+            <th class="text-center folders-col-actions">Actions</th>
             {% endif %}
           </tr>
         </thead>
@@ -189,12 +198,14 @@
                 </td>
                 {% endif %}
                 <td>
-                  <textarea
-                    class="form-control form-control-sm"
-                    name="notes-{{ folder.id }}"
-                    id="notes-{{ folder.id }}"
-                    rows="2"
-                    placeholder="Add notes...">{{ folder.notes or '' }}</textarea>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm folders-sleeve-input"
+                    name="sleeve-color-{{ folder.id }}"
+                    id="sleeve-color-{{ folder.id }}"
+                    value="{{ folder.sleeve_color or '' }}"
+                    placeholder="e.g. Black, Blue, Matte"
+                  >
                 </td>
                 {% if allow_delete %}
                 <td class="text-center">
@@ -254,7 +265,7 @@
             name="bulk_delete"
             value="1"
             formnovalidate
-            onclick="return confirm('Delete selected folders? This removes the folders and their cards.');"
+            data-confirm="Delete selected folders? This removes the folders and their cards."
             data-progress-label="Deleting..."
           >
             Delete selected
@@ -343,10 +354,10 @@
             </div>
             <div class="col-12">
               <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" id="bulkNotesApply" name="bulk_notes_apply" value="1">
-                <label class="form-check-label" for="bulkNotesApply">Replace notes</label>
+                <input class="form-check-input" type="checkbox" id="bulkSleeveColorApply" name="bulk_sleeve_color_apply" value="1">
+                <label class="form-check-label" for="bulkSleeveColorApply">Update sleeve color</label>
               </div>
-              <textarea class="form-control" rows="3" name="bulk_notes_value" placeholder="New notes for selected folders"></textarea>
+              <input class="form-control" type="text" name="bulk_sleeve_color_value" placeholder="New sleeve color for selected folders">
             </div>
           </div>
           <div class="alert alert-info small mt-3 d-flex justify-content-between align-items-center">

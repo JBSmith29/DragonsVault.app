@@ -19,7 +19,7 @@
     <div class="d-flex flex-wrap align-items-center gap-2">
       {% if can_edit %}
         <a class="btn btn-primary btn-sm" href="{{ url_for('views.games_edit', game_id=game.id) }}">Edit Game</a>
-        <form method="post" action="{{ url_for('views.games_delete', game_id=game.id) }}" onsubmit="return confirm('Delete this game log?');">
+        <form method="post" action="{{ url_for('views.games_delete', game_id=game.id) }}" data-confirm="Delete this game log?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
         </form>

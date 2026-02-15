@@ -79,15 +79,17 @@
               </td>
               <td class="text-end">{{ '{:,}'.format(b.rows or 0) }}</td>
               <td class="text-end">{{ '{:,}'.format(b.qty or 0) }}</td>
-              <td class="text-end">
-                <div class="d-flex flex-column align-items-end gap-1">
+              <td class="text-end collection-actions-cell">
+                <div class="collection-action-stack">
                   {% if b.folder %}
-                    <a class="btn btn-sm btn-primary"
+                    <a class="btn btn-sm btn-primary collection-action-btn"
                        href="{{ url_for('views.list_cards', folder=b.folder.id, show_friends=1 if show_friends else None) }}">
-                      Show Cards
+                      <span>View Cards</span>
                     </a>
                   {% else %}
-                    <button class="btn btn-sm btn-primary" disabled>Show Cards</button>
+                    <button class="btn btn-sm btn-outline-secondary collection-action-btn is-disabled" disabled>
+                      <span>Unavailable</span>
+                    </button>
                   {% endif %}
                 </div>
               </td>
@@ -107,27 +109,29 @@
     <div class="row g-3 mb-4">
       {% for item in type_breakdown %}
       <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-        <a class="tile type-tile d-block"
+        <a class="tile type-tile"
            href="{{ item.url }}">
-          <div class="type-left">
-            <div class="type-icon-group">
-              <div class="type-icon">
-                {% if item.icon_class %}
-                  <i class="bi {{ item.icon_class }}" aria-hidden="true"></i>
-                {% elif item.icon_letter %}
-                  <span aria-hidden="true">{{ item.icon_letter }}</span>
-                {% else %}
-                  <span aria-hidden="true">?</span>
-                {% endif %}
-                <span class="visually-hidden">{{ item.label or 'Unknown card type' }}</span>
-              </div>
-              <span class="badge text-bg-secondary type-count">&times;{{ '{:,}'.format(item.count) }}</span>
-            </div>
-            <div class="text-truncate">
-              <div class="type-name text-truncate">{{ item.label }}</div>
-              <div class="text-muted small text-truncate">Show {{ item.label }} cards in collection</div>
+          <div class="type-icon" aria-hidden="true">
+            {% if item.icon_class %}
+              <i class="bi {{ item.icon_class }}"></i>
+            {% elif item.icon_letter %}
+              <span>{{ item.icon_letter }}</span>
+            {% else %}
+              <span>?</span>
+            {% endif %}
+          </div>
+          <div class="type-content">
+            <div class="type-name" title="{{ item.label }}">{{ item.label }}</div>
+            <div class="type-hint" title="Show {{ item.label }} cards in collection">
+              Show {{ item.label }} cards in collection
             </div>
           </div>
+          <span class="badge text-bg-secondary type-count" title="{{ '{:,}'.format(item.count) }} cards">
+            &times;{{ '{:,}'.format(item.count) }}
+          </span>
+          <span class="visually-hidden">
+            {{ item.label or 'Unknown card type' }}: {{ '{:,}'.format(item.count) }} cards
+          </span>
         </a>
       </div>
       {% endfor %}

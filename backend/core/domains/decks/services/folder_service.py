@@ -91,6 +91,43 @@ def _type_group_label(type_line: str) -> str:
     return "Other"
 
 
+_MANA_SYMBOL_RE = re.compile(r"\{([^}]+)\}")
+_WUBRG = ("W", "U", "B", "R", "G")
+
+
+def _oracle_text_from_faces_json(faces_json: Any) -> str:
+    if not faces_json:
+        return ""
+    faces = faces_json.get("faces") if isinstance(faces_json, dict) else faces_json
+    if not isinstance(faces, list):
+        return ""
+    parts = [
+        face.get("oracle_text")
+        for face in faces
+        if isinstance(face, dict) and face.get("oracle_text")
+    ]
+    return " // ".join(parts)
+
+
+def _artifact_production_colors(oracle_text: str | None) -> set[str]:
+    if not oracle_text:
+        return set()
+    upper = oracle_text.upper()
+    if "ADD" not in upper:
+        return set()
+
+    out: set[str] = set()
+    for sym in _MANA_SYMBOL_RE.findall(oracle_text):
+        symbol = sym.upper()
+        for ch in _WUBRG:
+            if ch in symbol:
+                out.add(ch)
+
+    if "ANY COLOR" in upper:
+        out.update(_WUBRG)
+    return out
+
+
 def _clear_deck_metadata_wizard_cache() -> None:
     user_id = getattr(current_user, "id", None)
     if not user_id:
@@ -561,6 +598,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
                 Card.colors,
                 Card.color_identity,
                 Card.color_identity_mask,
+                Card.faces_json,
             )
         )
         .filter(Card.folder_id == folder_id)
@@ -666,7 +704,15 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         rarity_val = getattr(card, "rarity", None)
 
         letters_list = _color_letters(getattr(card, "color_identity", None)) or _color_letters(getattr(card, "colors", None))
-        letters_norm = "".join(ch for ch in "WUBRG" if ch in set(letters_list)) if letters_list else "C"
+        if "artifact" in (type_line or "").lower():
+            oracle_text = (getattr(card, "oracle_text", None) or "").strip()
+            if not oracle_text:
+                oracle_text = _oracle_text_from_faces_json(getattr(card, "faces_json", None))
+            produced_colors = _artifact_production_colors(oracle_text)
+            if produced_colors:
+                letters_list = [ch for ch in _WUBRG if ch in (set(letters_list) | produced_colors)]
+
+        letters_norm = "".join(ch for ch in _WUBRG if ch in set(letters_list)) if letters_list else "C"
         color_letters_map[card.id] = letters_norm
         color_icons_map[card.id] = colors_to_icons(letters_list or ["C"], use_local=True)
 

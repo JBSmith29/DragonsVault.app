@@ -235,6 +235,10 @@ def games_new():
     return game_service.games_new()
 
 
+@views.route("/gamedashboard")
+def gamedashboard():
+    return game_service.games_metrics_public_dashboard()
+
 @views.route("/games/metrics")
 @login_required
 def games_metrics():
@@ -298,6 +302,7 @@ def games_bulk_delete():
 __all__ = [
     "games_landing",
     "games_dashboard",
+    "gamedashboard",
     "games_admin",
     "games_overview",
     "games_manual_deck_update",

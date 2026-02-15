@@ -76,3 +76,4 @@ class BaseConfig:
         "frame-src": "https://js.hcaptcha.com",
     }
     STATIC_ASSET_BASE_URL = os.getenv("STATIC_ASSET_BASE_URL")
+    PUBLIC_GAME_DASHBOARD_OWNER_ID = os.getenv("PUBLIC_GAME_DASHBOARD_OWNER_ID")

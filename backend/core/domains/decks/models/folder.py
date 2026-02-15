@@ -42,6 +42,7 @@ class Folder(db.Model):
         index=True,
     )
     notes = db.Column(db.Text, nullable=True)
+    sleeve_color = db.Column(db.String(64), nullable=True)
     is_public = db.Column(
         db.Boolean,
         nullable=False,

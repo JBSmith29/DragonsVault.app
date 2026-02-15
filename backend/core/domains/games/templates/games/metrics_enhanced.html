@@ -69,6 +69,9 @@
     box-shadow: 0 0 12px rgba(var(--bs-primary-rgb), 0.35);
     transition: width 0.3s ease;
   }
+  {% for pct in range(0, 101) %}
+  .metric-chart-bar .metric-w-{{ pct }} { width: {{ pct }}%; }
+  {% endfor %}
   .metric-chart-value {
     font-size: 0.8rem;
     color: var(--bs-secondary-color);
@@ -343,7 +346,10 @@
                     {{ row.label }}
                   {% endif %}
                 </div>
-                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                {% set win_rate = row.win_rate|default(0)|round(0, 'floor')|int %}
+                {% if win_rate < 0 %}{% set win_rate = 0 %}{% endif %}
+                {% if win_rate > 100 %}{% set win_rate = 100 %}{% endif %}
+                <div class="metric-chart-bar"><span class="metric-w-{{ win_rate }}"></span></div>
                 <div class="metric-chart-value">{{ row.win_rate }}%</div>
               </div>
             {% endfor %}
@@ -361,7 +367,10 @@
             {% for row in deck_win_rates %}
               <div class="metric-chart-row">
                 <div class="metric-chart-label">{{ row.label }}</div>
-                <div class="metric-chart-bar"><span style="width: {{ row.win_rate }}%"></span></div>
+                {% set win_rate = row.win_rate|default(0)|round(0, 'floor')|int %}
+                {% if win_rate < 0 %}{% set win_rate = 0 %}{% endif %}
+                {% if win_rate > 100 %}{% set win_rate = 100 %}{% endif %}
+                <div class="metric-chart-bar"><span class="metric-w-{{ win_rate }}"></span></div>
                 <div class="metric-chart-value">{{ row.win_rate }}%</div>
               </div>
             {% endfor %}

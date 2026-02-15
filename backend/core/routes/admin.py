@@ -156,8 +156,8 @@ def _folder_categories_page(admin_mode: bool):
             owner_apply = request.form.get("bulk_owner_apply") == "1"
             owner_value = (request.form.get("bulk_owner_value") or "").strip()
             proxy_value_raw = (request.form.get("bulk_proxy") or "").strip().lower()
-            notes_apply = request.form.get("bulk_notes_apply") == "1"
-            notes_value = (request.form.get("bulk_notes_value") or "").strip()
+            sleeve_color_apply = request.form.get("bulk_sleeve_color_apply") == "1"
+            sleeve_color_value = (request.form.get("bulk_sleeve_color_value") or "").strip()
 
             allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}
             proxy_flag = None
@@ -166,7 +166,7 @@ def _folder_categories_page(admin_mode: bool):
             elif proxy_value_raw in {"owned", "off", "0", "false"}:
                 proxy_flag = False
 
-            updated = {"category": 0, "owner": 0, "proxy": 0, "notes": 0}
+            updated = {"category": 0, "owner": 0, "proxy": 0, "sleeve_color": 0}
             for folder in folders:
                 if folder.id not in selected_ids:
                     continue
@@ -182,14 +182,15 @@ def _folder_categories_page(admin_mode: bool):
                 if proxy_flag is not None and folder.is_proxy != proxy_flag:
                     folder.is_proxy = proxy_flag
                     updated["proxy"] += 1
-                if notes_apply:
-                    new_notes = notes_value or None
-                    if (folder.notes or None) != new_notes:
-                        folder.notes = new_notes
-                        updated["notes"] += 1
+                if sleeve_color_apply:
+                    new_sleeve_color = sleeve_color_value or None
+                    if (folder.sleeve_color or None) != new_sleeve_color:
+                        folder.sleeve_color = new_sleeve_color
+                        updated["sleeve_color"] += 1
 
             _safe_commit()
-            changed_fields = [name for name, count in updated.items() if count]
+            field_labels = {"category": "category", "owner": "owner", "proxy": "proxy", "sleeve_color": "sleeve color"}
+            changed_fields = [field_labels[name] for name, count in updated.items() if count]
             if changed_fields:
                 flash(
                     f"Bulk updated {len(selected_ids)} folder(s) ({', '.join(changed_fields)}).",
@@ -288,7 +289,7 @@ def _folder_categories_page(admin_mode: bool):
         updated_owners = 0
         updated_owner_links = 0
         updated_proxies = 0
-        updated_notes = 0
+        updated_sleeve_colors = 0
         updated_public = 0
         allowed_categories = {Folder.CATEGORY_DECK, Folder.CATEGORY_COLLECTION}
         for folder in folders:
@@ -324,11 +325,10 @@ def _folder_categories_page(admin_mode: bool):
                 if folder.is_public != public_value:
                     folder.is_public = public_value
                     updated_public += 1
-
-            notes_value = (request.form.get(f"notes-{folder.id}") or "").strip() or None
-            if (folder.notes or None) != notes_value:
-                folder.notes = notes_value
-                updated_notes += 1
+            sleeve_color_value = (request.form.get(f"sleeve-color-{folder.id}") or "").strip() or None
+            if (folder.sleeve_color or None) != sleeve_color_value:
+                folder.sleeve_color = sleeve_color_value
+                updated_sleeve_colors += 1
 
         _safe_commit()
         changes = []
@@ -342,8 +342,8 @@ def _folder_categories_page(admin_mode: bool):
             changes.append(f"{updated_owner_links} owner assignment{'s' if updated_owner_links != 1 else ''}")
         if updated_public:
             changes.append(f"{updated_public} public flag{'s' if updated_public != 1 else ''}")
-        if updated_notes:
-            changes.append(f"{updated_notes} note{'s' if updated_notes != 1 else ''}")
+        if updated_sleeve_colors:
+            changes.append(f"{updated_sleeve_colors} sleeve color{'s' if updated_sleeve_colors != 1 else ''}")
         if changes:
             flash(f"Updated {', '.join(changes)}.", "success")
         else:
@@ -356,7 +356,7 @@ def _folder_categories_page(admin_mode: bool):
                 "owner_links": updated_owner_links,
                 "proxies": updated_proxies,
                 "public": updated_public,
-                "notes": updated_notes,
+                "sleeve_color": updated_sleeve_colors,
             },
         )
         return redirect(url_for(target_endpoint))

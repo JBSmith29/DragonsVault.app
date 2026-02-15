@@ -11,27 +11,13 @@
 
 /* Type Breakdown tiles */
 .type-tile {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: flex-start;
   gap: 0.95rem;
-  min-height: 96px;
-  padding: 1rem 1.1rem;
-}
-
-.type-left {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  min-width: 0;
-}
-
-.type-icon-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 72px;
+  min-height: 94px;
+  padding: 0.9rem 1rem;
+  overflow: hidden;
 }
 
 .type-icon {
@@ -50,21 +36,119 @@
   font-size: 1.25rem;
 }
 
+.type-content {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
 .type-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 64px;
-  padding: 0.25rem 0.65rem;
+  min-width: 70px;
+  max-width: 100%;
+  padding: 0.3rem 0.62rem;
   border-radius: 999px;
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .type-name {
   font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.type-hint {
+  font-size: 0.82rem;
+  color: var(--bs-secondary-color);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .type-count.badge {
   font-weight: 700;
+}
+
+/* Collection table actions */
+.collection-actions-cell {
+  min-width: 128px;
+}
+
+.collection-action-stack {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.collection-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  max-width: 100%;
+  min-height: 2rem;
+  padding: 0.38rem 0.98rem;
+  border-radius: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collection-action-btn span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-action-btn.is-disabled {
+  opacity: 0.75;
+}
+
+@media (max-width: 575.98px) {
+  .collection-actions-cell {
+    min-width: 112px;
+  }
+
+  .collection-action-stack {
+    justify-content: flex-start;
+  }
+
+  .collection-action-btn {
+    width: 100%;
+  }
+
+  .type-tile {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon count"
+      "content content";
+    row-gap: 0.55rem;
+    column-gap: 0.75rem;
+  }
+
+  .type-icon {
+    grid-area: icon;
+  }
+
+  .type-content {
+    grid-area: content;
+  }
+
+  .type-count {
+    grid-area: count;
+    justify-self: end;
+  }
 }

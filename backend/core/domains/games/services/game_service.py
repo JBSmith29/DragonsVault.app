@@ -9,7 +9,7 @@ from typing import Any
 from functools import lru_cache
 from urllib.parse import quote
 
-from flask import Response, flash, redirect, render_template, request, url_for
+from flask import Response, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy import and_, case, func, or_, text
 from sqlalchemy.orm import selectinload
@@ -908,6 +908,16 @@ def _resolve_date_range(params) -> dict[str, Any]:
     }
 
 
+def _resolve_year_or_all_range(params) -> dict[str, Any]:
+    range_key = (params.get("range") or "all").strip().lower()
+    if range_key == "year":
+        return _resolve_date_range({
+            "range": "year",
+            "year": params.get("year"),
+        })
+    return _resolve_date_range({"range": "all"})
+
+
 def _range_query_params(range_ctx: dict[str, Any]) -> dict[str, str]:
     params: dict[str, str] = {"range": range_ctx.get("range_key") or ""}
     if range_ctx.get("range_key") == "year" and range_ctx.get("year_value"):
@@ -1246,7 +1256,7 @@ def _top_players_by_plays(
     merged: dict[str, dict[str, Any]] = {}
     for row in rows:
         key, label = _canonical_player_identity(row.user_id, row.display_name, scope)
-        entry = merged.setdefault(key, {"label": label, "count": 0})
+        entry = merged.setdefault(key, {"key": key, "label": label, "count": 0})
         entry["count"] += int(row.plays or 0)
     results = sorted(
         merged.values(),
@@ -1529,10 +1539,11 @@ def _deck_options(
     user_id: int,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
+    player_key: str | None = None,
     scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     filters = _session_filters(user_id, start_at, end_at, scope=scope)
-    rows = (
+    query = (
         db.session.query(
             GameDeck.folder_id,
             GameDeck.deck_name,
@@ -1541,7 +1552,12 @@ def _deck_options(
         .join(GameSeatAssignment, GameSeatAssignment.deck_id == GameDeck.id)
         .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
         .join(GameSession, GameSession.id == GameSeat.session_id)
-        .filter(*filters)
+    )
+    player_filter = _player_key_filter(player_key, scope=scope)
+    if player_filter is not None:
+        query = query.join(GamePlayer, GamePlayer.id == GameSeatAssignment.player_id).filter(player_filter)
+    rows = (
+        query.filter(*filters)
         .distinct()
         .all()
     )
@@ -1757,7 +1773,7 @@ def _deck_win_rates(
     user_id: int,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
-    limit: int = 6,
+    limit: int | None = 6,
     player_key: str | None = None,
     scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
@@ -1777,13 +1793,16 @@ def _deck_win_rates(
     player_filter = _player_key_filter(player_key, scope=scope)
     if player_filter is not None:
         query = query.join(GamePlayer, GamePlayer.id == GameSeatAssignment.player_id).filter(player_filter)
-    rows = (
+
+    query = (
         query.filter(*filters)
         .group_by(GameDeck.deck_name)
         .order_by(plays_expr.desc(), GameDeck.deck_name.asc())
-        .limit(limit)
-        .all()
     )
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+    rows = query.all()
+
     results = []
     for row in rows:
         plays = int(row.plays or 0)
@@ -1966,6 +1985,59 @@ def games_overview():
         has_owned_games=has_owned_games,
         manual_decks=manual_decks,
         registered_deck_options=registered_deck_options,
+    )
+
+
+
+def games_overview_public():
+    """Public read-only game log for the configured public dashboard owner."""
+    owner_user_id = _resolve_public_dashboard_owner_user_id()
+    q = (request.args.get("q") or "").strip()
+
+    sessions: list[GameSession] = []
+    summary = {"total_games": 0, "combo_wins": 0}
+
+    if owner_user_id is not None:
+        query = (
+            GameSession.query.options(
+                selectinload(GameSession.seats)
+                .selectinload(GameSeat.assignment)
+                .selectinload(GameSeatAssignment.player),
+                selectinload(GameSession.seats)
+                .selectinload(GameSeat.assignment)
+                .selectinload(GameSeatAssignment.deck),
+            )
+            .filter(GameSession.owner_user_id == owner_user_id)
+        )
+        query = _apply_notes_search(query, q)
+        sessions = query.order_by(GameSession.played_at.desc().nullslast(), GameSession.created_at.desc()).all()
+
+        total, combo_wins = (
+            db.session.query(
+                func.count(GameSession.id),
+                func.coalesce(func.sum(case((GameSession.win_via_combo.is_(True), 1), else_=0)), 0),
+            )
+            .filter(GameSession.owner_user_id == owner_user_id)
+            .one()
+        )
+        summary = {
+            "total_games": int(total or 0),
+            "combo_wins": int(combo_wins or 0),
+        }
+
+    games = [_game_session_payload(session, None) for session in sessions]
+
+    return render_template(
+        "games/logs.html",
+        games=games,
+        summary=summary,
+        search_query=q,
+        has_owned_games=False,
+        manual_decks=[],
+        registered_deck_options=[],
+        is_public_dashboard=True,
+        logs_action_endpoint="views.gamedashboard",
+        logs_metric_value="logs",
     )
 
 
@@ -4370,77 +4442,118 @@ def games_metrics_pods():
     )
 
 
-def games_metrics_users():
-    """User-focused metrics page."""
-    range_ctx = _resolve_date_range(request.args)
-    pod_options = _pod_options_for_user(current_user.id)
-    pod_lookup = {option["id"]: option for option in pod_options}
-    pod_raw = (request.args.get("pod") or "").strip()
-    selected_pod_id = None
-    if pod_raw:
-        try:
-            selected_pod_id = parse_positive_int(pod_raw, field="pod")
-        except ValidationError as exc:
-            log_validation_error(exc, context="metrics_pod_filter")
-            selected_pod_id = None
-        if selected_pod_id not in pod_lookup:
-            selected_pod_id = None
+def _empty_metrics_summary() -> dict[str, Any]:
+    return {
+        "total_games": 0,
+        "combo_wins": 0,
+        "combo_rate": 0,
+        "avg_players": None,
+        "unique_players": 0,
+        "avg_bracket_score": None,
+        "top_winners": [],
+        "top_decks": [],
+        "top_commanders": [],
+    }
 
-    base_scope = _pod_metrics_scope(current_user.id, selected_pod_id) if selected_pod_id else None
-    if selected_pod_id and base_scope is None:
-        base_scope = {"session_filter": text("1 = 0")}
+
+def _resolve_public_dashboard_owner_user_id() -> int | None:
+    configured_raw = str(current_app.config.get("PUBLIC_GAME_DASHBOARD_OWNER_ID") or "").strip()
+    if configured_raw:
+        try:
+            configured_id = parse_positive_int(configured_raw, field="public_game_dashboard_owner_id")
+        except ValidationError as exc:
+            log_validation_error(exc, context="public_game_dashboard_owner_id")
+        else:
+            exists = db.session.query(User.id).filter(User.id == configured_id).first()
+            if exists:
+                return int(configured_id)
+
+    row = (
+        db.session.query(GameSession.owner_user_id)
+        .filter(GameSession.owner_user_id.isnot(None))
+        .group_by(GameSession.owner_user_id)
+        .order_by(func.count(GameSession.id).desc(), GameSession.owner_user_id.asc())
+        .first()
+    )
+    if not row or row[0] is None:
+        return None
+    return int(row[0])
+
+
+def _render_games_metrics_users(
+    owner_user_id: int,
+    *,
+    metrics_action_endpoint: str,
+    player_filter_endpoint: str,
+    player_detail_endpoint: str | None,
+    show_related_metric_nav: bool,
+    is_public_dashboard: bool,
+):
+    range_ctx = _resolve_year_or_all_range(request.args)
+    player_key = (request.args.get("player") or "").strip()
+
+    player_options = _player_options(
+        owner_user_id,
+        range_ctx["start_at"],
+        range_ctx["end_at"],
+    )
+    selected_player_label = "All players"
+    if player_key:
+        selected_player_label = "Selected player"
+        for option in player_options:
+            if option["key"] == player_key:
+                selected_player_label = option["label"]
+                break
+        else:
+            player_key = ""
+            selected_player_label = "All players"
+
+    player_session_filter = _session_filter_for_player(player_key)
+    metrics_scope = _merge_scope_filters(None, [player_session_filter])
 
     from extensions import cache
+
     metrics_cache_key = _metrics_cache_key(
-        current_user.id,
+        owner_user_id,
         range_ctx,
-        pod_id=selected_pod_id,
+        player_key=player_key,
     )
     metrics = cache.get(metrics_cache_key)
     if metrics is None:
         metrics = _metrics_payload(
-            current_user.id,
+            owner_user_id,
             range_ctx["start_at"],
             range_ctx["end_at"],
-            scope=base_scope,
+            scope=metrics_scope,
         )
         cache.set(metrics_cache_key, metrics, timeout=300)
-    year_options = _available_years(current_user.id, scope=base_scope)
+
+    year_options = _available_years(owner_user_id)
     range_params = _range_query_params(range_ctx)
     range_params = dict(range_params)
-    if selected_pod_id:
-        range_params["pod"] = str(selected_pod_id)
 
-    # User-specific metrics
-    player_options = _player_options(
-        current_user.id,
-        range_ctx["start_at"],
-        range_ctx["end_at"],
-        scope=base_scope,
-    )
-    
     top_players = _top_players_by_plays(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
         limit=10,
-        scope=base_scope,
+        scope=metrics_scope,
     )
-    
+
     player_win_rates = _player_win_rates(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
         limit=10,
-        scope=base_scope,
+        scope=metrics_scope,
     )
-    
+
     combo_winners = _combo_winners(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
         limit=10,
-        scope=base_scope,
+        scope=metrics_scope,
     )
 
     return render_template(
@@ -4449,102 +4562,151 @@ def games_metrics_users():
         range_ctx=range_ctx,
         year_options=year_options,
         range_params=range_params,
-        pod_options=pod_options,
-        selected_pod_id=selected_pod_id,
         player_options=player_options,
+        selected_player_key=player_key,
+        selected_player_label=selected_player_label,
         top_players=top_players,
         player_win_rates=player_win_rates,
         combo_winners=combo_winners,
+        metrics_action_endpoint=metrics_action_endpoint,
+        player_filter_endpoint=player_filter_endpoint,
+        player_detail_endpoint=player_detail_endpoint,
+        show_related_metric_nav=show_related_metric_nav,
+        is_public_dashboard=is_public_dashboard,
     )
 
 
-def games_metrics_decks():
-    """Deck-focused metrics page."""
-    range_ctx = _resolve_date_range(request.args)
-    pod_options = _pod_options_for_user(current_user.id)
-    pod_lookup = {option["id"]: option for option in pod_options}
-    pod_raw = (request.args.get("pod") or "").strip()
-    selected_pod_id = None
-    if pod_raw:
-        try:
-            selected_pod_id = parse_positive_int(pod_raw, field="pod")
-        except ValidationError as exc:
-            log_validation_error(exc, context="metrics_pod_filter")
-            selected_pod_id = None
-        if selected_pod_id not in pod_lookup:
-            selected_pod_id = None
+def games_metrics_users():
+    """User-focused metrics page."""
+    return _render_games_metrics_users(
+        current_user.id,
+        metrics_action_endpoint="views.games_metrics_users",
+        player_filter_endpoint="views.games_metrics_users",
+        player_detail_endpoint="views.games_metrics_player",
+        show_related_metric_nav=True,
+        is_public_dashboard=False,
+    )
 
-    base_scope = _pod_metrics_scope(current_user.id, selected_pod_id) if selected_pod_id else None
-    if selected_pod_id and base_scope is None:
-        base_scope = {"session_filter": text("1 = 0")}
+
+def games_metrics_users_public():
+    """Public user metrics dashboard."""
+    owner_user_id = _resolve_public_dashboard_owner_user_id()
+    if owner_user_id is None:
+        range_ctx = _resolve_year_or_all_range(request.args)
+        return render_template(
+            "games/metrics_users.html",
+            metrics=_empty_metrics_summary(),
+            range_ctx=range_ctx,
+            year_options=[],
+            range_params=_range_query_params(range_ctx),
+            player_options=[],
+            selected_player_key="",
+            selected_player_label="All players",
+            top_players=[],
+            player_win_rates=[],
+            combo_winners=[],
+            metrics_action_endpoint="views.gamedashboard",
+            player_filter_endpoint="views.gamedashboard",
+            player_detail_endpoint=None,
+            show_related_metric_nav=False,
+            is_public_dashboard=True,
+        )
+
+    return _render_games_metrics_users(
+        owner_user_id,
+        metrics_action_endpoint="views.gamedashboard",
+        player_filter_endpoint="views.gamedashboard",
+        player_detail_endpoint=None,
+        show_related_metric_nav=False,
+        is_public_dashboard=True,
+    )
+
+
+def _render_games_metrics_decks(
+    owner_user_id: int,
+    *,
+    metrics_action_endpoint: str,
+    metrics_metric_value: str | None,
+    show_related_metric_nav: bool,
+    is_public_dashboard: bool,
+):
+    """Deck metrics renderer shared by private and public dashboards."""
+    range_ctx = _resolve_year_or_all_range(request.args)
+    player_key = (request.args.get("player") or "").strip()
+
+    player_options = _player_options(
+        owner_user_id,
+        range_ctx["start_at"],
+        range_ctx["end_at"],
+    )
+    selected_player_label = "All players"
+    if player_key:
+        selected_player_label = "Selected player"
+        for option in player_options:
+            if option["key"] == player_key:
+                selected_player_label = option["label"]
+                break
+        else:
+            player_key = ""
+            selected_player_label = "All players"
+
+    player_session_filter = _session_filter_for_player(player_key)
+    metrics_scope = _merge_scope_filters(None, [player_session_filter])
 
     from extensions import cache
+
     metrics_cache_key = _metrics_cache_key(
-        current_user.id,
+        owner_user_id,
         range_ctx,
-        pod_id=selected_pod_id,
+        player_key=player_key,
     )
     metrics = cache.get(metrics_cache_key)
     if metrics is None:
         metrics = _metrics_payload(
-            current_user.id,
+            owner_user_id,
             range_ctx["start_at"],
             range_ctx["end_at"],
-            scope=base_scope,
+            scope=metrics_scope,
         )
         cache.set(metrics_cache_key, metrics, timeout=300)
-    year_options = _available_years(current_user.id, scope=base_scope)
+
+    year_options = _available_years(owner_user_id)
     range_params = _range_query_params(range_ctx)
     range_params = dict(range_params)
-    if selected_pod_id:
-        range_params["pod"] = str(selected_pod_id)
+    if player_key:
+        range_params["player"] = player_key
 
-    # Deck-specific metrics
+    player_filter_active = bool(player_key)
+
     deck_options = _deck_options(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
-        scope=base_scope,
+        player_key=player_key if player_filter_active else None,
     )
-    
+
     deck_usage = _deck_usage(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
         limit=10,
-        scope=base_scope,
+        player_key=player_key if player_filter_active else None,
     )
-    
+
     deck_win_rates = _deck_win_rates(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
-        limit=10,
-        scope=base_scope,
+        limit=None,
+        player_key=player_key if player_filter_active else None,
     )
-    
-    commander_usage = _commander_usage(
-        current_user.id,
-        range_ctx["start_at"],
-        range_ctx["end_at"],
-        limit=10,
-        scope=base_scope,
-    )
-    
-    commander_win_rates = _commander_win_rates(
-        current_user.id,
-        range_ctx["start_at"],
-        range_ctx["end_at"],
-        limit=10,
-        scope=base_scope,
-    )
-    
+
     bracket_stats = _bracket_stats(
-        current_user.id,
+        owner_user_id,
         range_ctx["start_at"],
         range_ctx["end_at"],
         limit=10,
-        scope=base_scope,
+        player_key=player_key if player_filter_active else None,
     )
 
     return render_template(
@@ -4553,15 +4715,72 @@ def games_metrics_decks():
         range_ctx=range_ctx,
         year_options=year_options,
         range_params=range_params,
-        pod_options=pod_options,
-        selected_pod_id=selected_pod_id,
+        player_options=player_options,
+        selected_player_key=player_key,
+        selected_player_label=selected_player_label,
         deck_options=deck_options,
         deck_usage=deck_usage,
         deck_win_rates=deck_win_rates,
-        commander_usage=commander_usage,
-        commander_win_rates=commander_win_rates,
         bracket_stats=bracket_stats,
+        metrics_action_endpoint=metrics_action_endpoint,
+        metrics_metric_value=metrics_metric_value,
+        show_related_metric_nav=show_related_metric_nav,
+        is_public_dashboard=is_public_dashboard,
     )
+
+
+def games_metrics_decks():
+    """Deck-focused metrics page."""
+    return _render_games_metrics_decks(
+        current_user.id,
+        metrics_action_endpoint="views.games_metrics_decks",
+        metrics_metric_value=None,
+        show_related_metric_nav=True,
+        is_public_dashboard=False,
+    )
+
+
+def games_metrics_decks_public():
+    """Public deck metrics dashboard."""
+    owner_user_id = _resolve_public_dashboard_owner_user_id()
+    if owner_user_id is None:
+        range_ctx = _resolve_year_or_all_range(request.args)
+        return render_template(
+            "games/metrics_decks.html",
+            metrics=_empty_metrics_summary(),
+            range_ctx=range_ctx,
+            year_options=[],
+            range_params=_range_query_params(range_ctx),
+            player_options=[],
+            selected_player_key="",
+            selected_player_label="All players",
+            deck_options=[],
+            deck_usage=[],
+            deck_win_rates=[],
+            bracket_stats=[],
+            metrics_action_endpoint="views.gamedashboard",
+            metrics_metric_value="decks",
+            show_related_metric_nav=True,
+            is_public_dashboard=True,
+        )
+
+    return _render_games_metrics_decks(
+        owner_user_id,
+        metrics_action_endpoint="views.gamedashboard",
+        metrics_metric_value="decks",
+        show_related_metric_nav=True,
+        is_public_dashboard=True,
+    )
+
+
+def games_metrics_public_dashboard():
+    """Public metrics dashboard entrypoint (users/decks)."""
+    metric = (request.args.get("metric") or "users").strip().lower()
+    if metric == "decks":
+        return games_metrics_decks_public()
+    if metric == "logs":
+        return games_overview_public()
+    return games_metrics_users_public()
 
 
 __all__ = [
@@ -4576,7 +4795,10 @@ __all__ = [
     "games_metrics_player",
     "games_metrics_pods",
     "games_metrics_users",
+    "games_metrics_users_public",
     "games_metrics_decks",
+    "games_metrics_decks_public",
+    "games_metrics_public_dashboard",
     "games_players",
     "games_new",
     "games_edit",
@@ -4584,4 +4806,5 @@ __all__ = [
     "games_bulk_delete",
     "games_deck_bracket_update",
     "game_detail",
+    "games_overview_public",
 ]

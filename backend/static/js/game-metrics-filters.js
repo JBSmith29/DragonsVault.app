@@ -18,11 +18,22 @@
     const submitForm = () => {
       const formData = new FormData(form);
       const params = new URLSearchParams();
+      const rangeInput = rangeWrapper?.querySelector("[data-game-select-input]");
+      const rangeValue = (rangeInput?.value || "").toString().trim().toLowerCase();
+
       for (const [key, value] of formData.entries()) {
-        if (value && value.toString().trim()) {
-          params.set(key, value.toString().trim());
+        if (!value || !value.toString().trim()) {
+          continue;
         }
+        if (key === "year" && rangeValue !== "year") {
+          continue;
+        }
+        if ((key === "start" || key === "end") && rangeValue !== "custom") {
+          continue;
+        }
+        params.set(key, value.toString().trim());
       }
+
       const action = form.getAttribute("action") || window.location.pathname;
       const targetUrl = params.toString()
         ? `${action}?${params.toString()}`
@@ -77,7 +88,10 @@
       };
 
       options.forEach((btn) => {
-        btn.addEventListener("click", () => setActive(btn, true));
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          setActive(btn, true);
+        });
         if ((btn.dataset.value || "") === input.value) {
           setActive(btn, false);
         }
@@ -126,11 +140,12 @@
     };
 
     const updateVisibility = (value, fromUser) => {
-      if (!yearField || !customField) {
-        return;
+      if (yearField) {
+        yearField.style.display = value === "year" ? "" : "none";
       }
-      yearField.style.display = value === "year" ? "" : "none";
-      customField.style.display = value === "custom" ? "" : "none";
+      if (customField) {
+        customField.style.display = value === "custom" ? "" : "none";
+      }
       if (!fromUser) {
         return;
       }
@@ -138,7 +153,7 @@
         return;
       }
       if (value === "year") {
-        const yearInput = yearField.querySelector("[data-game-select-input]");
+        const yearInput = yearField?.querySelector("[data-game-select-input]");
         if (yearInput && yearInput.value) {
           submitForm();
         }
@@ -164,10 +179,26 @@
       }
       submitForm();
     });
-    bindSelect(playerWrapper);
-    bindSelect(deckWrapper);
+    bindSelect(playerWrapper, (_value, fromUser) => {
+      if (!fromUser) {
+        return;
+      }
+      submitForm();
+    });
+    bindSelect(deckWrapper, (_value, fromUser) => {
+      if (!fromUser) {
+        return;
+      }
+      submitForm();
+    });
     bindSearch(playerWrapper, "[data-game-select-option]");
     bindSearch(deckWrapper, "[data-game-select-option]");
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      submitForm();
+    });
   };
 
   const scan = (scope) => {

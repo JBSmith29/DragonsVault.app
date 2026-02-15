@@ -219,18 +219,47 @@
         <td>
           {% set back_to = request.full_path %}
           {% set wl_href = (
-            url_for('views.scryfall_print_detail', sid=it.scryfall_id, return_to=back_to)
-            if it.scryfall_id
-            else url_for('views.scryfall_resolve_by_name', name=it.name, return_to=back_to)
+            url_for('views.card_detail', card_id=it.display_card_id, return_to=back_to)
+            if it.display_card_id
+            else (
+              url_for('views.scryfall_print_detail', sid=(it.display_scryfall_id or it.scryfall_id), return_to=back_to)
+              if (it.display_scryfall_id or it.scryfall_id)
+              else url_for('views.scryfall_resolve_by_name', name=it.name, return_to=back_to)
+            )
           ) %}
-          <a
-            class="link-light link-underline-opacity-25 wl-card-link fw-semibold"
-            href="{{ wl_href }}"
-            data-scry-id="{{ it.scryfall_id or '' }}"
-            data-name="{{ it.name }}"
-          >{{ it.name }}</a>
-          <div class="small text-muted">
-            {% if it.created_at %}Added {{ it.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+          {% set rarity_label = it.display_rarity_label if it.display_rarity_label is defined else None %}
+          {% set rarity_class = it.display_rarity_badge_class if it.display_rarity_badge_class is defined else None %}
+          <div class="d-flex align-items-start gap-2 wl-card-main">
+            <div class="wishlist-thumb">
+              <img
+                src="{{ (it.display_image_url or it.image_url or static_url('img/card-placeholder.svg')) | e }}"
+                alt="{{ it.name }}"
+                class="wishlist-thumb-img"
+                data-card-id="{{ it.display_card_id or '' }}"
+                data-scry-id="{{ it.display_scryfall_id or it.scryfall_id or '' }}"
+                data-rarity-key="{{ it.id }}"
+                loading="lazy"
+              >
+            </div>
+            <div class="flex-grow-1" style="min-width:0;">
+              <a
+                class="link-light link-underline-opacity-25 wl-card-link fw-semibold"
+                href="{{ wl_href }}"
+                data-card-id="{{ it.display_card_id or '' }}"
+                data-scry-id="{{ it.display_scryfall_id or it.scryfall_id or '' }}"
+                data-name="{{ it.name }}"
+              >{{ it.name }}</a>
+              <div class="small text-muted">
+                {% if it.created_at %}Added {{ it.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+              </div>
+              <div class="mt-1">
+                <span
+                  class="badge {% if rarity_class %}badge-folder badge-folder-{{ rarity_class }}{% else %}text-bg-secondary{% endif %}{% if not rarity_label %} d-none{% endif %}"
+                  data-rarity-badge
+                  data-rarity-key="{{ it.id }}"
+                >{{ rarity_label or '' }}</span>
+              </div>
+            </div>
           </div>
         </td>
 
@@ -416,12 +445,16 @@
       {% elif st == 'removed' %}
         {% set status_class = 'text-bg-secondary' %}
       {% endif %}
+      {% set rarity_label = it.display_rarity_label if it.display_rarity_label is defined else None %}
+      {% set rarity_class = it.display_rarity_badge_class if it.display_rarity_badge_class is defined else None %}
       <div class="thumb">
         <img
-          src="{{ (it.image_url or static_url('img/card-placeholder.svg')) | e }}"
+          src="{{ (it.display_image_url or it.image_url or static_url('img/card-placeholder.svg')) | e }}"
           alt="{{ it.name }}"
           class="wishlist-thumb-img"
-          data-scry-id="{{ it.scryfall_id or '' }}"
+          data-card-id="{{ it.display_card_id or '' }}"
+          data-scry-id="{{ it.display_scryfall_id or it.scryfall_id or '' }}"
+          data-rarity-key="{{ it.id }}"
           data-name="{{ it.name }}"
           loading="lazy"
         >
@@ -433,6 +466,11 @@
           {% if it.in_friends_collection %}
             <span class="badge text-bg-orange status">Friends Collection</span>
           {% endif %}
+          <span
+            class="badge {% if rarity_class %}badge-folder badge-folder-{{ rarity_class }}{% else %}text-bg-secondary{% endif %}{% if not rarity_label %} d-none{% endif %}"
+            data-rarity-badge
+            data-rarity-key="{{ it.id }}"
+          >{{ rarity_label or '' }}</span>
         </div>
       </div>
       <div class="text-muted small">Requested: {{ it.requested_qty or it.quantity or 1 }}</div>
@@ -599,8 +637,15 @@
     white-space: nowrap;
   }
   .wl-order-toggle { line-height: 1; padding: .25rem .65rem; }
-  .wishlist-thumb { width: 120px; min-width: 120px; max-width: 120px; }
-  .wishlist-thumb img { object-fit: contain; width: 100%; height: auto; display: block; }
+  .wl-card-main { min-width: 0; }
+  .wishlist-thumb { width: 72px; min-width: 72px; max-width: 72px; }
+  .wishlist-thumb img {
+    object-fit: cover;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: .4rem;
+    display: block;
+  }
   .wishlist-row td { padding-top: .9rem; padding-bottom: .9rem; }
   .wl-select { cursor: pointer; }
   .wl-row-friends { background: rgba(253, 126, 20, 0.12); }
@@ -659,33 +704,125 @@
   clearBtn?.addEventListener('click', () => { search.value = ''; applyFilter(); });
   applyFilter();
 
-  // -------- Thumb images --------
-  const thumbCache = new Map();
+  // -------- Thumb images + rarity --------
+  const thumbCacheByCardId = new Map();
+  const thumbCacheByScryId = new Map();
+  const rarityClasses = [
+    'badge-folder-common',
+    'badge-folder-uncommon',
+    'badge-folder-rare',
+    'badge-folder-mythic',
+  ];
+
+  function normalizeRarity(value) {
+    const text = (value || '').toString().trim().toLowerCase().replace(/[_-]+/g, ' ');
+    if (!text) return '';
+    if (text.includes('mythic')) return 'mythic';
+    if (['common', 'uncommon', 'rare', 'special'].includes(text)) return text;
+    return text;
+  }
+
+  function rarityLabel(value) {
+    const rarity = normalizeRarity(value);
+    if (!rarity) return '';
+    if (rarity === 'mythic') return 'Mythic';
+    return rarity
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  function rarityBadgeClass(value) {
+    const rarity = normalizeRarity(value);
+    if (['common', 'uncommon', 'rare', 'mythic'].includes(rarity)) return `badge-folder-${rarity}`;
+    return '';
+  }
+
+  function applyRarity(rarityKey, rarityValue) {
+    if (!rarityKey) return;
+    const label = rarityLabel(rarityValue);
+    const badgeClass = rarityBadgeClass(rarityValue);
+    document.querySelectorAll('[data-rarity-badge]').forEach((badge) => {
+      if ((badge.dataset.rarityKey || '') !== String(rarityKey)) return;
+      badge.classList.remove('d-none', 'text-bg-secondary', ...rarityClasses);
+      if (!label) {
+        badge.textContent = '';
+        badge.classList.add('d-none');
+        return;
+      }
+      badge.textContent = label;
+      if (badgeClass) {
+        badge.classList.add('badge-folder', badgeClass);
+      } else {
+        badge.classList.remove('badge-folder');
+        badge.classList.add('text-bg-secondary');
+      }
+    });
+  }
+
+  async function fetchThumbByCardId(cardId) {
+    if (thumbCacheByCardId.has(cardId)) return thumbCacheByCardId.get(cardId);
+    try {
+      const r = await fetch(`/api/card/${encodeURIComponent(cardId)}`);
+      if (!r.ok) throw 0;
+      const data = await r.json();
+      const img = data?.images?.[0] || {};
+      const src = img.normal || img.large || img.small || null;
+      const rarity = data?.info?.rarity || null;
+      const payload = { src, rarity };
+      thumbCacheByCardId.set(cardId, payload);
+      return payload;
+    } catch {
+      const payload = { src: null, rarity: null };
+      thumbCacheByCardId.set(cardId, payload);
+      return payload;
+    }
+  }
 
   async function fetchThumbByScryId(sid) {
-    if (thumbCache.has(sid)) return thumbCache.get(sid);
+    if (thumbCacheByScryId.has(sid)) return thumbCacheByScryId.get(sid);
     try {
       const r = await fetch(`/api/scryfall/print/${encodeURIComponent(sid)}`);
       if (!r.ok) throw 0;
       const data = await r.json();
       const img = data?.image || {};
       const src = img.normal || img.small || img.large || null;
-      thumbCache.set(sid, src);
-      return src;
+      const rarity = data?.info?.rarity || null;
+      const payload = { src, rarity };
+      thumbCacheByScryId.set(sid, payload);
+      return payload;
     } catch {
-      thumbCache.set(sid, null);
-      return null;
+      const payload = { src: null, rarity: null };
+      thumbCacheByScryId.set(sid, payload);
+      return payload;
     }
   }
 
   async function hydrateThumb(img) {
     if (!img) return;
-    const sid = img.dataset.scryId;
-    let src = null;
-    if (sid) {
-      src = await fetchThumbByScryId(sid);
+    const cardId = (img.dataset.cardId || '').trim();
+    const sid = (img.dataset.scryId || '').trim();
+    let payload = { src: null, rarity: null };
+
+    if (cardId) {
+      payload = await fetchThumbByCardId(cardId);
     }
-    img.src = src || FALLBACK_IMG;
+
+    if ((!payload?.src || !payload?.rarity) && sid) {
+      const fromScryfall = await fetchThumbByScryId(sid);
+      payload = {
+        src: payload?.src || fromScryfall?.src || null,
+        rarity: payload?.rarity || fromScryfall?.rarity || null,
+      };
+    }
+
+    img.src = payload?.src || img.getAttribute('src') || FALLBACK_IMG;
+
+    const rarityKey = (img.dataset.rarityKey || '').trim();
+    if (rarityKey && payload?.rarity) {
+      applyRarity(rarityKey, payload.rarity);
+    }
   }
 
   document.querySelectorAll('.wishlist-thumb-img').forEach((img) => hydrateThumb(img));

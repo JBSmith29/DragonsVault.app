@@ -625,3 +625,17 @@ a.tile { text-decoration: none; color: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.cmdr-chip-stack {
+  gap: .35rem;
+}
+
+.cmdr-chip-thumb {
+  display: block;
+  height: auto;
+  border-radius: .5rem;
+}
+
+.cmdr-chip-thumb-shadow {
+  box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .35);
+}

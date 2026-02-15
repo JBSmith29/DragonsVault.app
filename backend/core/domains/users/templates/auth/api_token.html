@@ -37,7 +37,7 @@
           <input type="hidden" name="action" value="create">
           <button class="btn btn-primary" type="submit">Generate new token</button>
         </form>
-        <form method="post" class="d-inline" style="display:inline-block;">
+        <form method="post" class="d-inline-block">
           <input type="hidden" name="action" value="revoke">
           <button class="btn btn-outline-danger mt-3" type="submit" {% if not token_hint %}disabled{% endif %}>
             Revoke existing token

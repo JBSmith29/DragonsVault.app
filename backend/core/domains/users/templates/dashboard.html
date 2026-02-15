@@ -68,6 +68,9 @@
     font-size: 0.9rem;
     padding: 0.35em 0.6em;
   }
+  .dashboard-filter-wrap {
+    max-width: 280px;
+  }
 
   .top-card {
     display: flex;
@@ -75,13 +78,23 @@
     overflow: hidden;
   }
 
+  .top-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+
+  .top-card-col {
+    min-width: 0;
+  }
+
   .top-card-media {
     position: relative;
-    aspect-ratio: 63 / 88;
+    aspect-ratio: 7 / 8.6;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0.9rem;
+    padding: 0.65rem;
     background: rgba(15, 23, 42, 0.35);
   }
 
@@ -90,13 +103,13 @@
   }
 
   .top-card-media img {
-    max-width: 88%;
-    max-height: 88%;
+    max-width: 76%;
+    max-height: 80%;
     width: auto;
     height: auto;
     object-fit: contain;
-    border-radius: 0.6rem;
-    box-shadow: 0 12px 25px rgba(2, 6, 23, 0.35);
+    border-radius: 0.52rem;
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.32);
   }
 
   .top-card-placeholder {
@@ -153,6 +166,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-size: 0.7rem;
+    white-space: nowrap;
   }
 
   .top-card-folder {
@@ -172,10 +186,27 @@
     text-transform: uppercase;
   }
 
+  @media (min-width: 576px) {
+    .top-cards-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 768px) {
+    .top-cards-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 992px) {
+    .top-cards-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
   @media (min-width: 1200px) {
-    .top-card-col {
-      flex: 0 0 20%;
-      max-width: 20%;
+    .top-cards-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
   }
 
@@ -227,51 +258,15 @@
   }
 
   const globalHover = window.dvHoverPreview;
-  if (globalHover && typeof globalHover.show === 'function' && typeof globalHover.hide === 'function') {
-    hoverTargets.forEach(el => {
-      const src = el.getAttribute('data-hover-src');
-      el.addEventListener('mouseenter', (e) => globalHover.show(el, src, e));
-      el.addEventListener('mousemove', (e) => globalHover.show(el, src, e));
-      el.addEventListener('mouseleave', () => globalHover.hide());
-    });
+  if (!(globalHover && typeof globalHover.show === 'function' && typeof globalHover.hide === 'function')) {
     return;
-  }
-
-  const preview = document.createElement('div');
-  preview.id = 'deckHoverPreview';
-  preview.style.position = 'fixed';
-  preview.style.pointerEvents = 'none';
-  preview.style.zIndex = '1080';
-  preview.style.display = 'none';
-  preview.innerHTML = '<img alt="Commander art" style="max-width:260px; max-height:360px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); background:#111;">';
-  document.body.appendChild(preview);
-
-  const imgEl = preview.querySelector('img');
-  function hidePreview() { preview.style.display = 'none'; imgEl.src = ''; }
-  function showPreview(src, evt) {
-    if (!src) return;
-    imgEl.src = src;
-    preview.style.display = 'block';
-    positionPreview(evt);
-  }
-  function positionPreview(evt) {
-    const pad = 16;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const rect = preview.getBoundingClientRect();
-    let x = evt.clientX + pad;
-    let y = evt.clientY + pad;
-    if (x + rect.width + pad > vw) x = evt.clientX - rect.width - pad;
-    if (y + rect.height + pad > vh) y = vh - rect.height - pad;
-    preview.style.left = `${x}px`;
-    preview.style.top = `${y}px`;
   }
 
   hoverTargets.forEach(el => {
     const src = el.getAttribute('data-hover-src');
-    el.addEventListener('mouseenter', (e) => showPreview(src, e));
-    el.addEventListener('mousemove', positionPreview);
-    el.addEventListener('mouseleave', hidePreview);
+    el.addEventListener('mouseenter', (e) => globalHover.show(el, src, e));
+    el.addEventListener('mousemove', (e) => globalHover.show(el, src, e));
+    el.addEventListener('mouseleave', () => globalHover.hide());
   });
 })();
 </script>

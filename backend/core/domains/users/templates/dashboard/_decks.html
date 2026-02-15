@@ -27,7 +27,7 @@
 
 <div class="d-flex align-items-center justify-content-between mb-2">
   <div class="section-label mb-0">All Decks</div>
-  <div class="ms-auto" style="max-width: 280px;">
+  <div class="ms-auto dashboard-filter-wrap">
     <input id="deckFilter" type="search" class="form-control form-control-sm" placeholder="Filter decks..." aria-label="Filter decks">
   </div>
 </div>
@@ -83,7 +83,7 @@
     const term = input.value.trim().toLowerCase();
     document.querySelectorAll('#deckGrid [data-deck-name]').forEach(col => {
       const name = col.getAttribute('data-deck-name') || '';
-      col.style.display = !term || name.includes(term) ? '' : 'none';
+      col.classList.toggle('d-none', !!term && !name.includes(term));
     });
   });
 })();
