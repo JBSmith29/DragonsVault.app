@@ -128,37 +128,82 @@ def _request(
     raise GameEngineError("Game engine service URL is not configured.")
 
 
+def _ensure_status_ok(payload: Dict[str, Any], *, status_code: int = 502) -> Dict[str, Any]:
+    status = str(payload.get("status") or "").strip().lower()
+    if status == "ok":
+        return payload
+    message = payload.get("error") or payload.get("message") or status or "game_engine_error"
+    error_key = str(payload.get("error") or "").strip().lower()
+    status_map = {
+        "not_found": 404,
+        "forbidden": 403,
+        "unauthorized": 401,
+        "unauthenticated": 401,
+        "bad_request": 400,
+        "invalid": 400,
+        "conflict": 409,
+        "game_already_started": 409,
+        "folder_id_required": 400,
+        "deck_not_found": 404,
+        "player_id_and_action_type_required": 400,
+    }
+    resolved_status = status_map.get(status) or status_map.get(error_key) or status_code
+    raise GameEngineError(str(message), status_code=resolved_status)
+
+
 def create_game(user_id: int, *, format_name: str = "commander", players: Optional[list[int]] = None) -> Dict[str, Any]:
     payload = {"format": format_name}
     if players:
         payload["players"] = players
-    return _request("POST", "/v1/games", user_id=user_id, json_payload=payload)
+    response = _request("POST", "/v1/games", user_id=user_id, json_payload=payload)
+    return _ensure_status_ok(response)
 
 
 def ping(user_id: int) -> Dict[str, Any]:
-    return _request("GET", "/v1/ping", user_id=user_id)
+    response = _request("GET", "/v1/ping", user_id=user_id)
+    return _ensure_status_ok(response)
 
 
 def join_game(user_id: int, game_id: str) -> Dict[str, Any]:
-    return _request("POST", f"/v1/games/{game_id}/join", user_id=user_id, json_payload={})
+    response = _request("POST", f"/v1/games/{game_id}/join", user_id=user_id, json_payload={})
+    return _ensure_status_ok(response)
 
 
 def get_game(user_id: int, game_id: str) -> Dict[str, Any]:
-    return _request("GET", f"/v1/games/{game_id}", user_id=user_id)
+    response = _request("GET", f"/v1/games/{game_id}", user_id=user_id)
+    return _ensure_status_ok(response)
 
 
 def submit_action(user_id: int, game_id: str, *, action_type: str, payload: Optional[dict] = None) -> Dict[str, Any]:
     body = {"player_id": user_id, "action_type": action_type, "payload": payload or {}}
-    return _request("POST", f"/v1/games/{game_id}/actions", user_id=user_id, json_payload=body)
+    response = _request("POST", f"/v1/games/{game_id}/actions", user_id=user_id, json_payload=body)
+    status = str(response.get("status") or "").strip().lower()
+    if status in {"applied", "ok"}:
+        result = response.get("result")
+        if isinstance(result, dict) and result.get("ok") is False:
+            message = result.get("error") or "action_failed"
+            raise GameEngineError(str(message), status_code=409)
+        return response
+    if status == "failed":
+        result = response.get("result")
+        message = None
+        if isinstance(result, dict):
+            message = result.get("error")
+        message = message or response.get("error") or "action_failed"
+        raise GameEngineError(str(message), status_code=409)
+    message = response.get("error") or status or "action_failed"
+    raise GameEngineError(str(message), status_code=502)
 
 
 def list_events(user_id: int, game_id: str, *, since: Optional[int] = None) -> Dict[str, Any]:
     params = {}
     if since is not None:
         params["since"] = since
-    return _request("GET", f"/v1/games/{game_id}/events", user_id=user_id, params=params)
+    response = _request("GET", f"/v1/games/{game_id}/events", user_id=user_id, params=params)
+    return _ensure_status_ok(response)
 
 
 def sync_deck_from_folder(user_id: int, folder_id: int) -> Dict[str, Any]:
     body = {"folder_id": folder_id}
-    return _request("POST", "/v1/decks/from-folder", user_id=user_id, json_payload=body)
+    response = _request("POST", "/v1/decks/from-folder", user_id=user_id, json_payload=body)
+    return _ensure_status_ok(response)

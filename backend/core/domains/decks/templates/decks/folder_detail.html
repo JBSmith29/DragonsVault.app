@@ -192,16 +192,73 @@
     max-width:200px;
     align-self:stretch;
   }
+  .commander-portrait.has-partners{
+    flex:0 0 320px;
+    max-width:320px;
+  }
   .commander-portrait-frame{
     border-radius:1rem;
-    overflow:hidden;
+    overflow:visible;
     background:rgba(15,23,42,.65);
     border:1px solid rgba(255,255,255,.1);
     box-shadow:0 .75rem 1.5rem rgba(0,0,0,.35);
   }
-  .commander-portrait img{
+  .commander-stack{
+    --stack-overlap:60px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    min-height:260px;
+    padding:.9rem;
+  }
+  .commander-stack-item{
+    position:relative;
+    width:168px;
+    appearance:none;
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:.85rem;
+    overflow:hidden;
+    box-shadow:0 .55rem 1.25rem rgba(0,0,0,.42);
+    transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
+    z-index:calc(10 + var(--cmdr-index, 0));
+    background:rgba(2,6,23,.6);
+    padding:0;
+  }
+  .commander-stack-item + .commander-stack-item{
+    margin-left:calc(-1 * var(--stack-overlap));
+  }
+  .commander-stack-item img{
     width:100%;
     display:block;
+  }
+  .commander-stack-role{
+    position:absolute;
+    left:.4rem;
+    bottom:.4rem;
+    padding:.1rem .4rem;
+    border-radius:.35rem;
+    background:rgba(2,6,23,.78);
+    border:1px solid rgba(255,255,255,.22);
+    color:#fff;
+    font-size:.68rem;
+    font-weight:600;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    pointer-events:none;
+  }
+  .commander-stack:hover .commander-stack-item{
+    filter:saturate(.9);
+  }
+  .commander-stack:hover .commander-stack-item:hover,
+  .commander-stack-item:focus-visible{
+    transform:translateY(-8px) scale(1.02);
+    filter:none;
+    box-shadow:0 1rem 2rem rgba(0,0,0,.52);
+    z-index:60;
+  }
+  .commander-stack-item:focus-visible{
+    outline:2px solid var(--bs-primary);
+    outline-offset:2px;
   }
   .commander-portrait-placeholder{
     min-height:260px;
@@ -369,13 +426,22 @@
     width:auto;
   }
   @media (max-width: 576px){
-    .commander-portrait{
+    .commander-portrait,
+    .commander-portrait.has-partners{
       flex:1 1 100%;
       max-width:100%;
     }
     .commander-portrait-frame{
-      max-width:260px;
+      max-width:320px;
       margin:0 auto;
+    }
+    .commander-stack{
+      --stack-overlap:48px;
+      min-height:220px;
+      padding:.65rem;
+    }
+    .commander-stack-item{
+      width:144px;
     }
     .commander-meta-block{
       min-width:100%;
@@ -792,16 +858,27 @@
     <div class="card synergy-card mb-3">
       <div class="card-body">
         <div class="commander-summary mb-3">
-          <div class="commander-portrait">
+          {% set commander_media_list = commander_media_list if commander_media_list is defined else ([commander_media] if commander_media else []) %}
+          {% set commander_media_count = commander_media_list|length %}
+          <div class="commander-portrait{% if commander_media_count > 1 %} has-partners{% endif %}">
             <div class="commander-portrait-frame card-hover-shadow hover-lift">
-              {% set commander_media_list = commander_media_list if commander_media_list is defined else ([commander_media] if commander_media else []) %}
-              {% if commander_media_list and commander_media_list|length %}
-                <div class="d-flex justify-content-center gap-2">
+              {% if commander_media_count %}
+                <div class="commander-stack{% if commander_media_count > 1 %} has-partners{% endif %}">
                   {% for cm in commander_media_list %}
-                    <img src="{{ cm.image }}"
-                         alt="{{ cm.name or 'Commander art' }}"
-                         class="commander-img commander-img-thumb"
-                         {% if cm.hover %}data-hover-src="{{ cm.hover }}"{% endif %}>
+                    {% set role_label = 'Commander' if loop.first else 'Partner' %}
+                    <button type="button"
+                            class="commander-stack-item"
+                            style="--cmdr-index: {{ loop.index0 }};"
+                            aria-label="{{ role_label }}: {{ cm.name or 'Commander art' }}"
+                            {% if cm.hover or cm.image %}data-hover-src="{{ cm.hover or cm.image }}"{% endif %}>
+                      <img src="{{ cm.image }}"
+                           alt="{{ cm.name or role_label }}"
+                           class="commander-img commander-img-thumb"
+                           {% if cm.hover %}data-hover-src="{{ cm.hover }}"{% endif %}>
+                      {% if commander_media_count > 1 %}
+                        <span class="commander-stack-role">{{ role_label }}</span>
+                      {% endif %}
+                    </button>
                   {% endfor %}
                 </div>
               {% else %}

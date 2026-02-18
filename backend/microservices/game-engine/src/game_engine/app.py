@@ -270,8 +270,13 @@ def create_app() -> Flask:
         format_name = payload.get("format") or "commander"
         players = payload.get("players") or []
         player_ids = [int(p) for p in players if str(p).isdigit()]
+        if player_ids:
+            # Keep seat order stable while removing duplicates.
+            player_ids = list(dict.fromkeys(player_ids))
         if not player_ids:
             player_ids = [int(g.user_id)]
+        if str(format_name).strip().lower() == "commander" and len(player_ids) > 4:
+            return jsonify(status="error", error="commander_max_players_exceeded"), 400
         if int(g.user_id) not in player_ids:
             return jsonify(status="error", error="owner_must_be_player"), 403
 
@@ -322,14 +327,19 @@ def create_app() -> Flask:
             ).scalars().all()
             if not any(player.user_id == int(g.user_id) for player in players):
                 return jsonify(status="forbidden"), 403
+            game_state = dict(game.state or {})
+            current_status = str(game_state.get("status") or game.status or "waiting")
+            if game.status != current_status:
+                game.status = current_status
+                session.commit()
             return jsonify(
                 status="ok",
                 game={
                     "id": game.id,
                     "format": game.format,
-                    "status": game.status,
+                    "status": current_status,
                     "rules_version": game.rules_version,
-                    "state": game.state,
+                    "state": game_state,
                 },
                 players=[
                     {
@@ -353,7 +363,11 @@ def create_app() -> Flask:
             game = session.get(Game, game_id)
             if not game:
                 return jsonify(status="not_found"), 404
-            if game.status != "waiting":
+            state_status = str((game.state or {}).get("status") or game.status or "waiting")
+            if state_status != "waiting":
+                if game.status != state_status:
+                    game.status = state_status
+                    session.commit()
                 return jsonify(status="error", error="game_already_started"), 409
             existing = session.execute(
                 select(GamePlayer).where(
@@ -362,6 +376,13 @@ def create_app() -> Flask:
                 )
             ).scalars().first()
             if existing:
+                state = dict(game.state or {})
+                format_name = state.get("format") or game.format or "commander"
+                if not _state_has_player(state, int(g.user_id)):
+                    _state_add_player(state, int(g.user_id), format_name=str(format_name))
+                    game.state = state
+                    game.status = str(state.get("status") or game.status or "waiting")
+                    session.commit()
                 return jsonify(
                     status="ok",
                     game_id=game_id,
@@ -369,12 +390,14 @@ def create_app() -> Flask:
                     seat_index=existing.seat_index,
                     joined=False,
                 )
-            seat_index = session.execute(
-                select(GamePlayer.seat_index)
-                .where(GamePlayer.game_id == game_id)
-                .order_by(GamePlayer.seat_index.desc())
-            ).scalars().first()
-            next_seat = int(seat_index or -1) + 1
+            current_players = session.execute(
+                select(GamePlayer).where(GamePlayer.game_id == game_id)
+            ).scalars().all()
+            format_name = str((game.state or {}).get("format") or game.format or "commander").strip().lower()
+            if format_name == "commander" and len(current_players) >= 4:
+                return jsonify(status="error", error="commander_lobby_full"), 409
+            highest_seat = max((int(player.seat_index) for player in current_players), default=-1)
+            next_seat = highest_seat + 1
             session.add(
                 GamePlayer(
                     game_id=game_id,
@@ -383,9 +406,9 @@ def create_app() -> Flask:
                 )
             )
             state = dict(game.state or {})
-            format_name = state.get("format") or game.format or "commander"
             _state_add_player(state, int(g.user_id), format_name=str(format_name))
             game.state = state
+            game.status = str(state.get("status") or game.status or "waiting")
             event = GameEvent(
                 game_id=game_id,
                 seq=_next_event_seq(session, game_id),
@@ -476,7 +499,9 @@ def create_app() -> Flask:
                 },
             )
             if result.get("ok"):
-                game.state = dict(result["state"])
+                next_state = dict(result["state"])
+                game.state = next_state
+                game.status = str(next_state.get("status") or game.status or "active")
                 action.status = "applied"
                 events = result.get("events") or []
                 next_seq = _next_event_seq(session, game_id)

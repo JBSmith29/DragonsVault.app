@@ -31,6 +31,7 @@
     const metaEl = root.querySelector('#engineGameMeta');
     const playersListEl = root.querySelector('#enginePlayersList');
     const configStatusEl = root.querySelector('#engineConfigStatus');
+    const userId = parseInt(root.dataset.userId || '0', 10);
 
     let currentGameId = '';
     let engineReady = engineEnabled;
@@ -58,6 +59,43 @@
       if (!statusEl) return;
       statusEl.textContent = message;
       statusEl.className = `engine-status ${kind || ''}`.trim();
+    }
+
+    function normalizeErrorMessage(raw) {
+      const text = (raw || '').toString().trim();
+      if (!text) return 'Unexpected game engine error.';
+      const friendly = {
+        game_not_started: 'Game has not started yet.',
+        mulligan_in_progress: 'Finish mulligans before taking more actions.',
+        choice_pending: 'Resolve the pending choice before continuing.',
+        priority_required: 'You need priority to do that action.',
+        not_active_player: 'Only the active player can do that action right now.',
+        not_main_phase: 'That action is only available in a main phase.',
+        stack_not_empty: 'Resolve the stack first.',
+        stack_empty: 'The stack is currently empty.',
+        defender_required: 'Select a defender first.',
+        commander_min_players_required: 'Commander needs at least 2 players to start.',
+        commander_max_players_exceeded: 'Commander supports up to 4 players.',
+        commander_lobby_full: 'This Commander lobby is full (4 players max).',
+      };
+      if (friendly[text]) return friendly[text];
+      return text.replace(/_/g, ' ');
+    }
+
+    async function runWithBusy(button, busyLabel, callback) {
+      if (!button) return callback();
+      if (button.dataset.busy === 'true') return false;
+      const previous = button.textContent;
+      button.dataset.busy = 'true';
+      button.disabled = true;
+      if (busyLabel) button.textContent = busyLabel;
+      try {
+        return await callback();
+      } finally {
+        button.dataset.busy = 'false';
+        button.textContent = previous;
+        setControlsEnabled(engineEnabled && engineReady);
+      }
     }
 
     function getStoredGameId() {
@@ -121,11 +159,29 @@
         playersListEl.appendChild(empty);
         return;
       }
+
+      const displayNameFor = (player) => {
+        const label = (player && (player.display_name || player.username || player.name || player.label)) || '';
+        if (label) return label;
+        const numericId = Number(player && player.user_id);
+        if (numericId && userId && numericId === userId) return 'You';
+        return `Player ${player && player.user_id != null ? player.user_id : 'Unknown'}`;
+      };
+
       players.forEach((player) => {
         const item = document.createElement('div');
         item.className = 'list-group-item bg-transparent border-secondary text-light d-flex align-items-center justify-content-between';
+
         const left = document.createElement('div');
-        left.innerHTML = `<strong>Player ${player.user_id}</strong> <span class="text-muted small">Seat ${player.seat_index}</span>`;
+        const name = document.createElement('strong');
+        name.textContent = displayNameFor(player);
+        const seat = document.createElement('span');
+        seat.className = 'text-muted small';
+        seat.textContent = `Seat ${player.seat_index}`;
+        left.appendChild(name);
+        left.appendChild(document.createTextNode(' '));
+        left.appendChild(seat);
+
         const right = document.createElement('div');
         right.className = 'text-muted small';
         right.textContent = player.deck_ref ? `Deck: ${player.deck_ref}` : (player.status || 'active');
@@ -198,9 +254,21 @@
       }
       renderPlayers(players);
       if (result.game) {
-        setStatus(`Loaded lobby ${result.game.id}.`, 'text-success');
+        const gameFormat = String(result.game.format || '').toLowerCase();
+        const isCommander = gameFormat === 'commander';
+        const playerCount = Array.isArray(players) ? players.length : 0;
+        const commanderStartReady = !isCommander || (playerCount >= 2 && playerCount <= 4);
+        if (result.game.status === 'waiting' && isCommander && !commanderStartReady) {
+          if (playerCount < 2) {
+            setStatus('Commander games need 2-4 players to start. Invite at least one more player.', 'text-warning');
+          } else {
+            setStatus('Commander lobbies support up to 4 players. Remove one player before starting.', 'text-warning');
+          }
+        } else {
+          setStatus(`Loaded lobby ${result.game.id}.`, 'text-success');
+        }
         if (startBtn) {
-          startBtn.disabled = result.game.status !== 'waiting';
+          startBtn.disabled = result.game.status !== 'waiting' || !commanderStartReady;
         }
       }
     }
@@ -246,7 +314,7 @@
         engineReady = false;
         setControlsEnabled(false);
         setConfigStatus('Engine unavailable', 'is-warn');
-        setStatus(err.message || 'Engine unavailable.', 'text-danger');
+        setStatus(normalizeErrorMessage(err.message || 'Engine unavailable.'), 'text-danger');
         return false;
       }
     }
@@ -283,7 +351,7 @@
     }
 
     async function createGame() {
-      if (!(await ensureEngineReady())) return;
+      if (!(await ensureEngineReady())) return false;
       setStatus('Creating lobby...');
       const format = formatEl ? formatEl.value : 'commander';
       const deckId = createDeckSelectEl ? createDeckSelectEl.value : '';
@@ -301,18 +369,20 @@
           await loadDeckForGame(currentGameId, deckId);
         }
         await refreshGame();
+        return Boolean(currentGameId);
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
+        return false;
       }
     }
 
     async function joinGame() {
-      if (!(await ensureEngineReady())) return;
+      if (!(await ensureEngineReady())) return false;
       const gameId = (gameIdEl && gameIdEl.value || '').trim();
       const deckId = joinDeckSelectEl ? joinDeckSelectEl.value : '';
       if (!gameId) {
         setStatus('Enter a lobby ID to join.', 'text-warning');
-        return;
+        return false;
       }
       setStatus('Joining lobby...');
       try {
@@ -325,8 +395,10 @@
           await loadDeckForGame(currentGameId, deckId);
         }
         await refreshGame();
+        return Boolean(currentGameId);
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
+        return false;
       }
     }
 
@@ -342,7 +414,7 @@
         const result = await api(`/api/game-engine/games/${gameId}`, { method: 'GET' });
         renderGame(result);
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
       }
     }
 
@@ -361,7 +433,7 @@
         });
         await refreshGame();
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
       }
     }
 
@@ -377,7 +449,7 @@
         await loadDeckForGame(gameId, folderId);
         await refreshGame();
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
       }
     }
 
@@ -405,16 +477,16 @@
 
     if (createBtn) {
       createBtn.addEventListener('click', async () => {
-        await createGame();
-        if (currentGameId) {
+        const created = await runWithBusy(createBtn, 'Creating...', createGame);
+        if (created && currentGameId) {
           window.location.assign(`${openTableBase}?game_id=${encodeURIComponent(currentGameId)}`);
         }
       });
     }
     if (joinBtn) {
       joinBtn.addEventListener('click', async () => {
-        await joinGame();
-        if (currentGameId) {
+        const joined = await runWithBusy(joinBtn, 'Joining...', joinGame);
+        if (joined && currentGameId) {
           window.location.assign(`${openTableBase}?game_id=${encodeURIComponent(currentGameId)}`);
         }
       });
@@ -430,6 +502,18 @@
         if (value) {
           currentGameId = value;
           updateTableLink(currentGameId);
+        }
+      });
+      gameIdEl.addEventListener('keydown', async (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        if (!joinBtn) {
+          await joinGame();
+          return;
+        }
+        const joined = await runWithBusy(joinBtn, 'Joining...', joinGame);
+        if (joined && currentGameId) {
+          window.location.assign(`${openTableBase}?game_id=${encodeURIComponent(currentGameId)}`);
         }
       });
     }

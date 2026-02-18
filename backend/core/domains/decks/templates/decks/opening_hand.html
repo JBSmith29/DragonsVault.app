@@ -782,6 +782,17 @@
     font-weight: 600;
     font-size: 0.85rem;
   }
+  .scry-card .scry-choice-select {
+    width: 100%;
+  }
+  .scry-card .scry-choice-select .dv-select-toggle {
+    font-size: 0.85rem;
+    min-height: 36px;
+    padding: 0.35rem 0.55rem;
+  }
+  .scry-card .scry-choice-select .dv-select-menu {
+    min-width: 100%;
+  }
   .scry-top-list {
     display: flex;
     flex-direction: column;
@@ -1299,11 +1310,32 @@
       <div class="modal-body">
         <div class="row g-3 align-items-end mb-3">
           <div class="col-12 col-lg-4">
-            <label for="scryMode" class="form-label">Mode</label>
-            <select id="scryMode" class="form-select form-select-sm">
-              <option value="scry">Scry (put any on bottom)</option>
-              <option value="surveil">Surveil (put any in graveyard)</option>
-            </select>
+            <label for="scryModeToggle" class="form-label">Mode</label>
+            <div class="dropdown dv-select w-100" data-dv-select="scry-mode">
+              <input type="hidden" id="scryMode" data-dv-select-input value="scry">
+              <button
+                class="btn dv-select-toggle btn-sm w-100 d-inline-flex align-items-center justify-content-between gap-2"
+                type="button"
+                id="scryModeToggle"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                aria-label="Scry mode">
+                <span data-dv-select-label>Scry (put any on bottom)</span>
+                <i class="bi bi-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="scryModeToggle">
+                <li>
+                  <button class="dropdown-item active" type="button" data-dv-select-option data-value="scry" data-label="Scry (put any on bottom)">
+                    Scry (put any on bottom)
+                  </button>
+                </li>
+                <li>
+                  <button class="dropdown-item" type="button" data-dv-select-option data-value="surveil" data-label="Surveil (put any in graveyard)">
+                    Surveil (put any in graveyard)
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
           <div class="col-12 col-lg-4">
             <label for="scryCount" class="form-label">Cards to look at</label>
@@ -1443,6 +1475,7 @@
   let scryCards = [];
   let scryChoices = new Map();
   let scryTopOrder = [];
+  let scryChoiceUid = 0;
   let resolvingEffects = false;
   let pendingDiscard = null;
   let pendingSearch = null;
@@ -3924,6 +3957,87 @@
     setScryStatus('');
   }
 
+  function scryChoiceLabel(value, mode) {
+    if (value === 'top') {
+      return 'Keep on top';
+    }
+    return mode === 'surveil' ? 'Put in Graveyard' : 'Put in Bottom';
+  }
+
+  function buildScryChoiceSelect(mode, initialValue, onSelect) {
+    const topValue = 'top';
+    const offValue = mode === 'surveil' ? 'graveyard' : 'bottom';
+    const options = [
+      { value: topValue, label: 'Keep on top' },
+      { value: offValue, label: scryChoiceLabel(offValue, mode) },
+    ];
+    const hasInitial = options.some(function (opt) {
+      return opt.value === initialValue;
+    });
+    const resolvedInitial = hasInitial ? initialValue : topValue;
+    scryChoiceUid += 1;
+    const toggleId = `scryChoiceToggle-${scryChoiceUid}`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'dropdown dv-select w-100 scry-choice-select';
+    wrapper.dataset.dvSelect = `scry-choice-${scryChoiceUid}`;
+
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.setAttribute('data-dv-select-input', '');
+    hiddenInput.value = resolvedInitial;
+    wrapper.appendChild(hiddenInput);
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn dv-select-toggle btn-sm w-100 d-inline-flex align-items-center justify-content-between gap-2';
+    toggle.id = toggleId;
+    toggle.setAttribute('data-bs-toggle', 'dropdown');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Scry card action');
+
+    const label = document.createElement('span');
+    label.setAttribute('data-dv-select-label', '');
+    label.textContent = scryChoiceLabel(resolvedInitial, mode);
+    const chevron = document.createElement('i');
+    chevron.className = 'bi bi-chevron-down';
+
+    toggle.appendChild(label);
+    toggle.appendChild(chevron);
+    wrapper.appendChild(toggle);
+
+    const menu = document.createElement('ul');
+    menu.className = 'dropdown-menu dv-select-menu w-100';
+    menu.setAttribute('aria-labelledby', toggleId);
+
+    options.forEach(function (opt, optionIndex) {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dropdown-item';
+      if (opt.value === resolvedInitial || (optionIndex === 0 && !hasInitial)) {
+        btn.classList.add('active');
+      }
+      btn.setAttribute('data-dv-select-option', '');
+      btn.dataset.value = opt.value;
+      btn.dataset.label = opt.label;
+      btn.textContent = opt.label;
+      li.appendChild(btn);
+      menu.appendChild(li);
+    });
+
+    wrapper.appendChild(menu);
+    refreshDvSelect(wrapper);
+    wrapper.addEventListener('dv-select:change', function (event) {
+      if (typeof onSelect !== 'function') {
+        return;
+      }
+      const nextValue = event && event.detail ? event.detail.value : topValue;
+      onSelect(nextValue || topValue);
+    });
+    return wrapper;
+  }
+
   function renderScryTopList() {
     if (!scryTopList) {
       return;
@@ -3996,7 +4110,6 @@
       return;
     }
     const mode = scryMode ? (scryMode.value || 'scry') : 'scry';
-    const offLabel = mode === 'surveil' ? 'Graveyard' : 'Bottom';
     scryCards.forEach(function (card, idx) {
       const cardWrap = document.createElement('div');
       cardWrap.className = 'scry-card';
@@ -4006,16 +4119,6 @@
       const title = document.createElement('div');
       title.className = 'scry-name';
       title.textContent = card.name || 'Card';
-      const select = document.createElement('select');
-      select.className = 'form-select form-select-sm';
-      const keepOpt = document.createElement('option');
-      keepOpt.value = 'top';
-      keepOpt.textContent = 'Keep on top';
-      const offOpt = document.createElement('option');
-      offOpt.value = mode === 'surveil' ? 'graveyard' : 'bottom';
-      offOpt.textContent = `Put in ${offLabel}`;
-      select.appendChild(keepOpt);
-      select.appendChild(offOpt);
       let choice = scryChoices.get(idx) || 'top';
       if (mode === 'surveil' && choice === 'bottom') {
         choice = 'graveyard';
@@ -4025,9 +4128,8 @@
         choice = 'bottom';
         scryChoices.set(idx, choice);
       }
-      select.value = choice;
-      select.addEventListener('change', function () {
-        const val = select.value;
+
+      const choiceSelect = buildScryChoiceSelect(mode, choice, function (val) {
         scryChoices.set(idx, val);
         if (val === 'top') {
           if (!scryTopOrder.includes(idx)) {
@@ -4038,9 +4140,10 @@
         }
         renderScryTopList();
       });
+
       cardWrap.appendChild(img);
       cardWrap.appendChild(title);
-      cardWrap.appendChild(select);
+      cardWrap.appendChild(choiceSelect);
       scryPreview.appendChild(cardWrap);
     });
     renderScryTopList();

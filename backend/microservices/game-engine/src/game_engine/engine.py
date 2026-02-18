@@ -69,9 +69,50 @@ def _log(state: dict[str, Any], message: str) -> None:
     )
 
 
+def _coerce_player_id(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_state_player_refs(state: dict[str, Any]) -> None:
+    players = state.get("players") or []
+    normalized_players: list[dict[str, Any]] = []
+    for player in players:
+        if not isinstance(player, dict):
+            continue
+        player_id = _coerce_player_id(player.get("user_id"))
+        if player_id is None:
+            continue
+        player["user_id"] = player_id
+        normalized_players.append(player)
+    state["players"] = normalized_players
+
+    turn = state.setdefault("turn", {})
+    active_player = _coerce_player_id(turn.get("active_player"))
+    if active_player is not None:
+        turn["active_player"] = active_player
+    priority_player = _coerce_player_id(turn.get("priority_player"))
+    if priority_player is not None:
+        turn["priority_player"] = priority_player
+    passed = turn.get("passed")
+    if isinstance(passed, list):
+        normalized_passed: list[int] = []
+        for value in passed:
+            player_id = _coerce_player_id(value)
+            if player_id is not None:
+                normalized_passed.append(player_id)
+        turn["passed"] = normalized_passed
+
+
 def _find_player(state: dict[str, Any], player_id: int) -> dict[str, Any] | None:
+    target_id = _coerce_player_id(player_id)
+    if target_id is None:
+        return None
     for player in state.get("players", []):
-        if player.get("user_id") == player_id:
+        if _coerce_player_id(player.get("user_id")) == target_id:
+            player["user_id"] = target_id
             return player
     return None
 
@@ -2736,7 +2777,7 @@ def _advance_turn(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _has_priority(state: dict[str, Any], player_id: int) -> bool:
     turn = state.get("turn") or {}
-    return turn.get("priority_player") == player_id
+    return _coerce_player_id(turn.get("priority_player")) == _coerce_player_id(player_id)
 
 
 def _is_main_phase(state: dict[str, Any]) -> bool:
@@ -2803,6 +2844,7 @@ def apply_action(state: dict[str, Any], action: dict[str, Any]) -> dict[str, Any
     player_id = int(action.get("player_id"))
     payload = action.get("payload") or {}
     events: list[dict[str, Any]] = []
+    _normalize_state_player_refs(state)
     player = _find_player(state, player_id)
     if not player:
         return {"ok": False, "error": "player_not_found", "events": events}
@@ -2834,6 +2876,12 @@ def apply_action(state: dict[str, Any], action: dict[str, Any]) -> dict[str, Any
         events.append({"type": "deck_loaded", "count": len(cards)})
     elif action_type == "start_game":
         format_name = (state.get("format") or "commander").lower()
+        if format_name == "commander":
+            player_count = len(state.get("players") or [])
+            if player_count < 2:
+                return {"ok": False, "error": "commander_min_players_required", "events": events}
+            if player_count > 4:
+                return {"ok": False, "error": "commander_max_players_exceeded", "events": events}
         starting_player = payload.get("starting_player_id") or state.get("turn", {}).get("active_player")
         order = [p.get("user_id") for p in state.get("players", [])]
         if starting_player not in order and order:

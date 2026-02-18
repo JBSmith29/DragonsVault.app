@@ -3,7 +3,7 @@
     return document.querySelector('meta[name="csp-nonce"]')?.content || '';
   }
 
-  function ensureMainStyleNonces(root) {
+  function ensureStyleNonces(root) {
     const nonce = currentNonce();
     if (!nonce || !root || !root.querySelectorAll) return;
 
@@ -20,6 +20,16 @@
       replacement.textContent = styleEl.textContent || '';
       styleEl.replaceWith(replacement);
     });
+  }
+
+  function ensureMainStyleNonces() {
+    const main = document.getElementById('main');
+    if (!(main instanceof Element)) return;
+    ensureStyleNonces(main);
+  }
+
+  function ensureDocumentStyleNonces() {
+    ensureStyleNonces(document);
   }
 
   function applyConfig() {
@@ -44,19 +54,30 @@
       event.detail.headers['X-CSP-Nonce'] = activeNonce;
     });
 
-    document.addEventListener('htmx:afterSwap', function (event) {
-      const target = event?.target;
-      if (!(target instanceof Element) || target.id !== 'main') return;
-      ensureMainStyleNonces(target);
-    });
+    const rehydrateMain = function () {
+      ensureMainStyleNonces();
+      ensureDocumentStyleNonces();
+    };
+
+    document.addEventListener('htmx:afterSwap', rehydrateMain);
+    document.addEventListener('htmx:afterSettle', rehydrateMain);
+    document.addEventListener('htmx:historyRestore', rehydrateMain);
 
     window.addEventListener('popstate', function () {
-      const main = document.getElementById('main');
-      if (!(main instanceof Element)) return;
-      window.setTimeout(function () {
-        ensureMainStyleNonces(main);
-      }, 0);
+      window.setTimeout(rehydrateMain, 0);
     });
+
+    // Browser back/forward cache can restore pages without rerunning script tags.
+    window.addEventListener('pageshow', function (event) {
+      if (!event.persisted) return;
+      window.setTimeout(rehydrateMain, 0);
+    });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', rehydrateMain, { once: true });
+    } else {
+      rehydrateMain();
+    }
 
     return true;
   }

@@ -7,8 +7,59 @@ from flask_login import current_user, login_required
 
 from core.domains.cards.services import scryfall_cache as sc
 from core.domains.games.services import game_engine_client, game_service, games_enhanced
+from core.domains.users.models import User
 from core.routes.base import views
 from core.shared.utils.assets import static_url
+
+
+def _engine_error_response(exc: game_engine_client.GameEngineError):
+    status = int(exc.status_code or 502)
+    if status < 400 or status > 599:
+        status = 502
+    return jsonify({"ok": False, "error": str(exc)}), status
+
+
+def _annotate_engine_players(result: dict, *, current_user_id: int) -> dict:
+    if not isinstance(result, dict):
+        return result
+    players = result.get("players")
+    if not isinstance(players, list) or not players:
+        return result
+
+    user_ids = []
+    for player in players:
+        if not isinstance(player, dict):
+            continue
+        user_id = player.get("user_id")
+        if user_id is None:
+            continue
+        try:
+            user_ids.append(int(user_id))
+        except (TypeError, ValueError):
+            continue
+
+    if not user_ids:
+        return result
+
+    users = User.query.filter(User.id.in_(set(user_ids))).all()
+    label_map = {}
+    for user in users:
+        label_map[user.id] = user.display_name or user.username or user.email or f"Player {user.id}"
+
+    for player in players:
+        if not isinstance(player, dict):
+            continue
+        user_id = player.get("user_id")
+        try:
+            numeric_id = int(user_id)
+        except (TypeError, ValueError):
+            numeric_id = None
+        if numeric_id is None:
+            continue
+        player["display_name"] = label_map.get(numeric_id) or f"Player {numeric_id}"
+        player["is_me"] = numeric_id == int(current_user_id)
+
+    return result
 
 
 @views.route("/games")
@@ -54,6 +105,7 @@ def game_engine():
         "games/game_engine.html",
         engine_enabled=game_engine_client.engine_service_enabled(),
         deck_options=game_service.accessible_deck_options(current_user.id, commander_only=True),
+        engine_user_id=current_user.id,
     )
 
 
@@ -78,7 +130,7 @@ def api_game_engine_create():
     try:
         result = game_engine_client.create_game(current_user.id, format_name=format_name, players=players or None)
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})
 
 
@@ -88,7 +140,7 @@ def api_game_engine_ping():
     try:
         result = game_engine_client.ping(current_user.id)
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})
 
 
@@ -105,7 +157,7 @@ def api_game_engine_join(game_id: str):
     try:
         result = game_engine_client.join_game(current_user.id, game_id)
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})
 
 
@@ -115,7 +167,8 @@ def api_game_engine_get(game_id: str):
     try:
         result = game_engine_client.get_game(current_user.id, game_id)
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
+    result = _annotate_engine_players(result, current_user_id=current_user.id)
     return jsonify({"ok": True, "result": result})
 
 
@@ -126,7 +179,7 @@ def api_game_engine_events(game_id: str):
     try:
         result = game_engine_client.list_events(current_user.id, game_id, since=since)
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})
 
 
@@ -181,7 +234,7 @@ def api_game_engine_action(game_id: str):
             payload=action_payload,
         )
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})
 
 
@@ -195,7 +248,7 @@ def api_game_engine_sync_deck():
     try:
         result = game_engine_client.sync_deck_from_folder(current_user.id, int(folder_id))
     except game_engine_client.GameEngineError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 502
+        return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})
 
 

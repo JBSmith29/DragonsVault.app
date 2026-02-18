@@ -62,6 +62,7 @@
     const missingGameInput = root.querySelector('#engineMissingGameId');
     const missingOpenBtn = root.querySelector('#engineMissingOpenBtn');
     const missingUseLastBtn = root.querySelector('#engineMissingUseLastBtn');
+    const copyLobbyBtn = root.querySelector('#engineCopyLobbyId');
 
     let state = null;
     let selectedHandId = null;
@@ -75,12 +76,21 @@
     let lastEventSeq = 0;
     let eventFilter = 'all';
     let pollingTimer = null;
+    let refreshInFlight = false;
+    let eventsInFlight = false;
+    let destroyed = false;
+    let hotkeyHandler = null;
+    let cleanupRegistered = false;
+    let pageHideHandler = null;
+    let pageShowHandler = null;
+    let beforeSwapHandler = null;
     let lastTurnKey = null;
     let seatLookup = new Map();
     let boardFocusMode = 'auto';
     let manualBoardFocusId = userId;
     let selectedCommanderSourceId = userId;
     let lifeInputValues = new Map();
+    const eventsStoreKey = gameId ? `__gameEngineEventsStore:${gameId}` : '';
 
     function templateUrl(tmpl) {
       return (tmpl || '').replace('__GAME__', encodeURIComponent(gameId));
@@ -103,6 +113,27 @@
       } catch {
         // ignore storage failures
       }
+    }
+
+    function getEventsStore() {
+      if (!eventsStoreKey) return [];
+      if (!window.__gameEngineEventsStoreByGame) {
+        window.__gameEngineEventsStoreByGame = {};
+      }
+      const bag = window.__gameEngineEventsStoreByGame;
+      if (!Array.isArray(bag[eventsStoreKey])) {
+        bag[eventsStoreKey] = [];
+      }
+      return bag[eventsStoreKey];
+    }
+
+    function resetEventsStore() {
+      if (!eventsStoreKey) return;
+      if (!window.__gameEngineEventsStoreByGame) {
+        window.__gameEngineEventsStoreByGame = {};
+      }
+      window.__gameEngineEventsStoreByGame[eventsStoreKey] = [];
+      lastEventSeq = 0;
     }
 
     function redirectToGame(id) {
@@ -140,6 +171,28 @@
       statusEl.textContent = message;
       const tone = kind || 'text-muted';
       statusEl.className = `status-banner ${tone}`.trim();
+    }
+
+    function normalizeErrorMessage(raw) {
+      const text = (raw || '').toString().trim();
+      if (!text) return 'Unexpected game engine error.';
+      const friendly = {
+        game_not_started: 'Game has not started yet.',
+        mulligan_in_progress: 'Finish mulligans before taking more actions.',
+        choice_pending: 'Resolve the pending choice first.',
+        priority_required: 'You need priority to do that action.',
+        not_active_player: 'Only the active player can do that action right now.',
+        not_main_phase: 'That action is only available in a main phase.',
+        stack_not_empty: 'Resolve the stack before taking that action.',
+        stack_empty: 'The stack is empty.',
+        attacker_summoning_sick: 'One or more attackers has summoning sickness.',
+        defender_required: 'Select a defender first.',
+        commander_min_players_required: 'Commander needs at least 2 players to start.',
+        commander_max_players_exceeded: 'Commander supports up to 4 players.',
+        commander_lobby_full: 'This Commander lobby is full (4 players max).',
+      };
+      if (friendly[text]) return friendly[text];
+      return text.replace(/_/g, ' ');
     }
 
     function clearChildren(node) {
@@ -1062,9 +1115,10 @@
               method: 'POST',
               body: JSON.stringify({ action_type: 'resolve_choice', payload: { choice_id: choice.id, selections } })
             });
-            await refresh();
+            await refreshSafe();
+            await refreshEventsSafe();
           } catch (err) {
-            setStatus(err.message, 'text-danger');
+            setStatus(normalizeErrorMessage(err.message), 'text-danger');
           }
         });
         panel.appendChild(submit);
@@ -1080,6 +1134,9 @@
       const step = turn.step || '';
       const stackEmpty = !(stateObj?.stack || []).length;
       const status = stateObj?.status || '';
+      const formatName = String(stateObj?.format || '').toLowerCase();
+      const playerCount = Array.isArray(stateObj?.players) ? stateObj.players.length : 0;
+      const commanderStartReady = formatName !== 'commander' || (playerCount >= 2 && playerCount <= 4);
 
       if (playLandBtn) {
         playLandBtn.disabled = !(hasPriority && isActive && phase === 'main' && stackEmpty);
@@ -1109,7 +1166,7 @@
         commanderBtn.textContent = card?.is_commander ? 'Unmark Commander' : 'Mark Commander';
       }
       if (startBtn) {
-        startBtn.disabled = status !== 'waiting';
+        startBtn.disabled = status !== 'waiting' || !commanderStartReady;
       }
       if (mulliganBtn) {
         mulliganBtn.disabled = status !== 'mulligan';
@@ -1186,12 +1243,21 @@
       queueImageFetch(state);
 
       const status = state.status || game.status;
-      setStatus(`Game status: ${status}`, 'text-muted');
+      const formatName = String(state.format || game.format || '').toLowerCase();
+      const playerCount = Array.isArray(state.players) ? state.players.length : 0;
+      if (status === 'waiting' && formatName === 'commander' && playerCount < 2) {
+        setStatus('Commander games need 2-4 players to start. Invite at least one more player.', 'text-warning');
+      } else if (status === 'waiting' && formatName === 'commander' && playerCount > 4) {
+        setStatus('Commander lobbies support up to 4 players. Remove one player before starting.', 'text-warning');
+      } else {
+        setStatus(`Game status: ${status}`, 'text-muted');
+      }
 
       updateActionAvailability(state);
     }
 
     async function refresh() {
+      if (destroyed) return;
       if (!engineEnabled) {
         setStatus('Engine not configured.', 'text-warning');
         return;
@@ -1202,29 +1268,38 @@
       }
       try {
         const result = await api(templateUrl(gameUrlTemplate), { method: 'GET' });
+        if (destroyed) return;
         renderState(result);
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
+      }
+    }
+
+    async function refreshSafe() {
+      if (destroyed || refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        await refresh();
+      } finally {
+        refreshInFlight = false;
       }
     }
 
     async function refreshEvents() {
-      if (!gameId || !eventsUrlTemplate) return;
+      if (destroyed || !gameId || !eventsUrlTemplate) return;
       try {
         const url = templateUrl(eventsUrlTemplate);
         const params = lastEventSeq ? `?since=${lastEventSeq}` : '';
         const result = await api(`${url}${params}`, { method: 'GET' });
+        if (destroyed) return;
         const events = result.events || [];
-        if (!window.__gameEngineEventsStore) {
-          window.__gameEngineEventsStore = [];
-        }
-        const store = window.__gameEngineEventsStore;
+        const store = getEventsStore();
         if (events.length) {
-        events.forEach((evt) => store.push(evt));
-        if (store.length > 250) {
-          store.splice(0, store.length - 250);
+          events.forEach((evt) => store.push(evt));
+          if (store.length > 250) {
+            store.splice(0, store.length - 250);
+          }
         }
-      }
         if (!events.length) {
           ensureEventsPlaceholder();
           return;
@@ -1233,11 +1308,7 @@
           const shouldStick = eventsEl.scrollTop <= 24;
           const placeholder = eventsEl.querySelector('[data-placeholder="true"]');
           if (placeholder) placeholder.remove();
-          if (!shouldStick) {
-            eventsEl.dataset.preserveScroll = 'true';
-          } else {
-            eventsEl.dataset.preserveScroll = 'false';
-          }
+          eventsEl.dataset.preserveScroll = shouldStick ? 'false' : 'true';
         }
         let latestEvent = null;
         events.forEach((evt) => {
@@ -1288,16 +1359,27 @@
       }
     }
 
+    async function refreshEventsSafe() {
+      if (destroyed || eventsInFlight) return;
+      eventsInFlight = true;
+      try {
+        await refreshEvents();
+      } finally {
+        eventsInFlight = false;
+      }
+    }
+
     async function submitAction(actionType, payload) {
-      if (!gameId) return;
+      if (destroyed || !gameId) return;
       try {
         await api(templateUrl(actionsUrlTemplate), {
           method: 'POST',
           body: JSON.stringify({ action_type: actionType, payload: payload || {} })
         });
-        await refresh();
+        await refreshSafe();
+        await refreshEventsSafe();
       } catch (err) {
-        setStatus(err.message, 'text-danger');
+        setStatus(normalizeErrorMessage(err.message), 'text-danger');
       }
     }
 
@@ -1313,7 +1395,7 @@
       return blocks;
     }
 
-    if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+    if (refreshBtn) refreshBtn.addEventListener('click', refreshSafe);
     if (commanderSourceSelect) {
       commanderSourceSelect.addEventListener('change', (event) => {
         const value = event.target.value;
@@ -1432,6 +1514,87 @@
       submitAction('declare_blockers', { blocks });
     });
     if (combatDamageBtn) combatDamageBtn.addEventListener('click', () => submitAction('combat_damage'));
+    if (copyLobbyBtn) {
+      copyLobbyBtn.addEventListener('click', async () => {
+        if (!gameId) {
+          setStatus('No lobby ID to copy.', 'text-warning');
+          return;
+        }
+        try {
+          if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            throw new Error('clipboard_unavailable');
+          }
+          await navigator.clipboard.writeText(gameId);
+          setStatus(`Lobby ${gameId} copied to clipboard.`, 'text-success');
+        } catch (_) {
+          setStatus('Copy failed. Copy the lobby ID from the URL.', 'text-warning');
+        }
+      });
+    }
+
+    function stopPolling() {
+      if (!pollingTimer) return;
+      window.clearInterval(pollingTimer);
+      pollingTimer = null;
+    }
+
+    function startPolling() {
+      if (destroyed || pollingTimer || !engineEnabled || !gameId) return;
+      refreshSafe();
+      refreshEventsSafe();
+      pollingTimer = window.setInterval(() => {
+        refreshSafe();
+        refreshEventsSafe();
+      }, 4000);
+    }
+
+    function destroyTable() {
+      if (destroyed) return;
+      destroyed = true;
+      stopPolling();
+      if (hotkeyHandler) {
+        document.removeEventListener('keydown', hotkeyHandler);
+        hotkeyHandler = null;
+      }
+      if (pageHideHandler) {
+        window.removeEventListener('pagehide', pageHideHandler);
+        pageHideHandler = null;
+      }
+      if (pageShowHandler) {
+        window.removeEventListener('pageshow', pageShowHandler);
+        pageShowHandler = null;
+      }
+      if (beforeSwapHandler) {
+        document.removeEventListener('htmx:beforeSwap', beforeSwapHandler);
+        beforeSwapHandler = null;
+      }
+      root.dataset.bound = '';
+    }
+
+    function registerCleanupHandlers() {
+      if (cleanupRegistered) return;
+      cleanupRegistered = true;
+      pageHideHandler = () => {
+        stopPolling();
+      };
+      pageShowHandler = (event) => {
+        if (!event.persisted) return;
+        startPolling();
+      };
+      beforeSwapHandler = (event) => {
+        const target = event?.target;
+        if (!(target instanceof Element)) return;
+        if (target.id === 'main' || target === root || target.contains(root)) {
+          destroyTable();
+        }
+      };
+      window.addEventListener('pagehide', pageHideHandler, { passive: true });
+      window.addEventListener('pageshow', pageShowHandler);
+      window.addEventListener('beforeunload', destroyTable, { once: true });
+      document.addEventListener('htmx:beforeSwap', beforeSwapHandler);
+    }
+
+    registerCleanupHandlers();
 
     if (!gameId) {
       const storedId = getStoredGameId();
@@ -1456,16 +1619,21 @@
           redirectToGame(value);
         });
       }
+      if (missingGameInput) {
+        missingGameInput.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          if (missingOpenBtn) {
+            missingOpenBtn.click();
+          }
+        });
+      }
       return;
     }
 
     if (engineEnabled && gameId) {
-      refresh();
-      refreshEvents();
-      pollingTimer = window.setInterval(() => {
-        refresh();
-        refreshEvents();
-      }, 4000);
+      resetEventsStore();
+      startPolling();
     } else if (!engineEnabled) {
       setStatus('Engine not configured.', 'text-warning');
     }
@@ -1487,40 +1655,38 @@
     if (eventsFilterEl) {
       eventsFilterEl.addEventListener('change', (event) => {
         eventFilter = event.target.value || 'all';
-        const store = window.__gameEngineEventsStore || [];
+        const store = getEventsStore();
         rebuildEventsLog(store);
       });
     }
 
-    if (!window.__gameEngineTableHotkeysBound) {
-      window.__gameEngineTableHotkeysBound = true;
-      document.addEventListener('keydown', (event) => {
-        if (!engineEnabled || !gameId) return;
-        if (event.metaKey || event.ctrlKey || event.altKey) return;
-        if (shouldIgnoreHotkeys(event.target)) return;
-        const key = event.key.toLowerCase();
-        if (key === 'f') {
-          boardFocusMode = 'auto';
-          if (lastGameResult) renderState(lastGameResult);
-        } else if (key === 'm') {
+    hotkeyHandler = (event) => {
+      if (destroyed || !engineEnabled || !gameId) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (shouldIgnoreHotkeys(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === 'f') {
+        boardFocusMode = 'auto';
+        if (lastGameResult) renderState(lastGameResult);
+      } else if (key === 'm') {
+        boardFocusMode = 'manual';
+        manualBoardFocusId = userId;
+        if (lastGameResult) renderState(lastGameResult);
+      } else if (key === 'a') {
+        const activeId = state?.turn?.active_player;
+        if (activeId) {
           boardFocusMode = 'manual';
-          manualBoardFocusId = userId;
-          if (lastGameResult) renderState(lastGameResult);
-        } else if (key === 'a') {
-          const activeId = state?.turn?.active_player;
-          if (activeId) {
-            boardFocusMode = 'manual';
-            manualBoardFocusId = activeId;
-            if (lastGameResult) renderState(lastGameResult);
-          }
-        } else if (key === 'c' || key === 'escape') {
-          selectedHandId = null;
-          selectedBattlefield = new Set();
-          selectedCardId = null;
+          manualBoardFocusId = activeId;
           if (lastGameResult) renderState(lastGameResult);
         }
-      });
-    }
+      } else if (key === 'c' || key === 'escape') {
+        selectedHandId = null;
+        selectedBattlefield = new Set();
+        selectedCardId = null;
+        if (lastGameResult) renderState(lastGameResult);
+      }
+    };
+    document.addEventListener('keydown', hotkeyHandler);
   }
 
   function boot() {

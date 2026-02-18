@@ -195,6 +195,7 @@
   data-engine-ping-url="{{ url_for('views.api_game_engine_ping') }}"
   data-deck-options-url="{{ url_for('views.api_game_engine_deck_options') }}"
   data-deck-options-loaded="{{ 'true' if deck_options else 'false' }}"
+  data-user-id="{{ engine_user_id }}"
 >
   <section class="engine-hero">
     <div>
@@ -202,7 +203,7 @@
       <h1 class="engine-title">Create a lobby, pick a deck, and start playing</h1>
       <p class="engine-subtitle">
         Build a lobby in seconds, share the ID, and let players join with their own commander decks. Decks are loaded
-        automatically if you want them to be.
+        automatically if you want them to be. Commander games start with 2-4 players.
       </p>
       <div class="engine-hero-actions">
         {% if engine_enabled %}
@@ -237,12 +238,31 @@
         <span class="engine-step">Step 1</span>
       </div>
       <div class="engine-field">
-        <label class="form-label" for="engineFormat">Format</label>
-        <select id="engineFormat" class="form-select">
-          <option value="commander" selected>Commander</option>
-          <option value="standard">Standard</option>
-          <option value="modern">Modern</option>
-        </select>
+        <label class="form-label" for="engineFormatToggle">Format</label>
+        <div class="dropdown dv-select w-100" data-dv-select="engine-format">
+          <input type="hidden" id="engineFormat" data-dv-select-input value="commander">
+          <button
+            class="btn dv-select-toggle w-100 d-inline-flex align-items-center justify-content-between gap-2"
+            type="button"
+            id="engineFormatToggle"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="Game format">
+            <span data-dv-select-label>Commander</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <ul class="dropdown-menu dv-select-menu w-100" aria-labelledby="engineFormatToggle">
+            <li>
+              <button class="dropdown-item active" type="button" data-dv-select-option data-value="commander" data-label="Commander">Commander</button>
+            </li>
+            <li>
+              <button class="dropdown-item" type="button" data-dv-select-option data-value="standard" data-label="Standard">Standard</button>
+            </li>
+            <li>
+              <button class="dropdown-item" type="button" data-dv-select-option data-value="modern" data-label="Modern">Modern</button>
+            </li>
+          </ul>
+        </div>
       </div>
       <div class="engine-field">
         <label class="form-label" for="engineCreateDeckSelect">Your commander deck</label>
