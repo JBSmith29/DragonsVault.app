@@ -6,6 +6,7 @@ import secrets
 from typing import Optional
 
 from flask_login import UserMixin
+from sqlalchemy import select
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
@@ -53,6 +54,11 @@ class User(UserMixin, db.Model):
     def get_id(self) -> str:
         return str(self.id)
 
+    @property
+    def is_active(self) -> bool:
+        # Archived users are not allowed to authenticate.
+        return self.archived_at is None
+
     # Password helpers -----------------------------------------------------
     def set_password(self, raw_password: str) -> None:
         self.password_hash = generate_password_hash(raw_password.strip())
@@ -85,8 +91,12 @@ class User(UserMixin, db.Model):
         if not token:
             return None
         digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
-        candidate = cls.query.filter_by(api_token_hash=digest).first()
-        if candidate and candidate.api_token_hash:
+        candidate = db.session.execute(
+            select(cls)
+            .where(cls.api_token_hash == digest)
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if candidate and candidate.api_token_hash and candidate.archived_at is None:
             if hmac.compare_digest(candidate.api_token_hash, digest):
                 return candidate
         return None

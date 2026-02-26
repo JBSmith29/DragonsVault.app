@@ -75,7 +75,7 @@ const serviceDefinitions: ServiceDefinition[] = [
   {
     key: "folder-service",
     name: "Folder Service",
-    summary: "Decks and collections (currently routed to the monolith).",
+    summary: "Decks and collections (ping routed to service; data routes still on monolith).",
     apiPrefix: "/api/folders",
     schema: "folder_service",
     ping: pingFolderService,

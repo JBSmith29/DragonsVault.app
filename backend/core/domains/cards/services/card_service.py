@@ -2521,6 +2521,7 @@ def api_card(card_id):
             selectinload(Card.subroles),
         ),
     )
+    ensure_folder_access(card.folder, write=False, allow_shared=True)
     have_cache = ensure_cache_loaded()
     role_names = []
     subrole_names = []
@@ -2661,7 +2662,7 @@ def api_card(card_id):
             "printings": printings,
         }
     )
-    resp.cache_control.public = True
+    resp.cache_control.private = True
     resp.cache_control.max_age = 60
     return resp
 
@@ -4490,6 +4491,7 @@ def collection_overview():
 
 def api_deck_insight(deck_id: int):
     folder = get_or_404(Folder, deck_id)
+    ensure_folder_access(folder, write=False, allow_shared=True)
     cache_key = f"deck_drawer:{_user_cache_key()}:{folder.id}"
     payload = _cache_fetch(cache_key, 60, lambda: _deck_drawer_summary(folder))
     return jsonify(payload)
@@ -6751,6 +6753,7 @@ def card_detail(card_id):
     _, collection_folder_names, _ = _collection_metadata()
 
     card = get_or_404(Card, card_id)
+    ensure_folder_access(card.folder, write=False, allow_shared=True)
     have_cache = ensure_cache_loaded()
     oid = card.oracle_id
 

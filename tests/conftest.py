@@ -1,5 +1,7 @@
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -13,8 +15,19 @@ from extensions import db
 from models import User
 
 # Isolate all tests to a throwaway instance + SQLite database
-TEST_INSTANCE_DIR = ROOT_DIR / ".pytest-instance"
-TEST_INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+def _build_test_instance_dir() -> Path:
+    preferred_parent = ROOT_DIR / ".pytest-instance"
+    fallback_parent = Path(tempfile.gettempdir()) / f"dragonsvault-pytest-{os.getuid()}"
+    for parent in (preferred_parent, fallback_parent):
+        try:
+            parent.mkdir(parents=True, exist_ok=True)
+            return Path(tempfile.mkdtemp(prefix="run-", dir=parent))
+        except OSError:
+            continue
+    return Path(tempfile.mkdtemp(prefix="dragonsvault-pytest-run-"))
+
+
+TEST_INSTANCE_DIR = _build_test_instance_dir()
 TEST_DB_PATH = TEST_INSTANCE_DIR / "test.sqlite"
 os.environ["FLASK_ENV"] = "development"
 os.environ["INSTANCE_DIR"] = str(TEST_INSTANCE_DIR)
@@ -42,6 +55,12 @@ def app():
     with flask_app.app_context():
         db.session.configure(expire_on_commit=False)
     return flask_app
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_test_instance_dir():
+    yield
+    shutil.rmtree(TEST_INSTANCE_DIR, ignore_errors=True)
 
 
 @pytest.fixture

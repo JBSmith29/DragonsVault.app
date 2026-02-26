@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-__all__ = ["game_service", "games_enhanced", "stats", "game_engine_client"]
+__all__ = ["game_service", "game_import_service", "games_enhanced", "stats", "game_engine_client"]
 
 
 def __getattr__(name: str):

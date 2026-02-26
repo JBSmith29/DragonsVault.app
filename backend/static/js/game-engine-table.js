@@ -190,6 +190,11 @@
         commander_min_players_required: 'Commander needs at least 2 players to start.',
         commander_max_players_exceeded: 'Commander supports up to 4 players.',
         commander_lobby_full: 'This Commander lobby is full (4 players max).',
+        invalid_folder_id: 'Select a valid deck before syncing.',
+        folder_id_required: 'Select a deck before syncing.',
+        deck_id_required: 'Sync a deck before loading it into the game.',
+        invalid_deck_id: 'Sync a deck before loading it into the game.',
+        not_defending_player: 'You can only declare blockers for attacks targeting you.',
       };
       if (friendly[text]) return friendly[text];
       return text.replace(/_/g, ' ');
@@ -211,7 +216,10 @@
       seatLookup = new Map();
       (playersMeta || []).forEach((player) => {
         if (player && player.user_id != null) {
-          seatLookup.set(player.user_id, player.seat_index);
+          const seatIndex = Number(player.seat_index);
+          if (Number.isFinite(seatIndex)) {
+            seatLookup.set(Number(player.user_id), seatIndex + 1);
+          }
         }
       });
     }
@@ -409,7 +417,7 @@
       const graveyardCount = (zones.graveyard || []).length;
       const commandCount = (zones.command || []).length;
       const cmdSummary = formatCommanderDamage(player);
-      const seatValue = seatLookup.get(player.user_id);
+      const seatValue = seatLookup.get(Number(player.user_id));
       playerSummaryEl.innerHTML = `
         <div class="seat-row">
           <div class="seat-stat"><span>Life</span><strong>${player.life ?? 0}</strong></div>
@@ -1027,9 +1035,26 @@
       const combat = stateObj.combat || {};
       const attackers = combat.attackers || {};
       const myBattlefield = me.zones?.battlefield || [];
-      const myBlockers = myBattlefield.filter((card) => !card.tapped);
-      const attackerIds = Object.keys(attackers);
-      if (!attackerIds.length || !myBlockers.length) return;
+      const myBlockers = myBattlefield.filter(
+        (card) => !card.tapped && String(card.type_line || '').toLowerCase().includes('creature')
+      );
+      const attackerIds = Object.keys(attackers).filter((attackerId) =>
+        isDefenderForPlayer(attackers[attackerId], me.user_id, stateObj)
+      );
+      if (!attackerIds.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted small';
+        empty.textContent = 'No attackers are currently targeting you.';
+        blockerAssignmentsEl.appendChild(empty);
+        return;
+      }
+      if (!myBlockers.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted small';
+        empty.textContent = 'No untapped creatures available to block.';
+        blockerAssignmentsEl.appendChild(empty);
+        return;
+      }
       attackerIds.forEach((attackerId) => {
         const attacker = findCardById(stateObj, attackerId);
         const group = document.createElement('div');
@@ -1068,6 +1093,20 @@
         }
       }
       return null;
+    }
+
+    function isDefenderForPlayer(defender, playerIdValue, stateObj) {
+      if (!defender || playerIdValue == null) return false;
+      if (defender.type === 'player') {
+        return Number(defender.id) === Number(playerIdValue);
+      }
+      if (defender.type === 'card') {
+        const permanent = findCardById(stateObj, defender.id);
+        if (!permanent) return false;
+        const controllerId = permanent.controller_id ?? permanent.owner_id;
+        return Number(controllerId) === Number(playerIdValue);
+      }
+      return false;
     }
 
     function renderChoices(stateObj, meId) {
@@ -1154,7 +1193,11 @@
         declareAttackersBtn.disabled = !(isActive && phase === 'combat' && step === 'declare_attackers');
       }
       if (declareBlockersBtn) {
-        declareBlockersBtn.disabled = !(phase === 'combat' && step === 'declare_blockers');
+        const attackers = stateObj?.combat?.attackers || {};
+        const hasAttackersTargetingMe = Object.values(attackers).some((defender) =>
+          isDefenderForPlayer(defender, userId, stateObj)
+        );
+        declareBlockersBtn.disabled = !(phase === 'combat' && step === 'declare_blockers' && hasAttackersTargetingMe);
       }
       if (combatDamageBtn) {
         combatDamageBtn.disabled = !(isActive && phase === 'combat' && step === 'damage');

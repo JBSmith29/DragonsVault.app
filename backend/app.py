@@ -1,6 +1,7 @@
 """Flask application factory, CLI entry points, and database bootstrap."""
 
 import json
+from contextlib import contextmanager
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -101,6 +102,20 @@ class JsonRequestFormatter(logging.Formatter):
 
 
 _visibility_filters_registered = False
+_VISIBILITY_SKIP_SESSION_FLAG = "_skip_visibility_filters"
+
+@contextmanager
+def _without_visibility_filters():
+    """Temporarily disable per-request visibility hooks for auth loader queries."""
+    depth = int(db.session.info.get(_VISIBILITY_SKIP_SESSION_FLAG, 0) or 0)
+    db.session.info[_VISIBILITY_SKIP_SESSION_FLAG] = depth + 1
+    try:
+        yield
+    finally:
+        if depth > 0:
+            db.session.info[_VISIBILITY_SKIP_SESSION_FLAG] = depth
+        else:
+            db.session.info.pop(_VISIBILITY_SKIP_SESSION_FLAG, None)
 
 
 def _register_visibility_filters(card_model, folder_model) -> None:
@@ -113,15 +128,24 @@ def _register_visibility_filters(card_model, folder_model) -> None:
     def _apply_folder_visibility(execute_state):
         if not execute_state.is_select:
             return
+        if execute_state.is_column_load or execute_state.is_relationship_load:
+            return
         if not has_request_context():
             return
-        user_id = session.get("_user_id")
-        if not user_id:
+        if int(execute_state.session.info.get(_VISIBILITY_SKIP_SESSION_FLAG, 0) or 0) > 0:
             return
 
-        try:
-            user_id_int = int(user_id)
-        except (TypeError, ValueError):
+        user_id_int = getattr(g, "_visibility_user_id", None)
+        if user_id_int is None:
+            user_id = session.get("_user_id")
+            if not user_id:
+                return
+            try:
+                user_id_int = int(user_id)
+            except (TypeError, ValueError):
+                return
+
+        if user_id_int <= 0:
             return
 
         from models import FolderShare, UserFriend  # local import to avoid early import issues
@@ -181,9 +205,16 @@ def _configure_login_manager(app: Flask) -> None:
         from models import User
 
         try:
-            return db.session.get(User, int(user_id))
+            user_id_int = int(user_id)
         except (TypeError, ValueError):
             return None
+        with _without_visibility_filters():
+            user = db.session.get(User, user_id_int)
+        if user is not None and getattr(user, "archived_at", None) is not None:
+            return None
+        if user is not None and has_request_context():
+            g._visibility_user_id = user_id_int
+        return user
 
     @login_manager.request_loader
     def _load_user_from_request(req):
@@ -192,7 +223,16 @@ def _configure_login_manager(app: Flask) -> None:
         token = _extract_token(req)
         if not token:
             return None
-        return User.verify_api_token(token)
+        with _without_visibility_filters():
+            user = User.verify_api_token(token)
+        if user is not None and getattr(user, "archived_at", None) is not None:
+            return None
+        if user is not None and has_request_context():
+            try:
+                g._visibility_user_id = int(getattr(user, "id", 0) or 0)
+            except (TypeError, ValueError):
+                g._visibility_user_id = None
+        return user
 
     @login_manager.unauthorized_handler
     def _unauthorized():
@@ -731,6 +771,8 @@ def create_app():
         "views.register",
         "views.healthz",
         "views.readyz",
+        "views.api_healthz",
+        "views.api_readyz",
         "views.metrics",
         "views.overall_health",
         "views.gamedashboard",
@@ -772,6 +814,14 @@ def create_app():
             return
 
         next_url = request.full_path or path or "/"
+        wants_json = path.startswith("/api/") or (
+            request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
+        )
+        if wants_json:
+            response = jsonify({"error": "authentication_required"})
+            response.status_code = 401
+            response.headers["WWW-Authenticate"] = "Bearer"
+            return response
         return redirect(url_for("views.landing_page", next=next_url))
     default_limits = app.config.get("RATELIMIT_DEFAULT")
     if isinstance(default_limits, str):
@@ -952,7 +1002,7 @@ def create_app():
 
         preserved = None
         removed = 0
-        should_reset = not dry_run and (overwrite or quantity_mode == "absolute")
+        should_reset = not dry_run and overwrite
         try:
             with db.session.begin():
                 if should_reset:

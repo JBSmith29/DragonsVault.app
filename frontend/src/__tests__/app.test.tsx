@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
 import App from "../App";
+import * as endpoints from "../api/endpoints";
 
 vi.mock("../api/endpoints", () => ({
   pingWebApi: vi.fn(async () => ({ status: "ok", service: "web" })),
@@ -24,10 +25,27 @@ vi.mock("../api/endpoints", () => ({
 }));
 
 describe("App", () => {
-  it("renders the service control header", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders the service control header", async () => {
     render(<App />);
     expect(
       screen.getByRole("heading", { name: "Service Control Deck" })
     ).toBeInTheDocument();
+    expect(await screen.findAllByText("Online")).toHaveLength(5);
+  });
+
+  it("shows offline state when a service check fails", async () => {
+    vi.mocked(endpoints.pingPriceService).mockRejectedValueOnce(
+      new Error("service unavailable")
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("Price Service")).toBeInTheDocument();
+    expect(await screen.findByText("Offline")).toBeInTheDocument();
+    expect(await screen.findByText("/api/prices/v1")).toBeInTheDocument();
   });
 });

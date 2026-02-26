@@ -29,6 +29,8 @@ class ApiTokenAuthentication(BaseAuthentication):
             user = User.objects.get(api_token_hash=digest)
         except User.DoesNotExist as exc:
             raise AuthenticationFailed("Invalid token.") from exc
+        if getattr(user, "archived_at", None) is not None:
+            raise AuthenticationFailed("Invalid token.")
         if not user.api_token_hash or not hmac.compare_digest(user.api_token_hash, digest):
             raise AuthenticationFailed("Invalid token.")
         return (user, token)

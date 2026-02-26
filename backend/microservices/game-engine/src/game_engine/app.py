@@ -431,10 +431,24 @@ def create_app() -> Flask:
     @require_auth
     def submit_action(game_id: str):
         payload = request.get_json(silent=True) or {}
-        player_id = payload.get("player_id") or g.user_id
-        action_type = payload.get("action_type")
-        if not player_id or not action_type:
-            return jsonify(status="error", error="player_id_and_action_type_required"), 400
+        action_type = str(payload.get("action_type") or "").strip()
+        if not action_type:
+            return jsonify(status="error", error="action_type_required"), 400
+        player_id_raw = payload.get("player_id")
+        if player_id_raw is None:
+            player_id = int(g.user_id)
+        else:
+            try:
+                player_id = int(player_id_raw)
+            except (TypeError, ValueError):
+                return jsonify(status="error", error="invalid_player_id"), 400
+        if player_id != int(g.user_id):
+            return jsonify(status="forbidden", error="player_id_mismatch"), 403
+        action_payload = payload.get("payload")
+        if action_payload is None:
+            action_payload = {}
+        if not isinstance(action_payload, dict):
+            return jsonify(status="error", error="invalid_payload"), 400
 
         session = get_session_factory(config)()
         try:
@@ -444,14 +458,21 @@ def create_app() -> Flask:
                 return jsonify(status="not_found"), 404
             player = session.execute(
                 select(GamePlayer).where(
-                    GamePlayer.game_id == game_id, GamePlayer.user_id == int(player_id)
+                    GamePlayer.game_id == game_id, GamePlayer.user_id == player_id
                 )
             ).scalars().first()
             if not player:
                 return jsonify(status="forbidden"), 403
-            action_payload = payload.get("payload") or {}
-            if action_type == "load_deck" and action_payload.get("deck_id"):
-                deck_id = int(action_payload.get("deck_id"))
+            if action_type == "load_deck":
+                deck_id_raw = action_payload.get("deck_id")
+                if deck_id_raw is None:
+                    return jsonify(status="error", error="deck_id_required"), 400
+                try:
+                    deck_id = int(deck_id_raw)
+                except (TypeError, ValueError):
+                    return jsonify(status="error", error="invalid_deck_id"), 400
+                if deck_id <= 0:
+                    return jsonify(status="error", error="invalid_deck_id"), 400
                 deck = session.get(EngineDeck, deck_id)
                 if not deck:
                     return jsonify(status="error", error="deck_not_found"), 404
@@ -484,7 +505,7 @@ def create_app() -> Flask:
                 action_payload = {"cards": expanded, "shuffle": action_payload.get("shuffle", True)}
             action = GameAction(
                 game_id=game_id,
-                player_id=int(player_id),
+                player_id=player_id,
                 action_type=str(action_type),
                 payload=action_payload,
                 status="pending",
@@ -493,7 +514,7 @@ def create_app() -> Flask:
             result = apply_action(
                 game.state,
                 {
-                    "player_id": int(player_id),
+                    "player_id": player_id,
                     "action_type": action_type,
                     "payload": action_payload,
                 },

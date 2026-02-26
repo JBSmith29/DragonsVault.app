@@ -242,11 +242,17 @@ def api_game_engine_action(game_id: str):
 @login_required
 def api_game_engine_sync_deck():
     payload = request.get_json(silent=True) or {}
-    folder_id = payload.get("folder_id")
-    if not folder_id:
+    raw_folder_id = payload.get("folder_id")
+    if raw_folder_id is None:
         return jsonify({"ok": False, "error": "folder_id_required"}), 400
     try:
-        result = game_engine_client.sync_deck_from_folder(current_user.id, int(folder_id))
+        folder_id = int(raw_folder_id)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_folder_id"}), 400
+    if folder_id <= 0:
+        return jsonify({"ok": False, "error": "invalid_folder_id"}), 400
+    try:
+        result = game_engine_client.sync_deck_from_folder(current_user.id, folder_id)
     except game_engine_client.GameEngineError as exc:
         return _engine_error_response(exc)
     return jsonify({"ok": True, "result": result})

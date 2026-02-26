@@ -1,5 +1,6 @@
 from extensions import db
 from models import User
+from core.shared.utils.time import utcnow
 
 
 def _login(client, identifier, password):
@@ -137,3 +138,49 @@ def test_display_name_rejects_overly_long_value(client, create_user):
     with client.application.app_context():
         refreshed = db.session.get(User, user.id)
         assert refreshed.display_name is None
+
+
+def test_archived_user_cannot_login(client, create_user):
+    user, password = create_user(email="archived-login@example.com", username="archivedlogin")
+    persisted = db.session.get(User, user.id)
+    assert persisted is not None
+    persisted.archived_at = utcnow()
+    db.session.commit()
+
+    resp = client.post(
+        "/login",
+        data={"identifier": user.email, "password": password},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"Invalid email/username or password." in resp.data
+
+
+def test_archived_user_bearer_token_stops_working(client, create_user):
+    user, _password = create_user(email="archived-token@example.com", username="archivedtoken")
+    persisted = db.session.get(User, user.id)
+    assert persisted is not None
+    token = persisted.issue_api_token()
+    db.session.commit()
+
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    active_resp = client.get("/api/me", headers=headers)
+    assert active_resp.status_code == 200
+
+    persisted = db.session.get(User, user.id)
+    assert persisted is not None
+    persisted.archived_at = utcnow()
+    db.session.commit()
+    assert User.verify_api_token(token) is None
+
+    archived_resp = client.get("/api/me", headers=headers, follow_redirects=False)
+    assert archived_resp.status_code == 401
+    assert archived_resp.get_json() == {"error": "authentication_required"}
+    assert archived_resp.headers.get("WWW-Authenticate") == "Bearer"
+
+
+def test_api_requires_authentication_returns_401_json(client):
+    resp = client.get("/api/me", headers={"Accept": "application/json"}, follow_redirects=False)
+    assert resp.status_code == 401
+    assert resp.get_json() == {"error": "authentication_required"}
+    assert resp.headers.get("WWW-Authenticate") == "Bearer"

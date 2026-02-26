@@ -1,14 +1,20 @@
 """API endpoints for games administration and metrics management."""
 
-from flask import Blueprint, jsonify, request
+from datetime import datetime, timedelta
+
+from flask import Blueprint, current_app, jsonify
 from flask_login import login_required, current_user
 from extensions import db, cache
 from core.domains.games.models import GamePod, GameSession
 from core.domains.users.models import User
-from sqlalchemy import func
-from datetime import date
+from sqlalchemy import func, text
 
 games_api = Blueprint('games_api', __name__, url_prefix='/api/games')
+
+
+def _api_error(context: str):
+    current_app.logger.exception("%s failed", context)
+    return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @games_api.route('/metrics/refresh', methods=['POST'])
@@ -29,11 +35,8 @@ def refresh_metrics():
             'success': True,
             'message': 'Metrics cache refreshed successfully'
         })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Failed to refresh metrics: {str(e)}'
-        }), 500
+    except Exception:
+        return _api_error("metrics refresh")
 
 
 @games_api.route('/admin/system-stats', methods=['GET'])
@@ -49,7 +52,7 @@ def get_system_stats():
         total_users = db.session.query(func.count(User.id)).scalar() or 0
         
         # Games today
-        today = date.today()
+        today = datetime.utcnow().date()
         games_today = (
             db.session.query(func.count(GameSession.id))
             .filter(func.date(GameSession.played_at) == today)
@@ -78,11 +81,8 @@ def get_system_stats():
                 'avg_games_per_user': round(total_games / total_users, 1) if total_users > 0 else 0
             }
         })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Failed to get system stats: {str(e)}'
-        }), 500
+    except Exception:
+        return _api_error("system stats")
 
 
 @games_api.route('/admin/clear-cache', methods=['POST'])
@@ -98,11 +98,8 @@ def clear_cache():
             'success': True,
             'message': 'All caches cleared successfully'
         })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Failed to clear cache: {str(e)}'
-        }), 500
+    except Exception:
+        return _api_error("clear cache")
 
 
 @games_api.route('/admin/health-check', methods=['GET'])
@@ -119,10 +116,11 @@ def health_check():
             'cache': False,
             'recent_activity': False
         }
+        recent_games = 0
         
         # Test database connection
         try:
-            db.session.execute('SELECT 1')
+            db.session.execute(text("SELECT 1"))
             checks['database'] = True
         except Exception:
             pass
@@ -137,8 +135,7 @@ def health_check():
         
         # Check for recent activity (games in last 24 hours)
         try:
-            from datetime import datetime, timedelta
-            yesterday = datetime.now() - timedelta(days=1)
+            yesterday = datetime.utcnow() - timedelta(days=1)
             recent_games = (
                 db.session.query(func.count(GameSession.id))
                 .filter(GameSession.created_at >= yesterday)
@@ -148,19 +145,18 @@ def health_check():
         except Exception:
             pass
         
-        all_healthy = all(checks.values())
+        # A quiet instance can still be healthy; activity is informational.
+        all_healthy = bool(checks.get('database') and checks.get('cache'))
         
         return jsonify({
             'success': True,
             'healthy': all_healthy,
             'checks': checks,
-            'timestamp': datetime.now().isoformat()
+            'recent_games_last_24h': int(recent_games),
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
         })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Health check failed: {str(e)}'
-        }), 500
+    except Exception:
+        return _api_error("admin health check")
 
 
 @games_api.route('/quick-pod', methods=['POST'])

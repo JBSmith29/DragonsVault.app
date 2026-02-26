@@ -21,6 +21,8 @@ MAX_DISPLAY_NAME_LENGTH = 120
 
 
 @views.route("/login", methods=["GET", "POST"])
+@limiter.limit("20 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("120 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 def login():
     if current_user.is_authenticated:
         dest = _safe_next_url(request.args.get("next")) or url_for("views.dashboard")
@@ -35,9 +37,15 @@ def login():
             user = User.query.filter(func.lower(User.email) == lowered).first()
             if not user:
                 user = User.query.filter(func.lower(User.username) == lowered).first()
-        if not user or not user.check_password(password):
+        is_archived = bool(user and getattr(user, "archived_at", None))
+        if not user or is_archived or not user.check_password(password):
             flash("Invalid email/username or password.", "danger")
-            return render_template("auth/login.html", identifier=identifier, disable_hx=True)
+            return render_template(
+                "auth/login.html",
+                identifier=identifier,
+                disable_hx=True,
+                disable_sidebar=True,
+            )
 
         login_user(user, remember=False, fresh=True)
         session.permanent = True
@@ -52,7 +60,7 @@ def login():
             resp.headers["HX-Redirect"] = dest
         return resp
 
-    return render_template("auth/login.html", disable_hx=True)
+    return render_template("auth/login.html", disable_hx=True, disable_sidebar=True)
 
 
 @views.route("/logout")
@@ -84,6 +92,7 @@ def register():
             "username": username,
             "min_password_length": MIN_PASSWORD_LENGTH,
             "hcaptcha_site_key": hcaptcha_site_key,
+            "disable_sidebar": True,
         }
 
         if not email or not username or not password:
@@ -147,6 +156,7 @@ def register():
         min_password_length=MIN_PASSWORD_LENGTH,
         hcaptcha_site_key=current_app.config.get("HCAPTCHA_SITE_KEY"),
         disable_hx=True,
+        disable_sidebar=True,
     )
 
 

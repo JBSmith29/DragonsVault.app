@@ -169,7 +169,7 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 | **Command** | **Purpose** |
 | - | - |
 | `flask db upgrade` | Apply database migrations. |
-| `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {delta,new_only}]` | CLI importer mirroring the web importer. |
+| `flask import-csv PATH [--dry-run] [--default-folder NAME] [--overwrite] [--quantity-mode {new_only}]` | CLI importer mirroring the web importer. |
 | `flask fetch-scryfall-bulk [--progress]` | Download the Scryfall `default_cards` bulk file. |
 | `flask refresh-scryfall` | Load the downloaded bulk file into memory and build indexes. |
 | `flask sync-spellbook-combos [--card-count N ...]` | Pull Commander Spellbook combos into `data/spellbook_combos.json`. |
@@ -187,6 +187,7 @@ A complete list lives near the bottom of `backend/app.py`.
 Run the test suite with:
 
 ```bash
+pip install -r backend/requirements-dev.txt
 pytest
 ```
 

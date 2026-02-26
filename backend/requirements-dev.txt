@@ -1,4 +1,8 @@
 Flask-WTF==1.2.1
-pytest
-ruff
-coverage
+coverage==7.6.1
+iniconfig==2.1.0
+playwright==1.55.0
+pluggy==1.6.0
+Pygments==2.19.2
+pytest==8.4.2
+ruff==0.7.4

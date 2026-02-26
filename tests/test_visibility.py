@@ -1,4 +1,4 @@
-from models import Card, Folder, db
+from models import Card, Folder, User, db
 
 
 def _login(client, identifier, password):
@@ -25,6 +25,15 @@ def _create_owned_folder(app, owner, *, name="Owner Deck", card_name="Secret Tec
         db.session.add(card)
         db.session.commit()
         return folder, card
+
+
+def _issue_api_token(app, user_id: int) -> str:
+    with app.app_context():
+        user = db.session.get(User, user_id)
+        assert user is not None
+        token = user.issue_api_token()
+        db.session.commit()
+        return token
 
 
 def test_user_cannot_view_other_users_collection(client, create_user, app):
@@ -56,3 +65,50 @@ def test_admin_cannot_view_other_users_collections(client, create_user, app):
     resp = client.get("/cards")
     assert resp.status_code == 200
     assert card.name.encode() not in resp.data
+
+
+def test_user_cannot_access_other_users_card_detail_or_insight(client, create_user, app):
+    owner, _owner_password = create_user(email="owner-api@example.com", username="owner_api")
+    viewer, viewer_password = create_user(email="viewer-api@example.com", username="viewer_api")
+    folder, card = _create_owned_folder(app, owner, name="Private Deck", card_name="Hidden Oracle")
+
+    _login(client, viewer.email, viewer_password)
+
+    api_card_resp = client.get(f"/api/card/{card.id}")
+    assert api_card_resp.status_code in (403, 404)
+
+    detail_resp = client.get(f"/cards/{card.id}")
+    assert detail_resp.status_code in (403, 404)
+
+    insight_resp = client.get(f"/api/decks/{folder.id}/insight")
+    assert insight_resp.status_code in (403, 404)
+
+
+def test_bearer_token_cannot_access_other_users_card_or_deck(client, create_user, app):
+    owner, _owner_password = create_user(email="owner-token@example.com", username="owner_token")
+    viewer, _viewer_password = create_user(email="viewer-token@example.com", username="viewer_token")
+    folder, card = _create_owned_folder(app, owner, name="Token Private Deck", card_name="Token Hidden")
+
+    token = _issue_api_token(app, viewer.id)
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+    me_resp = client.get("/api/me", headers=headers)
+    assert me_resp.status_code == 200
+
+    api_card_resp = client.get(f"/api/card/{card.id}", headers=headers)
+    assert api_card_resp.status_code in (403, 404)
+
+    insight_resp = client.get(f"/api/decks/{folder.id}/insight", headers=headers)
+    assert insight_resp.status_code in (403, 404)
+
+
+def test_api_card_response_uses_private_cache_control(client, create_user, app):
+    owner, owner_password = create_user(email="owner-cache@example.com", username="owner_cache")
+    _folder, card = _create_owned_folder(app, owner, name="Cache Deck", card_name="Cache Hidden")
+    _login(client, owner.email, owner_password)
+
+    resp = client.get(f"/api/card/{card.id}")
+    assert resp.status_code == 200
+    cache_control = (resp.headers.get("Cache-Control") or "").lower()
+    assert "private" in cache_control
+    assert "public" not in cache_control

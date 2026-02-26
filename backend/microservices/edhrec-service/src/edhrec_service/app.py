@@ -58,6 +58,11 @@ def _normalize_name(raw: Optional[str]) -> Optional[str]:
     return name or None
 
 
+def _service_error(app: Flask, context: str):
+    app.logger.exception("%s failed", context)
+    return jsonify(status="error", error="internal_error"), 500
+
+
 def _commander_key(slug: str, theme_slug: Optional[str]) -> str:
     suffix = theme_slug or ""
     return f"commander:{slug}:{suffix}"
@@ -392,10 +397,11 @@ def create_app() -> Flask:
             if warning:
                 response["warning"] = warning
             return jsonify(response)
-        except EdhrecError as exc:
-            return jsonify(status="error", error=str(exc)), 502
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except EdhrecError:
+            app.logger.exception("commander detail upstream request failed")
+            return jsonify(status="error", error="upstream_provider_error"), 502
+        except Exception:
+            return _service_error(app, "commander detail")
         finally:
             session.close()
 
@@ -409,7 +415,7 @@ def create_app() -> Flask:
         slug = _normalize_slug(payload.get("slug")) or slugify_commander(name)
         if not slug:
             return jsonify(status="error", error="unable_to_slugify"), 400
-        force = bool(payload.get("force"))
+        force = _parse_bool(payload.get("force"))
         max_age = payload.get("max_age_hours")
         max_age = max_age if isinstance(max_age, int) else _parse_int(str(max_age), config.cache_ttl_hours)
 
@@ -436,10 +442,11 @@ def create_app() -> Flask:
             if warning:
                 response["warning"] = warning
             return jsonify(response)
-        except EdhrecError as exc:
-            return jsonify(status="error", error=str(exc)), 502
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except EdhrecError:
+            app.logger.exception("commander lookup upstream request failed")
+            return jsonify(status="error", error="upstream_provider_error"), 502
+        except Exception:
+            return _service_error(app, "commander by name")
         finally:
             session.close()
 
@@ -473,10 +480,11 @@ def create_app() -> Flask:
             if warning:
                 response["warning"] = warning
             return jsonify(response)
-        except EdhrecError as exc:
-            return jsonify(status="error", error=str(exc)), 502
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except EdhrecError:
+            app.logger.exception("theme detail upstream request failed")
+            return jsonify(status="error", error="upstream_provider_error"), 502
+        except Exception:
+            return _service_error(app, "theme detail")
         finally:
             session.close()
 
@@ -489,7 +497,7 @@ def create_app() -> Flask:
         slug = _normalize_slug(payload.get("slug")) or slugify_theme(name)
         if not slug:
             return jsonify(status="error", error="unable_to_slugify"), 400
-        force = bool(payload.get("force"))
+        force = _parse_bool(payload.get("force"))
         max_age = payload.get("max_age_hours")
         max_age = max_age if isinstance(max_age, int) else _parse_int(str(max_age), config.cache_ttl_hours)
 
@@ -514,10 +522,11 @@ def create_app() -> Flask:
             if warning:
                 response["warning"] = warning
             return jsonify(response)
-        except EdhrecError as exc:
-            return jsonify(status="error", error=str(exc)), 502
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except EdhrecError:
+            app.logger.exception("theme lookup upstream request failed")
+            return jsonify(status="error", error="upstream_provider_error"), 502
+        except Exception:
+            return _service_error(app, "theme by name")
         finally:
             session.close()
 
@@ -528,8 +537,8 @@ def create_app() -> Flask:
             ensure_tables(engine)
             payload = _summarize_cache(session)
             return jsonify(status="ok", **payload)
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except Exception:
+            return _service_error(app, "edhrec stats")
         finally:
             session.close()
 
@@ -553,8 +562,8 @@ def create_app() -> Flask:
                 if include_themes
                 else []
             )
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except Exception:
+            return _service_error(app, "edhrec index")
 
         if limit:
             commanders = commanders[:limit]
@@ -565,7 +574,7 @@ def create_app() -> Flask:
     @app.post("/v1/edhrec/refresh")
     def edhrec_refresh():
         payload = request.get_json(silent=True) or {}
-        force = bool(payload.get("force"))
+        force = _parse_bool(payload.get("force"))
         max_age = payload.get("max_age_hours")
         max_age = max_age if isinstance(max_age, int) else _parse_int(str(max_age), config.cache_ttl_hours)
         commander_entries = payload.get("commanders") or []
@@ -627,45 +636,48 @@ def create_app() -> Flask:
             if not (item[0] in theme_seen or theme_seen.add(item[0]))
         ]
 
-        ensure_tables(engine)
-        results: dict[str, Any] = {"commanders": [], "themes": []}
-        errors: List[str] = []
-        max_workers = max(1, int(config.refresh_concurrency))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for slug, theme_slug, name in commander_targets:
-                futures.append(
-                    executor.submit(
-                        _refresh_commander_task,
-                        session_factory=session_factory,
-                        config=config,
-                        slug=slug,
-                        theme_slug=theme_slug,
-                        name=name,
-                        force=force,
-                        max_age_hours=max_age,
+        try:
+            ensure_tables(engine)
+            results: dict[str, Any] = {"commanders": [], "themes": []}
+            errors: List[str] = []
+            max_workers = max(1, int(config.refresh_concurrency))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = []
+                for slug, theme_slug, name in commander_targets:
+                    futures.append(
+                        executor.submit(
+                            _refresh_commander_task,
+                            session_factory=session_factory,
+                            config=config,
+                            slug=slug,
+                            theme_slug=theme_slug,
+                            name=name,
+                            force=force,
+                            max_age_hours=max_age,
+                        )
                     )
-                )
-            for slug, name in theme_targets:
-                futures.append(
-                    executor.submit(
-                        _refresh_theme_task,
-                        session_factory=session_factory,
-                        config=config,
-                        slug=slug,
-                        name=name,
-                        force=force,
-                        max_age_hours=max_age,
+                for slug, name in theme_targets:
+                    futures.append(
+                        executor.submit(
+                            _refresh_theme_task,
+                            session_factory=session_factory,
+                            config=config,
+                            slug=slug,
+                            name=name,
+                            force=force,
+                            max_age_hours=max_age,
+                        )
                     )
-                )
-            for future in as_completed(futures):
-                result = future.result()
-                if result.get("kind") == "commander":
-                    results["commanders"].append(result)
-                else:
-                    results["themes"].append(result)
-                if not result.get("ok"):
-                    errors.append(result.get("error") or "unknown_error")
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result.get("kind") == "commander":
+                        results["commanders"].append(result)
+                    else:
+                        results["themes"].append(result)
+                    if not result.get("ok"):
+                        errors.append(result.get("error") or "unknown_error")
+        except Exception:
+            return _service_error(app, "edhrec refresh")
 
         commanders_ok = sum(1 for item in results["commanders"] if item.get("ok"))
         themes_ok = sum(1 for item in results["themes"] if item.get("ok"))

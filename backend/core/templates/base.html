@@ -4,7 +4,7 @@
 <html lang="en" data-bs-theme="dark">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="csp-nonce" content="{{ csp_nonce() }}">
     <script nonce="{{ csp_nonce() }}">
@@ -57,8 +57,11 @@
     <!-- Minimal indicator styles + sidebar/layout CSS -->
     <style nonce="{{ csp_nonce() }}">
       :root {
+        --vh: 100vh;
         --sidebar-w: 260px;
         --app-header-h: 96px;
+        --dv-safe-top: env(safe-area-inset-top, 0px);
+        --dv-safe-bottom: env(safe-area-inset-bottom, 0px);
         --dv-body-gradient: linear-gradient(180deg, rgba(15, 23, 42, 0.78), rgba(2, 6, 23, 0.94));
         --dv-sidebar-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
         --dv-scroll-thumb: rgba(148, 180, 255, 0.55);
@@ -75,9 +78,12 @@
       }
       body {
         margin: 0;
-        padding-top: var(--app-header-h, 96px);
+        padding-top: max(var(--app-header-h, 96px), var(--dv-safe-top));
         min-height: 100vh;
         height: 100vh;
+        min-height: var(--vh, 100dvh);
+        height: var(--vh, 100dvh);
+        padding-bottom: var(--dv-safe-bottom);
         background:
           var(--dv-body-gradient),
           url("{{ static_url('img/icon.png') }}") center/cover no-repeat fixed;
@@ -85,12 +91,21 @@
         overflow-x: hidden;
         overflow-y: auto;
       }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
       html[data-bs-theme="light"] body {
         color: #0f172a; /* ensure text remains legible over the gray background */
       }
       body * {
         -webkit-user-select: text;
         user-select: text;
+      }
+      img,
+      video {
+        max-width: 100%;
+        height: auto;
       }
       input,
       textarea,
@@ -129,8 +144,13 @@
         grid-template-columns: var(--sidebar-w) 1fr;
         min-height: calc(100vh - var(--app-header-h, 96px));
         height: calc(100vh - var(--app-header-h, 96px));
+        min-height: calc(var(--vh, 100dvh) - var(--app-header-h, 96px));
+        height: calc(var(--vh, 100dvh) - var(--app-header-h, 96px));
         background: transparent;
         overflow: hidden;
+      }
+      .layout-shell > * {
+        min-width: 0;
       }
       .layout-shell.layout-shell--guest {
         grid-template-columns: 1fr;
@@ -179,6 +199,8 @@
         top: var(--app-header-h, 96px);
         height: calc(100vh - var(--app-header-h, 96px));
         min-height: calc(100vh - var(--app-header-h, 96px));
+        height: calc(var(--vh, 100dvh) - var(--app-header-h, 96px));
+        min-height: calc(var(--vh, 100dvh) - var(--app-header-h, 96px));
         width: var(--sidebar-w);
         background: linear-gradient(160deg, rgba(17, 24, 39, .94), rgba(15, 23, 42, .82));
         border-right: 1px solid rgba(255, 255, 255, 0.06);
@@ -454,6 +476,7 @@
       /* Content area */
       #content {
         flex: 1;
+        min-width: 0;
         min-height: 100%;
         height: 100%;
         display: flex;
@@ -478,10 +501,12 @@
       .offcanvas {
         top: var(--dv-offcanvas-offset, var(--app-header-h, 96px));
         height: calc(100vh - var(--dv-offcanvas-offset, var(--app-header-h, 96px)));
+        height: calc(var(--vh, 100dvh) - var(--dv-offcanvas-offset, var(--app-header-h, 96px)));
       }
       .offcanvas-backdrop {
         top: var(--dv-offcanvas-offset, var(--app-header-h, 96px));
         height: calc(100vh - var(--dv-offcanvas-offset, var(--app-header-h, 96px)));
+        height: calc(var(--vh, 100dvh) - var(--dv-offcanvas-offset, var(--app-header-h, 96px)));
       }
       .brand-link { text-decoration: none; }
       .form-control,
@@ -536,8 +561,17 @@
         :root {
           --sidebar-w: 0px;
         }
+        body {
+          height: auto;
+          min-height: 100vh;
+          min-height: var(--vh, 100dvh);
+          background-attachment: scroll, scroll;
+        }
         .layout-shell {
           grid-template-columns: 1fr;
+          min-height: calc(100vh - var(--app-header-h, 0px));
+          min-height: calc(var(--vh, 100dvh) - var(--app-header-h, 0px));
+          height: auto;
         }
         #sidebar {
           position: fixed;
@@ -545,6 +579,8 @@
           left: 0;
           height: calc(100vh - var(--app-header-h, 0px));
           min-height: calc(100vh - var(--app-header-h, 0px));
+          height: calc(var(--vh, 100dvh) - var(--app-header-h, 0px));
+          min-height: calc(var(--vh, 100dvh) - var(--app-header-h, 0px));
           width: min(86vw, 320px);
           max-width: 90vw;
           transform: translateX(-105%);
@@ -572,9 +608,18 @@
         #content {
           padding-left: 1rem;
           padding-right: 1rem;
+          min-height: calc(100vh - var(--app-header-h, 0px));
+          min-height: calc(var(--vh, 100dvh) - var(--app-header-h, 0px));
+          height: auto;
+        }
+        #content > main {
+          overflow: visible;
+          padding-bottom: calc(2rem + var(--dv-safe-bottom));
         }
         .content-toolbar {
           display: flex;
+          top: max(calc(var(--app-header-h, 0px) + 0.5rem), var(--dv-safe-top));
+          border-radius: 0.9rem;
         }
         .sidebar-backdrop {
           display: block;
@@ -670,11 +715,12 @@
 
     </style>
     <link rel="stylesheet" href="{{ static_url('css/dv-design.css') }}">
+    <link rel="stylesheet" href="{{ static_url('css/mobile.css') }}?v=20260221-1">
   </head>
 
   {% set hx_enabled = not (disable_hx | default(false)) %}
   <body
-    class=""
+    class="{% if disable_sidebar | default(false) %}layout-guest{% endif %}{% if request.endpoint in ['views.login', 'views.register'] %} auth-shell{% endif %}"
     {% if hx_enabled %}
       hx-boost="true"
       hx-target="#main"
@@ -742,15 +788,37 @@
         window.DV = window.DV || {};
         window.DV.hxEnabled = hxEnabled;
 
-        const measureViewport = () => {
-          const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-          document.documentElement.style.setProperty('--vh', viewportHeight + 'px');
-          const header = document.querySelector('.app-header');
-          const headerHeight = header ? header.getBoundingClientRect().height : 96;
-          document.documentElement.style.setProperty('--header-height', headerHeight + 'px');
+        const root = document.documentElement;
+        let rafId = 0;
+        const getViewportHeight = () => {
+          if (window.visualViewport && window.visualViewport.height) {
+            return Math.round(window.visualViewport.height);
+          }
+          return window.innerHeight || document.documentElement.clientHeight || 0;
         };
 
-        window.addEventListener('resize', measureViewport, { passive: true });
+        const measureViewport = () => {
+          const viewportHeight = getViewportHeight();
+          root.style.setProperty('--vh', viewportHeight + 'px');
+          const header = document.querySelector('.app-header');
+          const headerHeight = header ? header.getBoundingClientRect().height : 96;
+          root.style.setProperty('--header-height', headerHeight + 'px');
+        };
+
+        const queueMeasure = () => {
+          if (rafId) return;
+          rafId = window.requestAnimationFrame(() => {
+            rafId = 0;
+            measureViewport();
+          });
+        };
+
+        window.addEventListener('resize', queueMeasure, { passive: true });
+        window.addEventListener('orientationchange', queueMeasure, { passive: true });
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', queueMeasure, { passive: true });
+          window.visualViewport.addEventListener('scroll', queueMeasure, { passive: true });
+        }
         document.addEventListener('DOMContentLoaded', measureViewport, { once: true });
         measureViewport();
       })();
@@ -1170,14 +1238,14 @@
             : Array.from(document.querySelectorAll(".offcanvas"));
           canvases.forEach((el) => {
             el.style.top = `${offset}px`;
-            const heightCalc = `calc(100vh - ${offset}px)`;
+            const heightCalc = `calc(var(--vh, 100dvh) - ${offset}px)`;
             el.style.height = heightCalc;
             el.style.setProperty("--bs-offcanvas-height", heightCalc);
           });
 
           Array.from(document.querySelectorAll(".offcanvas-backdrop")).forEach((el) => {
             el.style.top = `${offset}px`;
-            el.style.height = `calc(100vh - ${offset}px)`;
+            el.style.height = `calc(var(--vh, 100dvh) - ${offset}px)`;
           });
         };
 

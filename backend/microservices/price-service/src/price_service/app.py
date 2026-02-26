@@ -12,6 +12,10 @@ from mtgjson_client import MtgJsonClient, MtgJsonError
 from price_normalizer import normalize_prices
 
 
+def _parse_bool(value) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _is_expired(record: PrintPrice, ttl_seconds: int) -> bool:
     if ttl_seconds <= 0:
         return True
@@ -33,6 +37,11 @@ def _record_payload(record: PrintPrice, cache_hit: bool) -> dict:
         "fetched_at": record.fetched_at.isoformat() if record.fetched_at else None,
         "cache_hit": cache_hit,
     }
+
+
+def _service_error(app: Flask, context: str):
+    app.logger.exception("%s failed", context)
+    return jsonify(status="error", error="internal_error"), 500
 
 
 def create_app() -> Flask:
@@ -64,7 +73,7 @@ def create_app() -> Flask:
         if not scryfall_id:
             return jsonify(status="error", error="missing_scryfall_id"), 400
 
-        force = request.args.get("force") == "1"
+        force = _parse_bool(request.args.get("force"))
 
         session = session_factory()
         try:
@@ -116,12 +125,13 @@ def create_app() -> Flask:
             session.commit()
             return jsonify(_record_payload(record, False))
 
-        except MtgJsonError as exc:
+        except MtgJsonError:
             session.rollback()
-            return jsonify(status="error", error=str(exc)), 502
-        except Exception as exc:
+            app.logger.exception("price lookup failed due to upstream provider")
+            return jsonify(status="error", error="upstream_provider_error"), 502
+        except Exception:
             session.rollback()
-            return jsonify(status="error", error=str(exc)), 500
+            return _service_error(app, "price lookup")
         finally:
             session.close()
 

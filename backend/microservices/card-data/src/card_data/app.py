@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+import hmac
+import os
+from ipaddress import ip_address, ip_network
+
 from flask import Flask, jsonify, request
 from sqlalchemy import select
 
@@ -5,6 +11,67 @@ from .config import load_config
 from .db import ensure_tables, get_engine, get_session_factory, ping_db
 from .models import OracleKeyword, OracleRole, OracleSynergy, ScryfallOracle
 from .scryfall_sync import get_status, sync_scryfall
+
+
+def _parse_bool(value) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+_DEFAULT_SYNC_ALLOWLIST = (
+    "127.0.0.0/8",
+    "::1/128",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+)
+
+
+def _sync_allowlist() -> tuple:
+    raw = os.getenv("CARD_DATA_SYNC_ALLOWLIST")
+    entries = (
+        [item.strip() for item in raw.split(",") if item.strip()]
+        if raw
+        else list(_DEFAULT_SYNC_ALLOWLIST)
+    )
+    networks = []
+    for entry in entries:
+        try:
+            networks.append(ip_network(entry, strict=False))
+        except ValueError:
+            continue
+    return tuple(networks)
+
+
+def _client_ip() -> str | None:
+    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    if request.headers.get("X-Real-IP"):
+        return request.headers.get("X-Real-IP")
+    if request.remote_addr:
+        return request.remote_addr
+    return None
+
+
+def _is_sync_authorized() -> bool:
+    expected_token = (os.getenv("CARD_DATA_SYNC_TOKEN") or "").strip()
+    provided_token = (request.headers.get("X-Card-Data-Token") or "").strip()
+    if expected_token:
+        return bool(provided_token) and hmac.compare_digest(provided_token, expected_token)
+
+    client_ip = _client_ip()
+    if not client_ip:
+        return False
+    try:
+        client = ip_address(client_ip)
+    except ValueError:
+        return False
+    return any(client in network for network in _sync_allowlist())
+
+
+def _service_error(app: Flask, context: str):
+    app.logger.exception("%s failed", context)
+    return jsonify(status="error", error="internal_error"), 500
 
 
 def create_app() -> Flask:
@@ -38,19 +105,21 @@ def create_app() -> Flask:
             ensure_tables(engine)
             payload = get_status(session)
             return jsonify(payload)
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except Exception:
+            return _service_error(app, "scryfall status")
         finally:
             session.close()
 
     @app.post("/v1/scryfall/sync")
     def scryfall_sync():
+        if not _is_sync_authorized():
+            return jsonify(status="error", error="forbidden"), 403
         payload = request.get_json(silent=True) or {}
-        force = bool(payload.get("force")) or request.args.get("force") == "1"
+        force = _parse_bool(payload.get("force")) or _parse_bool(request.args.get("force"))
         try:
             result = sync_scryfall(engine, config, force=force)
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except Exception:
+            return _service_error(app, "scryfall sync")
         if result.get("status") == "locked":
             return jsonify(result), 409
         return jsonify(result)
@@ -114,8 +183,8 @@ def create_app() -> Flask:
                     for row in synergies
                 ],
             )
-        except Exception as exc:
-            return jsonify(status="error", error=str(exc)), 500
+        except Exception:
+            return _service_error(app, "oracle detail")
         finally:
             session.close()
 

@@ -10,6 +10,7 @@ class User(models.Model):
     is_admin = models.BooleanField()
     api_token_hash = models.CharField(max_length=64, null=True)
     api_token_hint = models.CharField(max_length=12, null=True)
+    archived_at = models.DateTimeField(null=True)
 
     class Meta:
         managed = False

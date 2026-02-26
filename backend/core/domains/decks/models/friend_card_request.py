@@ -30,13 +30,11 @@ class FriendCardRequest(db.Model):
         db.Integer,
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     recipient_user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     wishlist_item_id = db.Column(
         db.Integer,
@@ -46,9 +44,9 @@ class FriendCardRequest(db.Model):
     )
 
     requested_qty = db.Column(db.Integer, nullable=False, default=1)
-    status = db.Column(db.String(16), nullable=False, default="pending", index=True)
+    status = db.Column(db.String(16), nullable=False, default="pending")
 
-    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow, index=True)
 
     requester = db.relationship("User", foreign_keys=[requester_user_id])

@@ -77,6 +77,10 @@
         commander_min_players_required: 'Commander needs at least 2 players to start.',
         commander_max_players_exceeded: 'Commander supports up to 4 players.',
         commander_lobby_full: 'This Commander lobby is full (4 players max).',
+        invalid_folder_id: 'Select a valid deck before syncing.',
+        folder_id_required: 'Select a deck before syncing.',
+        deck_id_required: 'Sync a deck before loading it into the game.',
+        invalid_deck_id: 'Sync a deck before loading it into the game.',
       };
       if (friendly[text]) return friendly[text];
       return text.replace(/_/g, ' ');
@@ -177,7 +181,8 @@
         name.textContent = displayNameFor(player);
         const seat = document.createElement('span');
         seat.className = 'text-muted small';
-        seat.textContent = `Seat ${player.seat_index}`;
+        const seatIndex = Number(player && player.seat_index);
+        seat.textContent = Number.isFinite(seatIndex) ? `Seat ${seatIndex + 1}` : 'Seat -';
         left.appendChild(name);
         left.appendChild(document.createTextNode(' '));
         left.appendChild(seat);
