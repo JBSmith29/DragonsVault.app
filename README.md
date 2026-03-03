@@ -187,11 +187,37 @@ A complete list lives near the bottom of `backend/app.py`.
 Run the test suite with:
 
 ```bash
-pip install -r backend/requirements-dev.txt
-pytest
+python -m pip install "virtualenv<21" hatch
+hatch run test
 ```
 
-CI is configured via GitHub Actions (`.github/workflows/python-tests.yml`). Extend the suite as you add features.
+Run frontend CI checks with:
+
+```bash
+python -m pip install "virtualenv<21" hatch
+hatch run frontend-ci
+```
+
+CI is configured via GitHub Actions (`.github/workflows/python-tests.yml`) using these Hatch scripts. Extend the suite as you add features.
+
+## Documentation
+
+Build Sphinx docs locally:
+
+```bash
+python -m pip install "virtualenv<21" hatch
+hatch run docs-build
+```
+
+Preview docs on `http://localhost:8000`:
+
+```bash
+hatch run docs-serve
+```
+
+Generated files are written to `docs/_build/html`.
+
+Docs are built and published to GitHub Pages by `.github/workflows/docs.yml` on pushes to `main` (after GitHub Pages is configured to use GitHub Actions as the source).
 
 ## Configuration
 

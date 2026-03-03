@@ -30,10 +30,8 @@ docker compose --env-file .env --profile dev up -d ui
 ### Option B: Local Python (tests only)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-pytest -m "not ui"
+python -m pip install "virtualenv<21" hatch
+hatch run test
 ```
 
 ### Frontend dev
@@ -59,7 +57,7 @@ pre-commit run --all-files
 
 ## Tests
 
-- Default tests: `pytest -m "not ui"`
+- Default tests: `hatch run test`
 - UI tests are marked `ui` and require Playwright + browsers.
 
 ## Code style

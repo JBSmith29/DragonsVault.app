@@ -14,40 +14,23 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v4
 
-    - name: Cache Pants
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pants
-          .pants.d
-        key: pants-${{ runner.os }}-${{ hashFiles('pants.toml', 'backend/requirements.txt', 'backend/microservices/**/requirements.txt', 'frontend/package.json') }}
-        restore-keys: |
-          pants-${{ runner.os }}-
-
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
-        cache-dependency-path: backend/requirements.txt
+        cache-dependency-path: |
+          backend/requirements.txt
+          backend/requirements-dev.txt
 
-    - name: Install dependencies
+    - name: Install Hatch
       run: |
         python -m pip install --upgrade pip
-        pip install -r backend/requirements.txt
-        pip install -r backend/requirements-dev.txt
+        pip install "virtualenv<21" hatch
 
-    - name: Run tests
+    - name: Run backend tests
       run: |
-        pytest -m "not ui"
-
-    - name: Install Pants
-      run: |
-        python -m pip install pantsbuild.pants
-
-    - name: Run Pants tests
-      run: |
-        pants test ::
+        hatch run test
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -56,16 +39,6 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v4
 
-    - name: Cache Pants
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pants
-          .pants.d
-        key: pants-${{ runner.os }}-${{ hashFiles('pants.toml', 'backend/requirements.txt', 'backend/microservices/**/requirements.txt', 'frontend/package.json') }}
-        restore-keys: |
-          pants-${{ runner.os }}-
-
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
@@ -73,28 +46,18 @@ jobs:
         cache: 'npm'
         cache-dependency-path: frontend/package.json
 
-    - name: Install dependencies
-      run: npm install
-      working-directory: frontend
-
-    - name: Build
-      run: npm run build
-      working-directory: frontend
-
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
+        cache-dependency-path: backend/requirements.txt
 
-    - name: Install Pants
+    - name: Install Hatch
       run: |
-        python -m pip install pantsbuild.pants
+        python -m pip install --upgrade pip
+        pip install "virtualenv<21" hatch
 
-    - name: Pants frontend build
+    - name: Run frontend checks
       run: |
-        pants run frontend:build
-
-    - name: Pants frontend test
-      run: |
-        pants run frontend:test
+        hatch run frontend-ci

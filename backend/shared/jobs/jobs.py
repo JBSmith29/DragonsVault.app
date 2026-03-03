@@ -59,6 +59,38 @@ def _get_logger():
 KEEP_FAILED_IMPORT_UPLOADS = os.getenv("IMPORT_KEEP_FAILED_UPLOADS", "1").lower() in {"1", "true", "yes", "on"}
 
 
+def _start_inline_import_thread(
+    *,
+    filepath: str,
+    quantity_mode: str,
+    overwrite: bool,
+    owner_user_id: Optional[int],
+    owner_username: Optional[str],
+    job_id: str,
+    mapping_override: Optional[dict],
+) -> None:
+    def _runner():
+        try:
+            run_csv_import_inline(
+                filepath=filepath,
+                quantity_mode=quantity_mode,
+                overwrite=overwrite,
+                owner_user_id=owner_user_id,
+                owner_username=owner_username,
+                job_id=job_id,
+                mapping_override=mapping_override,
+            )
+        except Exception:
+            _get_logger().exception("Async import failed", extra={"job_id": job_id})
+
+    thread = threading.Thread(
+        target=_runner,
+        name=f"import-{job_id[:8]}",
+        daemon=True,
+    )
+    thread.start()
+
+
 def enqueue_csv_import(
     filepath: str,
     quantity_mode: str,
@@ -69,9 +101,9 @@ def enqueue_csv_import(
     mapping_override: Optional[dict] = None,
     run_async: bool = False,
 ) -> dict:
-    # Force inline imports so users aren't blocked by a missing/idle queue.
+    # Respect config, but fall back to inline mode if queue dependencies are unavailable.
     inline_pref = bool(current_app.config.get("IMPORT_RUN_INLINE", True))
-    inline_mode = True  # always inline to avoid hangs when workers are unavailable
+    inline_mode = inline_pref or not _jobs_available
     job_id = uuid.uuid4().hex
     # Validate headers before queuing the job to surface errors immediately.
     validate_import_file(filepath, mapping_override)
@@ -89,27 +121,16 @@ def enqueue_csv_import(
         },
     )
 
-    if run_async:
-        def _runner():
-            try:
-                run_csv_import_inline(
-                    filepath=filepath,
-                    quantity_mode=quantity_mode,
-                    overwrite=overwrite,
-                    owner_user_id=owner_user_id,
-                    owner_username=owner_username,
-                    job_id=job_id,
-                    mapping_override=mapping_override,
-                )
-            except Exception:
-                _get_logger().exception("Async import failed", extra={"job_id": job_id})
-
-        thread = threading.Thread(
-            target=_runner,
-            name=f"import-{job_id[:8]}",
-            daemon=True,
+    if run_async and inline_mode:
+        _start_inline_import_thread(
+            filepath=filepath,
+            quantity_mode=quantity_mode,
+            overwrite=overwrite,
+            owner_user_id=owner_user_id,
+            owner_username=owner_username,
+            job_id=job_id,
+            mapping_override=mapping_override,
         )
-        thread.start()
         return {
             "job_id": job_id,
             "ran_inline": False,
@@ -134,7 +155,42 @@ def enqueue_csv_import(
             "per_folder": per_folder,
         }
 
-    queue = get_queue()
+    queue = get_queue() if get_queue else None
+    if queue is None:
+        if has_app_context():
+            current_app.logger.warning("Queue unavailable; running import inline.")
+        if run_async:
+            _start_inline_import_thread(
+                filepath=filepath,
+                quantity_mode=quantity_mode,
+                overwrite=overwrite,
+                owner_user_id=owner_user_id,
+                owner_username=owner_username,
+                job_id=job_id,
+                mapping_override=mapping_override,
+            )
+            return {
+                "job_id": job_id,
+                "ran_inline": False,
+                "stats": None,
+                "per_folder": None,
+            }
+        stats, per_folder = run_csv_import_inline(
+            filepath=filepath,
+            quantity_mode=quantity_mode,
+            overwrite=overwrite,
+            owner_user_id=owner_user_id,
+            owner_username=owner_username,
+            job_id=job_id,
+            mapping_override=mapping_override,
+        )
+        return {
+            "job_id": job_id,
+            "ran_inline": True,
+            "stats": stats,
+            "per_folder": per_folder,
+        }
+
     try:
         queue.enqueue(
             run_csv_import_job,
@@ -158,6 +214,22 @@ def enqueue_csv_import(
         # Fall back to inline if the queue/Redis is unavailable so imports don't silently hang.
         if has_app_context():
             current_app.logger.warning("Queue unavailable; running import inline: %s", exc)
+        if run_async:
+            _start_inline_import_thread(
+                filepath=filepath,
+                quantity_mode=quantity_mode,
+                overwrite=overwrite,
+                owner_user_id=owner_user_id,
+                owner_username=owner_username,
+                job_id=job_id,
+                mapping_override=mapping_override,
+            )
+            return {
+                "job_id": job_id,
+                "ran_inline": False,
+                "stats": None,
+                "per_folder": None,
+            }
         stats, per_folder = run_csv_import_inline(
             filepath=filepath,
             quantity_mode=quantity_mode,

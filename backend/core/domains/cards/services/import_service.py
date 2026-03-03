@@ -299,6 +299,15 @@ def _json_error(message: str, *, field_errors: dict[str, str] | None = None, sta
     return resp
 
 
+def _wants_json_response() -> bool:
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    if request.is_json:
+        return True
+    accept = request.accept_mimetypes
+    return accept["application/json"] > accept["text/html"]
+
+
 def handle_import_csv(*, session_obj) -> ServiceResult:
     """Upload route that powers CSV/XLS collection imports."""
     if request.method == "GET":
@@ -316,10 +325,7 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
     quantity_mode = _normalize_quantity_mode(request.form.get("quantity_mode"))
 
     if action == "retry":
-        wants_json = (
-            request.headers.get("X-Requested-With") == "XMLHttpRequest"
-            or request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
-        )
+        wants_json = _wants_json_response()
         last_job = session_obj.get("last_import_job") or {}
         if not last_job:
             message = "No recent import to retry."
@@ -411,10 +417,7 @@ def handle_import_csv(*, session_obj) -> ServiceResult:
     if action in ("confirm", "overwrite"):
         filepath = (request.form.get("filepath") or "").strip()
         file = request.files.get("file")
-        wants_json = (
-            request.headers.get("X-Requested-With") == "XMLHttpRequest"
-            or request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
-        )
+        wants_json = _wants_json_response()
         if file and getattr(file, "filename", ""):
             try:
                 filepath = _save_upload_if_present(file)

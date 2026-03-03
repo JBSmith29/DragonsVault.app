@@ -1,0 +1,38 @@
+[tool.hatch.envs.default]
+detached = true
+
+[tool.hatch.envs.default.scripts]
+backend-deps = [
+  "python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt",
+]
+docs-clean = "rm -rf docs/_build"
+docs-build = [
+  "backend-deps",
+  "sphinx-build -M html docs docs/_build -W --keep-going",
+]
+docs-linkcheck = [
+  "backend-deps",
+  "sphinx-build -M linkcheck docs docs/_build -W --keep-going",
+]
+docs-serve = [
+  "docs-build",
+  "python -m http.server 8000 --directory docs/_build/html",
+]
+test = [
+  "backend-deps",
+  "pytest -m \"not ui\"",
+]
+frontend-deps = "npm install --prefix frontend"
+frontend-build = [
+  "frontend-deps",
+  "npm run --prefix frontend build",
+]
+frontend-test = [
+  "frontend-deps",
+  "npm run --prefix frontend test",
+]
+frontend-ci = [
+  "frontend-deps",
+  "frontend-build",
+  "frontend-test",
+]

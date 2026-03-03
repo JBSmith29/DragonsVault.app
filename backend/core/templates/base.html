@@ -1027,16 +1027,6 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.game_engine', 'views.game_engine_table'] %}active{% endif %}"
-               href="{{ url_for('views.game_engine') }}"
-               title="Game Engine"
-               aria-label="Game Engine"
-               data-endpoints="views.game_engine,views.game_engine_table">
-              <i class="bi bi-cpu" aria-hidden="true"></i>
-              <span class="sidebar-label">Game Engine</span>
-            </a>
-          </li>
-          <li class="nav-item">
             <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.build_landing', 'views.build_session'] %}active{% endif %}"
                href="{{ url_for('views.build_landing') }}"
                title="Build-A-Deck"
@@ -1623,9 +1613,7 @@
     <script src="{{ static_url('js/face-flip.js') }}" defer></script>
     <script src="{{ static_url('js/card-hover.js') }}" defer></script>
     <script src="{{ static_url('js/magic-rules.js') }}?v=20260208-1" defer></script>
-    <script src="{{ static_url('js/game-engine.js') }}?v=20260216-2" defer></script>
-    <script src="{{ static_url('js/game-engine-table.js') }}?v=20260216-1" defer></script>
-    
+
     <!-- Global form parameter cleanup -->
     <script nonce="{{ csp_nonce() }}">
       (function() {

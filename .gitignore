@@ -37,6 +37,7 @@ instance/
 .cache/
 .pants.d/
 dist/
+docs/_build/
 
 # Secrets
 .env
