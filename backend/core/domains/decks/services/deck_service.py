@@ -317,7 +317,7 @@ def deck_land_mana_sources(folder_id: int, *, filter_by_identity: bool = True) -
     if filter_by_identity:
         from core.routes.base import compute_folder_color_identity
 
-        letters, _label = compute_folder_color_identity(folder_id)
+        letters, _label = compute_folder_color_identity(folder_id, "20260311a")
         allowed = {ch for ch in (letters or "") if ch in {"W", "U", "B", "R", "G"}}
         allowed.add("C")
 
@@ -435,6 +435,12 @@ def opening_hand_shuffle():
     return card_service.opening_hand_shuffle()
 
 
+def opening_hand_mulligan():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_mulligan()
+
+
 def opening_hand_draw():
     from core.domains.cards.services import card_service
 
@@ -471,6 +477,12 @@ def opening_hand_surveil():
     return card_service.opening_hand_surveil()
 
 
+def opening_hand_tokens():
+    from core.domains.cards.services import card_service
+
+    return card_service.opening_hand_tokens()
+
+
 def opening_hand_token_search():
     from core.domains.cards.services import card_service
 
@@ -492,6 +504,7 @@ __all__ = [
     "get_deck_stats",
     "opening_hand",
     "opening_hand_play",
+    "opening_hand_mulligan",
     "opening_hand_draw",
     "opening_hand_search",
     "opening_hand_peek",
@@ -499,6 +512,7 @@ __all__ = [
     "opening_hand_scry",
     "opening_hand_surveil",
     "opening_hand_shuffle",
+    "opening_hand_tokens",
     "opening_hand_token_search",
     "register_deck_stats_listeners",
     "recompute_deck_stats",

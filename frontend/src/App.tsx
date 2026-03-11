@@ -16,6 +16,7 @@ import {
   type CardDataSyncStatus,
   type MaintenanceStatus,
 } from "./api/endpoints";
+import { apiUrl } from "./api/client";
 
 type ServiceStatus = "checking" | "ok" | "error";
 
@@ -47,7 +48,7 @@ const serviceDefinitions: ServiceDefinition[] = [
     apiPrefix: "/api",
     schema: "public",
     ping: pingWebApi,
-    endpoint: "/api/healthz",
+    endpoint: "/api/ops/maintenance",
     syncSources: [
       { kind: "maintenance", key: "scryfall", label: "Scryfall cache" },
       { kind: "maintenance", key: "spellbook", label: "Spellbook combos" },
@@ -239,7 +240,7 @@ export default function App() {
           <button className="primary" onClick={refreshStatuses} disabled={busy}>
             {busy ? "Checking services..." : "Refresh status"}
           </button>
-          <a className="ghost" href="/api/ops/maintenance">
+          <a className="ghost" href={apiUrl("/ops/maintenance")}>
             Open maintenance snapshot
           </a>
         </div>

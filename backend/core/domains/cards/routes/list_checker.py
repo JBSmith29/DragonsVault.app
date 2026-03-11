@@ -16,9 +16,33 @@ from models import Card, Folder, FolderShare, User, UserFriend
 from core.domains.cards.services import scryfall_cache
 from core.domains.decks.services import deck_utils
 
-from core.routes.base import _collection_rows_with_fallback, _normalize_name, views
+from core.routes.base import _collection_rows_with_fallback, _normalize_name, color_identity_name, views
 
 BASIC_LAND_SLUGS = {_normalize_name(name) for name in deck_utils.BASIC_LANDS}
+
+_RARITY_LABELS = {
+    "common": "Common",
+    "uncommon": "Uncommon",
+    "rare": "Rare",
+    "mythic": "Mythic",
+    "special": "Special",
+    "bonus": "Bonus",
+}
+
+
+def _normalize_rarity(value: str | None) -> str:
+    text = (value or "").strip().lower()
+    if not text:
+        return ""
+    return _RARITY_LABELS.get(text, text.title())
+
+
+def _normalize_type(value: str | None) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    # Keep the front (type) side before em-dash subtype details.
+    return text.split("—", 1)[0].strip()
 
 
 def _parse_card_list(text: str) -> "OrderedDict[str, dict]":
@@ -416,6 +440,8 @@ def _compute_list_checker(pasted: str):
 
     name_to_sid = {}
     face_to_sid = {}
+    name_to_meta = {}
+    face_to_meta = {}
     try:
         if scryfall_cache.ensure_cache_loaded():
             from core.domains.cards.services.scryfall_cache import get_all_prints
@@ -427,10 +453,18 @@ def _compute_list_checker(pasted: str):
                 sid = pr.get("id")
                 lang = (pr.get("lang") or "en").lower()
                 oracle = pr.get("oracle_id")
+                rarity_label = _normalize_rarity(pr.get("rarity"))
+                ci_raw = pr.get("color_identity") or pr.get("colors") or []
+                ci_letters, _ = scryfall_cache.normalize_color_identity(ci_raw)
+                type_label = _normalize_type(pr.get("type_line"))
+                meta = {"rarity": rarity_label, "color_identity": ci_letters, "type": type_label}
 
                 prev = name_to_sid.get(nm)
                 if prev is None or (prev[1] != "en" and lang == "en"):
                     name_to_sid[nm] = (sid, lang, oracle)
+                prev_meta = name_to_meta.get(nm)
+                if prev_meta is None or (prev_meta["lang"] != "en" and lang == "en"):
+                    name_to_meta[nm] = {"lang": lang, **meta}
 
                 raw = (pr.get("name") or "")
                 if "//" in raw:
@@ -441,13 +475,21 @@ def _compute_list_checker(pasted: str):
                         prev_a = face_to_sid.get(na)
                         if prev_a is None or (prev_a[1] != "en" and lang == "en"):
                             face_to_sid[na] = (sid, lang, oracle)
+                        prev_meta_a = face_to_meta.get(na)
+                        if prev_meta_a is None or (prev_meta_a["lang"] != "en" and lang == "en"):
+                            face_to_meta[na] = {"lang": lang, **meta}
                     if nb:
                         prev_b = face_to_sid.get(nb)
                         if prev_b is None or (prev_b[1] != "en" and lang == "en"):
                             face_to_sid[nb] = (sid, lang, oracle)
+                        prev_meta_b = face_to_meta.get(nb)
+                        if prev_meta_b is None or (prev_meta_b["lang"] != "en" and lang == "en"):
+                            face_to_meta[nb] = {"lang": lang, **meta}
     except Exception:
         name_to_sid = {}
         face_to_sid = {}
+        name_to_meta = {}
+        face_to_meta = {}
 
     folder_ids = set()
     for breakdown in (per_folder_counts, collection_counts, deck_counts, available_per_folder_counts):
@@ -564,6 +606,15 @@ def _compute_list_checker(pasted: str):
         rep_card = rep_card_map.get(nkey)
         rep_card_id = int(rep_card.id) if rep_card else None
         oracle_id = getattr(rep_card, "oracle_id", None)
+        rarity = _normalize_rarity(getattr(rep_card, "rarity", None)) if rep_card else ""
+        type_label = _normalize_type(getattr(rep_card, "type_line", None)) if rep_card else ""
+        ci_letters = ""
+        ci_known = False
+        if rep_card:
+            raw_ci = getattr(rep_card, "color_identity", None)
+            if raw_ci not in (None, ""):
+                ci_letters, _ = scryfall_cache.normalize_color_identity(raw_ci)
+                ci_known = True
 
         scry_id = None
         tup = name_to_sid.get(nkey) or face_to_sid.get(nkey)
@@ -571,8 +622,21 @@ def _compute_list_checker(pasted: str):
             scry_id = tup[0]
             oracle_id = oracle_id or tup[2]
 
+        meta = name_to_meta.get(nkey) or face_to_meta.get(nkey) or {}
+        if not rarity:
+            rarity = meta.get("rarity") or ""
+        if not type_label:
+            type_label = meta.get("type") or ""
+        if not ci_known and "color_identity" in meta:
+            ci_letters = meta.get("color_identity") or ""
+            ci_known = True
+
         if rep_card and not oracle_id:
             oracle_id = rep_card.oracle_id
+
+        color_identity_label = color_identity_name(ci_letters) if ci_known else "—"
+        rarity_label = rarity or "—"
+        type_display = type_label or "—"
 
         results.append(
             {
@@ -595,6 +659,10 @@ def _compute_list_checker(pasted: str):
                 "card_id": rep_card_id,
                 "scry_id": scry_id,
                 "oracle_id": oracle_id,
+                "color_identity": ci_letters if ci_known else "",
+                "color_identity_label": color_identity_label,
+                "rarity": rarity_label,
+                "type": type_display,
             }
         )
 
@@ -643,7 +711,7 @@ def list_checker_export_csv():
         max_sources = max(max_sources, len(folders_for_export))
     source_col_count = max(1, max_sources)
 
-    header = ["Card", "Requested", "Available", "Missing", "Status", "Total Owned"]
+    header = ["Card", "Type", "Color Identity", "Rarity", "Requested", "Available", "Missing", "Status", "Total Owned"]
     header.extend([f"Collection {idx}" for idx in range(1, source_col_count + 1)])
     writer.writerow(header)
     for rec in results:
@@ -660,6 +728,9 @@ def list_checker_export_csv():
         writer.writerow(
             [
                 rec["name"],
+                rec.get("type") or "",
+                rec.get("color_identity_label") or "",
+                rec.get("rarity") or "",
                 rec["requested"],
                 rec["available_in_collection"],
                 rec["missing_qty"],

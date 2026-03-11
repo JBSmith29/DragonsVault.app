@@ -20,6 +20,7 @@ from core.domains.cards.services import scryfall_cache as sc
 from core.domains.decks.services.edhrec_cache_service import edhrec_cache_snapshot
 from core.domains.decks.services.edhrec_client import edhrec_service_enabled
 from shared.events.live_updates import latest_job_events
+from .api import api_bp
 from .base import views
 
 
@@ -106,12 +107,12 @@ def readyz():
     return jsonify(status="ok"), 200
 
 
-@views.route("/api/healthz", methods=["GET"])
+@api_bp.route("/healthz", methods=["GET"])
 def api_healthz():
     return healthz()
 
 
-@views.route("/api/readyz", methods=["GET"])
+@api_bp.route("/readyz", methods=["GET"])
 def api_readyz():
     return readyz()
 
@@ -188,7 +189,7 @@ def _redis_readiness() -> dict[str, object]:
 
 
 @views.route("/ops/health", methods=["GET"])
-@views.route("/api/ops/health", methods=["GET"])
+@api_bp.route("/ops/health", methods=["GET"])
 def overall_health():
     if not _ops_authorized():
         return _ops_forbidden()
@@ -371,7 +372,7 @@ def _sync_status(scope: str, dataset: str | None, fallback_ts: float | None) -> 
     }
 
 
-@views.route("/api/ops/maintenance", methods=["GET"])
+@api_bp.route("/ops/maintenance", methods=["GET"])
 def maintenance_status():
     data_root = Path(sc.default_cards_path()).parent
     default_cards = Path(sc.default_cards_path())

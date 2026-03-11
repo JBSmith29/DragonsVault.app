@@ -30,7 +30,10 @@ export const pingUserManager = () => apiGet<ServicePing>("/user/v1/ping");
 export const pingCardData = () => apiGet<ServicePing>("/cards/v1/ping");
 export const pingFolderService = () => apiGet<ServicePing>("/folders/v1/ping");
 export const pingPriceService = () => apiGet<ServicePing>("/prices/v1/ping");
-export const pingWebApi = () => apiGet<ServicePing>("/healthz");
+export const pingWebApi = async (): Promise<ServicePing> => {
+  await apiGet<MaintenanceStatus>("/ops/maintenance");
+  return { status: "ok", service: "web-api" };
+};
 
 export const fetchMaintenanceStatus = () => apiGet<MaintenanceStatus>("/ops/maintenance");
 export const fetchCardDataSyncStatus = () =>

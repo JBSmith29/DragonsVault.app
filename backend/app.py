@@ -695,7 +695,7 @@ def create_app():
     loaders.append(FileSystemLoader([str(path) for path in extra_template_dirs]))
     app.jinja_loader = ChoiceLoader(loaders)
 
-    # Honor X-Forwarded-* headers from our reverse proxy (nginx/Cloudflare).
+    # Honor X-Forwarded-* headers from a trusted reverse proxy (nginx, Cloudflare, LB, etc.).
     # This prevents Flask-Talisman from forcing HTTPS redirects on plain HTTP health checks.
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
@@ -771,10 +771,14 @@ def create_app():
         "views.register",
         "views.healthz",
         "views.readyz",
-        "views.api_healthz",
-        "views.api_readyz",
+        "api.api_healthz",
+        "api.api_readyz",
+        "api_v1.api_healthz",
+        "api_v1.api_readyz",
         "views.metrics",
         "views.overall_health",
+        "api.overall_health",
+        "api_v1.overall_health",
         "views.gamedashboard",
         "views.terms_of_service",
         "views.privacy_policy",
@@ -944,13 +948,43 @@ def create_app():
         ensure_fts()
 
     # Blueprints
-    from core.routes import views, api_bp, register_routes
-    from core.domains.games.routes.games_api import register_games_api
+    from core.routes import api_blueprints, register_routes, web_blueprints
     register_routes()
-    app.register_blueprint(views)
-    app.register_blueprint(api_bp)
-    app.register_blueprint(api_bp, url_prefix="/api/v1", name="api_v1")
-    register_games_api(app)
+
+    # Web UI surface (`views` blueprint and domain web routes)
+    for blueprint in web_blueprints():
+        app.register_blueprint(blueprint)
+
+    # API surface (unversioned + /api/v1 version aliases)
+    for blueprint, versioned_prefix in api_blueprints():
+        app.register_blueprint(blueprint)
+        app.register_blueprint(
+            blueprint,
+            url_prefix=versioned_prefix,
+            name=f"{blueprint.name}_v1",
+        )
+
+    def _legacy_api_endpoint_fallback(error, endpoint: str, values: dict):
+        """Gracefully map legacy views.* API endpoint names to api.* routes.
+
+        Some templates/services historically referenced API handlers as
+        ``views.<endpoint>``. During route split, those handlers moved under the
+        ``api`` blueprint. This fallback prevents runtime 500s from stale
+        bytecode/templates by retrying URL generation against API blueprints.
+        """
+        if not endpoint or not endpoint.startswith("views."):
+            return None
+        endpoint_name = endpoint.split(".", 1)[1]
+        for candidate in (f"api.{endpoint_name}", f"api_v1.{endpoint_name}"):
+            if candidate not in app.view_functions:
+                continue
+            try:
+                return app.url_for(candidate, **(values or {}))
+            except Exception:
+                continue
+        return None
+
+    app.url_build_error_handlers.append(_legacy_api_endpoint_fallback)
 
     @app.context_processor
     def inject_device_type():

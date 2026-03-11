@@ -97,7 +97,7 @@ docker compose --env-file .env up -d web worker nginx
 
 ### 5. Open the app
 
-Visit `http://localhost` (or your LAN IP / Cloudflare hostname).
+Visit `http://localhost` (or your LAN IP / custom hostname).
 
 ## After launch
 
@@ -217,7 +217,18 @@ hatch run docs-serve
 
 Generated files are written to `docs/_build/html`.
 
-Docs are built and published to GitHub Pages by `.github/workflows/docs.yml` on pushes to `main` (after GitHub Pages is configured to use GitHub Actions as the source).
+Docs are build-validated in CI by `.github/workflows/docs.yml`.
+
+## Frontend on GitHub Pages
+
+The React frontend can be deployed to GitHub Pages with `.github/workflows/frontend-pages.yml`.
+
+Repository variables used by the workflow:
+
+- `VITE_API_BASE_URL` (recommended): absolute API base URL for the hosted frontend (for example `https://api.example.com/api`).
+- `PAGES_BASE_PATH` (optional): public base path for static assets. Defaults to `/<repo-name>/` for project pages.
+
+The workflow builds `frontend/dist`, adds an SPA fallback (`404.html`), and deploys on pushes to `main`.
 
 ## Configuration
 
@@ -278,8 +289,14 @@ DragonsVault/
 |   +-- app.py            # Flask application factory + CLI commands
 |   +-- config.py         # Config classes & defaults
 |   +-- extensions.py     # Shared extension instances
+|   +-- core/
+|   |   +-- routes/       # Route bootstrap split by web vs API surfaces
+|   |   |   +-- base.py   # Server-rendered/HTMX blueprint (`views`)
+|   |   |   +-- api.py    # JSON API blueprint (`api_bp`)
+|   |   |   +-- __init__.py # register_web_routes(), register_api_routes(), blueprint map
+|   |   +-- domains/      # Domain routes with explicit web/api registration hooks
 |   +-- models/           # SQLAlchemy models
-|   +-- routes/           # Blueprint routes & helpers
+|   +-- routes/           # Legacy compatibility shims to `core.routes`
 |   +-- services/         # CSV importer, Scryfall cache, stats helpers
 |   +-- templates/        # Jinja templates
 |   +-- static/           # CSS, JS, mana symbol assets
@@ -295,6 +312,12 @@ DragonsVault/
 +-- docker-compose.yml    # Local stack definition
 +-- README.md             # Project documentation
 ```
+
+### Backend web vs API boundary
+
+- Web surface: route modules on the `views` blueprint (server-rendered pages + HTMX handlers).
+- API surface: `api_bp` plus `games_api` blueprints mounted at `/api/*` and `/api/v1/*`.
+- Transitional note: a few legacy `/api/*` handlers are still collocated in web modules; their domain `register_api_routes()` functions make that explicit.
 
 ## Experimental Django API
 

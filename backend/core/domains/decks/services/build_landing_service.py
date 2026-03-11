@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import render_template, request
 from flask_login import current_user
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from extensions import db
 from models import BuildSession, BuildSessionCard, Card, EdhrecCommanderTagCard, Folder, FolderRole
@@ -54,11 +54,14 @@ def _collection_oracle_subquery(user_id: int):
     return (
         db.session.query(Card.oracle_id.label("oracle_id"))
         .join(Folder, Card.folder_id == Folder.id)
-        .join(FolderRole, FolderRole.folder_id == Folder.id)
+        .outerjoin(FolderRole, FolderRole.folder_id == Folder.id)
         .filter(
-            FolderRole.role == FolderRole.ROLE_COLLECTION,
             Folder.owner_user_id == user_id,
             Card.oracle_id.isnot(None),
+            or_(
+                FolderRole.role == FolderRole.ROLE_COLLECTION,
+                Folder.category == Folder.CATEGORY_COLLECTION,
+            ),
         )
         .distinct()
         .subquery()

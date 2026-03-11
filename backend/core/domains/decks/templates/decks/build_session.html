@@ -433,7 +433,7 @@
                 <span class="fw-semibold">EDHRec</span>
                 <span class="text-muted small">Synergy-first</span>
               </summary>
-              <p class="text-muted small mb-3">Cards you already own are tagged in the list.</p>
+              <p class="text-muted small mb-3">Cards available in your collection are tagged in the list.</p>
               {% if recommendations %}
                 <div class="build-rec-list">
                   {% for section in recommendations %}
@@ -477,7 +477,7 @@
                                 <div class="d-flex align-items-start justify-content-between gap-2">
                                   <div class="build-rec-title">{{ rec.name }}</div>
                                   {% if rec.in_collection %}
-                                    <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">In Collection</span>
+                                    <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">Available</span>
                                   {% endif %}
                                 </div>
                                 {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}

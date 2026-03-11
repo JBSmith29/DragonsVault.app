@@ -40,5 +40,6 @@ Open ``http://localhost:8000``.
 Publishing
 ----------
 
-The repository includes ``.github/workflows/docs.yml`` to build and publish
-Sphinx output to GitHub Pages on pushes to ``main``.
+The repository validates docs builds in CI via ``.github/workflows/docs.yml``.
+Frontend Pages deployment is handled separately by
+``.github/workflows/frontend-pages.yml``.

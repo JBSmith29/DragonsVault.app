@@ -13,7 +13,7 @@ from typing import Iterable
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, or_, text
 
 from extensions import db
 from models import BuildSession, BuildSessionCard, Card, Folder, FolderRole, OracleCoreRoleTag, OracleDeckTag
@@ -34,6 +34,7 @@ from core.shared.utils.symbols_cache import colors_to_icons, render_mana_html
 from core.shared.utils.assets import static_url
 
 _LOG = logging.getLogger(__name__)
+_LEGACY_COLLECTION_FOLDER_NAMES = {"lands", "common", "uncommon", "rare", "mythic", "to add"}
 
 
 def build_session_page(session_id: int):
@@ -67,8 +68,12 @@ def build_session_page(session_id: int):
         role_needs=metrics["role_needs"],
         sort_mode=sort_mode,
     )
+    owned_oracles = _owned_oracle_ids(current_user.id)
+    owned_name_keys = _owned_name_keys(current_user.id)
     collection_oracles = _collection_oracle_ids(current_user.id)
-    _mark_collection_cards(recommendations, collection_oracles)
+    if not collection_oracles and owned_oracles:
+        collection_oracles = set(owned_oracles)
+    _mark_collection_cards(recommendations, owned_oracles, owned_name_keys)
     edhrec_oracles = _recommendation_oracle_ids(recommendations)
     collection_sections = _collection_recommendation_sections(
         session.commander_oracle_id or "",
@@ -596,22 +601,144 @@ def _flash_unresolved_manual_add(names: list[str]) -> None:
     flash(f"Could not resolve: {preview}.", "warning")
 
 
+def _rows_to_oracle_ids(rows) -> set[str]:
+    return {
+        str(row[0]).strip().casefold()
+        for row in rows or []
+        if row and row[0]
+    }
+
+
+def _resolve_oracle_ids_from_names(card_names: list[str]) -> set[str]:
+    if not card_names:
+        return set()
+    resolved: set[str] = set()
+    try:
+        sc.ensure_cache_loaded()
+    except Exception:
+        return resolved
+    for raw_name in card_names:
+        name = (raw_name or "").strip()
+        if not name:
+            continue
+        try:
+            oracle_id = sc.unique_oracle_by_name(name)
+        except Exception:
+            oracle_id = None
+        if oracle_id:
+            resolved.add(str(oracle_id).strip().casefold())
+    return resolved
+
+
+def _owned_oracle_ids(user_id: int | None) -> set[str]:
+    if not user_id:
+        return set()
+    rows = (
+        db.session.query(Card.oracle_id)
+        .join(Folder, Card.folder_id == Folder.id)
+        .filter(
+            Folder.owner_user_id == user_id,
+            Card.oracle_id.isnot(None),
+            or_(Folder.is_proxy.is_(False), Folder.is_proxy.is_(None)),
+        )
+        .distinct()
+        .all()
+    )
+    oracle_ids = _rows_to_oracle_ids(rows)
+    if oracle_ids:
+        return oracle_ids
+
+    name_rows = (
+        db.session.query(Card.name)
+        .join(Folder, Card.folder_id == Folder.id)
+        .filter(
+            Folder.owner_user_id == user_id,
+            Card.name.isnot(None),
+            or_(Folder.is_proxy.is_(False), Folder.is_proxy.is_(None)),
+        )
+        .distinct()
+        .all()
+    )
+    return _resolve_oracle_ids_from_names([row[0] for row in name_rows if row and row[0]])
+
+
+def _owned_name_keys(user_id: int | None) -> set[str]:
+    if not user_id:
+        return set()
+    rows = (
+        db.session.query(Card.name)
+        .join(Folder, Card.folder_id == Folder.id)
+        .filter(
+            Folder.owner_user_id == user_id,
+            Card.name.isnot(None),
+            or_(Folder.is_proxy.is_(False), Folder.is_proxy.is_(None)),
+        )
+        .distinct()
+        .all()
+    )
+    return {
+        str(row[0]).strip().casefold()
+        for row in rows
+        if row and row[0]
+    }
+
+
 def _collection_oracle_ids(user_id: int | None) -> set[str]:
     if not user_id:
         return set()
     rows = (
         db.session.query(Card.oracle_id)
         .join(Folder, Card.folder_id == Folder.id)
-        .join(FolderRole, FolderRole.folder_id == Folder.id)
+        .outerjoin(FolderRole, FolderRole.folder_id == Folder.id)
         .filter(
-            FolderRole.role == FolderRole.ROLE_COLLECTION,
             Folder.owner_user_id == user_id,
             Card.oracle_id.isnot(None),
+            or_(
+                FolderRole.role == FolderRole.ROLE_COLLECTION,
+                Folder.category == Folder.CATEGORY_COLLECTION,
+                func.lower(Folder.category) == Folder.CATEGORY_COLLECTION,
+            ),
         )
         .distinct()
         .all()
     )
-    return {row[0] for row in rows if row and row[0]}
+    oracle_ids = _rows_to_oracle_ids(rows)
+    if oracle_ids:
+        return oracle_ids
+
+    fallback_rows = (
+        db.session.query(Card.oracle_id)
+        .join(Folder, Card.folder_id == Folder.id)
+        .filter(
+            Folder.owner_user_id == user_id,
+            Card.oracle_id.isnot(None),
+            func.lower(Folder.name).in_(_LEGACY_COLLECTION_FOLDER_NAMES),
+        )
+        .distinct()
+        .all()
+    )
+    oracle_ids = _rows_to_oracle_ids(fallback_rows)
+    if oracle_ids:
+        return oracle_ids
+
+    fallback_name_rows = (
+        db.session.query(Card.name)
+        .join(Folder, Card.folder_id == Folder.id)
+        .outerjoin(FolderRole, FolderRole.folder_id == Folder.id)
+        .filter(
+            Folder.owner_user_id == user_id,
+            Card.name.isnot(None),
+            or_(
+                FolderRole.role == FolderRole.ROLE_COLLECTION,
+                Folder.category == Folder.CATEGORY_COLLECTION,
+                func.lower(Folder.category) == Folder.CATEGORY_COLLECTION,
+                func.lower(Folder.name).in_(_LEGACY_COLLECTION_FOLDER_NAMES),
+            ),
+        )
+        .distinct()
+        .all()
+    )
+    return _resolve_oracle_ids_from_names([row[0] for row in fallback_name_rows if row and row[0]])
 
 
 def _build_oracle_ids(entries: Iterable[BuildSessionCard]) -> set[str]:
@@ -637,13 +764,31 @@ def _recommendation_oracle_ids(sections: list[dict] | None) -> set[str]:
     return oracle_ids
 
 
-def _mark_collection_cards(sections: list[dict] | None, owned_oracles: set[str]) -> None:
-    if not sections or not owned_oracles:
+def _mark_collection_cards(
+    sections: list[dict] | None,
+    owned_oracles: set[str],
+    owned_name_keys: set[str] | None = None,
+) -> None:
+    if not sections:
         return
+    owned_lookup = {
+        str(oracle_id).strip().casefold()
+        for oracle_id in owned_oracles
+        if oracle_id
+    }
+    name_lookup = {
+        str(name_key).strip().casefold()
+        for name_key in (owned_name_keys or set())
+        if name_key
+    }
     for section in sections:
         for card in section.get("cards") or []:
             oracle_id = (card.get("oracle_id") or "").strip()
-            card["in_collection"] = bool(oracle_id and oracle_id in owned_oracles)
+            name_key = (card.get("name") or "").strip().casefold()
+            card["in_collection"] = bool(
+                (oracle_id and oracle_id.casefold() in owned_lookup)
+                or (name_key and name_key in name_lookup)
+            )
 
 
 def _is_basic_land(type_line: str | None) -> bool:

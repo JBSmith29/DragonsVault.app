@@ -6,9 +6,9 @@
   id="rulesApp"
   class="container py-4"
   data-rules-url="{{ url_for('static', filename='docs/' ~ (rules_meta.filename if rules_meta and rules_meta.filename else 'MagicCompRules-2026-01-16.txt')) }}"
-  data-rules-api-url="{{ url_for('views.api_rules_text') }}"
-  data-rules-search-api-url="{{ url_for('views.api_rules_search') }}"
-  data-rules-workbook-api-url="{{ url_for('views.api_rules_workbook') }}"
+  data-rules-api-url="{{ url_for('api.api_rules_text') }}"
+  data-rules-search-api-url="{{ url_for('api.api_rules_search') }}"
+  data-rules-workbook-api-url="{{ url_for('api.api_rules_workbook') }}"
 >
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>

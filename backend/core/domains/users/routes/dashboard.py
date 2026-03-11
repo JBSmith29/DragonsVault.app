@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.domains.cards.services import card_service, scryfall_service
+from core.routes.api import api_bp
 from core.routes.base import views
 
 
@@ -18,13 +19,13 @@ def dashboard():
     return card_service.dashboard()
 
 
-@views.route("/api/card/<int:card_id>")
+@api_bp.route("/card/<int:card_id>")
 def api_card(card_id):
     """Lightweight JSON used by hover/quick-view."""
     return card_service.api_card(card_id)
 
 
-@views.route("/api/print/<sid>/faces", methods=["GET"])
+@api_bp.route("/print/<sid>/faces", methods=["GET"])
 def api_print_faces(sid):
     """Provide client-side render helpers with the available image faces for a print."""
     return scryfall_service.api_print_faces(sid)

@@ -1142,7 +1142,7 @@
     setStatus('Saving…', 'muted');
     if (saveBtn) saveBtn.disabled = true;
     try {
-      const resp = await fetch('{{ url_for("views.api_update_folder_categories") }}', {
+      const resp = await fetch('{{ url_for("api.api_update_folder_categories") }}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

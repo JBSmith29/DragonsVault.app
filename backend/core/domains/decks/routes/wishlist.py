@@ -92,7 +92,9 @@ def _color_identity_for_oracle(oracle_id):
 def _color_identity_for_item(item):
     card = getattr(item, "card", None)
     if card:
-        return card.color_identity or card.colors or None
+        direct = card.color_identity or card.colors or None
+        if direct:
+            return direct
     oracle_id = item.oracle_id
     ci = _color_identity_for_oracle(oracle_id)
     if ci:
@@ -716,6 +718,7 @@ def wishlist():
     allowed_sorts = {"name", "color", "location", "requested", "missing", "status", "order"}
     if sort not in allowed_sorts:
         sort = "name"
+    manual_color_sort = sort == "color"
 
     status_filter = (request.args.get("status") or "all").strip().lower()
     if status_filter not in ALLOWED_WISHLIST_STATUSES and status_filter != "all":
@@ -726,7 +729,7 @@ def wishlist():
             selectinload(WishlistItem.card).selectinload(Card.folder).selectinload(Folder.owner_user)
         )
     )
-    if sort in {"color", "location"}:
+    if sort == "location":
         base_query = base_query.outerjoin(Card, WishlistItem.card_id == Card.id).outerjoin(Folder, Card.folder_id == Folder.id)
 
     if status_filter != "all":
@@ -745,21 +748,40 @@ def wishlist():
     elif sort == "location":
         order_col = func.lower(func.coalesce(func.nullif(WishlistItem.source_folders, ""), Folder.name, ""))
     elif sort == "color":
-        order_col = func.lower(func.coalesce(Card.color_identity, Card.colors, ""))
+        order_col = func.lower(WishlistItem.name)
     else:
         order_col = func.lower(WishlistItem.name)
 
     order_expr = order_col.desc() if reverse else order_col.asc()
     base_query = base_query.order_by(order_expr, func.lower(WishlistItem.name), WishlistItem.id.asc())
-    total_items = base_query.order_by(None).count()
-    pages = max(1, ceil(total_items / per)) if per else 1
-    page = min(page, pages) if total_items else 1
-    start = (page - 1) * per + 1 if total_items else 0
-    end = min(start + per - 1, total_items) if total_items else 0
-
-    items = base_query.limit(per).offset((page - 1) * per).all()
-    for item in items:
-        item.display_color_identity = _color_identity_for_item(item)
+    if manual_color_sort:
+        all_items = base_query.order_by(func.lower(WishlistItem.name), WishlistItem.id.asc()).all()
+        for item in all_items:
+            item.display_color_identity = _color_identity_for_item(item)
+        all_items.sort(
+            key=lambda item: (
+                _format_color_identity(getattr(item, "display_color_identity", None)),
+                (item.name or "").lower(),
+                int(item.id or 0),
+            ),
+            reverse=reverse,
+        )
+        total_items = len(all_items)
+        pages = max(1, ceil(total_items / per)) if per else 1
+        page = min(page, pages) if total_items else 1
+        start = (page - 1) * per + 1 if total_items else 0
+        end = min(start + per - 1, total_items) if total_items else 0
+        offset = (page - 1) * per
+        items = all_items[offset : offset + per]
+    else:
+        total_items = base_query.order_by(None).count()
+        pages = max(1, ceil(total_items / per)) if per else 1
+        page = min(page, pages) if total_items else 1
+        start = (page - 1) * per + 1 if total_items else 0
+        end = min(start + per - 1, total_items) if total_items else 0
+        items = base_query.limit(per).offset((page - 1) * per).all()
+        for item in items:
+            item.display_color_identity = _color_identity_for_item(item)
 
     _enrich_wishlist_display_prints(items)
 

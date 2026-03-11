@@ -58,7 +58,7 @@ def build_deck_metadata_wizard_payload(
                 "missing_tag": missing_tag,
                 "actions": {
                     "commander_candidates_url": url_for(
-                        "views.api_folder_commander_candidates",
+                        "api.api_folder_commander_candidates",
                         folder_id=folder.id,
                     ),
                     "commander_set_url": url_for("views.set_commander", folder_id=folder.id),

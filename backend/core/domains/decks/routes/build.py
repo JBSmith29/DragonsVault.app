@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask_login import login_required
 
 from core.domains.decks.services import build_landing_service, build_session_service
+from core.routes.api import api_bp
 from core.routes.base import views
 
 
@@ -86,7 +87,7 @@ def build_session_edhrec_status(session_id: int):
     return build_session_service.edhrec_status(session_id)
 
 
-@views.get("/api/build-sessions/<int:session_id>/insight")
+@api_bp.get("/build-sessions/<int:session_id>/insight")
 @login_required
 def api_build_session_insight(session_id: int):
     return build_session_service.api_build_session_insight(session_id)

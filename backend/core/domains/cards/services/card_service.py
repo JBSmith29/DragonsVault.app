@@ -374,6 +374,23 @@ def _oracle_text_from_faces(faces_json) -> str | None:
         return None
     return " // ".join(parts)
 
+
+def _type_line_from_faces(faces_json) -> str | None:
+    for face in _faces_list(faces_json):
+        type_line = (face.get("type_line") or "").strip()
+        if type_line:
+            return type_line
+    return None
+
+
+def _type_line_from_print(print_payload: dict | None) -> str:
+    if not isinstance(print_payload, dict):
+        return ""
+    type_line = (print_payload.get("type_line") or "").strip()
+    if type_line:
+        return type_line
+    return _type_line_from_faces(print_payload.get("card_faces")) or ""
+
 def _faces_image_payload(faces_json) -> list[dict]:
     faces = []
     for idx, face in enumerate(_faces_list(faces_json)):
@@ -458,6 +475,30 @@ def _token_stubs_from_oracle_text(text: str | None) -> list[dict]:
             }
         )
     return found
+
+
+def _opening_hand_token_key(token: dict | None) -> str:
+    if not isinstance(token, dict):
+        return "token|token"
+    name = (token.get("name") or "Token").strip().lower()
+    type_line = (token.get("type_line") or "Token").strip().lower()
+    if not name:
+        name = "token"
+    if not type_line:
+        type_line = "token"
+    return f"{name}|{type_line}"
+
+
+def _dedupe_opening_hand_tokens(tokens: Iterable[dict] | None) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for token in tokens or []:
+        key = _opening_hand_token_key(token)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(token)
+    return deduped
 
 
 
@@ -940,13 +981,7 @@ def _commander_card_payload(name: Optional[str], oracle_id: Optional[str]) -> Op
     placeholder = static_url("img/card-placeholder.svg")
     imgs = _image_from_print(pr)
     back_imgs = _back_image_from_print(pr)
-    type_line = ""
-    if pr:
-        type_line = (pr or {}).get("type_line") or ""
-        if not type_line:
-            faces = (pr or {}).get("card_faces") or []
-            if faces:
-                type_line = (faces[0] or {}).get("type_line") or ""
+    type_line = _type_line_from_print(pr)
     oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces((pr or {}).get("card_faces"))
 
     payload = {
@@ -1060,6 +1095,14 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
             or _scryfall_card_url(card.set_code, card.collector_number)
         )
 
+        resolved_type_line = (card.type_line or "").strip() or _type_line_from_print(pr)
+        resolved_oracle_text = (
+            (card.oracle_text or "").strip()
+            or (pr or {}).get("oracle_text")
+            or _oracle_text_from_faces((pr or {}).get("card_faces"))
+            or ""
+        )
+
         entries.append(
             {
                 "name": card_name,
@@ -1074,8 +1117,8 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
                 "back_large": back_imgs.get("large"),
                 "detail_url": detail_url,
                 "external_url": external_url,
-                "type_line": card.type_line or "",
-                "oracle_text": card.oracle_text or "",
+                "type_line": resolved_type_line,
+                "oracle_text": resolved_oracle_text,
             }
         )
     if not entries:
@@ -1172,7 +1215,7 @@ def _deck_entries_from_build_session(session_id: int) -> tuple[Optional[str], li
                 "back_large": back_imgs.get("large"),
                 "detail_url": None,
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
-                "type_line": (pr or {}).get("type_line") or "",
+                "type_line": _type_line_from_print(pr),
                 "oracle_text": oracle_text or "",
             }
         )
@@ -1236,7 +1279,7 @@ def _deck_entries_from_list(
                 "back_large": back_imgs.get("large"),
                 "detail_url": None,
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
-                "type_line": (pr or {}).get("type_line") or "",
+                "type_line": _type_line_from_print(pr),
                 "oracle_text": oracle_text or "",
             }
         )
@@ -1888,19 +1931,42 @@ def _deck_drawer_summary(folder: Folder) -> dict:
     for cid, name, scode, cn, oid, lang, is_foil, qty, type_line, oracle_text, mana_value, faces_json in cards:
         qty = int(qty or 0) or 1
         total_cards += qty
-        type_line = type_line or ""
-        if type_line:
+        resolved_type_line = (type_line or "").strip()
+        resolved_oracle_text = (oracle_text or "").strip()
+        if not resolved_oracle_text:
+            resolved_oracle_text = _oracle_text_from_faces(faces_json) or ""
+        resolved_mana_value = mana_value
+        print_payload = None
+        if not resolved_type_line or not resolved_oracle_text or resolved_mana_value is None:
+            try:
+                print_payload = _lookup_print_data(scode, cn, name, oid)
+            except Exception:
+                print_payload = None
+        if not resolved_type_line:
+            resolved_type_line = _type_line_from_print(print_payload)
+        if not resolved_oracle_text:
+            resolved_oracle_text = (
+                (print_payload or {}).get("oracle_text")
+                or _oracle_text_from_faces((print_payload or {}).get("card_faces"))
+                or ""
+            )
+        if resolved_mana_value is None:
+            resolved_mana_value = (print_payload or {}).get("cmc")
+
+        if resolved_type_line:
             for t in BASE_TYPES:
-                if t in type_line:
+                if t in resolved_type_line:
                     type_counts[t] += qty
 
         mana_cost = _mana_cost_from_faces(faces_json)
+        if not mana_cost:
+            mana_cost = (print_payload or {}).get("mana_cost")
 
         bracket_card = {
             "name": name,
-            "type_line": type_line or "",
-            "oracle_text": oracle_text or "",
-            "mana_value": mana_value,
+            "type_line": resolved_type_line or "",
+            "oracle_text": resolved_oracle_text or "",
+            "mana_value": resolved_mana_value,
             "quantity": qty,
             "mana_cost": mana_cost,
             "produced_mana": None,
@@ -1962,7 +2028,7 @@ def _deck_drawer_summary(folder: Folder) -> dict:
     if len(spellbook_details) > 8:
         spellbook_details = spellbook_details[:8]
 
-    deck_color_letters, _deck_color_label = compute_folder_color_identity(folder.id)
+    deck_color_letters, _deck_color_label = compute_folder_color_identity(folder.id, "20260311a")
     deck_color_list = list(deck_color_letters) if deck_color_letters else []
 
     deck_tag_label = None
@@ -1997,53 +2063,6 @@ def _deck_drawer_summary(folder: Folder) -> dict:
         "total_cards": total_cards,
         "deck_colors": deck_color_list,
     }
-
-
-def _apply_cache_type_color_filters(base_query, selected_types, selected_colors, color_mode, type_mode="contains"):
-    """
-    Fallback filter using normalized DB fields (type_line + color_identity_mask).
-    """
-    want_types = [t.lower() for t in (selected_types or []) if t]
-    want_colors = [c.upper() for c in (selected_colors or []) if c]
-    use_types = bool(want_types)
-    use_colors = bool(want_colors)
-    if not use_types and not use_colors:
-        return base_query
-
-    query = base_query
-    if use_types:
-        if type_mode == "exact":
-            for t in want_types:
-                query = query.filter(Card.type_line.ilike(f"%{t}%"))
-        else:
-            query = query.filter(or_(*[Card.type_line.ilike(f"%{t}%") for t in want_types]))
-
-    if use_colors:
-        has_c = "C" in want_colors
-        non_c = [c for c in want_colors if c != "C"]
-        mask_map = {"W": 1, "U": 2, "B": 4, "R": 8, "G": 16}
-        want_mask = 0
-        for ch in non_c:
-            want_mask |= mask_map.get(ch, 0)
-        mask_expr = func.coalesce(Card.color_identity_mask, 0)
-
-        if color_mode == "exact":
-            if has_c and non_c:
-                query = query.filter(mask_expr == -1)
-            elif has_c:
-                query = query.filter(mask_expr == 0)
-            else:
-                query = query.filter(mask_expr == want_mask)
-        else:
-            if has_c and not non_c:
-                query = query.filter(mask_expr == 0)
-            else:
-                if want_mask:
-                    query = query.filter(mask_expr.op("&")(want_mask) == want_mask)
-                if has_c:
-                    query = query.filter(or_(mask_expr == 0, mask_expr.op("&")(want_mask) == want_mask))
-
-    return query
 
 
 def dashboard_index():
@@ -2326,7 +2345,7 @@ def dashboard():
                     images=images_vm,
                 )
 
-            letters, _label = compute_folder_color_identity(fid)
+            letters, _label = compute_folder_color_identity(fid, "20260311a")
             letters = letters or ""
             deck_vms.append(
                 DeckVM(
@@ -2564,29 +2583,45 @@ def api_card(card_id):
             }
         return {"small": None, "normal": None, "large": None}
 
-    oracle_text = getattr(card, "oracle_text", None) or _oracle_text_from_faces(getattr(card, "faces_json", None))
-    mana_cost = _mana_cost_from_faces(getattr(card, "faces_json", None))
-    colors = _color_letters_list(getattr(card, "colors", None))
-    color_identity = _color_letters_list(getattr(card, "color_identity", None)) or colors
-    color_identity = _effective_color_identity(getattr(card, "type_line", None), oracle_text, color_identity)
+    best_faces = (best or {}).get("card_faces") if isinstance(best, dict) else None
+    best_oracle_text = (best or {}).get("oracle_text") or _oracle_text_from_faces(best_faces)
+    best_mana_cost = (best or {}).get("mana_cost") or _mana_cost_from_faces(best_faces)
+    best_type_line = _type_line_from_print(best)
+    best_colors = _color_letters_list((best or {}).get("colors"))
+    best_color_identity = _color_letters_list((best or {}).get("color_identity")) or best_colors
+
+    type_line = (getattr(card, "type_line", None) or "").strip() or best_type_line or None
+    oracle_text = (
+        getattr(card, "oracle_text", None)
+        or _oracle_text_from_faces(getattr(card, "faces_json", None))
+        or best_oracle_text
+    )
+    mana_cost = _mana_cost_from_faces(getattr(card, "faces_json", None)) or best_mana_cost
+    cmc = getattr(card, "mana_value", None)
+    if cmc is None and isinstance(best, dict):
+        cmc = best.get("cmc")
+    colors = _color_letters_list(getattr(card, "colors", None)) or best_colors
+    color_identity = _color_letters_list(getattr(card, "color_identity", None)) or best_color_identity or colors
+    color_identity = _effective_color_identity(type_line, oracle_text, color_identity)
     if not colors:
         colors = color_identity
+    rarity = (getattr(card, "rarity", None) or "").strip().lower() or ((best or {}).get("rarity") or None)
 
     info = {
         "name": card.name,
         "mana_cost": mana_cost,
         "mana_cost_html": render_mana_html(mana_cost, use_local=False),
-        "type_line": getattr(card, "type_line", None),
+        "type_line": type_line,
         "oracle_text": oracle_text,
         "oracle_text_html": render_oracle_html(oracle_text, use_local=False),
         "colors": colors or [],
         "color_identity": color_identity or [],
-        "rarity": getattr(card, "rarity", None),
+        "rarity": rarity,
         "set": (card.set_code or ""),
         "collector_number": card.collector_number,
         "scryfall_uri": (best or {}).get("scryfall_uri") or _scryfall_card_url(card.set_code, card.collector_number),
         "scryfall_set_uri": (best or {}).get("scryfall_set_uri") or _scryfall_set_url(card.set_code),
-        "cmc": getattr(card, "mana_value", None),
+        "cmc": cmc,
         "set_name": (set_name_for_code(card.set_code) if have_cache else None),
         "legalities": (best or {}).get("legalities") or {},
         "commander_legality": ((best or {}).get("legalities") or {}).get("commander"),
@@ -2816,118 +2851,46 @@ def list_cards():
         query = query.filter(func.lower(Card.set_code) == set_code)
     if foil_only:
         query = query.filter(Card.is_foil.is_(True))
-    if rarity:
-        if hasattr(Card, "rarity"):
+    metadata_filter_requested = bool(rarity or typal or selected_types or selected_colors)
+    if not metadata_filter_requested:
+        if rarity and hasattr(Card, "rarity"):
             query = query.filter(func.lower(Card.rarity) == rarity)
 
-    # Typal filter
-    needs_typal_fallback = False
-    if typal:
-        if hasattr(Card, "type_line"):
+        if typal and hasattr(Card, "type_line"):
             query = query.filter(Card.type_line.ilike(f"%{typal}%"))
-        else:
-            needs_typal_fallback = True
 
-    # Base type filters
-    needs_type_fallback = False
-    use_db_types = hasattr(Card, "type_line")
-    if selected_types:
-        if use_db_types:
+        use_db_types = hasattr(Card, "type_line")
+        if selected_types and use_db_types:
             if type_mode == "exact":
                 for t in selected_types:
                     query = query.filter(Card.type_line.ilike(f"%{t}%"))
             else:
                 query = query.filter(or_(*[Card.type_line.ilike(f"%{t}%") for t in selected_types]))
-        else:
-            needs_type_fallback = True
 
-    # Color identity filters
-    needs_color_fallback = False
-    if selected_colors:
-        has_c = "c" in selected_colors
-        non_c = [c.upper() for c in selected_colors if c != "c"]
-        mask_map = {"W": 1, "U": 2, "B": 4, "R": 8, "G": 16}
-        want_mask = 0
-        for ch in non_c:
-            want_mask |= mask_map.get(ch, 0)
-        mask_expr = func.coalesce(Card.color_identity_mask, 0)
+        if selected_colors:
+            has_c = "c" in selected_colors
+            non_c = [c.upper() for c in selected_colors if c != "c"]
+            mask_map = {"W": 1, "U": 2, "B": 4, "R": 8, "G": 16}
+            want_mask = 0
+            for ch in non_c:
+                want_mask |= mask_map.get(ch, 0)
+            mask_expr = func.coalesce(Card.color_identity_mask, 0)
 
-        if color_mode == "exact":
-            if has_c and non_c:
-                query = query.filter(mask_expr == -1)
-            elif has_c:
-                query = query.filter(mask_expr == 0)
+            if color_mode == "exact":
+                if has_c and non_c:
+                    query = query.filter(mask_expr == -1)
+                elif has_c:
+                    query = query.filter(mask_expr == 0)
+                else:
+                    query = query.filter(mask_expr == want_mask)
             else:
-                query = query.filter(mask_expr == want_mask)
-        else:
-            if has_c and not non_c:
-                query = query.filter(mask_expr == 0)
-            else:
-                if want_mask:
-                    query = query.filter(mask_expr.op("&")(want_mask) == want_mask)
-                if has_c:
-                    query = query.filter(or_(mask_expr == 0, mask_expr.op("&")(want_mask) == want_mask))
-
-    if needs_typal_fallback or needs_type_fallback or needs_color_fallback:
-        query = _apply_cache_type_color_filters(
-            query,
-            selected_types if needs_type_fallback else None,
-            selected_colors,
-            color_mode,
-            type_mode=type_mode,
-        )
-
-    if typal and needs_typal_fallback:
-        rows = query.with_entities(Card.id, Card.set_code, Card.collector_number, Card.name, Card.oracle_id).all()
-        keep_ids = []
-        for cid, scode, cn, name, oid in rows:
-            p = _lookup_print_data(scode, cn, name, oid)
-            tl = (p or {}).get("type_line") or ""
-            if typal.lower() in tl.lower():
-                keep_ids.append(cid)
-        if keep_ids:
-            query = Card.query.filter(Card.id.in_(keep_ids))
-        else:
-            sets, langs, _folders = _facets()
-            set_options = _set_options_with_names(sets)
-            rarity_options = _rarity_options()
-            move_folder_options = _move_folder_choices()
-            return render_template(
-                "cards/cards.html",
-                cards=[],
-                total=0,
-                page=1,
-                per=per,
-                pages=1,
-                prev_url=None,
-                next_url=None,
-                page_urls=[],
-                start=0,
-                end=0,
-                q=q_text,
-                folder_id=folder_arg,
-                folder_is_proxy=folder_is_proxy,
-                set_code=set_code,
-                tribe=typal,
-                foil_only=foil_only,
-                rarity=rarity,
-                selected_types=selected_types,
-                selected_colors=selected_colors,
-                color_mode=color_mode,
-                type_mode=type_mode,
-                collection_flag=collection_flag,
-                show_friends=show_friends,
-                sort=sort,
-                direction=direction,
-                sets=sets,
-                langs=langs,
-                set_options=set_options,
-                rarity_options=rarity_options,
-                per_page=per,
-                is_deck_folder=is_deck_folder,
-                collection_folders=collection_names,
-                move_folder_options=move_folder_options,
-            )
+                if has_c and not non_c:
+                    query = query.filter(mask_expr == 0)
+                else:
+                    if want_mask:
+                        query = query.filter(mask_expr.op("&")(want_mask) == want_mask)
+                    if has_c:
+                        query = query.filter(or_(mask_expr == 0, mask_expr.op("&")(want_mask) == want_mask))
 
     def _image_from_print(pr):
         if not pr:
@@ -2996,6 +2959,81 @@ def list_cards():
                 return val
         return None
 
+    def _resolve_card_metadata(card_obj: Card, print_payload: dict | None) -> dict[str, Any]:
+        pr = print_payload or {}
+        type_line = (getattr(card_obj, "type_line", None) or "").strip() or _type_line_from_print(pr)
+        oracle_text = (
+            (getattr(card_obj, "oracle_text", None) or "").strip()
+            or _oracle_text_from_faces(getattr(card_obj, "faces_json", None))
+            or (pr.get("oracle_text") or _oracle_text_from_faces(pr.get("card_faces")) or "")
+        )
+        color_letters = _color_letters_list(getattr(card_obj, "color_identity", None)) or _color_letters_list(
+            getattr(card_obj, "colors", None)
+        )
+        if not color_letters:
+            color_letters = _color_letters_list(pr.get("color_identity")) or _color_letters_list(pr.get("colors"))
+        color_letters = _effective_color_identity(type_line, oracle_text, color_letters or [])
+        if not color_letters:
+            color_letters = []
+        rarity_value = (
+            (getattr(card_obj, "rarity", None) or "").strip().lower()
+            or str(pr.get("rarity") or "").strip().lower()
+        )
+        mask_map = {"W": 1, "U": 2, "B": 4, "R": 8, "G": 16}
+        color_mask = 0
+        for symbol in color_letters:
+            color_mask |= mask_map.get(symbol, 0)
+        return {
+            "type_line": type_line,
+            "rarity": rarity_value,
+            "color_letters": color_letters,
+            "color_mask": color_mask,
+        }
+
+    def _matches_metadata_filters(meta: dict[str, Any]) -> bool:
+        type_line_lc = str(meta.get("type_line") or "").lower()
+        rarity_value = str(meta.get("rarity") or "").strip().lower()
+        color_letters = [str(ch).upper() for ch in (meta.get("color_letters") or []) if str(ch).upper() in "WUBRG"]
+        color_set = set(color_letters)
+
+        if rarity and rarity_value != rarity:
+            return False
+        if typal and typal not in type_line_lc:
+            return False
+        if selected_types:
+            if type_mode == "exact":
+                if any(t not in type_line_lc for t in selected_types):
+                    return False
+            else:
+                if not any(t in type_line_lc for t in selected_types):
+                    return False
+        if selected_colors:
+            has_c = "c" in selected_colors
+            non_c = {c.upper() for c in selected_colors if c != "c" and c}
+            if color_mode == "exact":
+                if has_c and non_c:
+                    return False
+                if has_c:
+                    if color_set:
+                        return False
+                else:
+                    if color_set != non_c:
+                        return False
+            else:
+                if has_c and not non_c:
+                    if color_set:
+                        return False
+                else:
+                    matches_non_c = not non_c or non_c.issubset(color_set)
+                    if has_c:
+                        if not (not color_set or matches_non_c):
+                            return False
+                    elif not matches_non_c:
+                        return False
+        return True
+
+    metadata_resolved_cache: dict[int, dict[str, Any]] = {}
+
     card_columns = (
         Card.id,
         Card.name,
@@ -3012,6 +3050,33 @@ def list_cards():
         Card.color_identity,
         Card.color_identity_mask,
     )
+
+    if metadata_filter_requested:
+        filter_cards = (
+            query.options(
+                load_only(
+                    *card_columns,
+                    Card.oracle_text,
+                    Card.mana_value,
+                    Card.faces_json,
+                )
+            )
+            .all()
+        )
+        if not sc.cache_ready():
+            sc.ensure_cache_loaded()
+        filter_print_map = _bulk_print_lookup(filter_cards)
+        keep_ids: list[int] = []
+        for card_obj in filter_cards:
+            pr = filter_print_map.get(card_obj.id, {}) or {}
+            meta = _resolve_card_metadata(card_obj, pr)
+            metadata_resolved_cache[card_obj.id] = meta
+            if _matches_metadata_filters(meta):
+                keep_ids.append(card_obj.id)
+        if keep_ids:
+            query = query.filter(Card.id.in_(keep_ids))
+        else:
+            query = query.filter(Card.id == -1)
 
     # Sorting (DB-native where possible)
     if sort == "qty":
@@ -3073,10 +3138,18 @@ def list_cards():
     ordered_ids: list[int] = []
     total = 0
     cards: list[Card] = []
-    if sort in {"price", "art"}:
+    full_sort_keys = {"price", "art", "ctype", "type", "rar", "rarity", "colors", "colour"}
+    if sort in full_sort_keys:
         all_cards = (
             query.order_by(Card.id.asc())
-            .options(load_only(*card_columns))
+            .options(
+                load_only(
+                    *card_columns,
+                    Card.oracle_text,
+                    Card.mana_value,
+                    Card.faces_json,
+                )
+            )
             .all()
         )
         total = len(all_cards)
@@ -3100,7 +3173,7 @@ def list_cards():
                 return (missing, value or 0.0)
 
             ordered_ids = [card.id for card in sorted(all_cards, key=_price_sort_key)]
-        else:
+        elif sort == "art":
             art_missing = {}
             for c in all_cards:
                 pr = full_print_map.get(c.id, {})
@@ -3118,6 +3191,62 @@ def list_cards():
                     reverse=reverse,
                 )
             ]
+        else:
+            resolved_meta_by_id: dict[int, dict[str, Any]] = {}
+            for card_obj in all_cards:
+                cached_meta = metadata_resolved_cache.get(card_obj.id)
+                if cached_meta is not None:
+                    resolved_meta_by_id[card_obj.id] = cached_meta
+                    continue
+                pr = full_print_map.get(card_obj.id, {}) or {}
+                resolved_meta_by_id[card_obj.id] = _resolve_card_metadata(card_obj, pr)
+
+            def _rarity_rank(value: str) -> int:
+                normalized = (value or "").strip().lower()
+                if normalized in {"mythic", "mythic rare"}:
+                    return 4
+                if normalized == "rare":
+                    return 3
+                if normalized == "uncommon":
+                    return 2
+                if normalized == "common":
+                    return 1
+                if normalized:
+                    return 0
+                return -1
+
+            if sort in {"ctype", "type"}:
+                ordered = sorted(
+                    all_cards,
+                    key=lambda card_obj: (
+                        (resolved_meta_by_id.get(card_obj.id, {}).get("type_line") or "").lower(),
+                        (card_obj.name or "").lower(),
+                        card_obj.id,
+                    ),
+                    reverse=reverse,
+                )
+            elif sort in {"rar", "rarity"}:
+                ordered = sorted(
+                    all_cards,
+                    key=lambda card_obj: (
+                        _rarity_rank(str(resolved_meta_by_id.get(card_obj.id, {}).get("rarity") or "")),
+                        (card_obj.name or "").lower(),
+                        card_obj.id,
+                    ),
+                    reverse=reverse,
+                )
+            else:
+                ordered = sorted(
+                    all_cards,
+                    key=lambda card_obj: (
+                        int(resolved_meta_by_id.get(card_obj.id, {}).get("color_mask") or 0),
+                        "".join(resolved_meta_by_id.get(card_obj.id, {}).get("color_letters") or []),
+                        (card_obj.name or "").lower(),
+                        card_obj.id,
+                    ),
+                    reverse=reverse,
+                )
+            ordered_ids = [card_obj.id for card_obj in ordered]
 
         pages = max(1, ceil(total / per)) if per else 1
         page = min(page, pages)
@@ -3202,6 +3331,9 @@ def list_cards():
     if not sc.cache_ready():
         sc.ensure_cache_loaded()
     image_map, hover_map = {}, {}
+    resolved_type_line_map: dict[int, str] = {}
+    resolved_color_letters_map: dict[int, list[str]] = {}
+    resolved_rarity_map: dict[int, str] = {}
     type_map = {}
 
     print_map = _bulk_print_lookup(cards)
@@ -3217,7 +3349,26 @@ def list_cards():
             thumb_src = _image_from_print(pr)
         image_map[c.id] = thumb_src
         hover_map[c.id] = hover_src
-        type_line = getattr(c, "type_line", None) or ""
+        type_line = (getattr(c, "type_line", None) or "").strip() or _type_line_from_print(pr)
+        resolved_type_line_map[c.id] = type_line
+        print_oracle_text = ""
+        if pr:
+            print_oracle_text = (pr.get("oracle_text") or _oracle_text_from_faces(pr.get("card_faces")) or "")
+
+        color_value = getattr(c, "color_identity", None) or getattr(c, "colors", None)
+        if isinstance(color_value, (list, tuple, set)):
+            db_color_letters = [str(x).upper() for x in color_value if str(x).upper()]
+        else:
+            db_color_letters = [ch for ch in str(color_value or "").upper() if ch in "WUBRG"]
+        print_color_letters = _color_letters_list((pr or {}).get("color_identity")) or _color_letters_list((pr or {}).get("colors"))
+        resolved_color_letters = db_color_letters or print_color_letters
+        resolved_color_letters = _effective_color_identity(type_line, print_oracle_text, resolved_color_letters)
+        if not resolved_color_letters:
+            resolved_color_letters = ["C"]
+        resolved_color_letters_map[c.id] = resolved_color_letters
+
+        rarity_value = (getattr(c, "rarity", None) or "").strip().lower() or ((pr or {}).get("rarity") or "").strip().lower()
+        resolved_rarity_map[c.id] = rarity_value
         type_map[c.id] = [
             t
             for t in ["Artifact", "Battle", "Creature", "Enchantment", "Instant", "Land", "Planeswalker", "Sorcery"]
@@ -3261,7 +3412,7 @@ def list_cards():
     cards_vm: list[CardListItemVM] = []
     for c in cards:
         display_name = c.name
-        type_line = getattr(c, "type_line", None) or ""
+        type_line = resolved_type_line_map.get(c.id) or ""
         type_badges = type_map.get(c.id) or []
         type_tokens = [t.lower() for t in type_badges] if type_badges else []
         if not type_tokens and type_line:
@@ -3273,14 +3424,9 @@ def list_cards():
         evergreen_raw = evergreen_map.get(c.oracle_id or "", []) if c.oracle_id else []
         evergreen_labels = [format_role_label(tag) for tag in evergreen_raw]
         evergreen_display, evergreen_overflow = slice_badges(evergreen_labels)
-        color_value = getattr(c, "color_identity", None) or getattr(c, "colors", None)
-        if isinstance(color_value, (list, tuple, set)):
-            color_letters = [str(x).upper() for x in color_value if str(x).upper()]
-        else:
-            color_letters = [ch for ch in str(color_value or "").upper() if ch in "WUBRG"]
-        if not color_letters:
-            color_letters = ["C"]
-        rarity_label = (c.rarity or "").capitalize() or None
+        color_letters = resolved_color_letters_map.get(c.id) or ["C"]
+        rarity_value = resolved_rarity_map.get(c.id) or ""
+        rarity_label = rarity_value.replace("_", " ").title() if rarity_value else None
         folder_ref = None
         owner_label = None
         if getattr(c, "folder", None):
@@ -3921,6 +4067,24 @@ def bulk_move_cards():
                 existing.quantity = (existing.quantity or 0) + move_qty
                 merged += move_qty
             else:
+                clone_metadata: dict[str, Any] = {}
+                if not (card.type_line and card.rarity and card.color_identity and card.color_identity_mask is not None):
+                    try:
+                        clone_print = _lookup_print_data(card.set_code, card.collector_number, card.name, card.oracle_id)
+                    except Exception:
+                        clone_print = None
+                    if clone_print:
+                        clone_metadata = metadata_from_print(clone_print) or {}
+
+                clone_type_line = card.type_line or clone_metadata.get("type_line")
+                clone_rarity = card.rarity or clone_metadata.get("rarity")
+                clone_oracle_text = card.oracle_text or clone_metadata.get("oracle_text")
+                clone_mana_value = card.mana_value if card.mana_value is not None else clone_metadata.get("mana_value")
+                clone_colors = card.colors or clone_metadata.get("colors")
+                clone_color_identity = card.color_identity or clone_metadata.get("color_identity")
+                clone_color_identity_mask = card.color_identity_mask
+                if clone_color_identity_mask is None:
+                    clone_color_identity_mask = clone_metadata.get("color_identity_mask")
                 clone = Card(
                     name=card.name,
                     set_code=card.set_code,
@@ -3930,13 +4094,13 @@ def bulk_move_cards():
                     oracle_id=card.oracle_id,
                     lang=card.lang,
                     is_foil=card.is_foil,
-                    type_line=card.type_line,
-                    rarity=card.rarity,
-                    oracle_text=card.oracle_text,
-                    mana_value=card.mana_value,
-                    colors=card.colors,
-                    color_identity=card.color_identity,
-                    color_identity_mask=card.color_identity_mask,
+                    type_line=clone_type_line,
+                    rarity=clone_rarity,
+                    oracle_text=clone_oracle_text,
+                    mana_value=clone_mana_value,
+                    colors=clone_colors,
+                    color_identity=clone_color_identity,
+                    color_identity_mask=clone_color_identity_mask,
                     layout=card.layout,
                     faces_json=card.faces_json,
                 )
@@ -4856,7 +5020,7 @@ def decks_overview():
 
     for (fid, _name, _rows, _qty, cmd_oid, cmd_name, _owner, _owner_user_id, _is_proxy) in rows:
         # -- color identity for the deck
-        letters, label = compute_folder_color_identity(fid)
+        letters, label = compute_folder_color_identity(fid, "20260311a")
         letters = letters or ["C"]
         letters_str = "".join(ch for ch in "WUBRG" if ch in set(letters)) or "C"
         deck_ci_letters[fid] = letters_str
@@ -5353,6 +5517,24 @@ def deck_from_collection():
                     if target:
                         target.quantity = (target.quantity or 0) + move_qty
                     else:
+                        clone_metadata: dict[str, Any] = {}
+                        if not (card.type_line and card.rarity and card.color_identity and card.color_identity_mask is not None):
+                            try:
+                                clone_print = _lookup_print_data(card.set_code, card.collector_number, card.name, card.oracle_id)
+                            except Exception:
+                                clone_print = None
+                            if clone_print:
+                                clone_metadata = metadata_from_print(clone_print) or {}
+
+                        clone_type_line = card.type_line or clone_metadata.get("type_line")
+                        clone_rarity = card.rarity or clone_metadata.get("rarity")
+                        clone_oracle_text = card.oracle_text or clone_metadata.get("oracle_text")
+                        clone_mana_value = card.mana_value if card.mana_value is not None else clone_metadata.get("mana_value")
+                        clone_colors = card.colors or clone_metadata.get("colors")
+                        clone_color_identity = card.color_identity or clone_metadata.get("color_identity")
+                        clone_color_identity_mask = card.color_identity_mask
+                        if clone_color_identity_mask is None:
+                            clone_color_identity_mask = clone_metadata.get("color_identity_mask")
                         db.session.add(
                             Card(
                                 name=card.name,
@@ -5363,13 +5545,13 @@ def deck_from_collection():
                                 oracle_id=card.oracle_id,
                                 lang=card.lang,
                                 is_foil=card.is_foil,
-                                type_line=card.type_line,
-                                rarity=card.rarity,
-                                oracle_text=card.oracle_text,
-                                mana_value=card.mana_value,
-                                colors=card.colors,
-                                color_identity=card.color_identity,
-                                color_identity_mask=card.color_identity_mask,
+                                type_line=clone_type_line,
+                                rarity=clone_rarity,
+                                oracle_text=clone_oracle_text,
+                                mana_value=clone_mana_value,
+                                colors=clone_colors,
+                                color_identity=clone_color_identity,
+                                color_identity_mask=clone_color_identity_mask,
                                 layout=card.layout,
                                 faces_json=card.faces_json,
                             )
@@ -5911,8 +6093,16 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
 
                 imgs = _image_from_print(pr)
                 back_imgs = _back_image_from_print(pr)
-                flags = _card_type_flags(type_line)
-                normalized_oracle_text = oracle_text or _oracle_text_from_faces(faces_json) or ""
+                resolved_type_line = (type_line or "").strip() or _type_line_from_print(pr)
+                normalized_oracle_text = (
+                    (oracle_text or "").strip()
+                    or _oracle_text_from_faces(faces_json)
+                    or (pr or {}).get("oracle_text")
+                    or _oracle_text_from_faces((pr or {}).get("card_faces"))
+                    or ""
+                )
+                resolved_mana_value = mana_value if mana_value is not None else (pr or {}).get("cmc")
+                flags = _card_type_flags(resolved_type_line)
                 entry_vm = OpeningHandCardVM(
                     value=value_token,
                     name=card_name,
@@ -5920,9 +6110,9 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                     hover=imgs.get("large") or imgs.get("normal") or imgs.get("small") or placeholder_image,
                     back_image=back_imgs.get("normal") or back_imgs.get("large") or back_imgs.get("small"),
                     back_hover=back_imgs.get("large") or back_imgs.get("normal") or back_imgs.get("small"),
-                    type_line=type_line or "",
+                    type_line=resolved_type_line,
                     oracle_text=normalized_oracle_text,
-                    mana_value=mana_value,
+                    mana_value=resolved_mana_value,
                     is_creature=bool(flags["is_creature"]),
                     is_land=bool(flags["is_land"]),
                     is_instant=bool(flags["is_instant"]),
@@ -5944,7 +6134,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                     tokens = cached_tokens
 
                 if not tokens:
-                    text = oracle_text or _oracle_text_from_faces(faces_json)
+                    text = normalized_oracle_text
                     tokens = _token_stubs_from_oracle_text(text)
 
                 if tokens:
@@ -5954,7 +6144,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                         token_name = (token.get("name") or "Token").strip()
                         token_type = (token.get("type_line") or "").strip()
                         token_id = token.get("id")
-                        token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                        token_key = _opening_hand_token_key(token)
                         if token_key in seen_tokens:
                             continue
                         seen_tokens.add(token_key)
@@ -6009,7 +6199,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
 
                 imgs = _image_from_print(pr)
                 back_imgs = _back_image_from_print(pr)
-                type_line = (pr or {}).get("type_line") or ""
+                type_line = _type_line_from_print(pr)
                 mana_value = (pr or {}).get("cmc")
                 oracle_text = (pr or {}).get("oracle_text") or _oracle_text_from_faces((pr or {}).get("card_faces"))
                 flags = _card_type_flags(type_line)
@@ -6056,7 +6246,7 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
                         token_name = (token.get("name") or "Token").strip()
                         token_type = (token.get("type_line") or "").strip()
                         token_id = token.get("id")
-                        token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                        token_key = _opening_hand_token_key(token)
                         if token_key in seen_tokens:
                             continue
                         seen_tokens.add(token_key)
@@ -6170,7 +6360,7 @@ def opening_hand_play():
                     token_name = (token.get("name") or "Token").strip()
                     token_type = (token.get("type_line") or "").strip()
                     token_id = token.get("id")
-                    token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                    token_key = _opening_hand_token_key(token)
                     if token_key in token_seen:
                         continue
                     token_seen.add(token_key)
@@ -6280,6 +6470,89 @@ def opening_hand_shuffle():
             "warnings": warnings,
             "deck_size": deck_size,
             "commanders": commander_payload,
+        }
+    )
+
+
+def opening_hand_mulligan():
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("state") or ""
+    state = _decode_state(token)
+    if not state:
+        return jsonify({"ok": False, "error": "Invalid or expired hand state."}), 400
+
+    deck = state["deck"]
+    index = int(state["index"])
+    deck_name = state["deck_name"]
+
+    # Mulligans only apply to a fresh opening seven before other library actions.
+    if index != HAND_SIZE:
+        return jsonify({"ok": False, "error": "Mulligan is only available after shuffling a fresh opening hand."}), 400
+
+    raw_bottom_uids = payload.get("bottom_uids") or []
+    if not isinstance(raw_bottom_uids, list):
+        return jsonify({"ok": False, "error": "Invalid mulligan selection."}), 400
+
+    raw_count = payload.get("count")
+    try:
+        count = int(raw_count) if raw_count is not None else len(raw_bottom_uids)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid mulligan count."}), 400
+
+    if count < 0 or count > HAND_SIZE:
+        return jsonify({"ok": False, "error": "Invalid mulligan count."}), 400
+
+    hand_cards = deck[:index]
+    if count > len(hand_cards):
+        return jsonify({"ok": False, "error": "Not enough cards in hand for this mulligan."}), 400
+
+    bottom_uids: list[str] = []
+    for item in raw_bottom_uids:
+        uid = str(item or "").strip()
+        if not uid:
+            continue
+        bottom_uids.append(uid)
+
+    if len(bottom_uids) != count:
+        return jsonify({"ok": False, "error": "Select exactly the number of cards required for mulligan."}), 400
+    if len(set(bottom_uids)) != len(bottom_uids):
+        return jsonify({"ok": False, "error": "Duplicate mulligan selections are not allowed."}), 400
+
+    by_uid: dict[str, dict] = {}
+    for entry in hand_cards:
+        uid = str(entry.get("uid") or "").strip()
+        if uid:
+            by_uid[uid] = entry
+
+    if any(uid not in by_uid for uid in bottom_uids):
+        return jsonify({"ok": False, "error": "One or more selected cards are not in the opening hand."}), 400
+
+    bottom_cards = [by_uid[uid] for uid in bottom_uids]
+    bottom_uid_set = set(bottom_uids)
+    keep_cards = [
+        entry
+        for entry in hand_cards
+        if str(entry.get("uid") or "").strip() not in bottom_uid_set
+    ]
+
+    new_deck = keep_cards + deck[index:] + bottom_cards
+    state["deck"] = new_deck
+    state["index"] = len(keep_cards)
+    new_token = _encode_state(state)
+
+    remaining = len(new_deck) - len(keep_cards)
+    placeholder = static_url("img/card-placeholder.svg")
+    hand_payload = [_client_card_payload(card, placeholder) for card in keep_cards]
+
+    return jsonify(
+        {
+            "ok": True,
+            "hand": hand_payload,
+            "state": new_token,
+            "remaining": remaining,
+            "deck_name": deck_name,
+            "bottomed": len(bottom_cards),
+            "hand_size": len(keep_cards),
         }
     )
 
@@ -6631,6 +6904,34 @@ def _opening_hand_reorder(*, action: str):
         }
     )
 
+
+def opening_hand_tokens():
+    deck_id_raw = (request.args.get("deck_id") or "").strip()
+    if not deck_id_raw:
+        return jsonify({"ok": True, "deck_id": "", "tokens": []})
+    try:
+        parsed = _parse_opening_hand_deck_ref(deck_id_raw)
+    except ValidationError as exc:
+        log_validation_error(exc, context="opening_hand_tokens")
+        return jsonify({"ok": False, "error": "Invalid deck selection."}), 400
+    if not parsed:
+        return jsonify({"ok": False, "error": "Invalid deck selection."}), 400
+
+    source, deck_id = parsed
+    deck_key = _opening_hand_deck_key(source, deck_id)
+    deck_lookup, _ = _opening_hand_deck_options()
+    if deck_key not in deck_lookup:
+        return jsonify({"ok": False, "error": "Deck not found."}), 404
+
+    _, deck_token_lookup_json = _opening_hand_lookups([deck_key])
+    try:
+        deck_token_lookup = json.loads(deck_token_lookup_json or "{}")
+    except Exception:
+        deck_token_lookup = {}
+    token_payloads = _dedupe_opening_hand_tokens(deck_token_lookup.get(deck_key) or [])
+    return jsonify({"ok": True, "deck_id": deck_key, "tokens": token_payloads})
+
+
 def opening_hand_token_search():
     query = (request.args.get("q") or "").strip()
     if len(query) < 2:
@@ -6670,6 +6971,7 @@ def opening_hand_token_search():
         )
         payloads.append(token_vm.to_payload())
 
+    payloads = _dedupe_opening_hand_tokens(payloads)
     return jsonify({"ok": True, "tokens": payloads})
 
 
@@ -6686,39 +6988,74 @@ def _facets():
 
 
 def _rarity_options() -> List[Dict[str, str]]:
-    rows = (
-        db.session.query(func.lower(Card.rarity))
-        .filter(Card.rarity.isnot(None), Card.rarity != "")
-        .distinct()
-        .order_by(func.lower(Card.rarity))
-        .all()
-    )
-    present: Set[str] = set()
-    for (value,) in rows:
-        if not value:
-            continue
-        clean = value.strip().lower()
-        if clean:
-            present.add(clean)
+    user_key = _user_cache_key()
 
-    options: List[Dict[str, str]] = []
-    seen: Set[str] = set()
-    for value, label in RARITY_CHOICE_ORDER:
-        clean = value.strip().lower()
-        if not clean or clean in seen:
-            continue
-        options.append({"value": clean, "label": label})
-        seen.add(clean)
-        present.discard(clean)
+    def _build() -> List[Dict[str, str]]:
+        rows = (
+            db.session.query(func.lower(Card.rarity))
+            .filter(Card.rarity.isnot(None), Card.rarity != "")
+            .distinct()
+            .order_by(func.lower(Card.rarity))
+            .all()
+        )
+        present: Set[str] = set()
+        for (value,) in rows:
+            if not value:
+                continue
+            clean = value.strip().lower()
+            if clean:
+                present.add(clean)
 
-    for extra in sorted(present):
-        if extra in seen:
-            continue
-        label = extra.replace("_", " ").replace("-", " ").title()
-        options.append({"value": extra, "label": label})
-        seen.add(extra)
+        # Backfill rarity values from print metadata when DB rarity columns are blank.
+        missing_rows = (
+            db.session.query(
+                Card.set_code,
+                Card.collector_number,
+                Card.name,
+                Card.oracle_id,
+            )
+            .filter(or_(Card.rarity.is_(None), Card.rarity == ""))
+            .all()
+        )
+        seen_missing: Set[tuple[str, str, str, str]] = set()
+        for set_code, collector_number, name, oracle_id in missing_rows:
+            key = (
+                str(set_code or "").strip().lower(),
+                str(collector_number or "").strip().lower(),
+                str(name or "").strip().lower(),
+                str(oracle_id or "").strip().lower(),
+            )
+            if key in seen_missing:
+                continue
+            seen_missing.add(key)
+            try:
+                pr = _lookup_print_data(set_code, collector_number, name, oracle_id)
+            except Exception:
+                pr = None
+            rarity_value = str((pr or {}).get("rarity") or "").strip().lower()
+            if rarity_value:
+                present.add(rarity_value)
 
-    return options
+        options: List[Dict[str, str]] = []
+        seen: Set[str] = set()
+        for value, label in RARITY_CHOICE_ORDER:
+            clean = value.strip().lower()
+            if not clean or clean in seen:
+                continue
+            options.append({"value": clean, "label": label})
+            seen.add(clean)
+            present.discard(clean)
+
+        for extra in sorted(present):
+            if extra in seen:
+                continue
+            label = extra.replace("_", " ").replace("-", " ").title()
+            options.append({"value": extra, "label": label})
+            seen.add(extra)
+
+        return options
+
+    return _cache_fetch(f"rarity_options:{user_key}:{cache_epoch()}", 300, _build)
 
 
 def _set_options_with_names(codes: Iterable[str]) -> List[Dict[str, str]]:
@@ -6850,13 +7187,29 @@ def card_detail(card_id):
             label = " · ".join(bits) if bits else (pr.get("name") or card.name)
             images.append({"small": iu["small"], "normal": iu["normal"], "large": iu["large"], "label": label})
 
-    oracle_text = getattr(card, "oracle_text", None) or _oracle_text_from_faces(getattr(card, "faces_json", None))
-    mana_cost = _mana_cost_from_faces(getattr(card, "faces_json", None))
-    colors = _color_letters_list(getattr(card, "colors", None))
-    color_identity = _color_letters_list(getattr(card, "color_identity", None)) or colors
-    color_identity = _effective_color_identity(getattr(card, "type_line", None), oracle_text, color_identity)
+    best_faces = (best or {}).get("card_faces") if isinstance(best, dict) else None
+    best_oracle_text = (best or {}).get("oracle_text") or _oracle_text_from_faces(best_faces)
+    best_mana_cost = (best or {}).get("mana_cost") or _mana_cost_from_faces(best_faces)
+    best_type_line = _type_line_from_print(best)
+    best_colors = _color_letters_list((best or {}).get("colors"))
+    best_color_identity = _color_letters_list((best or {}).get("color_identity")) or best_colors
+
+    type_line = (getattr(card, "type_line", None) or "").strip() or best_type_line or None
+    oracle_text = (
+        getattr(card, "oracle_text", None)
+        or _oracle_text_from_faces(getattr(card, "faces_json", None))
+        or best_oracle_text
+    )
+    mana_cost = _mana_cost_from_faces(getattr(card, "faces_json", None)) or best_mana_cost
+    cmc = getattr(card, "mana_value", None)
+    if cmc is None and isinstance(best, dict):
+        cmc = best.get("cmc")
+    colors = _color_letters_list(getattr(card, "colors", None)) or best_colors
+    color_identity = _color_letters_list(getattr(card, "color_identity", None)) or best_color_identity or colors
+    color_identity = _effective_color_identity(type_line, oracle_text, color_identity)
     if not colors:
         colors = color_identity
+    rarity = (getattr(card, "rarity", None) or "").strip().lower() or ((best or {}).get("rarity") or None)
 
     commander_legality = None
     legalities = {"commander": None}
@@ -6869,14 +7222,14 @@ def card_detail(card_id):
         "name": card.name,
         "mana_cost": mana_cost,
         "mana_cost_html": render_mana_html(mana_cost, use_local=False),
-        "cmc": getattr(card, "mana_value", None),
-        "type_line": getattr(card, "type_line", None),
+        "cmc": cmc,
+        "type_line": type_line,
         "oracle_text": oracle_text,
         "oracle_text_html": render_oracle_html(oracle_text, use_local=False),
         "colors": colors or [],
         "color_identity": color_identity or [],
         "keywords": [],
-        "rarity": getattr(card, "rarity", None),
+        "rarity": rarity,
         "set": card.set_code,
         "set_name": set_name_for_code(card.set_code) if have_cache else None,
         "collector_number": card.collector_number,
@@ -7126,12 +7479,14 @@ __all__ = [
     "opening_hand",
     "opening_hand_play",
     "opening_hand_shuffle",
+    "opening_hand_mulligan",
     "opening_hand_draw",
     "opening_hand_search",
     "opening_hand_peek",
     "opening_hand_hideaway",
     "opening_hand_scry",
     "opening_hand_surveil",
+    "opening_hand_tokens",
     "opening_hand_token_search",
     "decks_overview",
     "list_cards",

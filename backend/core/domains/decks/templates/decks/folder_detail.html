@@ -16,7 +16,7 @@
      data-export-url="{{ url_for('views.export_cards', folder=folder.id) }}"
      data-bulk-delete-url="{{ url_for('views.bulk_delete_cards', folder_id=folder.id) }}"
      data-bulk-move-url="{{ url_for('views.bulk_move_cards') }}"
-     data-counts-url="{{ url_for('views.folder_counts', folder_id=folder.id) }}">
+     data-counts-url="{{ url_for('api.folder_counts', folder_id=folder.id) }}">
 
 <style nonce="{{ csp_nonce() }}">
   .cards-table { table-layout:auto; width:100%; }
@@ -2893,7 +2893,7 @@
   // On first load, refresh counts from the server to ensure they reflect the latest state.
   (async () => {
     try {
-      const res = await fetch("{{ url_for('views.folder_counts', folder_id=folder.id) }}");
+      const res = await fetch("{{ url_for('api.folder_counts', folder_id=folder.id) }}");
       const data = await res.json();
       if (data?.ok) {
         const uniq = document.querySelector('[data-stat-unique]');

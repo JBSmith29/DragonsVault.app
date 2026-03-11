@@ -6,6 +6,7 @@ from flask_login import login_required
 
 from extensions import limiter
 from core.domains.decks.services import folder_service
+from core.routes.api import api_bp
 from core.routes.base import limiter_key_user_or_ip, views
 
 
@@ -68,7 +69,7 @@ def folder_cards_json(folder_id):
     return folder_service.folder_cards_json(folder_id)
 
 
-@views.get("/api/folders/<int:folder_id>/commander-candidates")
+@api_bp.get("/folders/<int:folder_id>/commander-candidates")
 @login_required
 def api_folder_commander_candidates(folder_id: int):
     return folder_service.api_folder_commander_candidates(folder_id)
@@ -111,7 +112,7 @@ def folder_detail(folder_id):
     return folder_service.folder_detail(folder_id)
 
 
-@views.get("/api/folder/<int:folder_id>/counts")
+@api_bp.get("/folder/<int:folder_id>/counts")
 @login_required
 def folder_counts(folder_id: int):
     return folder_service.folder_counts(folder_id)

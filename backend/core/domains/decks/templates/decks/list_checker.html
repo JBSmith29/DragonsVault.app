@@ -168,21 +168,56 @@
 
     <!-- Results table -->
     <div class="table-responsive">
-      <table class="table table-sm align-middle table-hover cards-table">
+      <table class="table table-sm align-middle table-hover cards-table" data-checker-sortable="1">
         <thead>
           <tr>
-            <th class="checker-col-card">Card</th>
-            <th class="col-num text-center">Requested</th>
-            <th class="col-num text-center">Available</th>
-            <th class="col-num text-center">Missing</th>
-            <th>Folders (location breakdown)</th>
+            <th class="checker-col-card">
+              <button type="button" class="checker-sort-btn" data-sort-key="card" data-sort-type="text">
+                Card <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th class="text-center">
+              <button type="button" class="checker-sort-btn" data-sort-key="type" data-sort-type="text">
+                Type <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th class="text-center">
+              <button type="button" class="checker-sort-btn" data-sort-key="color_identity" data-sort-type="text">
+                Color Identity <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th class="text-center">
+              <button type="button" class="checker-sort-btn" data-sort-key="rarity" data-sort-type="text">
+                Rarity <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th class="col-num text-center">
+              <button type="button" class="checker-sort-btn" data-sort-key="requested" data-sort-type="number">
+                Requested <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th class="col-num text-center">
+              <button type="button" class="checker-sort-btn" data-sort-key="available" data-sort-type="number">
+                Available <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th class="col-num text-center">
+              <button type="button" class="checker-sort-btn" data-sort-key="missing" data-sort-type="number">
+                Missing <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="checker-sort-btn" data-sort-key="folders" data-sort-type="number">
+                Folders (location breakdown) <span class="checker-sort-indicator" data-sort-indicator></span>
+              </button>
+            </th>
           </tr>
         </thead>
         <tbody>
           {% for r in results %}
             {% set row_cls = 'row-missing' if r.status=='missing' else ('row-friends' if r.status=='friends' else ('row-partial' if r.status=='partial' else 'row-have')) %}
             <tr class="{{ row_cls }}">
-              <td>
+              <td data-sort-key-cell="card" data-sort-value="{{ (r.name or '')|lower }}">
                 {% set back_to = request.full_path %}
                 {% if r.card_id %}
                   <a
@@ -209,17 +244,39 @@
                   <span class="badge text-bg-orange ms-2">In Friends Collection</span>
                 {% endif %}
               </td>
-              <td class="text-center">{{ r.requested }}</td>
-              <td class="text-center">{{ r.available_in_collection }}</td>
-              <td class="text-center">
+              <td class="text-center" data-sort-key-cell="type" data-sort-value="{{ (r.type or '')|lower }}">
+                {% if r.type and r.type != '—' %}
+                  {{ r.type }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="text-center" data-sort-key-cell="color_identity" data-sort-value="{{ (r.color_identity_label or '')|lower }}">
+                {% if r.color_identity_label and r.color_identity_label != '—' %}
+                  {{ r.color_identity_label }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="text-center" data-sort-key-cell="rarity" data-sort-value="{{ (r.rarity or '')|lower }}">
+                {% if r.rarity and r.rarity != '—' %}
+                  {{ r.rarity }}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="text-center" data-sort-key-cell="requested" data-sort-value="{{ r.requested|int }}">{{ r.requested }}</td>
+              <td class="text-center" data-sort-key-cell="available" data-sort-value="{{ r.available_in_collection|int }}">{{ r.available_in_collection }}</td>
+              <td class="text-center" data-sort-key-cell="missing" data-sort-value="{{ r.missing_qty|int }}">
                 {% if r.missing_qty|int > 0 %}
                   <span class="badge rounded-pill text-bg-danger">x{{ r.missing_qty }}</span>
                 {% else %}
                   <span class="text-muted">&mdash;</span>
                 {% endif %}
               </td>
-              <td>
                 {% set collection = r.collection_folders or r.folders %}
+                {% set folder_count = (collection|length) + (r.deck_folders|length) %}
+              <td data-sort-key-cell="folders" data-sort-value="{{ folder_count }}">
                 {% if collection %}
                   <div class="mb-1 d-flex flex-wrap gap-1">
                     {% for fname, cnt in collection %}
@@ -249,6 +306,20 @@
 <style nonce="{{ csp_nonce() }}">
   .col-num { width: 130px; min-width: 110px; white-space: nowrap; }
   .checker-col-card { min-width: 220px; }
+  .checker-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .checker-sort-btn:hover { text-decoration: underline; }
+  .checker-sort-indicator { min-width: 0.8em; font-size: 0.78rem; opacity: 0.8; }
   .small-muted { color: #6c757d; }
   .row-have    { background: var(--bs-success-bg-subtle); }
   .row-partial { background: var(--bs-warning-bg-subtle); }
@@ -263,11 +334,58 @@
 (function () {
   // --- Persistence keys ---
   const KEY_TEXT = 'dv_list_checker_text';
-  const KEY_HTML = 'dv_list_checker_results_html';
+  const KEY_HTML = 'dv_list_checker_results_html_v3';
 
   const ta = document.getElementById('card_list');
   const res = document.getElementById('checker-results');
   const startOverBtn = document.getElementById('start-over-btn');
+
+  function bindCheckerSorting(scope) {
+    const root = scope || document;
+    root.querySelectorAll('table[data-checker-sortable="1"]').forEach((table) => {
+      if (table.dataset.sortBound === '1') return;
+      table.dataset.sortBound = '1';
+      const tbody = table.tBodies && table.tBodies[0];
+      if (!tbody) return;
+
+      function parseValue(cell, type) {
+        const raw = (cell?.dataset?.sortValue ?? cell?.textContent ?? '').trim();
+        if (type === 'number') {
+          const n = Number(raw.replace(/[^0-9.-]/g, ''));
+          return Number.isFinite(n) ? n : 0;
+        }
+        return raw.toLowerCase();
+      }
+
+      function sortRows(key, type, direction) {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+          const av = parseValue(a.querySelector('[data-sort-key-cell="' + key + '"]'), type);
+          const bv = parseValue(b.querySelector('[data-sort-key-cell="' + key + '"]'), type);
+          if (av < bv) return direction === 'asc' ? -1 : 1;
+          if (av > bv) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+        rows.forEach((row) => tbody.appendChild(row));
+      }
+
+      table.querySelectorAll('[data-sort-key]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.sortKey || '';
+          const type = btn.dataset.sortType || 'text';
+          const currentKey = table.dataset.sortKey || '';
+          const currentDir = table.dataset.sortDir || 'asc';
+          const nextDir = currentKey === key && currentDir === 'asc' ? 'desc' : 'asc';
+          table.dataset.sortKey = key;
+          table.dataset.sortDir = nextDir;
+          sortRows(key, type, nextDir);
+          table.querySelectorAll('[data-sort-indicator]').forEach((el) => { el.textContent = ''; });
+          const indicator = btn.querySelector('[data-sort-indicator]');
+          if (indicator) indicator.textContent = nextDir === 'asc' ? '▲' : '▼';
+        });
+      });
+    });
+  }
 
   // Restore textarea on load if empty
   if (ta && (!ta.value || !ta.value.trim())) {
@@ -281,6 +399,7 @@
     if (savedHTML) {
       res.innerHTML = savedHTML;
       res.dataset.hasResults = '1';
+      bindCheckerSorting(res);
       if (window.dvAttachCheckerHover) window.dvAttachCheckerHover(res);
     }
   }
@@ -306,8 +425,11 @@
       } catch (_) {}
       if (window.dvAttachCheckerHover) window.dvAttachCheckerHover(evt.target);
       if (window.dvHydrateCheckerThumbs) window.dvHydrateCheckerThumbs(evt.target);
+      bindCheckerSorting(evt.target);
     }
   });
+
+  bindCheckerSorting(document);
 
   // Start Over: clear UI + storage without reload
   if (startOverBtn) {

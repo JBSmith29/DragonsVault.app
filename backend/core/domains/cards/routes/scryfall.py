@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.domains.cards.services import scryfall_service
+from core.routes.api import api_bp
 from core.routes.base import views
 
 
@@ -15,7 +16,7 @@ def scryfall_browser():
     return scryfall_service.scryfall_browser()
 
 
-@views.route("/api/scryfall/print/<sid>")
+@api_bp.route("/scryfall/print/<sid>")
 def api_scryfall_print(sid):
     return scryfall_service.api_scryfall_print(sid)
 

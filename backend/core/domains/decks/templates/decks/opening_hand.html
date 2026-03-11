@@ -919,6 +919,7 @@
         <div class="hand-status">
           <span class="badge text-bg-primary text-uppercase" id="handDeckName">{{ selected_deck_name or 'No deck selected' }}</span>
           <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
+          <span class="badge text-bg-warning text-dark" id="mulliganCount" hidden></span>
         </div>
         <div class="hand-card-grid" id="handGrid">
           <div class="text-muted small">
@@ -931,6 +932,9 @@
       <div class="action-group action-group-left">
         <button class="btn btn-primary" type="button" id="shuffleBtn">
           Shuffle &amp; Deal
+        </button>
+        <button class="btn btn-outline-light" type="button" id="mulliganBtn" disabled>
+          Mulligan
         </button>
         <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
           Select New Deck
@@ -1174,6 +1178,29 @@
 {% endcall %}
 
 {% call wrap_modal() %}
+<div class="modal fade" id="mulliganModal" tabindex="-1" aria-labelledby="mulliganModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border border-secondary">
+      <div class="modal-header border-secondary-subtle">
+        <h5 class="modal-title" id="mulliganModalLabel">Bottom Cards for Mulligan</h5>
+        {% if is_mobile %}{% include "components/modal_close_btn.html" %}{% endif %}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-2" id="mulliganModalHint"></div>
+        <div class="effect-card-grid" id="mulliganCardList"></div>
+        <div class="text-muted small mt-2" id="mulliganModalStatus"></div>
+      </div>
+      <div class="modal-footer border-secondary-subtle">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="mulliganConfirmBtn" disabled>Bottom Cards</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endcall %}
+
+{% call wrap_modal() %}
 <div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content bg-dark text-light border border-secondary">
@@ -1372,12 +1399,14 @@
   const deckListInput = document.getElementById('deckListInput');
   const commanderInput = document.getElementById('commanderInput');
   const shuffleBtn = document.getElementById('shuffleBtn');
+  const mulliganBtn = document.getElementById('mulliganBtn');
   const resetBtn = document.getElementById('resetBtn');
   const drawBtn = document.getElementById('drawBtn');
   const stateInput = document.getElementById('handState');
   const handGrid = document.getElementById('handGrid');
   const handDeckName = document.getElementById('handDeckName');
   const handRemaining = document.getElementById('handRemaining');
+  const mulliganCountBadge = document.getElementById('mulliganCount');
   const handMessage = document.getElementById('handMessage');
   const handWarnings = document.getElementById('handWarnings');
   const fetchCardModalEl = document.getElementById('fetchCardModal');
@@ -1413,6 +1442,11 @@
   const discardConfirmBtn = document.getElementById('discardConfirmBtn');
   const discardModalHint = document.getElementById('discardModalHint');
   const discardModalStatus = document.getElementById('discardModalStatus');
+  const mulliganModal = document.getElementById('mulliganModal');
+  const mulliganCardList = document.getElementById('mulliganCardList');
+  const mulliganConfirmBtn = document.getElementById('mulliganConfirmBtn');
+  const mulliganModalHint = document.getElementById('mulliganModalHint');
+  const mulliganModalStatus = document.getElementById('mulliganModalStatus');
   const searchModal = document.getElementById('searchModal');
   const searchResults = document.getElementById('searchResults');
   const searchModalHint = document.getElementById('searchModalHint');
@@ -1463,6 +1497,7 @@
   const openingStage = document.querySelector('.opening-hand-stage');
   const sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
   const placeholderImage = "{{ static_url('img/card-placeholder.svg') }}";
+  const deckTokenEndpoint = "{{ url_for('views.opening_hand_tokens') }}";
   const deckCardLookup = {{ deck_card_lookup_json | safe }} || {};
   const deckTokenLookup = {{ deck_token_lookup_json | safe }} || {};
   const customTokenEntries = {{ custom_token_entries_json | default('[]', true) | safe }} || [];
@@ -1472,12 +1507,15 @@
   let commanderSeed = Array.isArray(commanderSeedPayload) ? commanderSeedPayload.slice() : [];
   let tokenAllSearchTimer = null;
   let tokenAllLastQuery = '';
+  const tokenDeckRequestCache = new Map();
+  const tokenDeckHydrated = new Set();
   let scryCards = [];
   let scryChoices = new Map();
   let scryTopOrder = [];
   let scryChoiceUid = 0;
   let resolvingEffects = false;
   let pendingDiscard = null;
+  let pendingMulligan = null;
   let pendingSearch = null;
   let pendingAttach = null;
   let pendingTokenAdd = null;
@@ -1489,6 +1527,7 @@
   const ruleHintCache = new Map();
   const ruleWarningSet = new Set();
   let landsPlayedThisTurn = 0;
+  let mulligansTaken = 0;
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),
@@ -1901,6 +1940,24 @@
       }
     }
     updateScryAvailability();
+    updateMulliganBadge();
+  }
+
+  function updateMulliganBadge() {
+    const hasState = Boolean(stateInput && stateInput.value);
+    if (mulliganBtn) {
+      mulliganBtn.disabled = !hasState;
+    }
+    if (!mulliganCountBadge) {
+      return;
+    }
+    if (mulligansTaken > 0) {
+      mulliganCountBadge.hidden = false;
+      mulliganCountBadge.textContent = `Mulligans: ${mulligansTaken}`;
+    } else {
+      mulliganCountBadge.hidden = true;
+      mulliganCountBadge.textContent = '';
+    }
   }
 
   function syncSidebarCollapse(active) {
@@ -1953,12 +2010,75 @@
     });
   }
 
+  function tokenIdentity(token) {
+    const name = (token && token.name ? String(token.name) : 'Token').trim().toLowerCase();
+    const typeLine = (token && token.type_line ? String(token.type_line) : 'Token').trim().toLowerCase();
+    return `${name || 'token'}|${typeLine || 'token'}`;
+  }
+
+  function uniqueTokens(tokens) {
+    if (!Array.isArray(tokens) || !tokens.length) {
+      return [];
+    }
+    const seen = new Set();
+    const deduped = [];
+    tokens.forEach(function (token) {
+      const key = tokenIdentity(token);
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      deduped.push(token);
+    });
+    return deduped;
+  }
+
+  async function ensureDeckTokens(deckId) {
+    const normalizedDeckId = (deckId || '').trim();
+    if (!normalizedDeckId) {
+      return [];
+    }
+    if (Object.prototype.hasOwnProperty.call(deckTokenLookup, normalizedDeckId)) {
+      tokenDeckHydrated.add(normalizedDeckId);
+    }
+    const existing = uniqueTokens(deckTokenLookup[normalizedDeckId] || []);
+    if (existing.length > 0 || tokenDeckHydrated.has(normalizedDeckId)) {
+      deckTokenLookup[normalizedDeckId] = existing;
+      return existing;
+    }
+    if (tokenDeckRequestCache.has(normalizedDeckId)) {
+      return tokenDeckRequestCache.get(normalizedDeckId);
+    }
+
+    const pending = (async function () {
+      try {
+        const response = await fetch(`${deckTokenEndpoint}?deck_id=${encodeURIComponent(normalizedDeckId)}`, {
+          credentials: 'same-origin',
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          return existing;
+        }
+        const hydrated = uniqueTokens(data.tokens || []);
+        deckTokenLookup[normalizedDeckId] = hydrated;
+        tokenDeckHydrated.add(normalizedDeckId);
+        return hydrated;
+      } catch (_) {
+        return existing;
+      } finally {
+        tokenDeckRequestCache.delete(normalizedDeckId);
+      }
+    })();
+    tokenDeckRequestCache.set(normalizedDeckId, pending);
+    return pending;
+  }
+
   function tokensForDeck(deckId) {
     if (!deckId) {
       const deckList = (deckListInput ? deckListInput.value : '').trim();
-      return deckList ? customTokenEntries : [];
+      return deckList ? uniqueTokens(customTokenEntries) : [];
     }
-    return deckTokenLookup[deckId] || [];
+    return uniqueTokens(deckTokenLookup[deckId] || []);
   }
 
   function setTokenStatus(text, level) {
@@ -2232,7 +2352,10 @@
         zone_hint: token && token.zone_hint ? token.zone_hint : 'permanents',
       });
       if (!payload) continue;
-      moveCardToBoard(payload, 'permanents');
+      const preferredZone = payload.zone_hint && boardState[payload.zone_hint]
+        ? payload.zone_hint
+        : classifyCard(payload);
+      moveCardToBoard(payload, preferredZone);
     }
     if (tokenModalInstance) {
       tokenModalInstance.hide();
@@ -2281,7 +2404,10 @@
     }
   }
 
-  function updateTokenPicker(deckId) {
+  async function updateTokenPicker(deckId) {
+    if (deckId) {
+      await ensureDeckTokens(deckId);
+    }
     const tokens = tokensForDeck(deckId);
     const hasTokens = Array.isArray(tokens) && tokens.length > 0;
     if (tokenPickerBtn) {
@@ -3002,6 +3128,93 @@
     });
   }
 
+  function updateMulliganConfirmState(selectedIds, required) {
+    if (!mulliganConfirmBtn) return;
+    const count = selectedIds ? selectedIds.size : 0;
+    mulliganConfirmBtn.disabled = required > 0 && count !== required;
+    if (mulliganModalStatus) {
+      if (!required) {
+        mulliganModalStatus.textContent = '';
+      } else {
+        mulliganModalStatus.textContent = `Selected ${count} of ${required}.`;
+      }
+    }
+  }
+
+  function renderMulliganList(required, selectedIds) {
+    if (!mulliganCardList) return;
+    mulliganCardList.innerHTML = '';
+    if (!handCards.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No cards in hand.';
+      mulliganCardList.appendChild(empty);
+      updateMulliganConfirmState(selectedIds, required);
+      return;
+    }
+    handCards.forEach(function (card) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'effect-card-option';
+      btn.dataset.cardId = card.__uid;
+      if (selectedIds.has(card.__uid)) {
+        btn.classList.add('is-selected');
+      }
+
+      const img = document.createElement('img');
+      img.src = card.image || placeholderImage;
+      img.alt = card.name || 'Card';
+      const title = document.createElement('div');
+      title.className = 'effect-title';
+      title.textContent = card.name || 'Card';
+      const subtitle = document.createElement('div');
+      subtitle.className = 'effect-subtitle';
+      subtitle.textContent = card.type_line || '';
+
+      btn.appendChild(img);
+      btn.appendChild(title);
+      if (subtitle.textContent) {
+        btn.appendChild(subtitle);
+      }
+
+      btn.addEventListener('click', function () {
+        if (selectedIds.has(card.__uid)) {
+          selectedIds.delete(card.__uid);
+          btn.classList.remove('is-selected');
+        } else {
+          selectedIds.add(card.__uid);
+          btn.classList.add('is-selected');
+        }
+        updateMulliganConfirmState(selectedIds, required);
+      });
+      mulliganCardList.appendChild(btn);
+    });
+    updateMulliganConfirmState(selectedIds, required);
+  }
+
+  function promptMulliganBottom(requiredCount) {
+    return new Promise(function (resolve) {
+      const rawCount = Math.max(parseInt(requiredCount || 0, 10) || 0, 0);
+      const count = Math.min(rawCount, handCards.length);
+      if (!count) {
+        resolve([]);
+        return;
+      }
+      const selectedIds = new Set();
+      pendingMulligan = { count: count, selected: selectedIds, resolve: resolve };
+      if (mulliganModalHint) {
+        mulliganModalHint.textContent = count
+          ? `Select ${count} card${count === 1 ? '' : 's'} to put on the bottom of your library.`
+          : 'No cards need to be put on the bottom.';
+      }
+      renderMulliganList(count, selectedIds);
+      const instance = getModalInstance(mulliganModal);
+      if (instance) {
+        instance.show();
+      }
+    });
+  }
+
   async function requestSearchMatches(criteria) {
     if (!stateInput || !stateInput.value) {
       showMessage('Shuffle a deck first.', 'warning');
@@ -3572,6 +3785,10 @@
     }
     if (!count || count <= 0) {
       return;
+    }
+    const deckId = currentDeckId();
+    if (deckId) {
+      await ensureDeckTokens(deckId);
     }
     const matches = findTokenMatches(card);
     if (matches.length === 1) {
@@ -5250,6 +5467,7 @@
     showWarnings([]);
     ruleWarningSet.clear();
     landsPlayedThisTurn = 0;
+    mulligansTaken = 0;
     closeContextMenu();
     updateActionVisibility();
   }
@@ -5406,92 +5624,211 @@
     resetBtn.addEventListener('click', resetSimulator);
   }
 
+  async function shuffleOpeningHand(options) {
+    const opts = options || {};
+    showMessage('');
+    showWarnings([]);
+    const deckId = currentDeckId();
+    const deckList = (deckListInput ? deckListInput.value : '').trim();
+    const commander = (commanderInput ? commanderInput.value : '').trim();
+
+    if (!deckId && !deckList) {
+      showMessage('Choose a deck or paste a deck list before shuffling.', 'warning');
+      return null;
+    }
+
+    if (shuffleBtn) {
+      shuffleBtn.disabled = true;
+    }
+    if (drawBtn) {
+      drawBtn.disabled = true;
+    }
+    if (mulliganBtn) {
+      mulliganBtn.disabled = true;
+    }
+    showMessage(opts.statusMessage || 'Shuffling...', 'info');
+
+    try {
+      const payload = {
+        deck_id: deckId || null,
+        deck_list: deckList || null,
+        commander_name: commander
+      };
+      if (csrfToken) {
+        payload.csrf_token = csrfToken;
+      }
+      const response = await fetch('{{ url_for("views.opening_hand_shuffle") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (_) {
+        data = null;
+      }
+
+      if (!response.ok || !data || !data.ok) {
+        const detail = (data && data.error) ? data.error : `Unable to shuffle deck (HTTP ${response.status}).`;
+        showMessage(detail, 'danger');
+        return null;
+      }
+
+      if (opts.resetMulligans !== false) {
+        mulligansTaken = 0;
+      }
+      if (opts.successMessage) {
+        showMessage(opts.successMessage.replace('{deck}', data.deck_name || 'deck'), 'success');
+      } else if (opts.successMessage !== null) {
+        showMessage('Opening hand ready from ' + data.deck_name + '.', 'success');
+      }
+      if (stateInput) {
+        stateInput.value = data.state;
+      }
+      if (handDeckName) {
+        handDeckName.textContent = data.deck_name;
+      }
+      if (handRemaining) {
+        handRemaining.hidden = false;
+        handRemaining.textContent = data.remaining + ' cards remaining';
+      }
+
+      setHand(data.hand);
+      boardZones.forEach(function (zone) {
+        boardState[zone] = [];
+      });
+      if (Array.isArray(data.commanders)) {
+        setCommanderSeed(data.commanders);
+      }
+      seedCommandZone();
+      renderBoard();
+      closeContextMenu();
+      if (drawBtn) {
+        drawBtn.disabled = false;
+      }
+      updateScryAvailability();
+      updateMulliganBadge();
+      ruleWarningSet.clear();
+      landsPlayedThisTurn = 0;
+      showWarnings(data.warnings || []);
+      return data;
+    } catch (err) {
+      console.error(err);
+      showMessage('An unexpected error occurred while shuffling.', 'danger');
+      return null;
+    } finally {
+      if (shuffleBtn) {
+        shuffleBtn.disabled = false;
+      }
+      updateMulliganBadge();
+    }
+  }
+
+  function randomHandUids(count) {
+    const pool = handCards.map(function (card) { return card.__uid; }).filter(Boolean);
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = pool[i];
+      pool[i] = pool[j];
+      pool[j] = temp;
+    }
+    return pool.slice(0, Math.max(0, count));
+  }
+
+  async function applyMulliganBottom(bottomUids, count, mulliganNumber) {
+    if (!stateInput || !stateInput.value) {
+      showMessage('Shuffle a deck first.', 'warning');
+      return false;
+    }
+    const payload = {
+      state: stateInput.value,
+      bottom_uids: bottomUids,
+      count: count,
+    };
+    if (csrfToken) {
+      payload.csrf_token = csrfToken;
+    }
+    try {
+      const response = await fetch('{{ url_for("views.opening_hand_mulligan") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || !data.ok) {
+        const detail = (data && data.error) ? data.error : `Unable to apply mulligan (HTTP ${response.status}).`;
+        showMessage(detail, 'warning');
+        return false;
+      }
+
+      if (stateInput) {
+        stateInput.value = data.state;
+      }
+      if (handRemaining) {
+        handRemaining.hidden = false;
+        handRemaining.textContent = data.remaining + ' cards remaining';
+      }
+      if (handDeckName && data.deck_name) {
+        handDeckName.textContent = data.deck_name;
+      }
+      setHand(data.hand || []);
+      if (drawBtn) {
+        drawBtn.disabled = data.remaining <= 0;
+      }
+      mulligansTaken = mulliganNumber;
+      updateMulliganBadge();
+      updateScryAvailability();
+      showMessage(`Mulligan ${mulliganNumber} complete. Keeping ${data.hand_size || 0}.`, 'success');
+      return true;
+    } catch (err) {
+      console.error(err);
+      showMessage('Unable to apply mulligan right now.', 'danger');
+      return false;
+    }
+  }
+
   if (shuffleBtn) {
     shuffleBtn.addEventListener('click', async function () {
-      showMessage('');
-      showWarnings([]);
-      const deckId = currentDeckId();
-      const deckList = (deckListInput ? deckListInput.value : '').trim();
-      const commander = (commanderInput ? commanderInput.value : '').trim();
+      await shuffleOpeningHand({ resetMulligans: true });
+    });
+  }
 
-      if (!deckId && !deckList) {
-        showMessage('Choose a deck or paste a deck list before shuffling.', 'warning');
+  if (mulliganBtn) {
+    mulliganBtn.addEventListener('click', async function () {
+      if (!stateInput || !stateInput.value) {
+        showMessage('Shuffle a deck first.', 'warning');
+        return;
+      }
+      const mulliganNumber = mulligansTaken + 1;
+      const shuffled = await shuffleOpeningHand({
+        resetMulligans: false,
+        statusMessage: `Taking mulligan ${mulliganNumber}...`,
+        successMessage: null,
+      });
+      if (!shuffled) {
         return;
       }
 
-      shuffleBtn.disabled = true;
-      if (drawBtn) {
-        drawBtn.disabled = true;
+      const bottomCount = Math.min(mulliganNumber, handCards.length);
+      let bottomUids = await promptMulliganBottom(bottomCount);
+      if (!Array.isArray(bottomUids) || bottomUids.length !== bottomCount) {
+        bottomUids = randomHandUids(bottomCount);
+        if (bottomCount > 0) {
+          showMessage('Mulligan selection canceled. Random cards were placed on bottom.', 'warning');
+        }
       }
-      showMessage('Shuffling...', 'info');
 
-      try {
-        const payload = {
-          deck_id: deckId || null,
-          deck_list: deckList || null,
-          commander_name: commander
-        };
-        if (csrfToken) {
-          payload.csrf_token = csrfToken;
-        }
-        const response = await fetch('{{ url_for("views.opening_hand_shuffle") }}', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify(payload)
-        });
-
-        let data = null;
-        try {
-          data = await response.json();
-        } catch (_) {
-          data = null;
-        }
-
-        if (!response.ok || !data || !data.ok) {
-          const detail = (data && data.error) ? data.error : `Unable to shuffle deck (HTTP ${response.status}).`;
-          showMessage(detail, 'danger');
-          return;
-        }
-
-        showMessage('Opening hand ready from ' + data.deck_name + '.', 'success');
-        if (stateInput) {
-          stateInput.value = data.state;
-        }
-        if (handDeckName) {
-          handDeckName.textContent = data.deck_name;
-        }
-        if (handRemaining) {
-          handRemaining.hidden = false;
-          handRemaining.textContent = data.remaining + ' cards remaining';
-        }
-
-        setHand(data.hand);
-        boardZones.forEach(function (zone) {
-          boardState[zone] = [];
-        });
-        if (Array.isArray(data.commanders)) {
-          setCommanderSeed(data.commanders);
-        }
-        seedCommandZone();
-        renderBoard();
-        closeContextMenu();
-        if (drawBtn) {
-          drawBtn.disabled = false;
-        }
-        updateScryAvailability();
-        ruleWarningSet.clear();
-        landsPlayedThisTurn = 0;
-        showWarnings(data.warnings || []);
-      } catch (err) {
-        console.error(err);
-        showMessage('An unexpected error occurred while shuffling.', 'danger');
-      } finally {
-        shuffleBtn.disabled = false;
-      }
+      await applyMulliganBottom(bottomUids, bottomCount, mulliganNumber);
     });
   }
 
@@ -5620,7 +5957,7 @@
       : (typeof bootstrap !== 'undefined' && bootstrap.Modal ? bootstrap.Modal : null);
     tokenModalInstance = ModalCtor ? ModalCtor.getOrCreateInstance(tokenPickerModal) : null;
 
-    tokenPickerModal.addEventListener('show.bs.modal', function () {
+    tokenPickerModal.addEventListener('show.bs.modal', async function () {
       if (tokenPickerSearch) {
         tokenPickerSearch.value = '';
       }
@@ -5629,6 +5966,9 @@
       }
       const deckId = currentDeckId();
       const deckListActive = !deckId && (deckListInput ? deckListInput.value.trim() : '');
+      if (deckId) {
+        await ensureDeckTokens(deckId);
+      }
       lastTokenDeckId = deckId;
       renderTokenList(deckId);
       setTokenStatus(deckId || deckListActive ? '' : 'Select a deck first.');
@@ -5639,6 +5979,47 @@
     tokenPickerModal.addEventListener('hidden.bs.modal', function () {
       setTokenStatus('');
       pendingTokenAdd = null;
+    });
+  }
+
+  if (mulliganConfirmBtn) {
+    mulliganConfirmBtn.addEventListener('click', function () {
+      if (!pendingMulligan) {
+        return;
+      }
+      const required = pendingMulligan.count || 0;
+      const selected = Array.from(pendingMulligan.selected || []);
+      if (required && selected.length !== required) {
+        updateMulliganConfirmState(pendingMulligan.selected, required);
+        return;
+      }
+      const selectedSet = new Set(selected);
+      const ordered = handCards
+        .filter(function (card) { return selectedSet.has(card.__uid); })
+        .map(function (card) { return card.__uid; });
+      const instance = getModalInstance(mulliganModal);
+      if (instance) {
+        instance.hide();
+      }
+      if (pendingMulligan && typeof pendingMulligan.resolve === 'function') {
+        const resolve = pendingMulligan.resolve;
+        pendingMulligan = null;
+        resolve(ordered);
+      } else {
+        pendingMulligan = null;
+      }
+    });
+  }
+
+  if (mulliganModal) {
+    mulliganModal.addEventListener('hidden.bs.modal', function () {
+      if (pendingMulligan && typeof pendingMulligan.resolve === 'function') {
+        const resolve = pendingMulligan.resolve;
+        pendingMulligan = null;
+        resolve([]);
+      } else {
+        pendingMulligan = null;
+      }
     });
   }
 

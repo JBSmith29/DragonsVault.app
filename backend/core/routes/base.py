@@ -28,6 +28,7 @@ from core.domains.cards.services.pricing import (
     prices_for_print_exact as _prices_for_print_exact,
 )
 from core.domains.cards.services.scryfall_cache import cache_ready, ensure_cache_loaded, find_by_set_cn, prints_for_oracle, unique_oracle_by_name
+from .api import api_bp
 
 views = Blueprint("views", __name__)
 
@@ -473,6 +474,10 @@ def _commander_candidates_for_folder(folder_id: int, limit: int = 60):
     for c in qs:
         pr = _lookup_print_data(c.set_code, c.collector_number, c.name, c.oracle_id)
         tline = getattr(c, "type_line", "") or pr.get("type_line") or ""
+        if not tline:
+            faces = (pr or {}).get("card_faces") or []
+            if faces:
+                tline = (faces[0] or {}).get("type_line") or ""
         tl = tline.lower()
         if ("legendary" in tl) and ("creature" in tl or "artifact" in tl):
             out.append(
@@ -605,19 +610,13 @@ def jinja_ci_name(ci):
 
 
 @cache.memoize(timeout=300)
-def compute_folder_color_identity(folder_id: int):
+def compute_folder_color_identity(folder_id: int, cache_version: str = "20260311a"):
     """
     Return (letters, label) for the folder's color identity using Scryfall cache.
     letters: e.g., "WUG" or "" (colorless). label: friendly name.
     """
+    _ = cache_version  # cache key versioning for memoized results
     seen = set()
-    rows = (
-        db.session.query(Card.color_identity, Card.colors)
-        .filter(Card.folder_id == folder_id)
-        .all()
-    )
-    if not rows:
-        return "", color_identity_name([])
 
     def _letters_from_value(value):
         if not value:
@@ -628,10 +627,90 @@ def compute_folder_color_identity(folder_id: int):
             raw = [ch for ch in str(value).upper()]
         return [ch for ch in raw if ch in WUBRG_ORDER]
 
-    for ci_val, colors_val in rows:
+    def _commander_oracle_ids(raw_value) -> list[str]:
+        text = str(raw_value or "").strip()
+        if not text:
+            return []
+        return [piece.strip() for piece in text.split(",") if piece.strip()]
+
+    def _commander_names(raw_value) -> list[str]:
+        text = str(raw_value or "").strip()
+        if not text:
+            return []
+        return [piece.strip() for piece in text.split("//") if piece.strip()]
+
+    folder_row = (
+        db.session.query(Folder.commander_oracle_id, Folder.commander_name)
+        .filter(Folder.id == folder_id)
+        .first()
+    )
+    commander_blob = folder_row.commander_oracle_id if folder_row else None
+    commander_name_blob = folder_row.commander_name if folder_row else None
+
+    commander_resolved = False
+    for oracle_id in _commander_oracle_ids(commander_blob):
+        try:
+            prints = prints_for_oracle(oracle_id) or []
+        except Exception:
+            prints = []
+        if not prints:
+            continue
+        commander_resolved = True
+        commander_letters = _letters_from_value(prints[0].get("color_identity")) or _letters_from_value(prints[0].get("colors"))
+        seen.update(commander_letters)
+
+    if not commander_resolved:
+        for commander_name in _commander_names(commander_name_blob):
+            try:
+                oracle_id = unique_oracle_by_name(commander_name)
+            except Exception:
+                oracle_id = None
+            if not oracle_id:
+                continue
+            try:
+                prints = prints_for_oracle(oracle_id) or []
+            except Exception:
+                prints = []
+            if not prints:
+                continue
+            commander_resolved = True
+            commander_letters = _letters_from_value(prints[0].get("color_identity")) or _letters_from_value(prints[0].get("colors"))
+            seen.update(commander_letters)
+
+    if commander_resolved:
+        letters = "".join([c for c in WUBRG_ORDER if c in seen])
+        return letters, color_identity_name(letters)
+
+    rows = (
+        db.session.query(
+            Card.color_identity,
+            Card.colors,
+            Card.set_code,
+            Card.collector_number,
+            Card.name,
+            Card.oracle_id,
+        )
+        .filter(Card.folder_id == folder_id)
+        .all()
+    )
+    if not rows:
+        return "", color_identity_name([])
+
+    missing_rows = []
+    for ci_val, colors_val, set_code, collector_number, card_name, oracle_id in rows:
         letters = _letters_from_value(ci_val) or _letters_from_value(colors_val)
-        for ch in letters:
-            seen.add(ch)
+        if letters:
+            seen.update(letters)
+        else:
+            missing_rows.append((set_code, collector_number, card_name, oracle_id))
+
+    if missing_rows:
+        for set_code, collector_number, card_name, oracle_id in missing_rows:
+            pr = _lookup_print_data(set_code, collector_number, card_name, oracle_id)
+            letters = _letters_from_value((pr or {}).get("color_identity")) or _letters_from_value((pr or {}).get("colors"))
+            seen.update(letters)
+            if len(seen) >= len(WUBRG_ORDER):
+                break
 
     letters = "".join([c for c in WUBRG_ORDER if c in seen])
     label = color_identity_name(letters)
@@ -765,7 +844,7 @@ def magic_rules():
     )
 
 
-@views.get("/api/rules/search")
+@api_bp.get("/rules/search")
 def api_rules_search():
     from core.shared.utils.rules_cache import search_magic_rules
 
@@ -780,7 +859,7 @@ def api_rules_search():
     return jsonify({"ok": True, "query": query, "matches": matches})
 
 
-@views.get("/api/rules/lookup")
+@api_bp.get("/rules/lookup")
 def api_rules_lookup():
     from core.shared.utils.rules_cache import lookup_magic_rule
 
@@ -793,7 +872,7 @@ def api_rules_lookup():
     return jsonify({"ok": True, "rule": rule_number, "text": line})
 
 
-@views.get("/api/rules/text")
+@api_bp.get("/rules/text")
 def api_rules_text():
     from core.shared.utils.rules_cache import magic_rules_text
 
@@ -803,7 +882,7 @@ def api_rules_text():
     return Response(text, mimetype="text/plain")
 
 
-@views.get("/api/rules/workbook")
+@api_bp.get("/rules/workbook")
 def api_rules_workbook():
     from core.shared.utils.rules_cache import magic_rules_workbook
 

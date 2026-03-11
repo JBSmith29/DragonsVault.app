@@ -1,0 +1,79 @@
+name: Frontend Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PAGES_BASE_PATH: ${{ vars.PAGES_BASE_PATH }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package.json
+
+    - name: Resolve build variables
+      run: |
+        BASE_PATH="${PAGES_BASE_PATH:-/${GITHUB_REPOSITORY#*/}/}"
+        echo "VITE_BASE_PATH=${BASE_PATH}" >> "$GITHUB_ENV"
+        if [ -z "${VITE_API_BASE_URL}" ]; then
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "::error::VITE_API_BASE_URL must be set for production Pages deploys."
+            exit 1
+          fi
+          echo "::warning::VITE_API_BASE_URL is not set; preview builds will default API calls to /api."
+        fi
+
+    - name: Install frontend dependencies
+      run: npm install --prefix frontend
+
+    - name: Build frontend
+      run: npm run --prefix frontend build
+
+    - name: Add SPA fallback
+      run: cp frontend/dist/index.html frontend/dist/404.html
+
+    - name: Set up Pages
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      uses: actions/configure-pages@v5
+
+    - name: Upload frontend artifact
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: frontend/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - name: Deploy frontend
+      id: deployment
+      uses: actions/deploy-pages@v4

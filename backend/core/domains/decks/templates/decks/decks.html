@@ -439,7 +439,7 @@
             {% set cmd_alt   = cmd.alt   if cmd else (cmd_name or 'Commander') %}
             {% set set_url = url_for('views.set_commander', folder_id=d.id) %}
             {% set clear_url = url_for('views.clear_commander', folder_id=d.id) %}
-            {% set candidate_url = url_for('views.api_folder_commander_candidates', folder_id=d.id) %}
+            {% set candidate_url = url_for('api.api_folder_commander_candidates', folder_id=d.id) %}
 
             <tr class="deck-row"
                 data-deck-id="{{ d.id }}"

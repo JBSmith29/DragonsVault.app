@@ -109,6 +109,27 @@ def _oracle_text_from_faces_json(faces_json: Any) -> str:
     return " // ".join(parts)
 
 
+def _type_line_from_print_payload(print_payload: Dict[str, Any] | None) -> str:
+    if not isinstance(print_payload, dict):
+        return ""
+    direct = str(print_payload.get("type_line") or "").strip()
+    if direct:
+        return direct
+    faces = print_payload.get("card_faces")
+    if not isinstance(faces, list):
+        return ""
+    parts = []
+    for face in faces:
+        if not isinstance(face, dict):
+            continue
+        value = str(face.get("type_line") or "").strip()
+        if value:
+            parts.append(value)
+    if not parts:
+        return ""
+    return " // ".join(parts)
+
+
 def _artifact_production_colors(oracle_text: str | None) -> set[str]:
     if not oracle_text:
         return set()
@@ -462,17 +483,50 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
 
     bracket_cards: List[Dict[str, Any]] = []
     token_cache_by_oracle: dict[str, list[dict]] = {}
+    row_print_cache: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+
+    def _row_print_payload(scode: Any, cn: Any, name: Any) -> Dict[str, Any]:
+        key = (
+            str(scode or "").strip().lower(),
+            str(cn or "").strip().lower(),
+            str(name or "").strip().lower(),
+        )
+        if key not in row_print_cache:
+            payload: Dict[str, Any] = {}
+            try:
+                found = find_by_set_cn(scode, cn, name)
+            except Exception:
+                found = None
+            if isinstance(found, dict):
+                payload = found
+            row_print_cache[key] = payload
+        return row_print_cache[key]
 
     for cid, name, scode, cn, oid, lang, is_foil, fid, qty, type_line, oracle_text, mana_value, faces_json in rows:
         qty = int(qty or 0) or 1
 
-        tline = type_line or ""
-        text = oracle_text or ""
+        row_print: Dict[str, Any] = {}
+        if not str(type_line or "").strip() or not str(oracle_text or "").strip() or mana_value is None:
+            row_print = _row_print_payload(scode, cn, name)
+
+        tline = str(type_line or "").strip() or _type_line_from_print_payload(row_print)
+        text = str(oracle_text or "").strip()
         if not text and faces_json:
             face_texts = [face.get("oracle_text") for face in _faces_list(faces_json) if face.get("oracle_text")]
             text = " // ".join(face_texts)
+        if not text:
+            text = str(row_print.get("oracle_text") or "").strip()
+        if not text:
+            text = _oracle_text_from_faces_json(row_print.get("card_faces"))
 
         mana_cost = _mana_cost_from_faces(faces_json)
+        if not mana_cost:
+            row_mana_cost = row_print.get("mana_cost")
+            if row_mana_cost:
+                mana_cost = str(row_mana_cost)
+        row_cmc = row_print.get("cmc")
+        if mana_value is None and row_cmc is not None:
+            mana_value = row_cmc
 
         bracket_card = {
             "name": name,
@@ -653,6 +707,8 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     cmc_map = {}
     cmc_bucket_map: Dict[int, str] = {}
     color_letters_map = {}
+    resolved_type_line_map: Dict[int, str] = {}
+    resolved_rarity_map: Dict[int, str] = {}
     total_value_usd = 0.0
     cache_key = f"folder:{folder.id}" if getattr(folder, "id", None) else None
     print_map = _bulk_print_lookup(deck_cards, cache_key=cache_key, epoch=cache_epoch())
@@ -691,7 +747,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         return [ch for ch in raw if ch in {"W", "U", "B", "R", "G"}]
 
     for card in deck_cards:
-        pr = print_map.get(card.id, {})
+        pr = print_map.get(card.id, {}) or {}
 
         if pr:
             im = sc.image_for_print(pr)
@@ -700,14 +756,22 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             image_map[card.id] = None
 
         display_name = card.name
-        type_line = getattr(card, "type_line", None)
-        rarity_val = getattr(card, "rarity", None)
+        type_line = (getattr(card, "type_line", None) or "").strip() or _type_line_from_print_payload(pr)
+        rarity_val = (getattr(card, "rarity", None) or "").strip().lower() or str(pr.get("rarity") or "").strip().lower()
+        resolved_type_line_map[card.id] = type_line or ""
+        resolved_rarity_map[card.id] = rarity_val or ""
 
         letters_list = _color_letters(getattr(card, "color_identity", None)) or _color_letters(getattr(card, "colors", None))
+        if not letters_list:
+            letters_list = _color_letters(pr.get("color_identity")) or _color_letters(pr.get("colors"))
         if "artifact" in (type_line or "").lower():
             oracle_text = (getattr(card, "oracle_text", None) or "").strip()
             if not oracle_text:
                 oracle_text = _oracle_text_from_faces_json(getattr(card, "faces_json", None))
+            if not oracle_text:
+                oracle_text = str(pr.get("oracle_text") or "").strip()
+            if not oracle_text:
+                oracle_text = _oracle_text_from_faces_json(pr.get("card_faces"))
             produced_colors = _artifact_production_colors(oracle_text)
             if produced_colors:
                 letters_list = [ch for ch in _WUBRG if ch in (set(letters_list) | produced_colors)]
@@ -717,6 +781,8 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         color_icons_map[card.id] = colors_to_icons(letters_list or ["C"], use_local=True)
 
         cmc_val = getattr(card, "mana_value", None)
+        if cmc_val is None:
+            cmc_val = pr.get("cmc")
         try:
             cmc_val = float(cmc_val) if cmc_val is not None else None
         except (TypeError, ValueError):
@@ -834,11 +900,11 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         if sort == "name":
             deck_cards.sort(key=lambda x: ((x.name or "").lower()), reverse=reverse)
         elif sort == "ctype":
-            deck_cards.sort(key=lambda x: ((x.type_line or "").lower()), reverse=reverse)
+            deck_cards.sort(key=lambda x: (resolved_type_line_map.get(x.id, "").lower()), reverse=reverse)
         elif sort == "colors":
             deck_cards.sort(key=lambda x: (color_letters_map.get(x.id) or "C"), reverse=reverse)
         elif sort == "rar":
-            deck_cards.sort(key=lambda x: _rarity_rank(x.rarity), reverse=reverse)
+            deck_cards.sort(key=lambda x: _rarity_rank(resolved_rarity_map.get(x.id) or ""), reverse=reverse)
         elif sort == "set":
             deck_cards.sort(key=lambda x: ((x.set_code or "").upper()), reverse=reverse)
         elif sort == "cn":
@@ -898,11 +964,12 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     card_vms: list[FolderCardVM] = []
     for card in deck_cards:
         display_name = card.name
-        type_line = getattr(card, "type_line", None) or ""
+        type_line = resolved_type_line_map.get(card.id) or ""
         type_badges = [t for t in base_types if t in type_line]
-        rarity_label = (getattr(card, "rarity", None) or "").capitalize() or None
+        rarity_value = (resolved_rarity_map.get(card.id) or "").strip().lower()
+        rarity_label = rarity_value.capitalize() if rarity_value else None
         rarity_badge_class = (rarity_label or "").lower() if rarity_label else None
-        pr = print_map.get(card.id, {})
+        pr = print_map.get(card.id, {}) or {}
         img_pack = sc.image_for_print(pr) if pr else {}
         image_small = img_pack.get("small") or image_map.get(card.id)
         image_normal = img_pack.get("normal") or image_small

@@ -7,6 +7,7 @@ from flask_login import login_required
 
 from extensions import limiter
 from core.domains.cards.services import import_service
+from core.routes.api import api_bp
 from core.routes.base import limiter_key_user_or_ip, views
 
 
@@ -51,7 +52,7 @@ def manual_import():
     return render_template(result.template or "cards/manual_import.html", **(result.context or {}))
 
 
-@views.post("/api/folders/categories")
+@api_bp.post("/folders/categories")
 @login_required
 def api_update_folder_categories():
     """Update folder categories for the current user (used post-import)."""
