@@ -52,7 +52,7 @@ from core.domains.decks.services.commander_brackets import (
 )
 from core.domains.decks.services.spellbook_sync import EARLY_MANA_VALUE_THRESHOLD, LATE_MANA_VALUE_THRESHOLD
 from shared.auth import ensure_folder_access
-from core.domains.decks.services.deck_service import deck_curve_missing, deck_curve_rows, deck_land_mana_sources, deck_mana_pip_dist
+from core.domains.decks.services.deck_service import deck_land_mana_sources, deck_mana_pip_dist
 from core.domains.decks.services.build_recommendation_service import build_recommendation_sections
 from core.domains.decks.services.edhrec_cache_service import cache_ready as edhrec_cache_ready
 from core.domains.decks.services.edhrec.edhrec_ingestion_service import ingest_commander_tag_data
@@ -627,8 +627,6 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
     type_breakdown = [(t, type_counts[t]) for t in BASE_TYPES if type_counts[t] > 0]
     mana_pip_dist = deck_mana_pip_dist(folder_id, mode="detail")
     land_mana_sources = deck_land_mana_sources(folder_id)
-    curve_rows = deck_curve_rows(folder_id, mode="detail")
-    curve_missing = deck_curve_missing(folder_id)
 
     name_col = _name_sort_expr()
     cn_num = _collector_number_numeric()
@@ -791,7 +789,7 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
         bucket = ""
         if cmc_val is not None:
             try:
-                ivalue = int(cmc_val)
+                ivalue = int(round(cmc_val))
             except (TypeError, ValueError):
                 ivalue = None
             if ivalue is not None:
@@ -1018,6 +1016,39 @@ def _folder_detail_impl(folder_id: int, *, allow_shared: bool = False, share_tok
             group_map[label].append(card)
         else:
             other_cards.append(card)
+
+    # Build curve rows from the same resolved card payload rendered on the page.
+    # This keeps chart bars and CMC filtering in sync even when legacy rows lack derived DB fields.
+    curve_bins: dict[str, int] = {bucket: 0 for bucket in ["0", "1", "2", "3", "4", "5", "6", "7+"]}
+    curve_missing = 0
+    for card in card_vms:
+        type_line = (card.type_line or "").lower()
+        if "land" in type_line:
+            continue
+        qty = int(card.quantity or 0) or 1
+        cmc_value = card.cmc_value
+        if cmc_value is None:
+            curve_missing += qty
+            continue
+        try:
+            bucket_val = int(round(float(cmc_value)))
+        except (TypeError, ValueError):
+            curve_missing += qty
+            continue
+        if bucket_val < 0:
+            bucket_val = 0
+        bucket = str(bucket_val) if bucket_val <= 6 else "7+"
+        curve_bins[bucket] += qty
+
+    total_curve = sum(curve_bins.values()) or 1
+    curve_rows = [
+        {
+            "label": bucket,
+            "count": int(curve_bins.get(bucket) or 0),
+            "pct": int(round(100.0 * (int(curve_bins.get(bucket) or 0)) / total_curve)) if total_curve else 0,
+        }
+        for bucket in ["0", "1", "2", "3", "4", "5", "6", "7+"]
+    ]
 
     card_groups: list[dict[str, Any]] = []
     for label, _ in _CARD_TYPE_GROUPS:
@@ -1610,7 +1641,7 @@ def send_to_build(folder_id: int):
         flash("Collection folders cannot be sent to Build-A-Deck.", "warning")
         return redirect(url_for("views.folder_detail", folder_id=folder.id))
 
-    extra_oracles = [val.strip() for val in request.form.getlist("card_oracle_id") if str(val or "").strip()]
+    extra_oracles = [str(val or "").strip() for val in request.form.getlist("card_oracle_id") if str(val or "").strip()]
     extra_counts = Counter(extra_oracles)
 
     commander_oracle_id = primary_commander_oracle_id(folder.commander_oracle_id)
@@ -1628,9 +1659,6 @@ def send_to_build(folder_id: int):
             prints = []
         if prints:
             commander_name = (prints[0].get("name") or "").strip() or commander_name
-    if not commander_oracle_id and not commander_name:
-        flash("Set a commander before sending this deck to Build-A-Deck.", "warning")
-        return redirect(url_for("views.folder_detail", folder_id=folder.id))
 
     ensure_build_session_tables()
     tags = [folder.deck_tag] if folder.deck_tag else []
@@ -1644,60 +1672,114 @@ def send_to_build(folder_id: int):
     db.session.add(session)
     db.session.flush()
 
+    def _normalize_oracle_id(value: Any) -> str:
+        return str(value or "").strip()
+
+    entry_map: dict[str, BuildSessionCard] = {}
+    added = 0
+
+    def _add_card_to_session(oracle_id: str, quantity: int) -> None:
+        nonlocal added
+        normalized_oracle_id = _normalize_oracle_id(oracle_id)
+        qty_val = int(quantity or 0)
+        if not normalized_oracle_id or qty_val <= 0:
+            return
+        key = normalized_oracle_id.casefold()
+        existing = entry_map.get(key)
+        if existing:
+            existing.quantity = int(existing.quantity or 0) + qty_val
+        else:
+            existing = BuildSessionCard(
+                session_id=session.id,
+                card_oracle_id=normalized_oracle_id,
+                quantity=qty_val,
+            )
+            db.session.add(existing)
+            entry_map[key] = existing
+        added += qty_val
+
+    resolution_cache: dict[tuple[str, str, str], Optional[str]] = {}
+    unresolved_qty = 0
+    cache_loaded = False
+
+    def _resolve_oracle_id(
+        oracle_id: Any,
+        set_code: Any,
+        collector_number: Any,
+        card_name: Any,
+    ) -> Optional[str]:
+        nonlocal cache_loaded
+        direct = _normalize_oracle_id(oracle_id)
+        if direct:
+            return direct
+
+        name_text = str(card_name or "").strip()
+        if not name_text:
+            return None
+
+        key = (
+            str(set_code or "").strip().casefold(),
+            str(collector_number or "").strip().casefold(),
+            name_text.casefold(),
+        )
+        cached = resolution_cache.get(key)
+        if key in resolution_cache:
+            return cached
+
+        if not cache_loaded:
+            try:
+                sc.ensure_cache_loaded()
+            except Exception:
+                pass
+            cache_loaded = True
+
+        resolved: Optional[str] = None
+        try:
+            found = find_by_set_cn(set_code, collector_number, name_text)
+            if isinstance(found, dict):
+                resolved = _normalize_oracle_id(found.get("oracle_id")) or None
+        except Exception:
+            resolved = None
+
+        if not resolved:
+            try:
+                resolved = _normalize_oracle_id(sc.unique_oracle_by_name(name_text)) or None
+            except Exception:
+                resolved = None
+
+        resolution_cache[key] = resolved
+        return resolved
+
     rows = (
-        db.session.query(Card.oracle_id, func.coalesce(func.sum(Card.quantity), 0))
-        .filter(Card.folder_id == folder.id, Card.oracle_id.isnot(None))
-        .group_by(Card.oracle_id)
+        db.session.query(
+            Card.oracle_id,
+            Card.set_code,
+            Card.collector_number,
+            Card.name,
+            func.coalesce(func.sum(Card.quantity), 0),
+        )
+        .filter(Card.folder_id == folder.id)
+        .group_by(Card.oracle_id, Card.set_code, Card.collector_number, Card.name)
         .all()
     )
-    added = 0
-    commander_present = False
-    entry_map: dict[str, BuildSessionCard] = {}
-    for oracle_id, qty in rows:
-        if not oracle_id:
-            continue
-        if commander_oracle_id and str(oracle_id) == str(commander_oracle_id):
-            commander_present = True
+
+    for oracle_id, set_code, collector_number, card_name, qty in rows:
         qty = int(qty or 0)
         if qty <= 0:
             continue
-        entry = BuildSessionCard(
-            session_id=session.id,
-            card_oracle_id=str(oracle_id),
-            quantity=qty,
-        )
-        db.session.add(entry)
-        entry_map[str(oracle_id)] = entry
-        added += qty
+        resolved_oracle_id = _resolve_oracle_id(oracle_id, set_code, collector_number, card_name)
+        if not resolved_oracle_id:
+            unresolved_qty += qty
+            continue
+        _add_card_to_session(resolved_oracle_id, qty)
 
-    if commander_oracle_id and not commander_present:
-        if str(commander_oracle_id) in entry_map:
-            entry_map[str(commander_oracle_id)].quantity += 1
-        else:
-            entry = BuildSessionCard(
-                session_id=session.id,
-                card_oracle_id=str(commander_oracle_id),
-                quantity=1,
-            )
-            db.session.add(entry)
-            entry_map[str(commander_oracle_id)] = entry
-        added += 1
+    commander_key = _normalize_oracle_id(commander_oracle_id).casefold()
+    if commander_key and commander_key not in entry_map:
+        _add_card_to_session(str(commander_oracle_id), 1)
 
     if extra_counts:
         for oracle_id, qty in extra_counts.items():
-            if not oracle_id or qty <= 0:
-                continue
-            if oracle_id in entry_map:
-                entry_map[oracle_id].quantity += int(qty)
-            else:
-                db.session.add(
-                    BuildSessionCard(
-                        session_id=session.id,
-                        card_oracle_id=str(oracle_id),
-                        quantity=int(qty),
-                    )
-                )
-            added += int(qty)
+            _add_card_to_session(oracle_id, int(qty))
 
     try:
         db.session.commit()
@@ -1707,7 +1789,17 @@ def send_to_build(folder_id: int):
         flash("Unable to send this deck to Build-A-Deck.", "danger")
         return redirect(url_for("views.folder_detail", folder_id=folder.id))
 
-    flash(f"Build session created with {added} cards.", "success")
+    if added > 0:
+        flash(f"Build session created with {added} cards.", "success")
+    else:
+        flash("Build session created, but no cards could be added from this deck.", "warning")
+
+    if unresolved_qty > 0:
+        noun = "card was" if unresolved_qty == 1 else "cards were"
+        flash(
+            f"{unresolved_qty} deck {noun} skipped because Oracle IDs could not be resolved.",
+            "warning",
+        )
     return redirect(url_for("views.build_session", session_id=session.id))
 
 
