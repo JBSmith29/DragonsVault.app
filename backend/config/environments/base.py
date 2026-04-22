@@ -16,7 +16,7 @@ class BaseConfig:
     SEND_FILE_MAX_AGE_DEFAULT = 86400
     PERMANENT_SESSION_LIFETIME = 4 * 60 * 60  # 4 hour session timeout
     SESSION_REFRESH_EACH_REQUEST = True
-    SESSION_PROTECTION = os.getenv("SESSION_PROTECTION", "basic")
+    SESSION_PROTECTION = os.getenv("SESSION_PROTECTION", "strong")
 
     # Database (absolute sqlite path; forward slashes are fine on Windows)
     DEFAULT_SQLITE = default_sqlite_uri(INSTANCE_DIR)
@@ -31,11 +31,12 @@ class BaseConfig:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "1").lower() in {"1", "true", "yes", "on"}
+    SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "dv_session")
 
     # CSRF Protection
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = 3600  # 1 hour
-    WTF_CSRF_SSL_STRICT = os.getenv("WTF_CSRF_SSL_STRICT", "0").lower() in {"1", "true", "yes", "on"}
+    WTF_CSRF_SSL_STRICT = os.getenv("WTF_CSRF_SSL_STRICT", "1").lower() in {"1", "true", "yes", "on"}
 
     # Dev-only convenience
     ALLOW_RUNTIME_INDEX_BOOTSTRAP = os.getenv("ALLOW_RUNTIME_INDEX_BOOTSTRAP", "0").lower() in {"1", "true", "yes", "on"}

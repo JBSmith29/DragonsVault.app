@@ -28,7 +28,7 @@ def record_audit_event(action: str, details: Optional[Dict[str, Any]] = None) ->
             user_id=user_id,
             action=action,
             details=details or {},
-            ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+            ip_address=(request.remote_addr or "")[:64],
             user_agent=(request.headers.get("User-Agent") or "")[:255],
         )
         db.session.add(entry)

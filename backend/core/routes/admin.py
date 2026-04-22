@@ -115,6 +115,7 @@ def _folder_categories_page(admin_mode: bool):
 @limiter.limit("20 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def admin_folder_categories():
+    require_admin()
     return _folder_categories_page(admin_mode=True)
 
 
@@ -222,6 +223,9 @@ def admin_manage_users():
 @views.post("/admin/impersonate/stop")
 @login_required
 def admin_impersonate_stop():
+    # Allow the currently-impersonated user to stop the session (so they can
+    # exit back to the admin). The service validates the stored impersonator
+    # is a real admin before restoring them.
     return stop_admin_impersonation()
 
 
