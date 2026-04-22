@@ -165,6 +165,7 @@ def register():
 @limiter.limit("20 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def manage_api_token():
+    issued_token = None
     action = (request.form.get("action") or "").lower() if request.method == "POST" else ""
 
     if action == "create":
