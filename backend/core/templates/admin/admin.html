@@ -204,6 +204,38 @@
         </div>
       </div>
     </div>
+
+    {% if scheduler %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <h5 class="card-title mb-0">Weekly Refresh Scheduler</h5>
+            {% if scheduler.enabled %}
+              <span class="badge text-bg-success">Active</span>
+            {% else %}
+              <span class="badge text-bg-secondary">Disabled</span>
+            {% endif %}
+          </div>
+          <div class="text-muted small mb-3">Automatic weekly refresh of Scryfall, Spellbook, and EDHREC data.</div>
+          <ul class="list-unstyled small mb-3">
+            <li><span class="text-muted">Schedule:</span> {{ scheduler.schedule }}</li>
+            <li><span class="text-muted">Last run:</span> {{ scheduler.last_run }}</li>
+            <li><span class="text-muted">Next run:</span> {{ scheduler.next_run }}</li>
+            <li><span class="text-muted">Mode:</span> {{ scheduler.mode }}</li>
+          </ul>
+          <div class="d-flex flex-wrap gap-1 mb-3">
+            {% for name, on in scheduler.datasets.items() %}
+              <span class="badge {% if on %}text-bg-primary{% else %}text-bg-secondary{% endif %}">
+                {{ name }}
+              </span>
+            {% endfor %}
+          </div>
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.admin_data_operations') }}">Open Maintenance Console</a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
 </div>

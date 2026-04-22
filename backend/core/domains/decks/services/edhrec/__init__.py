@@ -1,11 +1,12 @@
-"""EDHREC ingestion and helper services."""
+"""EDHREC ingestion and helper services.
 
-from . import edhrec_payload_service
-from . import edhrec_target_service
-from . import edhrec_ingestion_fetch_service
-from . import edhrec_ingestion_persistence_service
-from . import edhrec_tag_refresh_service
-from . import edhrec_ingestion_service
+Sub-modules are imported lazily to avoid circular import issues at package
+initialization time. Import them directly when needed:
+
+    from core.domains.decks.services.edhrec import edhrec_ingestion_service
+"""
+
+from __future__ import annotations
 
 __all__ = [
     "edhrec_ingestion_fetch_service",

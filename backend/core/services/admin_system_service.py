@@ -27,8 +27,59 @@ __all__ = [
     "job_last_run",
     "load_symbols_context",
     "render_admin_data_operations",
+    "scheduler_status",
     "site_request_counts",
 ]
+
+
+def scheduler_status() -> dict:
+    """Read the scheduler state file and compute next/last run info."""
+    import os
+    from shared.jobs.refresh_scheduler import (
+        _load_state, _next_schedule, _parse_dt, _parse_weekday,
+    )
+    try:
+        state_path = Path(os.getenv("SCHEDULE_REFRESH_STATE_FILE", "/app/instance/scheduler_state.json"))
+        enabled = os.getenv("SCHEDULE_REFRESH_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
+        weekday = _parse_weekday(os.getenv("SCHEDULE_REFRESH_WEEKDAY", "sunday"), default=6)
+        hour = int(os.getenv("SCHEDULE_REFRESH_HOUR", "0"))
+        minute = int(os.getenv("SCHEDULE_REFRESH_MINUTE", "0"))
+        tz_name = os.getenv("SCHEDULE_REFRESH_TZ", "UTC")
+
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            tz = timezone.utc
+
+        state = _load_state(state_path)
+        last_run_raw = state.get("last_run_at")
+        last_run_dt = _parse_dt(last_run_raw, tz)
+        last_run_str = last_run_dt.strftime("%Y-%m-%d %H:%M %Z") if last_run_dt else "Never"
+
+        now = datetime.now(tz)
+        next_run_dt = _next_schedule(now, weekday, hour, minute)
+        next_run_str = next_run_dt.strftime("%Y-%m-%d %H:%M %Z")
+
+        weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        schedule_label = f"{weekday_names[weekday]} at {hour:02d}:{minute:02d} {tz_name}"
+
+        return {
+            "enabled": enabled,
+            "last_run": last_run_str,
+            "next_run": next_run_str,
+            "schedule": schedule_label,
+            "mode": os.getenv("SCHEDULE_REFRESH_MODE", "rq"),
+            "datasets": {
+                "scryfall": os.getenv("SCHEDULE_REFRESH_SCRYFALL", "1").lower() in {"1", "true", "yes", "on"},
+                "rulings": os.getenv("SCHEDULE_REFRESH_SCRYFALL_RULINGS", "1").lower() in {"1", "true", "yes", "on"},
+                "spellbook": os.getenv("SCHEDULE_REFRESH_SPELLBOOK", "1").lower() in {"1", "true", "yes", "on"},
+                "edhrec": os.getenv("SCHEDULE_REFRESH_EDHREC", "1").lower() in {"1", "true", "yes", "on"},
+            },
+        }
+    except Exception as exc:
+        current_app.logger.warning("Failed to read scheduler status: %s", exc)
+        return {"enabled": False, "last_run": "Unknown", "next_run": "Unknown", "schedule": "Unknown", "mode": "unknown", "datasets": {}}
 
 
 def site_request_counts() -> dict[str, int]:

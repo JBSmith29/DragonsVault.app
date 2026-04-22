@@ -22,7 +22,7 @@ from core.domains.decks.services.deck_tags import is_valid_deck_tag
 from core.domains.decks.services.edhrec_cache_service import edhrec_cache_snapshot
 from core.domains.decks.services.edhrec_client import edhrec_service_enabled
 from core.domains.users.services.audit import record_audit_event
-from core.services.admin_system_service import build_data_ops_context, load_symbols_context, site_request_counts
+from core.services.admin_system_service import build_data_ops_context, load_symbols_context, site_request_counts, scheduler_status
 from core.services.admin_user_management_service import (
     handle_delete_user,
     handle_reset_user_password,
@@ -665,6 +665,7 @@ def render_admin_console():
     }
     user_context = user_management_context(include_users=False)
     request_counts = site_request_counts()
+    sched = scheduler_status()
     return render_template(
         "admin/admin.html",
         prints=data_ops["prints"],
@@ -677,4 +678,5 @@ def render_admin_console():
         edhrec=edhrec,
         user_stats=user_context["user_stats"],
         request_counts=request_counts,
+        scheduler=sched,
     )
