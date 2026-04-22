@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask_login import login_required
 
 from extensions import limiter
-from core.domains.cards.services import card_service
+from core.domains.cards.services import card_mutation_service, collection_overview_service, collection_service, shared_folders_service
 from core.domains.decks.services import deck_service
 from core.routes.api import api_bp
 from core.routes.base import limiter_key_user_or_ip, views
@@ -34,48 +34,48 @@ def api_fetch_proxy_deck():
 
 @views.route("/cards")
 def list_cards():
-    return card_service.list_cards()
+    return collection_service.list_cards()
 
 
 @views.route("/cards/shared")
 @login_required
 def shared_folders():
-    return card_service.shared_folders()
+    return shared_folders_service.shared_folders()
 
 
 @views.post("/cards/shared/follow")
 @login_required
 def shared_follow():
-    return card_service.shared_follow()
+    return shared_folders_service.shared_follow()
 
 
 @views.post("/cards/bulk-move")
 @login_required
 def bulk_move_cards():
-    return card_service.bulk_move_cards()
+    return card_mutation_service.bulk_move_cards()
 
 
 @views.post("/folders/<int:folder_id>/cards/bulk-delete")
 @login_required
 def bulk_delete_cards(folder_id):
-    return card_service.bulk_delete_cards(folder_id)
+    return card_mutation_service.bulk_delete_cards(folder_id)
 
 
 @api_bp.get("/card/<int:card_id>/printing-options")
 @login_required
 def api_card_printing_options(card_id):
-    return card_service.api_card_printing_options(card_id)
+    return card_mutation_service.api_card_printing_options(card_id)
 
 
 @api_bp.post("/card/<int:card_id>/update-printing")
 @login_required
 def api_update_card_printing(card_id):
-    return card_service.api_update_card_printing(card_id)
+    return card_mutation_service.api_update_card_printing(card_id)
 
 
 @views.route("/collection")
 def collection_overview():
-    return card_service.collection_overview()
+    return collection_overview_service.collection_overview()
 
 
 @api_bp.get("/decks/<int:deck_id>/insight")

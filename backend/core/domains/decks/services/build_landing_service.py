@@ -14,7 +14,7 @@ from core.domains.decks.services.commander_cache import compute_bracket_signatur
 from core.domains.decks.services.deck_tags import get_deck_tag_groups
 from core.domains.decks.services.edhrec_cache_service import cache_ready
 from shared.cache.request_cache import request_cached
-from core.routes.base import color_identity_name
+from shared.mtg import color_identity_name
 
 
 def build_landing_page():

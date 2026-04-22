@@ -1,6 +1,6 @@
 # DragonsVault
 
-![python](https://img.shields.io/badge/python-3.11%2B-blue)
+![python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
 ![Docker](https://img.shields.io/badge/docker-required-blue)
 ![License](https://img.shields.io/badge/license-Unlicense-green)
 
@@ -61,6 +61,8 @@ DragonsVault is a Docker-first **Magic: The Gathering** collection manager for c
 
 - Docker (Desktop or Engine)
 - Git (optional, for cloning)
+- Python 3.11 or 3.12
+- Node.js 20 (for local frontend checks)
 
 ## Quickstart
 
@@ -187,25 +189,27 @@ A complete list lives near the bottom of `backend/app.py`.
 Run the test suite with:
 
 ```bash
-python -m pip install "virtualenv<21" hatch
+python3 -m pip install --user --break-system-packages "virtualenv<21" hatch
 hatch run test
 ```
 
 Run frontend CI checks with:
 
 ```bash
-python -m pip install "virtualenv<21" hatch
+python3 -m pip install --user --break-system-packages "virtualenv<21" hatch
 hatch run frontend-ci
 ```
 
 CI is configured via GitHub Actions (`.github/workflows/python-tests.yml`) using these Hatch scripts. Extend the suite as you add features.
+The backend CI matrix currently runs on Python 3.11 and 3.12.
+Frontend CI is validated on Node.js 20.
 
 ## Documentation
 
 Build Sphinx docs locally:
 
 ```bash
-python -m pip install "virtualenv<21" hatch
+python3 -m pip install --user --break-system-packages "virtualenv<21" hatch
 hatch run docs-build
 ```
 

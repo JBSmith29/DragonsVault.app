@@ -451,8 +451,8 @@ a.badge:focus {
 
 /* ---------- FOLDER PALETTE (common buckets) ---------- */
 .badge-folder-lands      { background:#64748b; color:#fff; }
-.badge-folder-to-add     { background:#0000FF; color:#000000; }
-.badge-folder-unsorted   { background:#800080; color:#000000; } 
+.badge-folder-to-add     { background:#2563eb; color:#fff; }
+.badge-folder-unsorted   { background:#7c3aed; color:#fff; }
 
 /* Examples for named decks/folders (add more as you wish) */
 .badge-folder-abzan---big-buttz       { background:#99B798; color:#000000; }
@@ -638,4 +638,63 @@ a.tile { text-decoration: none; color: inherit; }
 
 .cmdr-chip-thumb-shadow {
   box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .35);
+}
+
+/* ===== Global polish additions ===== */
+
+/* Consistent focus-visible ring across all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--dv-accent-blue, #3b82f6);
+  outline-offset: 3px;
+}
+
+/* Skip-to-content link for keyboard/screen-reader users */
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--dv-accent-blue, #3b82f6);
+  color: #fff;
+  border-radius: 0 0 0.5rem 0.5rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* Tighten app-header on small phones so it doesn't eat too much vertical space */
+@media (max-width: 575.98px) {
+  .app-header {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  .app-header__title {
+    font-size: 1.35rem;
+  }
+  .app-header__motto {
+    font-size: 0.82rem;
+  }
+}
+
+/* Prevent long unbroken strings from blowing out card/tile layouts */
+.card,
+.tile,
+.glass-panel {
+  overflow-wrap: anywhere;
+}
+
+/* Smoother table row transitions in dark mode */
+html[data-bs-theme="dark"] .cards-table tbody tr:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+/* Ensure modal/offcanvas backdrops don't cover the safe area on notched phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .modal-dialog {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Iterable, TypeVar, Any
 
 from flask import abort, current_app, has_app_context
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect
 from sqlalchemy.sql.sqltypes import Integer
 
@@ -47,3 +48,12 @@ def get_or_404(model: type[T], ident: Any, *, options: Iterable[object] | None =
     if instance is None:
         abort(404)
     return instance
+
+
+def safe_commit() -> None:
+    """Commit with rollback guard so callers do not leave the session poisoned."""
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        current_app.logger.exception("Non-fatal commit failure; rolling back")
+        db.session.rollback()

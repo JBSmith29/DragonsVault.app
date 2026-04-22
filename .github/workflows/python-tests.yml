@@ -9,6 +9,10 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
 
     steps:
     - name: Check out code
@@ -17,7 +21,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: ${{ matrix.python-version }}
         cache: 'pip'
         cache-dependency-path: |
           backend/requirements.txt
@@ -32,6 +36,48 @@ jobs:
       run: |
         hatch run test
 
+  backend-postgres-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: dragonsvault_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dragonsvault_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/dragonsvault_test
+      INSTANCE_DIR: ${{ github.workspace }}/.pytest-instance-pg
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+        cache-dependency-path: |
+          backend/requirements.txt
+          backend/requirements-dev.txt
+
+    - name: Install Hatch
+      run: |
+        python -m pip install --upgrade pip
+        pip install "virtualenv<21" hatch
+
+    - name: Run PostgreSQL smoke tests
+      run: |
+        hatch run test-postgres-smoke
+
   frontend-build:
     runs-on: ubuntu-latest
 
@@ -44,12 +90,12 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: frontend/package.json
+        cache-dependency-path: frontend/package-lock.json
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
         cache: 'pip'
         cache-dependency-path: backend/requirements.txt
 

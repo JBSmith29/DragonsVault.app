@@ -315,7 +315,7 @@ def deck_land_mana_sources(folder_id: int, *, filter_by_identity: bool = True) -
 
     allowed = {"W", "U", "B", "R", "G", "C"}
     if filter_by_identity:
-        from core.routes.base import compute_folder_color_identity
+        from shared.mtg import compute_folder_color_identity
 
         letters, _label = compute_folder_color_identity(folder_id, "20260311a")
         allowed = {ch for ch in (letters or "") if ch in {"W", "U", "B", "R", "G"}}
@@ -376,117 +376,117 @@ def register_deck_stats_listeners() -> None:
 
 
 def create_proxy_deck():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import proxy_deck_service
 
-    return card_service.create_proxy_deck()
+    return proxy_deck_service.create_proxy_deck()
 
 
 def create_proxy_deck_bulk():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import proxy_deck_service
 
-    return card_service.create_proxy_deck_bulk()
+    return proxy_deck_service.create_proxy_deck_bulk()
 
 
 def api_fetch_proxy_deck():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import proxy_deck_service
 
-    return card_service.api_fetch_proxy_deck()
+    return proxy_deck_service.api_fetch_proxy_deck()
 
 
 def api_deck_insight(deck_id: int):
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import deck_gallery_service
 
-    return card_service.api_deck_insight(deck_id)
+    return deck_gallery_service.api_deck_insight(deck_id)
 
 
 def decks_overview():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import deck_gallery_service
 
-    return card_service.decks_overview()
+    return deck_gallery_service.decks_overview()
 
 
 def deck_from_collection():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import deck_from_collection_service
 
-    return card_service.deck_from_collection()
+    return deck_from_collection_service.deck_from_collection()
 
 
 def deck_tokens_overview():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import deck_tokens_service
 
-    return card_service.deck_tokens_overview()
+    return deck_tokens_service.deck_tokens_overview()
 
 
 def opening_hand():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand()
+    return opening_hand_service.opening_hand()
 
 
 def opening_hand_play():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_play()
+    return opening_hand_service.opening_hand_play()
 
 
 def opening_hand_shuffle():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_shuffle()
+    return opening_hand_service.opening_hand_shuffle()
 
 
 def opening_hand_mulligan():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_mulligan()
+    return opening_hand_service.opening_hand_mulligan()
 
 
 def opening_hand_draw():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_draw()
+    return opening_hand_service.opening_hand_draw()
 
 
 def opening_hand_search():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_search()
+    return opening_hand_service.opening_hand_search()
 
 
 def opening_hand_peek():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_peek()
+    return opening_hand_service.opening_hand_peek()
 
 
 def opening_hand_hideaway():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_hideaway()
+    return opening_hand_service.opening_hand_hideaway()
 
 
 def opening_hand_scry():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_scry()
+    return opening_hand_service.opening_hand_scry()
 
 
 def opening_hand_surveil():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_surveil()
+    return opening_hand_service.opening_hand_surveil()
 
 
 def opening_hand_tokens():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_tokens()
+    return opening_hand_service.opening_hand_tokens()
 
 
 def opening_hand_token_search():
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
-    return card_service.opening_hand_token_search()
+    return opening_hand_service.opening_hand_token_search()
 
 
 __all__ = [

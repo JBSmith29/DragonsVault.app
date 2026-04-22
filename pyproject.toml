@@ -22,13 +22,15 @@ test = [
   "backend-deps",
   "pytest -m \"not ui\"",
 ]
-frontend-deps = "npm install --prefix frontend"
+test-postgres-smoke = [
+  "backend-deps",
+  "pytest tests/test_account.py tests/test_visibility.py -q",
+]
+frontend-deps = "npm ci --prefix frontend"
 frontend-build = [
-  "frontend-deps",
   "npm run --prefix frontend build",
 ]
 frontend-test = [
-  "frontend-deps",
   "npm run --prefix frontend test",
 ]
 frontend-ci = [

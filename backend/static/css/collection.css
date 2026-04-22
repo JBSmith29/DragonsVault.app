@@ -180,8 +180,7 @@ html[data-bs-theme="light"] .collection-page .type-count {
     width: 100%;
   }
 
-  .collection-page .type-tile {
-    grid-template-columns: auto minmax(0, 1fr);
+  .collection-page .type-tile {    grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
       "icon count"
       "content content";
@@ -205,4 +204,15 @@ html[data-bs-theme="light"] .collection-page .type-count {
     grid-area: count;
     justify-self: end;
   }
+}
+
+/* Light mode overrides */
+html[data-bs-theme="light"] .collection-action-btn {
+  color: #1e293b;
+}
+
+html[data-bs-theme="light"] .stat-chip {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #1e293b;
 }

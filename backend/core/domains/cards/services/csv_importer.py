@@ -1,18 +1,25 @@
 # services/csv_importer.py
-import csv
-import io
 import logging
 import os
 import uuid
 from dataclasses import dataclass, asdict, field
 from typing import List, Dict, Any, Tuple, Optional, Iterable
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_, func
+from sqlalchemy import func
 from flask import current_app, has_request_context
 from extensions import db, cache
 from models import Card, Folder
 from pathlib import Path
 from core.domains.cards.services.scryfall_cache import cache_exists, load_cache, find_by_set_cn, metadata_from_print
+from core.domains.cards.services.csv_import_file_service import (
+    FileValidationError,
+    HeaderValidationError,
+    count_rows as _count_rows,
+    open_table as _open_table,
+    read_import_headers,
+    resolve_header_mapping,
+    validate_import_file,
+)
 from shared.events.live_updates import emit_import_event
 
 # --- NEW: lazy-load helper for the Scryfall cache ---
@@ -42,21 +49,7 @@ _METADATA_FIELDS = (
     "faces_json",
 )
 IMPORT_CHUNK_SIZE = int(os.getenv("IMPORT_BATCH_SIZE", 500))
-IMPORT_MAX_BYTES = int(os.getenv("IMPORT_MAX_BYTES", 10 * 1024 * 1024))  # 10MB default
-
 logger = logging.getLogger(__name__)
-
-
-class HeaderValidationError(ValueError):
-    """Raised when required headers are missing from the import file."""
-
-    def __init__(self, details: List[str]):
-        super().__init__("Missing required column(s): " + "; ".join(details))
-        self.details = details
-
-
-class FileValidationError(ValueError):
-    """Raised when the import file fails size or encoding checks."""
 
 
 def _apply_card_metadata(card: Card, metadata: Dict[str, Any], *, only_if_empty: bool = False) -> bool:
@@ -73,42 +66,6 @@ def _apply_card_metadata(card: Card, metadata: Dict[str, Any], *, only_if_empty:
             setattr(card, field, value)
             changed = True
     return changed
-
-# Ordered header variants (first match wins).
-EXPECTED = {
-    "folder": [
-        "folder name", "folder_name", "folder", "binder", "binder name", "album",
-    ],
-    "folder_category": [
-        "folder category", "folder type", "binder type", "collection type",
-    ],
-    "name": [
-        "card name", "card_name", "name", "card",
-    ],
-    "qty": [
-        "quantity", "qty", "trade quantity", "count", "copies",
-    ],
-    "set_code": [
-        "set code", "set_code", "set", "expansion", "setcode", "edition",
-    ],
-    "collector_number": [
-        "collector number", "collector_number", "collector #",
-        "card number", "card_number", "card #",
-        "cn", "number", "#",
-    ],
-    "lang": [
-        "language", "lang",
-    ],
-    "is_foil": [
-        "printing", "foil", "is foil", "foil?", "is_foil",
-    ],
-}
-
-REQUIRED_FIELDS = {
-    "name": "Card name",
-    "set_code": "Set code",
-    "collector_number": "Collector number",
-}
 
 _LANG_MAP = {
     "english": "en",
@@ -351,136 +308,6 @@ def _ensure_folder_for_owner(
         db.session.rollback()
         raise
 
-def _validate_file_size(filepath: str) -> None:
-    try:
-        size = Path(filepath).stat().st_size
-    except Exception as exc:
-        log = current_app.logger if current_app else logger
-        log.warning("Unable to read import file size for %s: %s", filepath, exc)
-        raise FileValidationError("Unable to read import file size.") from exc
-    if size > IMPORT_MAX_BYTES:
-        log = current_app.logger if current_app else logger
-        log.warning("Import file too large: %s (%s bytes)", filepath, size)
-        raise FileValidationError(
-            f"File is too large. Limit: {IMPORT_MAX_BYTES // (1024 * 1024)} MB."
-        )
-
-
-def _read_text(filepath: str) -> str:
-    _validate_file_size(filepath)
-    data = Path(filepath).read_bytes()
-    try:
-        return data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        log = current_app.logger if current_app else logger
-        log.warning("CSV encoding error for %s: %s", filepath, exc)
-        raise FileValidationError("CSV must be UTF-8 encoded.") from exc
-
-def _strip_sep_preamble(text: str) -> Tuple[str, Optional[str]]:
-    """
-    Handles Excel 'sep=,' preamble, quoted or unquoted.
-    Returns (content_without_preamble, delimiter_if_declared)
-    """
-    if not text:
-        return text, None
-    first_newline = text.find("\n")
-    head = text if first_newline == -1 else text[:first_newline]
-    head_stripped = head.strip().lower().strip("'\"")
-    if head_stripped.startswith("sep=") and len(head_stripped) >= 5:
-        delim = head_stripped[4:5]
-        content = text[first_newline + 1 :] if first_newline != -1 else ""
-        return content, delim
-    return text, None
-
-def _make_reader(filepath: str) -> Tuple[csv.DictReader, str]:
-    raw = _read_text(filepath)
-    content, declared = _strip_sep_preamble(raw)
-
-    if declared:
-        delimiter = declared
-    else:
-        sample = content[:4096]
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=[",", ";", "\t", "|"])
-            delimiter = dialect.delimiter
-        except Exception:
-            delimiter = ","
-
-    sio = io.StringIO(content)
-    reader = csv.DictReader(sio, delimiter=delimiter)
-    return reader, delimiter
-
-def _normalize_headers(headers):
-    mapping, missing, invalid = resolve_header_mapping(headers, allow_missing=False)
-    if missing or invalid:
-        raise HeaderValidationError(_format_header_errors(missing, invalid))
-    return mapping
-
-
-def resolve_header_mapping(
-    headers: Iterable[str],
-    mapping_override: Optional[Dict[str, str]] = None,
-    *,
-    allow_missing: bool = False,
-) -> Tuple[Dict[str, str], List[str], List[Tuple[str, str]]]:
-    if not headers:
-        raise HeaderValidationError([
-            "No headers found. Include columns such as 'Name', 'Set Code', 'Collector Number'."
-        ])
-    lower_to_original = {h.strip().lower(): h for h in headers if isinstance(h, str)}
-    mapping: Dict[str, str] = {}
-    invalid_overrides: List[Tuple[str, str]] = []
-
-    if mapping_override:
-        for field, header in mapping_override.items():
-            if not header:
-                continue
-            header_key = str(header).strip()
-            if not header_key:
-                continue
-            resolved = lower_to_original.get(header_key.lower())
-            if not resolved:
-                invalid_overrides.append((field, header_key))
-                continue
-            mapping[field] = resolved
-
-    for field, variants in EXPECTED.items():
-        if field in mapping:
-            continue
-        for v in variants:
-            if v in lower_to_original:
-                mapping[field] = lower_to_original[v]
-                break
-
-    missing = [req for req in REQUIRED_FIELDS if req not in mapping]
-    if (missing or invalid_overrides) and not allow_missing:
-        raise HeaderValidationError(_format_header_errors(missing, invalid_overrides))
-    return mapping, missing, invalid_overrides
-
-
-def _format_header_errors(missing: Iterable[str], invalid_overrides: Iterable[Tuple[str, str]]) -> List[str]:
-    details: List[str] = []
-    for field, header in invalid_overrides:
-        label = REQUIRED_FIELDS.get(field, field.replace("_", " ").title())
-        details.append(f"{label} mapped to '{header}', but that header is not in the file.")
-    for req in missing:
-        label = REQUIRED_FIELDS.get(req, req.replace("_", " ").title())
-        variants = ", ".join(EXPECTED.get(req, []))
-        detail = f"{label} (accepted: {variants})" if variants else label
-        details.append(detail)
-    return details
-
-
-def validate_import_file(filepath: str, mapping_override: Optional[Dict[str, str]] = None) -> None:
-    """Ensure the provided file has the required headers."""
-    _, headers, _ = _open_table(filepath)
-    resolve_header_mapping(headers or [], mapping_override, allow_missing=False)
-
-
-def read_import_headers(filepath: str) -> List[str]:
-    _, headers, _ = _open_table(filepath)
-    return headers or []
-
 @dataclass
 class ImportStats:
     added: int = 0
@@ -493,42 +320,6 @@ class ImportStats:
 
 
 SKIP_DETAIL_LIMIT = 50
-
-def _count_rows(filepath: str) -> Optional[int]:
-    try:
-        if _is_excel(filepath):
-            from openpyxl import load_workbook
-
-            wb = load_workbook(filepath, read_only=True, data_only=True)
-            try:
-                ws = wb.worksheets[0]
-                rows = ws.iter_rows(values_only=True)
-                header_found = False
-                count = 0
-                for row in rows:
-                    vals = ["" if v is None else str(v).strip() for v in row]
-                    if not header_found:
-                        if any(vals):
-                            header_found = True
-                        continue
-                    if not any(vals):
-                        continue
-                    count += 1
-                return count
-            finally:
-                try:
-                    wb.close()
-                except Exception:
-                    pass
-        reader, _delimiter = _make_reader(filepath)
-        count = 0
-        for row in reader:
-            if not any((str(v or "").strip() for v in row.values())):
-                continue
-            count += 1
-        return count
-    except Exception:
-        return None
 
 def process_csv(
     filepath: str,
@@ -571,9 +362,7 @@ def process_csv(
     is_moxfield = _is_moxfield_headers(headers or [])
     default_folder_local = "Collection" if is_moxfield else default_folder
     processed = 0
-    mapping, missing, invalid = resolve_header_mapping(headers or [], mapping_override, allow_missing=False)
-    if missing or invalid:
-        raise HeaderValidationError(_format_header_errors(missing, invalid))
+    mapping, _missing, _invalid = resolve_header_mapping(headers or [], mapping_override, allow_missing=False)
 
     owner_name = (owner_username or "").strip() or None
 
@@ -878,67 +667,6 @@ def process_csv(
         quantity_mode=quantity_mode,
     )
     return stats, per_folder
-
-def _is_excel(filepath: str) -> bool:
-    return Path(filepath).suffix.lower() in {".xlsx", ".xlsm"}
-
-def _iter_excel_rows(filepath: str) -> tuple[Iterable[Dict[str, Any]], list[str]]:
-    """
-    Stream rows from the first worksheet of an .xlsx/.xlsm file.
-    Returns (row_iter, headers). All values are coerced to str ('' for None).
-    """
-    from openpyxl import load_workbook
-
-    wb = load_workbook(filepath, read_only=True, data_only=True)
-    ws = wb.worksheets[0]
-
-    # Find header row (first non-empty row)
-    headers = None
-    for row in ws.iter_rows(values_only=True):
-        vals = ["" if v is None else str(v).strip() for v in row]
-        if any(vals):
-            headers = vals
-            break
-    if not headers:
-        raise HeaderValidationError([
-            "No headers found in Excel file. Include columns such as 'Name', 'Set Code', 'Collector Number'."
-        ])
-
-    # Yield dict rows lazily
-    def _gen():
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            vals = ["" if v is None else str(v).strip() for v in row]
-            # Truncate/pad to header length
-            if len(vals) < len(headers):
-                vals += [""] * (len(headers) - len(vals))
-            elif len(vals) > len(headers):
-                vals = vals[: len(headers)]
-            # Skip fully empty
-            if not any(vals):
-                continue
-            yield {headers[i]: vals[i] for i in range(len(headers))}
-    return _gen(), headers
-
-def _open_table(filepath: str) -> tuple[Iterable[Dict[str, Any]], list[str], Optional[str]]:
-    """
-    Unified row source for CSV or Excel.
-    Returns (row_iter, headers, delimiter_if_csv_else_None).
-    """
-    _validate_file_size(filepath)
-    if _is_excel(filepath):
-        rows, headers = _iter_excel_rows(filepath)
-        return rows, headers, None
-    else:
-        reader, delimiter = _make_reader(filepath)
-        if not reader.fieldnames:
-            raise HeaderValidationError([
-                "No headers found in CSV. Include columns such as 'Name', 'Set Code', 'Collector Number'."
-            ])
-        # Adapt csv.DictReader to our common iterable interface
-        def _gen():
-            for r in reader:
-                yield r
-        return _gen(), list(reader.fieldnames), delimiter
 
 def _log_import_summary(
     stats: ImportStats,

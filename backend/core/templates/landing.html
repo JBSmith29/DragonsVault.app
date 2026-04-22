@@ -1,41 +1,114 @@
 {% extends "base.html" %}
 {% block title %}Welcome to DragonsVault{% endblock %}
 
+{% block styles %}
+<style nonce="{{ csp_nonce() }}">
+  .landing-hero {
+    padding: clamp(2rem, 6vw, 4rem) 0;
+  }
+  .landing-feature-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.45rem 0;
+    color: var(--dv-text-secondary);
+    font-size: 0.97rem;
+  }
+  .landing-feature-list li i {
+    color: var(--dv-accent-blue);
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+  }
+  .landing-card {
+    background: var(--dv-glass-bg);
+    border: 1px solid var(--dv-glass-border);
+    border-radius: 1.25rem;
+    backdrop-filter: blur(var(--dv-glass-blur));
+    box-shadow: 0 16px 40px rgba(2, 6, 23, 0.32);
+    padding: 2rem;
+  }
+  html[data-bs-theme="light"] .landing-card {
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(148, 163, 184, 0.28);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
+  }
+  .landing-card-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dv-accent-blue);
+    margin-bottom: 0.75rem;
+  }
+  .landing-cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  @media (max-width: 575.98px) {
+    .landing-cta-row .btn {
+      flex: 1 1 100%;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<section class="py-5">
-  <div class="container py-4">
-    <div class="row align-items-center g-5">
+<section class="landing-hero">
+  <div class="container">
+    <div class="row align-items-center g-4 g-lg-5">
+
+      {# Left: headline + features + CTAs #}
       <div class="col-12 col-lg-6">
-        <h1 class="display-5 fw-bold mb-4">Meet DragonsVault</h1>
-        <p class="lead text-muted">
-          DragonsVault helps Commander players track collections, evaluate decks, and keep every card
-          at their fingertips. Import lists from DragonShield or MTGGoldfish, refresh Scryfall data
-          with one click, and explore powerful filters designed for paper collections.
+        <h1 class="display-5 fw-bold mb-3">
+          <span class="text-gradient">DragonsVault</span>
+        </h1>
+        <p class="lead mb-4" style="color: var(--dv-text-secondary);">
+          The Commander player's home base — track your collection, build decks with EDHREC insights,
+          and log every game, all in one place.
         </p>
-        <ul class="list-unstyled text-muted mb-4">
-          <li class="mb-2">• Organize decks and collection folders with commander insights.</li>
-          <li class="mb-2">• Import CSVs or binders to keep quantities in sync.</li>
-          <li class="mb-2">• Generate analytics: colors, mana curve, combo hints, and more.</li>
+        <ul class="list-unstyled landing-feature-list mb-4">
+          <li><i class="bi bi-collection-fill"></i> Organize cards into folders with commander insights and rarity buckets.</li>
+          <li><i class="bi bi-file-earmark-arrow-up-fill"></i> Import from ManaBox, Moxfield, or DragonShield CSV in seconds.</li>
+          <li><i class="bi bi-bar-chart-fill"></i> Mana curve, pip breakdown, combo hints, and bracket scoring.</li>
+          <li><i class="bi bi-controller"></i> Log pods, track wins, and explore leaderboards with your playgroup.</li>
         </ul>
-        <div class="d-flex flex-wrap gap-3">
-          <a href="{{ url_for('views.login') }}" class="btn btn-primary btn-lg">Sign in</a>
-          <a href="{{ url_for('views.register') }}" class="btn btn-outline-theme btn-lg">Create an account</a>
+        <div class="landing-cta-row">
+          <a href="{{ url_for('views.login') }}" class="btn btn-primary btn-lg px-4">
+            <i class="bi bi-box-arrow-in-right me-1"></i> Sign in
+          </a>
+          <a href="{{ url_for('views.register') }}" class="btn btn-outline-theme btn-lg px-4">
+            Create an account
+          </a>
         </div>
       </div>
+
+      {# Right: glass info card #}
       <div class="col-12 col-lg-6">
-        <div class="card shadow-lg border-0 bg-dark text-light bg-opacity-75">
-          <div class="card-body p-4">
-            <h2 class="h5 text-uppercase text-info fw-semibold mb-3">Why DragonsVault?</h2>
-            <p class="mb-3 text-light">
-              Built by Commander players for Commander players, DragonsVault centralizes deckbuilding,
-              wishlists, Scryfall lookups, and powerful bulk data tools in a single dashboard.
-            </p>
-            <p class="text-light mb-0">
-              Ready to get started? Sign in to continue to your dashboard or create a free account now.
-            </p>
+        <div class="landing-card">
+          <p class="landing-card-label">Why DragonsVault?</p>
+          <p class="mb-3" style="color: var(--dv-text-secondary);">
+            Built by Commander players for Commander players. DragonsVault centralizes deckbuilding,
+            wishlists, Scryfall lookups, and powerful bulk data tools in a single dashboard.
+          </p>
+          <hr style="border-color: var(--dv-border); margin: 1rem 0;">
+          <div class="row g-3 text-center">
+            <div class="col-4">
+              <div class="fw-bold fs-4 text-gradient">100%</div>
+              <div class="small" style="color: var(--dv-text-muted);">Paper-first</div>
+            </div>
+            <div class="col-4">
+              <div class="fw-bold fs-4 text-gradient">Offline</div>
+              <div class="small" style="color: var(--dv-text-muted);">Scryfall cache</div>
+            </div>
+            <div class="col-4">
+              <div class="fw-bold fs-4 text-gradient">Free</div>
+              <div class="small" style="color: var(--dv-text-muted);">Self-hosted</div>
+            </div>
           </div>
         </div>
       </div>
+
     </div>
   </div>
 </section>

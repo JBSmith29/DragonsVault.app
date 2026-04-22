@@ -1,7 +1,6 @@
 import {
-  useCallback,
   useEffect,
-  useMemo,
+  useEffectEvent,
   useState,
   type CSSProperties,
 } from "react";
@@ -132,16 +131,15 @@ export default function App() {
   const [cardDataSync, setCardDataSync] = useState<CardDataSyncStatus | null>(null);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const serviceList = useMemo(() => serviceDefinitions, []);
 
-  const refreshStatuses = useCallback(async () => {
+  const refreshStatuses = useEffectEvent(async () => {
     setBusy(true);
     setServices(buildInitialHealth());
     const maintenancePromise = fetchMaintenanceStatus();
     const cardDataPromise = fetchCardDataSyncStatus();
 
     const results = await Promise.allSettled(
-      serviceList.map(async (service) => {
+      serviceDefinitions.map(async (service) => {
         const start = performance.now();
         try {
           const payload = await service.ping();
@@ -160,7 +158,7 @@ export default function App() {
 
     const next: Record<string, ServiceHealth> = {};
     results.forEach((result, index) => {
-      const key = serviceList[index].key;
+      const key = serviceDefinitions[index].key;
       if (result.status === "fulfilled") {
         next[key] = {
           status: result.value.status,
@@ -185,42 +183,39 @@ export default function App() {
     );
     setLastChecked(new Date().toISOString());
     setBusy(false);
-  }, [serviceList]);
+  });
 
   useEffect(() => {
-    refreshStatuses();
-  }, [refreshStatuses]);
+    void refreshStatuses();
+  }, []);
 
-  const syncRowsFor = useCallback(
-    (service: ServiceDefinition) => {
-      const sources = service.syncSources ?? [];
-      if (!sources.length) return [];
-      return sources.map((source) => {
-        if (source.kind === "maintenance") {
-          const entry = maintenance?.[source.key];
-          const fallback =
-            entry?.status && entry.status !== "unknown"
-              ? formatSyncStatus(entry.status)
-              : "—";
-          return {
-            label: source.label,
-            value: entry?.last_sync
-              ? formatSyncTime(entry.last_sync)
-              : fallback,
-          };
-        }
-        const stamp = cardDataSync?.processed_at || cardDataSync?.updated_at;
-        const fallback = cardDataSync?.status
-          ? formatSyncStatus(cardDataSync.status)
-          : "—";
+  const syncRowsFor = (service: ServiceDefinition) => {
+    const sources = service.syncSources ?? [];
+    if (!sources.length) return [];
+    return sources.map((source) => {
+      if (source.kind === "maintenance") {
+        const entry = maintenance?.[source.key];
+        const fallback =
+          entry?.status && entry.status !== "unknown"
+            ? formatSyncStatus(entry.status)
+            : "—";
         return {
           label: source.label,
-          value: stamp ? formatSyncTime(stamp) : fallback,
+          value: entry?.last_sync
+            ? formatSyncTime(entry.last_sync)
+            : fallback,
         };
-      });
-    },
-    [maintenance, cardDataSync]
-  );
+      }
+      const stamp = cardDataSync?.processed_at || cardDataSync?.updated_at;
+      const fallback = cardDataSync?.status
+        ? formatSyncStatus(cardDataSync.status)
+        : "—";
+      return {
+        label: source.label,
+        value: stamp ? formatSyncTime(stamp) : fallback,
+      };
+    });
+  };
 
   const lastCheckedLabel = lastChecked
     ? formatSyncTime(lastChecked)
@@ -247,7 +242,7 @@ export default function App() {
       </header>
 
       <section className="services">
-        {serviceList.map((service, index) => {
+        {serviceDefinitions.map((service, index) => {
           const status = services[service.key]?.status ?? "checking";
           const latency = services[service.key]?.latencyMs ?? null;
           const syncRows = syncRowsFor(service);

@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import time
 import uuid
-from contextlib import nullcontext
 import logging
-import threading
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +29,14 @@ else:  # pragma: no cover - optional dependency
 from shared.jobs.background.imports import run_csv_import
 from core.domains.cards.services.csv_importer import FileValidationError, HeaderValidationError, validate_import_file
 from shared.events.live_updates import emit_job_event
+from shared.jobs.csv_import_jobs_service import (
+    cleanup_temp_file as _cleanup_temp_file_service,
+    enqueue_csv_import as _enqueue_csv_import_service,
+    process_csv_import as _process_csv_import_service,
+    run_csv_import_inline as _run_csv_import_inline_service,
+    run_csv_import_job as _run_csv_import_job_service,
+    start_inline_import_thread as _start_inline_import_thread_service,
+)
 from core.domains.cards.services.scryfall_cache import ensure_cache_loaded
 from core.domains.cards.services import scryfall_cache as sc
 from core.domains.decks.services.spellbook_sync import (
@@ -69,26 +74,17 @@ def _start_inline_import_thread(
     job_id: str,
     mapping_override: Optional[dict],
 ) -> None:
-    def _runner():
-        try:
-            run_csv_import_inline(
-                filepath=filepath,
-                quantity_mode=quantity_mode,
-                overwrite=overwrite,
-                owner_user_id=owner_user_id,
-                owner_username=owner_username,
-                job_id=job_id,
-                mapping_override=mapping_override,
-            )
-        except Exception:
-            _get_logger().exception("Async import failed", extra={"job_id": job_id})
-
-    thread = threading.Thread(
-        target=_runner,
-        name=f"import-{job_id[:8]}",
-        daemon=True,
+    _start_inline_import_thread_service(
+        filepath=filepath,
+        quantity_mode=quantity_mode,
+        overwrite=overwrite,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
+        job_id=job_id,
+        mapping_override=mapping_override,
+        run_csv_import_inline=run_csv_import_inline,
+        get_logger=_get_logger,
     )
-    thread.start()
 
 
 def enqueue_csv_import(
@@ -101,150 +97,25 @@ def enqueue_csv_import(
     mapping_override: Optional[dict] = None,
     run_async: bool = False,
 ) -> dict:
-    # Respect config, but fall back to inline mode if queue dependencies are unavailable.
-    inline_pref = bool(current_app.config.get("IMPORT_RUN_INLINE", True))
-    inline_mode = inline_pref or not _jobs_available
-    job_id = uuid.uuid4().hex
-    # Validate headers before queuing the job to surface errors immediately.
-    validate_import_file(filepath, mapping_override)
-    log = _get_logger()
-    log.info(
-        "Import enqueue requested",
-        extra={
-            "job_id": job_id,
-            "inline_mode": inline_mode,
-            "quantity_mode": quantity_mode,
-            "overwrite": overwrite,
-            "filepath": filepath,
-            "mapping_override": mapping_override,
-            "run_async": run_async,
-        },
+    return _enqueue_csv_import_service(
+        filepath,
+        quantity_mode,
+        overwrite,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
+        mapping_override=mapping_override,
+        run_async=run_async,
+        inline_pref=bool(current_app.config.get("IMPORT_RUN_INLINE", True)),
+        jobs_available=_jobs_available,
+        validate_import_file=validate_import_file,
+        get_logger=_get_logger,
+        get_queue=get_queue,
+        run_csv_import_inline=run_csv_import_inline,
+        run_csv_import_job=run_csv_import_job,
+        start_inline_import_thread=_start_inline_import_thread,
+        has_app_context=has_app_context,
+        current_app=current_app,
     )
-
-    if run_async and inline_mode:
-        _start_inline_import_thread(
-            filepath=filepath,
-            quantity_mode=quantity_mode,
-            overwrite=overwrite,
-            owner_user_id=owner_user_id,
-            owner_username=owner_username,
-            job_id=job_id,
-            mapping_override=mapping_override,
-        )
-        return {
-            "job_id": job_id,
-            "ran_inline": False,
-            "stats": None,
-            "per_folder": None,
-        }
-
-    if inline_mode:
-        stats, per_folder = run_csv_import_inline(
-            filepath=filepath,
-            quantity_mode=quantity_mode,
-            overwrite=overwrite,
-            owner_user_id=owner_user_id,
-            owner_username=owner_username,
-            job_id=job_id,
-            mapping_override=mapping_override,
-        )
-        return {
-            "job_id": job_id,
-            "ran_inline": True,
-            "stats": stats,
-            "per_folder": per_folder,
-        }
-
-    queue = get_queue() if get_queue else None
-    if queue is None:
-        if has_app_context():
-            current_app.logger.warning("Queue unavailable; running import inline.")
-        if run_async:
-            _start_inline_import_thread(
-                filepath=filepath,
-                quantity_mode=quantity_mode,
-                overwrite=overwrite,
-                owner_user_id=owner_user_id,
-                owner_username=owner_username,
-                job_id=job_id,
-                mapping_override=mapping_override,
-            )
-            return {
-                "job_id": job_id,
-                "ran_inline": False,
-                "stats": None,
-                "per_folder": None,
-            }
-        stats, per_folder = run_csv_import_inline(
-            filepath=filepath,
-            quantity_mode=quantity_mode,
-            overwrite=overwrite,
-            owner_user_id=owner_user_id,
-            owner_username=owner_username,
-            job_id=job_id,
-            mapping_override=mapping_override,
-        )
-        return {
-            "job_id": job_id,
-            "ran_inline": True,
-            "stats": stats,
-            "per_folder": per_folder,
-        }
-
-    try:
-        queue.enqueue(
-            run_csv_import_job,
-            filepath,
-            quantity_mode,
-            overwrite,
-            job_id,
-            owner_user_id,
-            owner_username,
-            mapping_override,
-            job_id=f"import-{job_id}",
-            description=f"csv-import:{os.path.basename(filepath)}",
-        )
-        return {
-            "job_id": job_id,
-            "ran_inline": False,
-            "stats": None,
-            "per_folder": None,
-        }
-    except Exception as exc:  # pragma: no cover - relies on external redis service
-        # Fall back to inline if the queue/Redis is unavailable so imports don't silently hang.
-        if has_app_context():
-            current_app.logger.warning("Queue unavailable; running import inline: %s", exc)
-        if run_async:
-            _start_inline_import_thread(
-                filepath=filepath,
-                quantity_mode=quantity_mode,
-                overwrite=overwrite,
-                owner_user_id=owner_user_id,
-                owner_username=owner_username,
-                job_id=job_id,
-                mapping_override=mapping_override,
-            )
-            return {
-                "job_id": job_id,
-                "ran_inline": False,
-                "stats": None,
-                "per_folder": None,
-            }
-        stats, per_folder = run_csv_import_inline(
-            filepath=filepath,
-            quantity_mode=quantity_mode,
-            overwrite=overwrite,
-            owner_user_id=owner_user_id,
-            owner_username=owner_username,
-            job_id=job_id,
-            mapping_override=mapping_override,
-        )
-        return {
-            "job_id": job_id,
-            "ran_inline": True,
-            "stats": stats,
-            "per_folder": per_folder,
-        }
 
 
 def run_csv_import_job(
@@ -256,42 +127,21 @@ def run_csv_import_job(
     owner_username: Optional[str],
     mapping_override: Optional[dict] = None,
 ):
-    app = _create_app()
-    with app.app_context():
-        job = get_current_job()
-        log = _get_logger()
-        success = False
-        log.info(
-            "Import job started",
-            extra={
-                "job_id": import_job_id,
-                "quantity_mode": quantity_mode,
-                "overwrite": overwrite,
-                "owner_user_id": owner_user_id,
-                "owner_username": owner_username,
-                "filepath": filepath,
-                "mapping_override": mapping_override,
-            },
-        )
-        try:
-            _process_csv_import(
-                filepath=filepath,
-                quantity_mode=quantity_mode,
-                overwrite=overwrite,
-                import_job_id=import_job_id,
-                owner_user_id=owner_user_id,
-                owner_username=owner_username,
-                job_ref=job,
-                mapping_override=mapping_override,
-            )
-            log.info(
-                "Import job completed",
-                extra={"job_id": import_job_id, "quantity_mode": quantity_mode, "overwrite": overwrite},
-            )
-            success = True
-        finally:
-            if success or not KEEP_FAILED_IMPORT_UPLOADS:
-                _cleanup_temp_file(filepath, app.logger)
+    return _run_csv_import_job_service(
+        filepath,
+        quantity_mode,
+        overwrite,
+        import_job_id,
+        owner_user_id,
+        owner_username,
+        mapping_override,
+        create_app=_create_app,
+        get_current_job=get_current_job,
+        get_logger=_get_logger,
+        process_csv_import=_process_csv_import,
+        cleanup_temp_file=_cleanup_temp_file,
+        keep_failed_import_uploads=KEEP_FAILED_IMPORT_UPLOADS,
+    )
 
 
 def run_csv_import_inline(
@@ -304,56 +154,21 @@ def run_csv_import_inline(
     job_id: Optional[str] = None,
     mapping_override: Optional[dict] = None,
 ):
-    job_id = job_id or f"inline-{uuid.uuid4().hex[:8]}"
-    if has_app_context():
-        ctx = nullcontext()
-        app_logger = current_app.logger
-    else:
-        app = _create_app()
-        ctx = app.app_context()
-        app_logger = app.logger
-    with ctx:
-        success = False
-        try:
-            app_logger.info(
-                "Import inline start",
-                extra={
-                    "job_id": job_id,
-                    "quantity_mode": quantity_mode,
-                    "overwrite": overwrite,
-                    "owner_user_id": owner_user_id,
-                    "owner_username": owner_username,
-                    "filepath": filepath,
-                    "mapping_override": mapping_override,
-                },
-            )
-            stats, per_folder = _process_csv_import(
-                filepath=filepath,
-                quantity_mode=quantity_mode,
-                overwrite=overwrite,
-                import_job_id=job_id,
-                owner_user_id=owner_user_id,
-                owner_username=owner_username,
-                job_ref=None,
-                mapping_override=mapping_override,
-            )
-            app_logger.info(
-                "Import inline complete",
-                extra={
-                    "job_id": job_id,
-                    "quantity_mode": quantity_mode,
-                    "overwrite": overwrite,
-                    "added": getattr(stats, "added", None) if stats else None,
-                    "updated": getattr(stats, "updated", None) if stats else None,
-                    "skipped": getattr(stats, "skipped", None) if stats else None,
-                    "errors": getattr(stats, "errors", None) if stats else None,
-                },
-            )
-            success = True
-            return stats, per_folder
-        finally:
-            if success or not KEEP_FAILED_IMPORT_UPLOADS:
-                _cleanup_temp_file(filepath, app_logger)
+    return _run_csv_import_inline_service(
+        filepath,
+        quantity_mode,
+        overwrite,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
+        job_id=job_id,
+        mapping_override=mapping_override,
+        has_app_context=has_app_context,
+        current_app=current_app,
+        create_app=_create_app,
+        process_csv_import=_process_csv_import,
+        cleanup_temp_file=_cleanup_temp_file,
+        keep_failed_import_uploads=KEEP_FAILED_IMPORT_UPLOADS,
+    )
 
 
 def _process_csv_import(
@@ -367,66 +182,24 @@ def _process_csv_import(
     job_ref,
     mapping_override: Optional[dict] = None,
 ):
-    emit_job_event(
-        "import",
-        "queued",
-        job_id=import_job_id,
-        rq_id=getattr(job_ref, "id", None),
-        file=os.path.basename(filepath),
+    return _process_csv_import_service(
+        filepath=filepath,
+        quantity_mode=quantity_mode,
         overwrite=overwrite,
-        user_id=owner_user_id,
+        import_job_id=import_job_id,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
+        job_ref=job_ref,
+        mapping_override=mapping_override,
+        emit_job_event=emit_job_event,
+        run_csv_import=run_csv_import,
+        header_validation_error_cls=HeaderValidationError,
+        file_validation_error_cls=FileValidationError,
     )
-    try:
-        result = run_csv_import(
-            filepath=filepath,
-            quantity_mode=quantity_mode,
-            overwrite=overwrite,
-            import_job_id=import_job_id,
-            owner_user_id=owner_user_id,
-            owner_username=owner_username,
-            mapping_override=mapping_override,
-        )
-        stats = result.get("stats")
-        per_folder = result.get("per_folder")
-        summary = result.get("summary") or {}
-        emit_job_event(
-            "import",
-            "completed",
-            job_id=summary.get("job_id") or getattr(stats, "job_id", None),
-            added=summary.get("added") if summary else getattr(stats, "added", None),
-            updated=summary.get("updated") if summary else getattr(stats, "updated", None),
-            skipped=summary.get("skipped") if summary else getattr(stats, "skipped", None),
-            errors=summary.get("errors") if summary else getattr(stats, "errors", None),
-            removed_folders=summary.get("removed_folders", 0),
-            user_id=owner_user_id,
-        )
-        return stats, per_folder
-    except (HeaderValidationError, FileValidationError) as exc:
-        emit_job_event(
-            "import",
-            "failed",
-            job_id=import_job_id,
-            error=str(exc),
-            user_id=owner_user_id,
-        )
-        raise
-    except Exception as exc:
-        emit_job_event(
-            "import",
-            "failed",
-            job_id=import_job_id,
-            error=str(exc),
-            user_id=owner_user_id,
-        )
-        raise
 
 
 def _cleanup_temp_file(filepath: str, logger) -> None:
-    if filepath and os.path.exists(filepath):
-        try:
-            os.remove(filepath)
-        except Exception:
-            logger.warning("Failed to remove temp import file %s", filepath, exc_info=True)
+    _cleanup_temp_file_service(filepath, logger)
 
 
 def enqueue_scryfall_refresh(kind: str, *, force_download: bool = False) -> str:

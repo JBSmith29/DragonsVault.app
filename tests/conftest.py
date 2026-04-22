@@ -13,6 +13,7 @@ import pytest
 import extensions as ext
 from extensions import db
 from models import User
+from sqlalchemy.engine.url import make_url
 
 # Isolate all tests to a throwaway instance + SQLite database
 def _build_test_instance_dir() -> Path:
@@ -27,13 +28,34 @@ def _build_test_instance_dir() -> Path:
     return Path(tempfile.mkdtemp(prefix="dragonsvault-pytest-run-"))
 
 
-TEST_INSTANCE_DIR = _build_test_instance_dir()
-TEST_DB_PATH = TEST_INSTANCE_DIR / "test.sqlite"
-os.environ["FLASK_ENV"] = "development"
+_configured_instance_dir = os.getenv("INSTANCE_DIR")
+TEST_INSTANCE_DIR = (
+    Path(_configured_instance_dir).resolve()
+    if _configured_instance_dir
+    else _build_test_instance_dir()
+)
+DEFAULT_TEST_DB_PATH = TEST_INSTANCE_DIR / "test.sqlite"
+TEST_DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{DEFAULT_TEST_DB_PATH.as_posix()}"
+IS_SQLITE_TEST_DB = TEST_DATABASE_URL.startswith("sqlite:")
+TEST_DB_PATH = DEFAULT_TEST_DB_PATH
+
+if IS_SQLITE_TEST_DB:
+    try:
+        parsed_database = make_url(TEST_DATABASE_URL).database
+    except Exception:
+        parsed_database = None
+    if parsed_database:
+        configured_db_path = Path(parsed_database).expanduser()
+        if not configured_db_path.is_absolute():
+            configured_db_path = (TEST_INSTANCE_DIR / configured_db_path).resolve()
+        TEST_DB_PATH = configured_db_path
+    TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+os.environ.setdefault("FLASK_ENV", "development")
 os.environ["INSTANCE_DIR"] = str(TEST_INSTANCE_DIR)
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
-os.environ["ENABLE_TALISMAN"] = "0"
-os.environ["DISABLE_BACKGROUND_JOBS"] = "1"
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ.setdefault("ENABLE_TALISMAN", "0")
+os.environ.setdefault("DISABLE_BACKGROUND_JOBS", "1")
 
 import app as dv_app  # noqa: E402  pylint:disable=wrong-import-position
 
@@ -60,7 +82,17 @@ def app():
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_test_instance_dir():
     yield
-    shutil.rmtree(TEST_INSTANCE_DIR, ignore_errors=True)
+    if not _configured_instance_dir:
+        shutil.rmtree(TEST_INSTANCE_DIR, ignore_errors=True)
+
+
+def _cleanup_sqlite_files():
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
+    for suffix in ("-wal", "-shm"):
+        sidecar = TEST_DB_PATH.with_name(TEST_DB_PATH.name + suffix)
+        if sidecar.exists():
+            sidecar.unlink()
 
 
 @pytest.fixture
@@ -68,23 +100,19 @@ def db_session(app):
     with app.app_context():
         db.session.remove()
         db.engine.dispose()
-        if TEST_DB_PATH.exists():
-            TEST_DB_PATH.unlink()
-        for suffix in ("-wal", "-shm"):
-            sidecar = TEST_DB_PATH.with_name(TEST_DB_PATH.name + suffix)
-            if sidecar.exists():
-                sidecar.unlink()
+        if IS_SQLITE_TEST_DB:
+            _cleanup_sqlite_files()
+        else:
+            db.drop_all()
         db.create_all()
         yield db
         db.session.remove()
+        if not IS_SQLITE_TEST_DB:
+            db.drop_all()
         db.engine.dispose()
-        # SQLite teardown: delete the DB file to avoid drop_all issues across runs.
-        if TEST_DB_PATH.exists():
-            TEST_DB_PATH.unlink()
-        for suffix in ("-wal", "-shm"):
-            sidecar = TEST_DB_PATH.with_name(TEST_DB_PATH.name + suffix)
-            if sidecar.exists():
-                sidecar.unlink()
+        if IS_SQLITE_TEST_DB:
+            # SQLite teardown: delete the DB file to avoid drop_all issues across runs.
+            _cleanup_sqlite_files()
 
 
 @pytest.fixture

@@ -4,10 +4,12 @@ from . import database_cache
 from . import memory_cache
 from . import redis_cache
 from . import request_cache
+from . import runtime_cache
 
 __all__ = [
     "database_cache",
     "memory_cache",
     "redis_cache",
     "request_cache",
+    "runtime_cache",
 ]

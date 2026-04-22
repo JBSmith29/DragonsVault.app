@@ -67,6 +67,26 @@ class FolderShare(models.Model):
         db_table = "folder_share"
 
 
+class UserFriend(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        User,
+        db_column="user_id",
+        on_delete=models.CASCADE,
+        related_name="friendships",
+    )
+    friend_user = models.ForeignKey(
+        User,
+        db_column="friend_user_id",
+        on_delete=models.CASCADE,
+        related_name="reverse_friendships",
+    )
+
+    class Meta:
+        managed = False
+        db_table = "user_friends"
+
+
 class Card(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)

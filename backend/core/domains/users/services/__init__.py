@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-__all__ = ["audit", "authz"]
+__all__ = ["audit", "authz", "dashboard_service"]
 
 
 def __getattr__(name: str):

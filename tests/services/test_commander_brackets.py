@@ -8,17 +8,17 @@ def test_bracket_one_allows_two_nonland_tutors(monkeypatch):
 
     tutors = [
         cb.BracketCard(
-            name="Demonic Tutor",
+            name="Diabolic Tutor",
             type_line="Sorcery",
             oracle_text="Search your library for a card, put that card into your hand, then shuffle.",
-            mana_value=2,
+            mana_value=4,
             quantity=1,
         ),
         cb.BracketCard(
-            name="Vampiric Tutor",
-            type_line="Instant",
-            oracle_text="Search your library for a card, then shuffle.",
-            mana_value=1,
+            name="Mastermind's Acquisition",
+            type_line="Sorcery",
+            oracle_text="Choose one — Search your library for a card, put it into your hand, then shuffle; or choose a card you own from outside the game and put it into your hand.",
+            mana_value=4,
             quantity=1,
         ),
     ]
@@ -37,6 +37,44 @@ def test_bracket_one_allows_two_nonland_tutors(monkeypatch):
 
     assert result["level"] == 1
     assert result["bracket1_eligible"] is True
+
+
+def test_game_changer_tutors_raise_bracket_floor(monkeypatch):
+    """Premium tutors on the Game Changers list should still promote the bracket floor."""
+
+    monkeypatch.setattr(cb, "ensure_cache_loaded", lambda: None)
+
+    cards = [
+        cb.BracketCard(
+            name="Demonic Tutor",
+            type_line="Sorcery",
+            oracle_text="Search your library for a card, put that card into your hand, then shuffle.",
+            mana_value=2,
+            quantity=1,
+        ),
+        cb.BracketCard(
+            name="Vampiric Tutor",
+            type_line="Instant",
+            oracle_text="Search your library for a card, then shuffle.",
+            mana_value=1,
+            quantity=1,
+        ),
+    ]
+    for idx in range(58):
+        cards.append(
+            cb.BracketCard(
+                name=f"Vanilla {idx}",
+                type_line="Creature",
+                oracle_text="",
+                mana_value=4,
+                quantity=1,
+            )
+        )
+
+    result = cb.evaluate_commander_bracket(cards)
+
+    assert result["level"] == 3
+    assert result["metrics"]["game_changers"] == 2
 
 
 def test_creature_tutors_excluded_from_nonland_tutor_count(monkeypatch):

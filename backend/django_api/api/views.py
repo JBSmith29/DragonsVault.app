@@ -11,43 +11,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Card, Folder, FolderShare
-
-
-def _serialize_folder(folder: Folder, counts: dict[str, int] | None = None) -> dict[str, Any]:
-    counts = counts or {}
-    return {
-        "id": folder.id,
-        "name": folder.name,
-        "category": folder.category,
-        "deck_tag": folder.deck_tag,
-        "commander_name": folder.commander_name,
-        "is_proxy": bool(folder.is_proxy),
-        "is_public": bool(folder.is_public),
-        "owner_user_id": folder.owner_user_id,
-        "updated_at": folder.updated_at.isoformat() if folder.updated_at else None,
-        "counts": {
-            "unique": int(counts.get("unique") or 0),
-            "total": int(counts.get("total") or 0),
-        },
-    }
-
-
-def _serialize_card(card: Card) -> dict[str, Any]:
-    return {
-        "id": card.id,
-        "name": card.name,
-        "set_code": card.set_code,
-        "collector_number": card.collector_number,
-        "lang": card.lang,
-        "quantity": card.quantity,
-        "is_foil": bool(card.is_foil),
-        "folder_id": card.folder_id,
-        "oracle_id": card.oracle_id,
-        "type_line": card.type_line,
-        "rarity": card.rarity,
-        "color_identity_mask": card.color_identity_mask,
-    }
+from .models import Card, Folder, FolderShare, UserFriend
+from shared.api import serialize_card, serialize_folder
 
 
 def _counts_for_folder_ids(folder_ids: list[int]) -> dict[int, dict[str, int]]:
@@ -67,6 +32,27 @@ def _counts_for_folder_ids(folder_ids: list[int]) -> dict[int, dict[str, int]]:
     }
 
 
+def _friend_user_ids(user_id: int | None) -> list[int]:
+    if not user_id:
+        return []
+    return list(
+        UserFriend.objects.filter(user_id=user_id).values_list("friend_user_id", flat=True)
+    )
+
+
+def _accessible_folders(user):
+    filters = (
+        Q(owner_user_id=user.id)
+        | Q(owner_user__isnull=True)
+        | Q(is_public=True)
+        | Q(shares__shared_user_id=user.id)
+    )
+    friend_ids = _friend_user_ids(getattr(user, "id", None))
+    if friend_ids:
+        filters |= Q(owner_user_id__in=friend_ids)
+    return Folder.objects.filter(filters).distinct().order_by(Lower("name"))
+
+
 def _user_can_access_folder(user, folder: Folder) -> bool:
     if folder.owner_user_id == user.id:
         return True
@@ -74,7 +60,9 @@ def _user_can_access_folder(user, folder: Folder) -> bool:
         return True
     if folder.is_public:
         return True
-    return FolderShare.objects.filter(folder_id=folder.id, shared_user_id=user.id).exists()
+    if FolderShare.objects.filter(folder_id=folder.id, shared_user_id=user.id).exists():
+        return True
+    return UserFriend.objects.filter(user_id=user.id, friend_user_id=folder.owner_user_id).exists()
 
 
 @api_view(["GET"])
@@ -118,19 +106,10 @@ def me(request):
 @api_view(["GET"])
 def folders(request):
     user = request.user
-    accessible = (
-        Folder.objects.filter(
-            Q(owner_user_id=user.id)
-            | Q(owner_user__isnull=True)
-            | Q(is_public=True)
-            | Q(shares__shared_user_id=user.id)
-        )
-        .distinct()
-        .order_by(Lower("name"))
-    )
+    accessible = _accessible_folders(user)
     folder_ids = [folder.id for folder in accessible]
     counts_map = _counts_for_folder_ids(folder_ids)
-    data = [_serialize_folder(folder, counts_map.get(folder.id, {})) for folder in accessible]
+    data = [serialize_folder(folder, counts_map.get(folder.id, {})) for folder in accessible]
     return Response({"data": data})
 
 
@@ -143,7 +122,7 @@ def folder_detail(request, folder_id: int):
     if not _user_can_access_folder(request.user, folder):
         return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
     counts = _counts_for_folder_ids([folder.id]).get(folder.id, {})
-    return Response({"data": _serialize_folder(folder, counts)})
+    return Response({"data": serialize_folder(folder, counts)})
 
 
 @api_view(["GET"])
@@ -170,10 +149,15 @@ def folder_cards(request, folder_id: int):
     base_query = Card.objects.filter(folder_id=folder.id).order_by(Lower("name"), "id")
     total = base_query.count()
     cards = list(base_query[offset : offset + limit])
+    print_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
+    oracle_cache: dict[str, dict[str, Any]] = {}
 
     return Response(
         {
-            "data": [_serialize_card(card) for card in cards],
+            "data": [
+                serialize_card(card, print_cache=print_cache, oracle_cache=oracle_cache)
+                for card in cards
+            ],
             "pagination": {"total": total, "limit": limit, "offset": offset},
         }
     )

@@ -21,6 +21,10 @@ def ensure_folder_access(folder, *, write: bool = False, allow_shared: bool = Fa
     owner_id = getattr(folder, "owner_user_id", None)
     if owner_id and current_user.is_authenticated and current_user.id == owner_id:
         return
+    if owner_id is None and current_user.is_authenticated:
+        if write:
+            abort(403)
+        return
     if write:
         abort(403)
     if not allow_shared:

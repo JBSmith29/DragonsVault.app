@@ -1,3 +1,6 @@
+from models import UserSetting, db
+
+
 def _login(client, create_user):
     user, password = create_user()
     client.post("/login", data={"identifier": user.email, "password": password}, follow_redirects=True)
@@ -29,6 +32,18 @@ def test_dashboard_page(client, create_user):
     _login(client, create_user)
     response = client.get("/dashboard")
     assert response.status_code == 200
+
+
+def test_dashboard_mode_post_persists_selection(client, create_user, app):
+    _login(client, create_user)
+
+    response = client.post("/dashboard", data={"dashboard_mode": "decks"}, follow_redirects=False)
+
+    assert response.status_code == 302
+    with app.app_context():
+        setting = db.session.get(UserSetting, "dashboard_mode")
+        assert setting is not None
+        assert setting.value == "decks"
 
 
 def test_collection_page(client, create_user):

@@ -8,12 +8,14 @@ import unicodedata
 from typing import Iterable
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models import DeckTag, DeckTagMap, Folder
 from shared.cache.request_cache import request_cache_clear, request_cached
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 _WHITESPACE_RE = re.compile(r"\s+")
+_POPULARITY_SUFFIX_RE = re.compile(r"(?:[-_]?\d[\d-]*[km]?)$", re.IGNORECASE)
 
 _CATEGORY_ORDER = [
     "Core Archetypes",
@@ -25,6 +27,68 @@ _CATEGORY_ORDER = [
     "Keywords and Combat",
     "Flavor and Miscellaneous",
 ]
+
+_FALLBACK_TAG_GROUPS = OrderedDict(
+    [
+        (
+            "Core Archetypes",
+            ["cEDH", "Combo", "Control", "Good Stuff", "Ramp", "Stax"],
+        ),
+        (
+            "Mechanics and Resources",
+            [
+                "Auras",
+                "Artifacts",
+                "Blood",
+                "Card Draw",
+                "Clues",
+                "Combat-Focused",
+                "Discard",
+                "Equipment",
+                "Food",
+                "Graveyard",
+                "Landfall",
+                "Lifegain",
+                "Lifedrain",
+                "Life Exchange",
+                "Protection",
+                "Ramp",
+                "Reanimator",
+                "Sacrifice",
+                "Self-Discard",
+                "Tokens",
+                "Treasure",
+                "Wheels",
+            ],
+        ),
+        (
+            "Tribal Themes",
+            [
+                "Dinosaurs",
+                "Dragons",
+                "Dwarves",
+                "Elves",
+                "Faeries",
+                "Humans",
+                "Merfolk",
+                "Phyrexians",
+                "Sphinxes",
+                "Vampires",
+                "Werewolves",
+                "Wolves",
+                "Zombies",
+            ],
+        ),
+        (
+            "Special Card Synergies",
+            ["Battles", "Curses", "Legendary Matters", "Planeswalkers", "Sagas", "Shrines"],
+        ),
+        (
+            "Keywords and Combat",
+            ["Deathtouch", "Double Strike", "Flying", "Haste", "Hexproof", "Indestructible", "Reach", "Trample", "Vigilance"],
+        ),
+    ]
+)
 
 _SPECIAL_LABELS = {
     "cedh": "cEDH",
@@ -84,16 +148,35 @@ def _clear_cache() -> None:
     request_cache_clear("deck_tags")
 
 
+def _fallback_tag_rows() -> list[dict]:
+    rows: list[dict] = []
+    for category, labels in _FALLBACK_TAG_GROUPS.items():
+        for label in labels:
+            rows.append(
+                {
+                    "name": label,
+                    "slug": _slugify(label),
+                    "source": "system",
+                    "edhrec_category": category,
+                }
+            )
+    rows.sort(key=lambda row: (row.get("name") or "").casefold())
+    return rows
+
+
 def _load_tag_rows() -> list[dict]:
     def _query() -> list[dict]:
-        rows = db.session.execute(
-            select(
-                DeckTag.name,
-                DeckTag.slug,
-                DeckTag.source,
-                DeckTag.edhrec_category,
-            ).order_by(func.lower(DeckTag.name))
-        ).all()
+        try:
+            rows = db.session.execute(
+                select(
+                    DeckTag.name,
+                    DeckTag.slug,
+                    DeckTag.source,
+                    DeckTag.edhrec_category,
+                ).order_by(func.lower(DeckTag.name))
+            ).all()
+        except (RuntimeError, SQLAlchemyError):
+            return _fallback_tag_rows()
         return [dict(row._mapping) for row in rows]
 
     return request_cached(("deck_tags", "rows"), _query)
@@ -178,10 +261,17 @@ def resolve_deck_tag_from_slug(value: str | None) -> str | None:
         row = by_slug.get(_slugify(cleaned))
     if row is None:
         raw_slug = (value or "").strip().lower()
-        row = by_slug.get(raw_slug)
+        candidates = [raw_slug]
+        trimmed = _POPULARITY_SUFFIX_RE.sub("", raw_slug).strip("-_")
+        if trimmed and trimmed not in candidates:
+            candidates.append(trimmed)
+        for candidate in candidates:
+            row = by_slug.get(candidate)
+            if row is not None:
+                break
     if row is not None:
         return row.get("name")
-    return cleaned
+    return None
 
 
 def is_valid_deck_tag(tag: str | None) -> bool:

@@ -43,8 +43,70 @@
 }
 
 @media (max-width: 991.98px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .app-header {
     display: none !important;
+  }
+
+  #content,
+  #main,
+  #main > .row,
+  #main > .container,
+  #main > .container-fluid {
+    min-width: 0;
+  }
+
+  .table-responsive {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0.9rem;
+  }
+
+  .table-responsive > .table,
+  .table-responsive > table {
+    min-width: max-content;
+    margin-bottom: 0;
+  }
+
+  .table-responsive th,
+  .table-responsive td,
+  .table th,
+  .table td {
+    white-space: nowrap;
+  }
+
+  img,
+  svg,
+  canvas,
+  video,
+  iframe {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .btn-group,
+  .btn-toolbar {
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .btn-group > .btn,
+  .btn-group-vertical > .btn,
+  .btn-toolbar > .btn,
+  .btn-toolbar > .btn-group {
+    border-radius: 0.75rem !important;
+  }
+
+  .dropdown-menu {
+    max-width: min(92vw, 24rem);
   }
 
   .content-toolbar {
@@ -144,6 +206,68 @@
     padding-right: 0.7rem;
   }
 
+  #main .card,
+  #main .glass-panel,
+  #main .tile {
+    overflow-wrap: anywhere;
+  }
+
+  #main .d-flex {
+    min-width: 0;
+  }
+
+  #main .d-flex.flex-wrap {
+    row-gap: 0.5rem;
+  }
+
+  #main .btn-group,
+  #main .btn-toolbar,
+  #main .input-group {
+    width: 100%;
+  }
+
+  #main .input-group {
+    flex-wrap: wrap;
+  }
+
+  #main .input-group > .form-control,
+  #main .input-group > .form-select,
+  #main .input-group > .input-group-text,
+  #main .input-group > .btn {
+    width: 100%;
+    flex: 1 1 100%;
+    border-radius: 0.75rem !important;
+    margin-left: 0 !important;
+  }
+
+  #main .btn-group > .btn,
+  #main .btn-toolbar > .btn,
+  #main .btn-toolbar > .btn-group {
+    flex: 1 1 auto;
+  }
+
+  #main .btn-group > .btn,
+  #main .btn-toolbar > .btn {
+    min-height: var(--dv-touch-target);
+  }
+
+  #main .pagination {
+    justify-content: center;
+    gap: 0.3rem;
+  }
+
+  #main .page-link {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #main .badge {
+    white-space: normal;
+  }
+
   #sidebar {
     width: min(92vw, 340px);
     max-width: 92vw;
@@ -190,6 +314,52 @@
     padding-right: 0.55rem;
   }
 
+  #main {
+    overflow-x: clip;
+  }
+
+  #main .card,
+  #main .modal-content,
+  #main .offcanvas,
+  #main .table-responsive,
+  #main .alert {
+    border-radius: 0.85rem;
+  }
+
+  #main h1,
+  #main .h1 {
+    font-size: clamp(1.65rem, 7vw, 2.1rem);
+  }
+
+  #main h2,
+  #main .h2 {
+    font-size: clamp(1.35rem, 5.8vw, 1.7rem);
+  }
+
+  #main h3,
+  #main .h3 {
+    font-size: clamp(1.15rem, 5vw, 1.45rem);
+  }
+
+  /* Only stretch standalone buttons, not those inside groups/toolbars/input-groups */
+  #main > .btn,
+  #main .card-body > .btn,
+  #main .card-footer > .btn,
+  #main form > .btn,
+  #main .d-grid > .btn {
+    width: 100%;
+  }
+
+  #main .btn-group > .btn,
+  #main .btn-toolbar > .btn,
+  #main .btn-toolbar > .btn-group {
+    flex: 1 1 auto;
+  }
+
+  #main .dropdown-menu {
+    width: min(92vw, 22rem);
+  }
+
   #sidebar {
     width: min(94vw, 330px);
   }
@@ -207,6 +377,14 @@
   #content {
     padding-left: 0.45rem;
     padding-right: 0.45rem;
+  }
+
+  #main > .row {
+    --bs-gutter-x: 0.8rem;
+  }
+
+  #main .table-responsive {
+    border-radius: 0.75rem;
   }
 
   .content-toolbar {

@@ -90,7 +90,7 @@ def test_send_to_build_copies_deck_cards_and_selected_additions(client, create_u
 
 
 def test_send_to_build_resolves_missing_oracle_ids_without_commander(client, create_user, app, monkeypatch):
-    from core.domains.decks.services import folder_service
+    from core.domains.decks.services import send_to_build_service
 
     user, password = create_user(
         email="sendbuild_resolve@example.com",
@@ -125,7 +125,7 @@ def test_send_to_build_resolves_missing_oracle_ids_without_commander(client, cre
         ],
     )
 
-    monkeypatch.setattr(folder_service.sc, "ensure_cache_loaded", lambda: True)
+    monkeypatch.setattr(send_to_build_service.sc, "ensure_cache_loaded", lambda: True)
 
     def _fake_find_by_set_cn(set_code, collector_number, name):
         if str(set_code).upper() == "MIR" and str(collector_number) == "12" and str(name) == "Mystic Tutor":
@@ -137,8 +137,8 @@ def test_send_to_build_resolves_missing_oracle_ids_without_commander(client, cre
             return "oid-island"
         return None
 
-    monkeypatch.setattr(folder_service, "find_by_set_cn", _fake_find_by_set_cn)
-    monkeypatch.setattr(folder_service.sc, "unique_oracle_by_name", _fake_unique_oracle_by_name)
+    monkeypatch.setattr(send_to_build_service, "find_by_set_cn", _fake_find_by_set_cn)
+    monkeypatch.setattr(send_to_build_service.sc, "unique_oracle_by_name", _fake_unique_oracle_by_name)
 
     _login(client, user.email, password)
     response = client.post(

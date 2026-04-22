@@ -129,7 +129,7 @@ def test_opening_hand_hideaway(client, create_user, app):
 
 
 def test_opening_hand_shuffle_uses_resolved_type_line_for_zone_hints(client, create_user, app, monkeypatch):
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_deck_source_service
 
     user, password = create_user(email="zones@example.com", username="zones")
     deck_id = _create_deck(app, user, name="Zone Deck")
@@ -151,7 +151,7 @@ def test_opening_hand_shuffle_uses_resolved_type_line_for_zone_hints(client, cre
             "oracle_text": "",
         }
 
-    monkeypatch.setattr(card_service, "_lookup_print_data", _fake_lookup_print_data)
+    monkeypatch.setattr(opening_hand_deck_source_service, "_lookup_print_data", _fake_lookup_print_data)
 
     _login(client, user.email, password)
     resp = client.post("/opening-hand/shuffle", json={"deck_id": str(deck_id)})
@@ -224,12 +224,12 @@ def test_opening_hand_mulligan_rejects_invalid_selection(client, create_user, ap
 
 
 def test_opening_hand_token_search_sets_zone_hints(client, create_user, monkeypatch):
-    from core.domains.cards.services import card_service
+    from core.domains.decks.services import opening_hand_service
 
     user, password = create_user(email="token_search@example.com", username="token_search")
     _login(client, user.email, password)
 
-    monkeypatch.setattr(card_service, "_ensure_cache_ready", lambda: True)
+    monkeypatch.setattr(opening_hand_service, "_ensure_cache_ready", lambda: True)
 
     def _fake_search_tokens(query, limit=36):
         return [
@@ -247,7 +247,7 @@ def test_opening_hand_token_search_sets_zone_hints(client, create_user, monkeypa
             },
         ]
 
-    monkeypatch.setattr(card_service.sc, "search_tokens", _fake_search_tokens)
+    monkeypatch.setattr(opening_hand_service.sc, "search_tokens", _fake_search_tokens)
 
     resp = client.get("/opening-hand/tokens/search?q=soldier")
     assert resp.status_code == 200

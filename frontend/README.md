@@ -5,7 +5,7 @@ SPA scaffold powered by Vite + React.
 ## Local dev
 
 ```
-npm install
+npm ci
 npm run dev
 ```
 

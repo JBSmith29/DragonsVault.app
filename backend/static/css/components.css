@@ -408,7 +408,7 @@ select.form-select-sm option {
 .curve-bar .fill {
   width: 100%;
   background: var(--bs-primary);
-  opacity: 0.3;
+  opacity: 0.65;
   border-radius: 0.65rem 0.65rem 0 0;
   transition: height 0.18s ease;
 }
@@ -720,7 +720,7 @@ select.form-select-sm option {
 .deck-curve-fill {
   width: 100%;
   background: var(--bs-primary);
-  opacity: 0.3;
+  opacity: 0.65;
   border-radius: 0.65rem 0.65rem 0 0;
   transition: height 0.15s ease;
 }

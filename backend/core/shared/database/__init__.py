@@ -6,6 +6,7 @@ from shared.database import (
     get_database_config,
     get_or_404,
     optimize_database_queries,
+    safe_commit,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "get_database_config",
     "get_or_404",
     "optimize_database_queries",
+    "safe_commit",
 ]

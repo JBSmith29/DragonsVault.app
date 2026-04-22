@@ -1,4 +1,4 @@
-from models import Card, Folder, User, db
+from models import Card, Folder, FolderShare, User, UserFriend, db
 
 
 def _login(client, identifier, password):
@@ -9,9 +9,22 @@ def _login(client, identifier, password):
     )
 
 
-def _create_owned_folder(app, owner, *, name="Owner Deck", card_name="Secret Tech"):
+def _create_owned_folder(
+    app,
+    owner,
+    *,
+    name="Owner Deck",
+    card_name="Secret Tech",
+    shared_user=None,
+    is_public=False,
+):
     with app.app_context():
-        folder = Folder(name=name, category=Folder.CATEGORY_DECK, owner_user_id=owner.id)
+        folder = Folder(
+            name=name,
+            category=Folder.CATEGORY_DECK,
+            owner_user_id=owner.id if owner is not None else None,
+            is_public=is_public,
+        )
         db.session.add(folder)
         db.session.flush()
         card = Card(
@@ -23,6 +36,8 @@ def _create_owned_folder(app, owner, *, name="Owner Deck", card_name="Secret Tec
             lang="en",
         )
         db.session.add(card)
+        if shared_user is not None:
+            db.session.add(FolderShare(folder_id=folder.id, shared_user_id=shared_user.id))
         db.session.commit()
         return folder, card
 
@@ -100,6 +115,69 @@ def test_bearer_token_cannot_access_other_users_card_or_deck(client, create_user
 
     insight_resp = client.get(f"/api/decks/{folder.id}/insight", headers=headers)
     assert insight_resp.status_code in (403, 404)
+
+
+def test_api_folder_endpoints_allow_friend_access_via_bearer_token(client, create_user, app):
+    owner, _owner_password = create_user(email="friend-owner@example.com", username="friend_owner")
+    viewer, _viewer_password = create_user(email="friend-viewer@example.com", username="friend_viewer")
+    folder, card = _create_owned_folder(
+        app,
+        owner,
+        name="Friend Deck",
+        card_name="Friendly Secret",
+    )
+    with app.app_context():
+        db.session.add(UserFriend(user_id=viewer.id, friend_user_id=owner.id))
+        db.session.commit()
+
+    token = _issue_api_token(app, viewer.id)
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+    folders_resp = client.get("/api/folders", headers=headers)
+    assert folders_resp.status_code == 200
+    folder_payload = folders_resp.get_json() or {}
+    folder_ids = {item["id"] for item in folder_payload.get("data", [])}
+    assert folder.id in folder_ids
+
+    detail_resp = client.get(f"/api/folders/{folder.id}", headers=headers)
+    assert detail_resp.status_code == 200
+    detail_payload = detail_resp.get_json() or {}
+    assert detail_payload.get("data", {}).get("name") == "Friend Deck"
+
+    cards_resp = client.get(f"/api/folders/{folder.id}/cards", headers=headers)
+    assert cards_resp.status_code == 200
+    cards_payload = cards_resp.get_json() or {}
+    card_names = [item["name"] for item in cards_payload.get("data", [])]
+    assert card.name in card_names
+
+
+def test_api_folder_endpoints_allow_ownerless_folder_access(client, create_user, app):
+    viewer, viewer_password = create_user(email="ownerless-viewer@example.com", username="ownerless_viewer")
+    folder, card = _create_owned_folder(
+        app,
+        None,
+        name="System Deck",
+        card_name="Open Secret",
+    )
+
+    _login(client, viewer.email, viewer_password)
+
+    folders_resp = client.get("/api/folders")
+    assert folders_resp.status_code == 200
+    folder_payload = folders_resp.get_json() or {}
+    folder_ids = {item["id"] for item in folder_payload.get("data", [])}
+    assert folder.id in folder_ids
+
+    detail_resp = client.get(f"/api/folders/{folder.id}")
+    assert detail_resp.status_code == 200
+    detail_payload = detail_resp.get_json() or {}
+    assert detail_payload.get("data", {}).get("name") == "System Deck"
+
+    cards_resp = client.get(f"/api/folders/{folder.id}/cards")
+    assert cards_resp.status_code == 200
+    cards_payload = cards_resp.get_json() or {}
+    card_names = [item["name"] for item in cards_payload.get("data", [])]
+    assert card.name in card_names
 
 
 def test_api_card_response_uses_private_cache_control(client, create_user, app):

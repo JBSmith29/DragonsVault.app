@@ -5,7 +5,14 @@ from __future__ import annotations
 from flask_login import login_required
 
 from extensions import limiter
-from core.domains.decks.services import folder_service
+from core.domains.decks.services import (
+    commander_assignment_service,
+    commander_info_service,
+    folder_detail_service,
+    folder_metadata_service,
+    folder_sharing_service,
+    send_to_build_service,
+)
 from core.routes.api import api_bp
 from core.routes.base import limiter_key_user_or_ip, views
 
@@ -13,121 +20,121 @@ from core.routes.base import limiter_key_user_or_ip, views
 @views.get("/commander-brackets")
 @limiter.limit("30 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 def commander_brackets_info():
-    return folder_service.commander_brackets_info()
+    return commander_info_service.commander_brackets_info()
 
 
 @views.get("/commander-spellbook-combos")
 def commander_spellbook_combos():
-    return folder_service.commander_spellbook_combos()
+    return commander_info_service.commander_spellbook_combos()
 
 
 @views.post("/folders/<int:folder_id>/tag/set")
 @login_required
 def set_folder_tag(folder_id: int):
-    return folder_service.set_folder_tag(folder_id)
+    return folder_metadata_service.set_folder_tag(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/tag/clear")
 @login_required
 def clear_folder_tag(folder_id: int):
-    return folder_service.clear_folder_tag(folder_id)
+    return folder_metadata_service.clear_folder_tag(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/owner/set")
 @login_required
 def set_folder_owner(folder_id: int):
-    return folder_service.set_folder_owner(folder_id)
+    return folder_metadata_service.set_folder_owner(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/proxy/set")
 @login_required
 def set_folder_proxy(folder_id: int):
-    return folder_service.set_folder_proxy(folder_id)
+    return folder_metadata_service.set_folder_proxy(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/rename")
 @login_required
 def rename_proxy_deck(folder_id: int):
-    return folder_service.rename_proxy_deck(folder_id)
+    return folder_metadata_service.rename_proxy_deck(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/send-to-build")
 @login_required
 def send_to_build(folder_id: int):
-    return folder_service.send_to_build(folder_id)
+    return send_to_build_service.send_to_build(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/edhrec/refresh")
 @login_required
 def refresh_folder_edhrec(folder_id: int):
-    return folder_service.refresh_folder_edhrec(folder_id)
+    return folder_metadata_service.refresh_folder_edhrec(folder_id)
 
 
 @views.get("/folders/<int:folder_id>/cards.json")
 @login_required
 def folder_cards_json(folder_id):
-    return folder_service.folder_cards_json(folder_id)
+    return folder_metadata_service.folder_cards_json(folder_id)
 
 
 @api_bp.get("/folders/<int:folder_id>/commander-candidates")
 @login_required
 def api_folder_commander_candidates(folder_id: int):
-    return folder_service.api_folder_commander_candidates(folder_id)
+    return commander_assignment_service.api_folder_commander_candidates(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/set_commander")
 @login_required
 def set_folder_commander(folder_id: int):
-    return folder_service.set_folder_commander(folder_id)
+    return commander_assignment_service.set_folder_commander(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/clear_commander")
 @login_required
 def clear_folder_commander(folder_id: int):
-    return folder_service.clear_folder_commander(folder_id)
+    return commander_assignment_service.clear_folder_commander(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/commander/set")
 @login_required
 def set_commander(folder_id):
-    return folder_service.set_commander(folder_id)
+    return commander_assignment_service.set_commander(folder_id)
 
 
 @views.post("/folders/<int:folder_id>/commander/clear")
 @login_required
 def clear_commander(folder_id):
-    return folder_service.clear_commander(folder_id)
+    return commander_assignment_service.clear_commander(folder_id)
 
 
 @views.route("/folders/<int:folder_id>/sharing", methods=["GET", "POST"])
 @limiter.limit("30 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def folder_sharing(folder_id: int):
-    return folder_service.folder_sharing(folder_id)
+    return folder_sharing_service.folder_sharing(folder_id)
 
 
 @views.route("/folders/<int:folder_id>", methods=["GET", "POST"])
 @login_required
 def folder_detail(folder_id):
-    return folder_service.folder_detail(folder_id)
+    return folder_detail_service.folder_detail(folder_id)
 
 
 @api_bp.get("/folder/<int:folder_id>/counts")
 @login_required
 def folder_counts(folder_id: int):
-    return folder_service.folder_counts(folder_id)
+    return folder_metadata_service.folder_counts(folder_id)
 
 
 @views.route("/shared/folder/<int:folder_id>")
 @login_required
 def shared_folder_detail(folder_id):
-    return folder_service.shared_folder_detail(folder_id)
+    return folder_detail_service.shared_folder_detail(folder_id)
 
 
 @views.route("/shared/<string:share_token>")
 @login_required
 def shared_folder_by_token(share_token: str):
-    return folder_service.shared_folder_by_token(share_token)
+    return folder_detail_service.shared_folder_by_token(share_token)
 
 
 __all__ = [
