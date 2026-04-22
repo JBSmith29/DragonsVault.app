@@ -585,6 +585,16 @@
   .token-thumb { width:96px; flex:0 0 96px; }
   .token-thumb img { width:96px; height:96px; object-fit:contain; border-radius:.5rem; display:block; background:transparent; }
 
+  .token-source {
+    color: var(--bs-body-color);
+    background: transparent;
+    transition: background .12s ease, color .12s ease;
+  }
+  .token-source:hover {
+    background: rgba(var(--bs-primary-rgb), .1);
+    color: var(--bs-primary);
+  }
+
   .btn-plain{ background:transparent; border:0; padding:.25rem; line-height:1; }
   .btn-plain:focus{ box-shadow:none; }
   .btn-plain:hover{ background:rgba(255,255,255,.06); border-radius:.5rem; }
@@ -816,6 +826,15 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-outline-primary" type="submit">Send to Build</button>
         </form>
+      {% endif %}
+      {% if folder.is_deck and deck_tokens and deck_tokens|length %}
+        <button class="btn btn-sm btn-outline-secondary"
+                type="button"
+                id="tokensQuickBtn"
+                title="View tokens produced by cards in this deck">
+          <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1em;vertical-align:text-bottom;margin-right:.25rem;">
+          Tokens <span class="badge text-bg-secondary ms-1">{{ deck_tokens|length }}</span>
+        </button>
       {% endif %}
       <a class="btn btn-sm btn-outline-primary" href="{{ cards_link }}">View cards</a>
       <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#ownerModal">
@@ -1523,112 +1542,125 @@
 
   {% if is_deck_folder %}
     <div class="card mb-4" id="folderSynergy">
-      <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-          <div>
-            <h5 class="card-title mb-1">Synergy Recommendations</h5>
-            <p class="text-muted small mb-0">EDHREC-powered additions based on your commander.</p>
-          </div>
-          <div class="d-flex flex-wrap align-items-center gap-2">
-            {% if edhrec_tag_label %}
-              <span class="badge bg-secondary-subtle text-secondary-emphasis">Tag: {{ edhrec_tag_label }}</span>
-            {% endif %}
-            {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
-              <form method="post" action="{{ url_for('views.refresh_folder_edhrec', folder_id=folder.id) }}" class="d-inline">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-sm btn-outline-primary" type="submit">Refresh EDHREC</button>
-              </form>
-            {% endif %}
-          </div>
+      {# Collapsible header #}
+      <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <button class="btn btn-plain d-inline-flex align-items-center gap-2 fw-semibold"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#synergyBody"
+                aria-expanded="false"
+                aria-controls="synergyBody"
+                id="synergyToggle">
+          <i class="bi bi-stars"></i>
+          Synergy Recommendations
+          <i class="bi bi-chevron-down synergy-chevron" style="font-size:.8rem;transition:transform .2s ease;"></i>
+        </button>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          {% if edhrec_tag_label %}
+            <span class="badge bg-secondary-subtle text-secondary-emphasis">Tag: {{ edhrec_tag_label }}</span>
+          {% endif %}
+          {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+            <form method="post" action="{{ url_for('views.refresh_folder_edhrec', folder_id=folder.id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-primary" type="submit">Refresh EDHREC</button>
+            </form>
+          {% endif %}
         </div>
-        {% if not edhrec_commander_ready %}
-          <div class="text-muted small">Set a commander to see EDHREC recommendations.</div>
-        {% elif not edhrec_ready %}
-          <div class="text-muted small">EDHREC data is not available yet. Ask an admin to refresh the cache.</div>
-        {% elif not edhrec_sections %}
-          <div class="text-muted small">No EDHREC recommendations found for this commander.</div>
-        {% else %}
-          <p class="text-muted small mb-3">Cards already in this deck are labeled.</p>
-          <div class="build-rec-list">
-            {% for section in edhrec_sections %}
-              <details class="build-rec-section"{% if section.default_open %} open{% endif %}>
-                <summary class="build-rec-summary">
-                  <span class="fw-semibold">{{ section.label }}</span>
-                  <span class="text-muted small">{{ section.count }} cards</span>
-                </summary>
-                <p class="text-muted small mb-3">{{ section.description }}</p>
-                <div class="row g-3">
-                  {% for rec in section.cards %}
-                    <div class="col-6 col-md-4 col-lg-3 col-xl-2">
-                      <div class="card h-100 build-rec-card">
-                        {% if rec.image %}
-                          <img src="{{ rec.image }}"
-                               class="card-img-top build-card-img"
-                               alt="{{ rec.name }}"
-                               data-hover-src="{{ rec.image }}">
-                        {% endif %}
-                        <div class="card-body">
-                          <div class="d-flex align-items-start justify-content-between gap-2">
-                            {% set rec_href = url_for('views.scryfall_browser', q=rec.name, unique='1') %}
-                            <div class="build-rec-title">
-                              <a href="{{ rec_href }}"
-                                 class="text-decoration-none text-reset rec-card-title"
-                                 data-hover-src="{{ rec.image or '' }}">
-                                {{ rec.name }}
-                              </a>
+      </div>
+
+      {# Collapsed by default #}
+      <div class="collapse" id="synergyBody">
+        <div class="card-body">
+          <p class="text-muted small mb-3">EDHREC-powered additions based on your commander.</p>
+          {% if not edhrec_commander_ready %}
+            <div class="text-muted small">Set a commander to see EDHREC recommendations.</div>
+          {% elif not edhrec_ready %}
+            <div class="text-muted small">EDHREC data is not available yet. Ask an admin to refresh the cache.</div>
+          {% elif not edhrec_sections %}
+            <div class="text-muted small">No EDHREC recommendations found for this commander.</div>
+          {% else %}
+            <p class="text-muted small mb-3">Cards already in this deck are labeled.</p>
+            <div class="build-rec-list">
+              {% for section in edhrec_sections %}
+                <details class="build-rec-section"{% if section.default_open %} open{% endif %}>
+                  <summary class="build-rec-summary">
+                    <span class="fw-semibold">{{ section.label }}</span>
+                    <span class="text-muted small">{{ section.count }} cards</span>
+                  </summary>
+                  <p class="text-muted small mb-3">{{ section.description }}</p>
+                  <div class="row g-3">
+                    {% for rec in section.cards %}
+                      <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+                        <div class="card h-100 build-rec-card">
+                          {% if rec.image %}
+                            <img src="{{ rec.image }}"
+                                 class="card-img-top build-card-img"
+                                 alt="{{ rec.name }}"
+                                 data-hover-src="{{ rec.image }}">
+                          {% endif %}
+                          <div class="card-body">
+                            <div class="d-flex align-items-start justify-content-between gap-2">
+                              {% set rec_href = url_for('views.scryfall_browser', q=rec.name, unique='1') %}
+                              <div class="build-rec-title">
+                                <a href="{{ rec_href }}"
+                                   class="text-decoration-none text-reset rec-card-title"
+                                   data-hover-src="{{ rec.image or '' }}">
+                                  {{ rec.name }}
+                                </a>
+                              </div>
+                              {% if rec.in_deck %}
+                                <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">In Deck</span>
+                              {% endif %}
                             </div>
-                            {% if rec.in_deck %}
-                              <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">In Deck</span>
+                            {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}
+                              <div class="d-flex text-muted small">
+                                {% if rec.synergy_percent is not none %}
+                                  <span>Synergy {{ rec.synergy_percent }}%</span>
+                                {% endif %}
+                                {% if rec.inclusion_percent is not none %}
+                                  {% set inclusion_value = rec.inclusion_percent|float %}
+                                  {% if inclusion_value < 0 %}
+                                    {% set inclusion_display = 0 %}
+                                  {% elif inclusion_value > 100 %}
+                                    {% set inclusion_display = 100 %}
+                                  {% else %}
+                                    {% set inclusion_display = rec.inclusion_percent %}
+                                  {% endif %}
+                                  <span class="ms-auto">Incl {{ inclusion_display }}%</span>
+                                {% endif %}
+                              </div>
+                            {% endif %}
+                            {% if rec.price_text %}
+                              <div class="text-muted small mt-1">{{ rec.price_text }}</div>
+                            {% endif %}
+                            {% if rec.reasons %}
+                              <div class="d-flex flex-wrap gap-1 mt-2">
+                                {% for reason in rec.reasons %}
+                                  <span class="badge rounded-pill bg-info-subtle text-info-emphasis">{{ reason }}</span>
+                                {% endfor %}
+                              </div>
+                            {% endif %}
+                            {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
+                              <div class="form-check mt-2">
+                                <input class="form-check-input build-add-checkbox"
+                                       type="checkbox"
+                                       form="folderBuildAddForm"
+                                       name="card_oracle_id"
+                                       value="{{ rec.oracle_id }}"
+                                       id="buildAdd-{{ section.key }}-{{ loop.index0 }}">
+                                <label class="form-check-label small" for="buildAdd-{{ section.key }}-{{ loop.index0 }}">Add to Build</label>
+                              </div>
                             {% endif %}
                           </div>
-                          {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}
-                            <div class="d-flex text-muted small">
-                              {% if rec.synergy_percent is not none %}
-                                <span>Synergy {{ rec.synergy_percent }}%</span>
-                              {% endif %}
-                              {% if rec.inclusion_percent is not none %}
-                                {% set inclusion_value = rec.inclusion_percent|float %}
-                                {% if inclusion_value < 0 %}
-                                  {% set inclusion_display = 0 %}
-                                {% elif inclusion_value > 100 %}
-                                  {% set inclusion_display = 100 %}
-                                {% else %}
-                                  {% set inclusion_display = rec.inclusion_percent %}
-                                {% endif %}
-                                <span class="ms-auto">Incl {{ inclusion_display }}%</span>
-                              {% endif %}
-                            </div>
-                          {% endif %}
-                          {% if rec.price_text %}
-                            <div class="text-muted small mt-1">{{ rec.price_text }}</div>
-                          {% endif %}
-                          {% if rec.reasons %}
-                            <div class="d-flex flex-wrap gap-1 mt-2">
-                              {% for reason in rec.reasons %}
-                                <span class="badge rounded-pill bg-info-subtle text-info-emphasis">{{ reason }}</span>
-                              {% endfor %}
-                            </div>
-                          {% endif %}
-                          {% if current_user.is_authenticated and folder.owner_user_id == current_user.id %}
-                            <div class="form-check mt-2">
-                              <input class="form-check-input build-add-checkbox"
-                                     type="checkbox"
-                                     form="folderBuildAddForm"
-                                     name="card_oracle_id"
-                                     value="{{ rec.oracle_id }}"
-                                     id="buildAdd-{{ section.key }}-{{ loop.index0 }}">
-                              <label class="form-check-label small" for="buildAdd-{{ section.key }}-{{ loop.index0 }}">Add to Build</label>
-                            </div>
-                          {% endif %}
                         </div>
                       </div>
-                    </div>
-                  {% endfor %}
-                </div>
-              </details>
-            {% endfor %}
-          </div>
-        {% endif %}
+                    {% endfor %}
+                  </div>
+                </details>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
       </div>
     </div>
   {% endif %}
@@ -1656,24 +1688,27 @@
 
   {# ===== Tokens section ===== #}
   {% if deck_tokens and deck_tokens|length %}
-    <div class="card token-section mb-4">
+    <div class="card token-section mb-4" id="deckTokensSection">
       <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
           <button id="tokensToggle"
-                  class="btn btn-sm btn-plain tap-toggle d-inline-flex align-items-center gap-2 collapsed"
+                  class="btn btn-sm btn-plain tap-toggle d-inline-flex align-items-center gap-2"
                   type="button"
                   data-bs-toggle="collapse"
                   data-bs-target="#deckTokensCollapse"
-                  aria-expanded="false"
+                  aria-expanded="true"
                   aria-controls="deckTokensCollapse"
                   title="Expand/Collapse">
             <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}">
             <span class="fw-semibold">Tokens</span>
+            <span class="badge text-bg-secondary">{{ deck_tokens|length }}</span>
+            <i class="bi bi-chevron-up tokens-chevron" style="font-size:.8rem;transition:transform .2s ease;"></i>
           </button>
         </div>
+        <span class="text-muted small">Cards in this deck that produce tokens</span>
       </div>
 
-      <div class="collapse" id="deckTokensCollapse">
+      <div class="collapse show" id="deckTokensCollapse">
         <div class="card-body">
           <div class="row g-3">
             {% for t in deck_tokens %}
@@ -1682,14 +1717,14 @@
               {% set tok_large = (tok_normal or tok_img or '')|replace('/normal/','/large/') %}
               {% set srcs = t.sources or [] %}
               {% set nsrc = srcs|length %}
-              {% set more = nsrc-2 if nsrc>2 else 0 %}
-              {% set collapse_id = 'toksrc-' ~ loop.index0 %}
+              {% set creator_collapse_id = 'tokcreator-' ~ loop.index0 %}
               {% set tok_href = (url_for('views.scryfall_print_detail', sid=t.id) if t.id else url_for('views.scryfall_browser', q=t.name, unique='1')) %}
 
-              <div class="col-12 col-md-6">
-                <div class="token-item h-100">
-                  <div class="d-flex gap-2">
-                    <div class="token-thumb">
+              <div class="col-12 col-md-6 col-xl-4">
+                <div class="token-item h-100 border rounded-3 p-3">
+                  {# Token header: image + name + type #}
+                  <div class="d-flex gap-3 align-items-start mb-2">
+                    <div class="token-thumb flex-shrink-0">
                       <a class="token-tile-link d-inline-block"
                          href="{{ tok_href }}"
                          {% if tok_large or tok_normal or tok_img %}
@@ -1706,80 +1741,71 @@
                         {% endif %}
                       </a>
                     </div>
-
                     <div class="flex-fill min-w-0">
-                      <div class="d-flex align-items-center gap-2">
-                        <div class="fw-semibold text-truncate">
-                          <a class="token-name-link text-decoration-none"
-                             href="{{ tok_href }}"
-                             {% if tok_large or tok_normal or tok_img %}
-                               data-hover-src="{{ tok_large or tok_normal or tok_img }}"
-                             {% endif %}>
-                            {{ t.name or 'Token' }}
-                          </a>
-                        </div>
-                        <span class="badge text-bg-secondary ms-auto">&times;{{ nsrc }}</span>
+                      <div class="fw-semibold">
+                        <a class="token-name-link text-decoration-none"
+                           href="{{ tok_href }}"
+                           {% if tok_large or tok_normal or tok_img %}
+                             data-hover-src="{{ tok_large or tok_normal or tok_img }}"
+                           {% endif %}>
+                          {{ t.name or 'Token' }}
+                        </a>
                       </div>
-                      <div class="small text-muted text-truncate">{{ t.type_line or '' }}</div>
-                      {% if srcs %}
-                        {% set creator_collapse_id = 'tokcreator-' ~ loop.index0 %}
-                        <div class="d-flex align-items-center gap-2 mt-2">
-                          <button class="btn btn-outline-secondary btn-sm px-2 py-1 tap-toggle"
-                                  type="button"
-                                  data-bs-toggle="collapse"
-                                  data-bs-target="#{{ creator_collapse_id }}"
-                                  aria-expanded="true"
-                                  aria-controls="{{ creator_collapse_id }}"
-                                  title="Show token creators">
-                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" class="tap-icon-img">
-                          </button>
-                          <span class="small text-muted fw-semibold">Token Creator</span>
-                        </div>
-                        <div class="collapse show mt-1" id="{{ creator_collapse_id }}">
-                          <div class="token-source-list">
-                            {% for s in srcs %}
-                              {% set src_small = s.img or '' %}
-                              {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
-                              {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
-                              <a class="token-source text-decoration-none d-flex align-items-center gap-2"
-                                 href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
-                                 {% if src_large or src_normal or src_small %}
-                                   data-hover-src="{{ src_large or src_normal or src_small }}"
-                                 {% endif %}>
-                                <span>{{ s.name }}</span>
-                              </a>
-                            {% endfor %}
-                          </div>
-                        </div>
-                      {% endif %}
+                      <div class="small text-muted">{{ t.type_line or '' }}</div>
+                      <div class="mt-1">
+                        <span class="badge text-bg-secondary">
+                          {{ nsrc }} creator{{ 's' if nsrc != 1 else '' }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                      <div class="collapse mt-2" id="{{ collapse_id }}">
-                        <div class="small mb-1 text-muted d-flex align-items-center gap-2">
-                          <span class="badge bg-light text-dark border">
-                            <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" class="tap-icon-img">
-                          </span>
-                          <span>Token Creator</span>
-                        </div>
-                        <div class="token-source-list">
+                  {# Creators list — collapsible, open by default #}
+                  {% if srcs %}
+                    <div>
+                      <button class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-between mb-2"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#{{ creator_collapse_id }}"
+                              aria-expanded="true"
+                              aria-controls="{{ creator_collapse_id }}">
+                        <span class="small fw-semibold">
+                          <i class="bi bi-magic me-1"></i>Made by
+                        </span>
+                        <i class="bi bi-chevron-up" style="font-size:.75rem;transition:transform .2s ease;"></i>
+                      </button>
+                      <div class="collapse show" id="{{ creator_collapse_id }}">
+                        <div class="d-flex flex-column gap-1">
                           {% for s in srcs %}
                             {% set src_small = s.img or '' %}
                             {% set src_normal = (src_small or '')|replace('/small/','/normal/') %}
                             {% set src_large = (src_normal or src_small)|replace('/normal/','/large/') %}
-                            <a class="token-source text-decoration-none d-flex align-items-center gap-2"
+                            <a class="token-source d-flex align-items-center gap-2 text-decoration-none rounded-2 px-2 py-1"
                                href="{{ url_for('views.card_detail', card_id=s.card_id) }}"
                                {% if src_large or src_normal or src_small %}
                                  data-hover-src="{{ src_large or src_normal or src_small }}"
                                {% endif %}>
-                              <span>{{ s.name }}</span>
+                              {% if src_small %}
+                                <img src="{{ src_small }}"
+                                     alt="{{ s.name }}"
+                                     class="rounded-1 flex-shrink-0"
+                                     style="width:32px;height:auto;object-fit:cover;"
+                                     {% if src_large or src_normal %}
+                                       data-hover-src="{{ src_large or src_normal }}"
+                                     {% endif %}>
+                              {% else %}
+                                <span class="flex-shrink-0 d-inline-flex align-items-center justify-content-center rounded-1 bg-secondary-subtle"
+                                      style="width:32px;height:32px;font-size:.7rem;">
+                                  <i class="bi bi-card-image"></i>
+                                </span>
+                              {% endif %}
+                              <span class="small fw-semibold text-truncate">{{ s.name }}</span>
                             </a>
                           {% endfor %}
-                          {% if not srcs %}
-                            <div class="text-muted small">No sources listed.</div>
-                          {% endif %}
                         </div>
                       </div>
                     </div>
-                  </div>
+                  {% endif %}
                 </div>
               </div>
             {% endfor %}
@@ -1788,7 +1814,6 @@
       </div>
     </div>
   {% endif %}
-
   {% set current_sort = sort or (request.args.get('sort') or 'name') %}
   {% set current_dir = direction or (request.args.get('dir') or 'asc') %}
   {% set sort_label_map = {
@@ -2353,6 +2378,44 @@
   });
 
   // Tokens collapse handled by Bootstrap data API
+
+  // Tokens quick-jump button: scroll to section and ensure it's open
+  const tokensQuickBtn = document.getElementById('tokensQuickBtn');
+  if (tokensQuickBtn) {
+    tokensQuickBtn.addEventListener('click', function () {
+      const section = document.getElementById('deckTokensSection');
+      const collapse = document.getElementById('deckTokensCollapse');
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (collapse && !collapse.classList.contains('show')) {
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapse);
+        bsCollapse.show();
+      }
+    });
+  }
+
+  // Chevron rotation for synergy toggle
+  const synergyToggle = document.getElementById('synergyToggle');
+  if (synergyToggle) {
+    const synergyBody = document.getElementById('synergyBody');
+    const chevron = synergyToggle.querySelector('.synergy-chevron');
+    if (synergyBody && chevron) {
+      synergyBody.addEventListener('show.bs.collapse', () => { chevron.style.transform = 'rotate(180deg)'; });
+      synergyBody.addEventListener('hide.bs.collapse', () => { chevron.style.transform = 'rotate(0deg)'; });
+    }
+  }
+
+  // Chevron rotation for tokens toggle
+  const tokensToggle = document.getElementById('tokensToggle');
+  if (tokensToggle) {
+    const tokensCollapse = document.getElementById('deckTokensCollapse');
+    const tokChevron = tokensToggle.querySelector('.tokens-chevron');
+    if (tokensCollapse && tokChevron) {
+      tokensCollapse.addEventListener('show.bs.collapse', () => { tokChevron.style.transform = 'rotate(0deg)'; });
+      tokensCollapse.addEventListener('hide.bs.collapse', () => { tokChevron.style.transform = 'rotate(180deg)'; });
+    }
+  }
 
   // Export CSV for this folder (supports multiple formats)
   const exportButtons = document.querySelectorAll('[data-export-format]');
