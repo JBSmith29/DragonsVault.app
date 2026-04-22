@@ -341,6 +341,8 @@ def create_app():
         "views.landing_page",
         "views.login",
         "views.register",
+        "views.forgot_password",
+        "views.reset_password",
         "views.healthz",
         "views.readyz",
         "api.api_healthz",

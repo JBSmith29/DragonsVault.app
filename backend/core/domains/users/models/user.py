@@ -31,6 +31,10 @@ class User(UserMixin, db.Model):
     last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
     archived_at = db.Column(db.DateTime, nullable=True, index=True)
 
+    # Password reset (self-service) ----------------------------------------
+    pw_reset_token_hash = db.Column(db.String(64), nullable=True, unique=True, index=True)
+    pw_reset_token_expires_at = db.Column(db.DateTime, nullable=True)
+
     folders = db.relationship("Folder", back_populates="owner_user", lazy="dynamic")
     shared_folders = db.relationship("FolderShare", back_populates="shared_user", lazy="dynamic")
     following = db.relationship(
@@ -85,6 +89,44 @@ class User(UserMixin, db.Model):
         self.api_token_hash = None
         self.api_token_hint = None
         self.api_token_created_at = None
+
+    # Password reset helpers -----------------------------------------------
+    PW_RESET_TTL_SECONDS = 3600  # 1 hour
+
+    def issue_pw_reset_token(self) -> str:
+        """Generate a one-time password reset token. Returns plaintext; stores hash."""
+        from datetime import timedelta
+        token = secrets.token_urlsafe(32)
+        self.pw_reset_token_hash = hashlib.sha256(token.encode()).hexdigest()
+        self.pw_reset_token_expires_at = utcnow() + timedelta(seconds=self.PW_RESET_TTL_SECONDS)
+        return token
+
+    def clear_pw_reset_token(self) -> None:
+        self.pw_reset_token_hash = None
+        self.pw_reset_token_expires_at = None
+
+    @classmethod
+    def verify_pw_reset_token(cls, token: str | None) -> Optional["User"]:
+        """Return the user if the token is valid and unexpired, else None."""
+        if not token:
+            return None
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        candidate = db.session.execute(
+            select(cls).where(cls.pw_reset_token_hash == digest)
+        ).scalar_one_or_none()
+        if not candidate:
+            return None
+        if not candidate.pw_reset_token_hash:
+            return None
+        if not hmac.compare_digest(candidate.pw_reset_token_hash, digest):
+            return None
+        if candidate.pw_reset_token_expires_at is None:
+            return None
+        if utcnow() > candidate.pw_reset_token_expires_at:
+            return None
+        if candidate.archived_at is not None:
+            return None
+        return candidate
 
     @classmethod
     def verify_api_token(cls, token: str | None) -> Optional["User"]:

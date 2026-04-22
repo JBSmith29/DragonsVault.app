@@ -165,7 +165,6 @@ def register():
 @limiter.limit("20 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
 @login_required
 def manage_api_token():
-    issued_token = None
     action = (request.form.get("action") or "").lower() if request.method == "POST" else ""
 
     if action == "create":
@@ -310,4 +309,61 @@ def account_center():
             username_form_value if username_form_value is not None else (current_user.username or "")
         ),
         username_max=MAX_USERNAME_LENGTH,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Self-service password reset
+# ---------------------------------------------------------------------------
+
+@views.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+@limiter.limit("10 per hour", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for("views.dashboard"))
+
+    message = None
+    if request.method == "POST":
+        from core.domains.users.services.password_reset_service import request_password_reset
+        email = (request.form.get("email") or "").strip().lower()
+        message = request_password_reset(email)
+
+    return render_template(
+        "auth/forgot_password.html",
+        message=message,
+        disable_hx=True,
+        disable_sidebar=True,
+    )
+
+
+@views.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"], key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+def reset_password(token: str):
+    if current_user.is_authenticated:
+        return redirect(url_for("views.dashboard"))
+
+    # Validate token on GET so we can show an error immediately for bad links
+    from models import User as _User
+    token_valid = _User.verify_pw_reset_token(token) is not None
+
+    error = None
+    if request.method == "POST":
+        from core.domains.users.services.password_reset_service import redeem_password_reset
+        new_password = request.form.get("new_password") or ""
+        confirm_password = request.form.get("confirm_password") or ""
+        success, msg = redeem_password_reset(token, new_password, confirm_password, MIN_PASSWORD_LENGTH)
+        if success:
+            flash(msg, "success")
+            return redirect(url_for("views.login"))
+        error = msg
+
+    return render_template(
+        "auth/reset_password.html",
+        token=token,
+        token_valid=token_valid,
+        error=error,
+        min_password_length=MIN_PASSWORD_LENGTH,
+        disable_hx=True,
+        disable_sidebar=True,
     )

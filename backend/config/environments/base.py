@@ -78,3 +78,12 @@ class BaseConfig:
     }
     STATIC_ASSET_BASE_URL = os.getenv("STATIC_ASSET_BASE_URL")
     PUBLIC_GAME_DASHBOARD_OWNER_ID = os.getenv("PUBLIC_GAME_DASHBOARD_OWNER_ID")
+
+    # Email (SMTP) — used for password reset
+    APP_NAME = os.getenv("APP_NAME", "DragonsVault")
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "localhost")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "1").lower() in {"1", "true", "yes", "on"}
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+    MAIL_FROM = os.getenv("MAIL_FROM", "noreply@dragonsvault.app")
