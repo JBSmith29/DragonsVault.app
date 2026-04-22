@@ -344,7 +344,7 @@ services:
       "dvapi.wsgi:application"
     restart: unless-stopped
     environment:
-      PYTHONPATH: /app/backend/django_api
+      PYTHONPATH: /app/backend/django_api:/app/backend
       DJANGO_SETTINGS_MODULE: dvapi.settings
       DJANGO_DEBUG: "0"
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set_in_env_file}
