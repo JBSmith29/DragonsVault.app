@@ -350,6 +350,7 @@ services:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set_in_env_file}
       DJANGO_SECRET_KEY_FILE: ${DJANGO_SECRET_KEY_FILE:-/run/secrets/django_secret_key}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?set_in_env_file}
+      DJANGO_SECURE_SSL_REDIRECT: "0"
       INSTANCE_DIR: /app/instance
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_env_file}
       DATABASE_URL: postgresql+psycopg2://dvapp:${POSTGRES_PASSWORD}@pgbouncer:6432/dragonsvault
