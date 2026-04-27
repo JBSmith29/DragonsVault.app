@@ -832,7 +832,6 @@
                 type="button"
                 id="tokensQuickBtn"
                 title="View tokens produced by cards in this deck">
-          <img src="https://svgs.scryfall.io/card-symbols/T.svg" alt="{T}" style="height:1em;vertical-align:text-bottom;margin-right:.25rem;">
           Tokens <span class="badge text-bg-secondary ms-1">{{ deck_tokens|length }}</span>
         </button>
       {% endif %}
@@ -1579,7 +1578,6 @@
           {% elif not edhrec_sections %}
             <div class="text-muted small">No EDHREC recommendations found for this commander.</div>
           {% else %}
-            <p class="text-muted small mb-3">Cards already in this deck are labeled.</p>
             <div class="build-rec-list">
               {% for section in edhrec_sections %}
                 <details class="build-rec-section"{% if section.default_open %} open{% endif %}>
@@ -1608,9 +1606,6 @@
                                   {{ rec.name }}
                                 </a>
                               </div>
-                              {% if rec.in_deck %}
-                                <span class="badge rounded-pill bg-success-subtle text-success-emphasis text-nowrap">In Deck</span>
-                              {% endif %}
                             </div>
                             {% if rec.synergy_percent is not none or rec.inclusion_percent is not none %}
                               <div class="d-flex text-muted small">

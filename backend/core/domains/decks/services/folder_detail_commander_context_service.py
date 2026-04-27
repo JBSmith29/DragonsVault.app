@@ -158,10 +158,18 @@ def build_folder_detail_commander_context(
             )
             if deck_oracle_ids and edhrec_sections:
                 for section in edhrec_sections:
+                    # Filter out cards already in deck and mark remaining cards
+                    filtered_cards = []
                     for card in section.get("cards") or []:
                         oracle_id = (card.get("oracle_id") or "").strip()
                         if oracle_id:
-                            card["in_deck"] = oracle_id in deck_oracle_ids
+                            if oracle_id in deck_oracle_ids:
+                                # Skip cards already in deck
+                                continue
+                            card["in_deck"] = False
+                        filtered_cards.append(card)
+                    section["cards"] = filtered_cards
+                    section["count"] = len(filtered_cards)
 
     return {
         "bracket_card_links": bracket_card_links,
