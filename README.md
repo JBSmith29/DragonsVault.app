@@ -212,9 +212,11 @@ Frontend CI is validated on Node.js 20.
 - [DEPLOYMENT](docs/DEPLOYMENT.md) - Production deployment guide
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) - Common issues and solutions
 - [DATABASE_SCHEMA](docs/DATABASE_SCHEMA.md) - Database schema reference
+- [Documentation Hosting](docs/HOSTING_DOCS.md) - How to host docs on your server or GitHub Pages
 
 ### Developer Documentation
 - [API Documentation](http://localhost/api/docs) - OpenAPI/Swagger UI (when running)
+- [Sphinx Documentation](http://localhost/docs/) - Full documentation site (when deployed)
 - [Architecture Decision Records](docs/adr/) - Design decisions and rationale
 - [CONTRIBUTING](CONTRIBUTING.md) - Development setup and guidelines
 - [SECURITY](SECURITY.md) - Security policies and reporting
