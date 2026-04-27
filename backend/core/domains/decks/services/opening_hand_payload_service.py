@@ -168,6 +168,8 @@ def _client_card_payload(entry: dict, placeholder: str) -> dict:
         "detail_url": entry.get("detail_url") or entry.get("external_url"),
         "type_line": entry.get("type_line") or "",
         "oracle_text": entry.get("oracle_text") or "",
+        "mana_cost": entry.get("mana_cost") or "",
+        "mana_value": entry.get("mana_value"),
         "is_creature": bool(flags["is_creature"]),
         "is_land": bool(flags["is_land"]),
         "is_instant": bool(flags["is_instant"]),

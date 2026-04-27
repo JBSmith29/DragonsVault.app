@@ -152,6 +152,8 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
                 or (pr or {}).get("oracle_text")
                 or _oracle_text_from_faces((pr or {}).get("card_faces"))
                 or "",
+                "mana_cost": (pr or {}).get("mana_cost") or "",
+                "mana_value": (pr or {}).get("cmc"),
             }
         )
 
@@ -234,6 +236,8 @@ def _deck_entries_from_build_session(session_id: int) -> tuple[Optional[str], li
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
                 "type_line": _type_line_from_print(pr),
                 "oracle_text": oracle_text or "",
+                "mana_cost": (pr or {}).get("mana_cost") or "",
+                "mana_value": (pr or {}).get("cmc"),
             }
         )
 
@@ -295,6 +299,8 @@ def _deck_entries_from_list(
                 "external_url": (pr or {}).get("scryfall_uri") or (pr or {}).get("uri"),
                 "type_line": _type_line_from_print(pr),
                 "oracle_text": oracle_text or "",
+                "mana_cost": (pr or {}).get("mana_cost") or "",
+                "mana_value": (pr or {}).get("cmc"),
             }
         )
 

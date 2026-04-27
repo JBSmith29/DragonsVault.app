@@ -491,6 +491,132 @@
   .board-zone-creatures { grid-area: creatures; }
   .board-zone-permanents { grid-area: permanents; }
   .board-zone-lands { grid-area: lands; }
+
+  /* ===== Card Detail Panel ===== */
+  #cardDetailPanel {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.5rem);
+    right: 1.25rem;
+    width: clamp(260px, 22vw, 320px);
+    z-index: 1035;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 1rem;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 1rem 2.5rem rgba(2, 6, 23, 0.55);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: 70vh;
+  }
+  #cardDetailPanel.is-visible {
+    display: flex;
+  }
+  .cdp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem 0.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    flex-shrink: 0;
+  }
+  .cdp-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    color: #f1f5f9;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cdp-close {
+    flex-shrink: 0;
+    background: transparent;
+    border: 0;
+    color: rgba(148, 163, 184, 0.7);
+    padding: 0.15rem 0.3rem;
+    line-height: 1;
+    border-radius: 0.4rem;
+    font-size: 1rem;
+  }
+  .cdp-close:hover { color: #f1f5f9; background: rgba(255,255,255,0.08); }
+  .cdp-meta {
+    padding: 0.45rem 0.75rem 0;
+    flex-shrink: 0;
+  }
+  .cdp-type {
+    font-size: 0.75rem;
+    color: rgba(148, 163, 184, 0.85);
+    font-style: italic;
+    margin-bottom: 0.2rem;
+  }
+  .cdp-mana {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.35rem;
+  }
+  .cdp-mana img {
+    height: 1.1em;
+    vertical-align: middle;
+  }
+  .cdp-mana .cdp-cmc {
+    font-size: 0.72rem;
+    color: rgba(148, 163, 184, 0.7);
+    margin-left: 0.25rem;
+  }
+  .cdp-oracle {
+    padding: 0.45rem 0.75rem 0.75rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .cdp-oracle::-webkit-scrollbar { width: 5px; }
+  .cdp-oracle::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 999px; }
+  .cdp-hints {
+    padding: 0.4rem 0.75rem 0.6rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    flex-shrink: 0;
+  }
+  .cdp-hint-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .cdp-hint-draw    { background: rgba(59,130,246,0.25); color: #93c5fd; }
+  .cdp-hint-discard { background: rgba(239,68,68,0.22);  color: #fca5a5; }
+  .cdp-hint-token   { background: rgba(16,185,129,0.22); color: #6ee7b7; }
+  .cdp-hint-search  { background: rgba(234,179,8,0.22);  color: #fde68a; }
+  .cdp-hint-ramp    { background: rgba(132,204,22,0.22); color: #bef264; }
+  .cdp-hint-counter { background: rgba(139,92,246,0.22); color: #c4b5fd; }
+  .cdp-hint-exile   { background: rgba(249,115,22,0.22); color: #fdba74; }
+  .cdp-hint-bounce  { background: rgba(14,165,233,0.22); color: #7dd3fc; }
+  .cdp-hint-copy    { background: rgba(168,85,247,0.22); color: #e9d5ff; }
+  .cdp-hint-land    { background: rgba(120,113,108,0.3); color: #d6d3d1; }
+  @media (max-width: 768px) {
+    #cardDetailPanel {
+      right: 0.5rem;
+      left: 0.5rem;
+      width: auto;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 5.5rem);
+      max-height: 50vh;
+    }
+  }
   @media (max-width: 1199.98px) {
     .board-grid-layout {
       grid-template-areas:
@@ -869,6 +995,22 @@
       </div>
     </div>
   </div>
+</div>
+
+{# ===== Card Detail Panel ===== #}
+<div id="cardDetailPanel" role="complementary" aria-label="Card details" aria-live="polite">
+  <div class="cdp-header">
+    <span class="cdp-name" id="cdpName"></span>
+    <button class="cdp-close" id="cdpClose" aria-label="Close card detail" type="button">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <div class="cdp-meta">
+    <div class="cdp-type" id="cdpType"></div>
+    <div class="cdp-mana" id="cdpMana"></div>
+  </div>
+  <div class="cdp-oracle" id="cdpOracle"></div>
+  <div class="cdp-hints" id="cdpHints"></div>
 </div>
 
 <div class="opening-hand-layout{% if selection_active %} full-mode{% endif %}">
@@ -1588,6 +1730,94 @@
     'snow-covered forest',
     'snow-covered wastes',
   ]);
+
+  // ===== Card Detail Panel =====
+  const cdpPanel    = document.getElementById('cardDetailPanel');
+  const cdpName     = document.getElementById('cdpName');
+  const cdpType     = document.getElementById('cdpType');
+  const cdpMana     = document.getElementById('cdpMana');
+  const cdpOracle   = document.getElementById('cdpOracle');
+  const cdpHints    = document.getElementById('cdpHints');
+  const cdpClose    = document.getElementById('cdpClose');
+
+  // Render mana symbols from a mana cost string like "{2}{U}{U}"
+  function renderManaCost(manaCost, cmc) {
+    if (!cdpMana) return;
+    cdpMana.innerHTML = '';
+    const cost = (manaCost || '').trim();
+    if (cost) {
+      const symbols = cost.match(/\{[^}]+\}/g) || [];
+      symbols.forEach(function(sym) {
+        const code = sym.slice(1, -1).toLowerCase().replace('/', '');
+        const img = document.createElement('img');
+        img.src = 'https://svgs.scryfall.io/card-symbols/' + encodeURIComponent(code.toUpperCase()) + '.svg';
+        img.alt = sym;
+        img.title = sym;
+        img.onerror = function() { this.style.display = 'none'; };
+        cdpMana.appendChild(img);
+      });
+    }
+    if (cmc != null && cmc !== '') {
+      const cmcSpan = document.createElement('span');
+      cmcSpan.className = 'cdp-cmc';
+      cmcSpan.textContent = 'CMC ' + cmc;
+      cdpMana.appendChild(cmcSpan);
+    }
+  }
+
+  // Detect mechanic hints from oracle text
+  function buildMechanicHints(card) {
+    const text = ((card && card.oracle_text) || '').toLowerCase();
+    if (!text) return [];
+    const hints = [];
+    if (/draw( \w+)? card/.test(text))                                hints.push({ cls: 'cdp-hint-draw',    icon: 'bi-arrow-down-circle', label: 'Draw' });
+    if (/discard( \w+)? card/.test(text))                             hints.push({ cls: 'cdp-hint-discard', icon: 'bi-trash3',            label: 'Discard' });
+    if (/create( \w+)? token/.test(text))                             hints.push({ cls: 'cdp-hint-token',   icon: 'bi-stars',             label: 'Token' });
+    if (/search your library/.test(text))                             hints.push({ cls: 'cdp-hint-search',  icon: 'bi-search',            label: 'Tutor' });
+    if (/add \{|\btap\b.*\badd\b|produces? mana/.test(text))         hints.push({ cls: 'cdp-hint-ramp',    icon: 'bi-lightning-charge',  label: 'Ramp' });
+    if (/counter target/.test(text))                                  hints.push({ cls: 'cdp-hint-counter', icon: 'bi-shield-x',          label: 'Counter' });
+    if (/exile/.test(text))                                           hints.push({ cls: 'cdp-hint-exile',   icon: 'bi-box-arrow-right',   label: 'Exile' });
+    if (/return.*to.*hand|bounce/.test(text))                         hints.push({ cls: 'cdp-hint-bounce',  icon: 'bi-arrow-return-left', label: 'Bounce' });
+    if (/copy/.test(text))                                            hints.push({ cls: 'cdp-hint-copy',    icon: 'bi-files',             label: 'Copy' });
+    if (card && card.is_land)                                         hints.push({ cls: 'cdp-hint-land',    icon: 'bi-geo-alt',           label: 'Land' });
+    return hints;
+  }
+
+  function showCardDetail(card) {
+    if (!cdpPanel || !card) return;
+    cdpName.textContent    = card.name || '';
+    cdpType.textContent    = card.type_line || '';
+    renderManaCost(card.mana_cost || '', card.mana_value != null ? card.mana_value : '');
+    cdpOracle.textContent  = card.oracle_text || '(No oracle text available)';
+    // Mechanic hints
+    cdpHints.innerHTML = '';
+    const hints = buildMechanicHints(card);
+    hints.forEach(function(h) {
+      const badge = document.createElement('span');
+      badge.className = 'cdp-hint-badge ' + h.cls;
+      badge.innerHTML = '<i class="bi ' + h.icon + '"></i> ' + h.label;
+      cdpHints.appendChild(badge);
+    });
+    cdpHints.style.display = hints.length ? '' : 'none';
+    cdpPanel.classList.add('is-visible');
+  }
+
+  function hideCardDetail() {
+    if (cdpPanel) cdpPanel.classList.remove('is-visible');
+  }
+
+  if (cdpClose) {
+    cdpClose.addEventListener('click', hideCardDetail);
+  }
+
+  // Close panel when clicking outside it
+  document.addEventListener('click', function(e) {
+    if (!cdpPanel || !cdpPanel.classList.contains('is-visible')) return;
+    if (cdpPanel.contains(e.target)) return;
+    // Only close if the click wasn't on a hand-card or board card
+    if (e.target.closest('.hand-card')) return;
+    hideCardDetail();
+  }, { capture: false });
 
   function setDeckSelection(value, label) {
     const normalizedValue = value || '';
@@ -4602,6 +4832,8 @@
           return;
         }
       }
+      // Show card detail panel on single click
+      showCardDetail(card);
       handleCardInteraction(cardEl.dataset.cardId, source, zone || null);
     });
     if (source === 'board') {
@@ -5888,6 +6120,8 @@
         showMessage('');
         drawBtn.disabled = data.remaining <= 0;
         updateScryAvailability();
+        // Show detail panel for the drawn card
+        if (data.card) showCardDetail(data.card);
       } catch (err) {
         console.error(err);
         showMessage('An unexpected error occurred while drawing.', 'danger');

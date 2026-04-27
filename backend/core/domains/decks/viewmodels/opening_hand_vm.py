@@ -16,6 +16,7 @@ class OpeningHandCardVM:
     type_line: str
     oracle_text: Optional[str]
     mana_value: Optional[float]
+    mana_cost: Optional[str]
     is_creature: bool
     is_land: bool
     is_instant: bool
@@ -36,6 +37,7 @@ class OpeningHandCardVM:
             "type_line": self.type_line,
             "oracle_text": self.oracle_text,
             "mana_value": self.mana_value,
+            "mana_cost": self.mana_cost,
             "is_creature": self.is_creature,
             "is_land": self.is_land,
             "is_instant": self.is_instant,
