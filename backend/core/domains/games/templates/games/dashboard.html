@@ -301,34 +301,54 @@ function showImportModal() {
 
 // Admin functions
 function refreshMetrics() {
-  // Show loading state
-  const btn = event.target;
+  const btn = event.currentTarget || event.target;
   const originalText = btn.innerHTML;
   btn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Refreshing...';
   btn.disabled = true;
-  
-  // Simulate refresh (replace with actual API call)
-  setTimeout(() => {
-    btn.innerHTML = originalText;
-    btn.disabled = false;
-    // Show success message
-    const toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-bg-success border-0 position-fixed top-0 end-0 m-3';
-    toast.innerHTML = `
-      <div class="d-flex">
-        <div class="toast-body">Metrics refreshed successfully!</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-      </div>
-    `;
-    document.body.appendChild(toast);
-    new bootstrap.Toast(toast).show();
-    setTimeout(() => toast.remove(), 5000);
-  }, 2000);
+
+  fetch('/api/games/metrics/refresh', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+      if (data.success) {
+        showDashboardToast('Metrics refreshed.', 'success');
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showDashboardToast(data.message || 'Refresh failed.', 'danger');
+      }
+    })
+    .catch(() => {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+      showDashboardToast('Request failed.', 'danger');
+    });
 }
 
 function showSystemStats() {
-  // This would show a modal with system-wide statistics
-  alert('System stats modal would open here');
+  const modalEl = document.getElementById('systemStatsModal');
+  const bodyEl = document.getElementById('systemStatsBody');
+  if (!modalEl || !bodyEl) return;
+
+  bodyEl.innerHTML = '<div class="text-muted">Loading…</div>';
+  new bootstrap.Modal(modalEl).show();
+
+  fetch('/api/games/admin/system-stats')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { bodyEl.innerHTML = '<div class="text-danger">Failed to load stats.</div>'; return; }
+      const s = data.stats;
+      bodyEl.innerHTML = `
+        <div class="row g-3">
+          <div class="col-6"><div class="text-muted small">Total Games</div><div class="fw-bold fs-5">${s.total_games}</div></div>
+          <div class="col-6"><div class="text-muted small">Total Users</div><div class="fw-bold fs-5">${s.total_users}</div></div>
+          <div class="col-6"><div class="text-muted small">Games Today</div><div class="fw-bold fs-5">${s.games_today}</div></div>
+          <div class="col-6"><div class="text-muted small">Total Pods</div><div class="fw-bold fs-5">${s.total_pods}</div></div>
+          <div class="col-6"><div class="text-muted small">Avg Games / User</div><div class="fw-bold fs-5">${s.avg_games_per_user}</div></div>
+          <div class="col-6"><div class="text-muted small">Combo Rate</div><div class="fw-bold fs-5">${s.combo_rate}%</div></div>
+        </div>`;
+    })
+    .catch(() => { bodyEl.innerHTML = '<div class="text-danger">Request failed.</div>'; });
 }
 
 // Game preview functionality
@@ -407,5 +427,37 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+function showDashboardToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast align-items-center text-bg-${type} border-0 position-fixed top-0 end-0 m-3`;
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  new bootstrap.Toast(toast).show();
+  setTimeout(() => toast.remove(), 5000);
+}
 </script>
+
+<!-- System Stats Modal (admin only) -->
+{% if current_user.is_admin %}
+<div class="modal fade" id="systemStatsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-graph-up me-2"></i>System Stats</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="systemStatsBody">
+        <div class="text-muted">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}

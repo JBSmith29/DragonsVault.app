@@ -186,4 +186,3 @@ def quick_game_save():
 def register_games_api(app):
     """Register the games API blueprint with the Flask app."""
     app.register_blueprint(games_api)
-    app.register_blueprint(games_api, url_prefix="/api/v1/games", name="games_api_v1")

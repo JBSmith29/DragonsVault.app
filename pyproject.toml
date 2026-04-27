@@ -20,7 +20,7 @@ docs-serve = [
 ]
 test = [
   "backend-deps",
-  "pytest -m \"not ui\"",
+  "pytest -m \"not ui\" --cov=backend --cov-report=html --cov-report=term-missing",
 ]
 test-postgres-smoke = [
   "backend-deps",

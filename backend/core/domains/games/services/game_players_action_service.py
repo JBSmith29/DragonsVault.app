@@ -50,9 +50,13 @@ def _handle_remove_pod():
         return _players_redirect()
     pod = legacy.GamePod.query.filter_by(id=pod_id, owner_user_id=current_user.id).first()
     if pod:
-        db.session.delete(pod)
-        db.session.commit()
-        flash("Pod removed.", "info")
+        try:
+            db.session.delete(pod)
+            db.session.commit()
+            flash("Pod removed.", "info")
+        except Exception:
+            db.session.rollback()
+            flash("Unable to remove pod.", "danger")
     return _players_redirect()
 
 
@@ -121,9 +125,13 @@ def _handle_remove_pod_member():
     if not is_owner and not is_self_member:
         flash("Pod member not found.", "warning")
         return _players_redirect()
-    db.session.delete(member)
-    db.session.commit()
-    flash("Pod member removed.", "info")
+    try:
+        db.session.delete(member)
+        db.session.commit()
+        flash("Pod member removed.", "info")
+    except Exception:
+        db.session.rollback()
+        flash("Unable to remove pod member.", "danger")
     return _players_redirect()
 
 
@@ -298,9 +306,13 @@ def _handle_remove_deck():
     ).first()
     if not assignment:
         return _players_redirect()
-    db.session.delete(assignment)
-    db.session.commit()
-    flash("Deck removed.", "info")
+    try:
+        db.session.delete(assignment)
+        db.session.commit()
+        flash("Deck removed.", "info")
+    except Exception:
+        db.session.rollback()
+        flash("Unable to remove deck.", "danger")
     return _players_redirect()
 
 
@@ -319,9 +331,13 @@ def _handle_remove_player():
     if not roster_player:
         flash("Player not found.", "warning")
         return _players_redirect()
-    db.session.delete(roster_player)
-    db.session.commit()
-    flash("Player removed.", "info")
+    try:
+        db.session.delete(roster_player)
+        db.session.commit()
+        flash("Player removed.", "info")
+    except Exception:
+        db.session.rollback()
+        flash("Unable to remove player.", "danger")
     return _players_redirect()
 
 

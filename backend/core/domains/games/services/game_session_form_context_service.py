@@ -48,7 +48,7 @@ def game_form_context() -> dict[str, Any]:
         for player in roster_players
     }
     guest_deck_options = legacy._accessible_deck_options(current_user.id)
-    manual_link_options = legacy._accessible_deck_options()
+    manual_link_options = legacy._accessible_deck_options(current_user.id)
     guest_deck_refs = {deck["ref"] for deck in guest_deck_options}
     pods = legacy._pod_payloads_for_owner(current_user.id, roster_players)
     pod_member_map = {str(pod["id"]): pod["member_ids"] for pod in pods}

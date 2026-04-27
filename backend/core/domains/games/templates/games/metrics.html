@@ -140,7 +140,7 @@
           </ul>
         </div>
       </div>
-      <div class="col-12 col-md-4" id="yearField">
+      <div class="col-12 col-md-4" id="yearField" style="display:none">
         <label class="form-label" for="rangeYear">Year</label>
         <div class="dropdown dv-select w-100" data-game-select="year">
           <input type="hidden" id="rangeYear" name="year" data-game-select-input value="{{ range_ctx.year_value }}">
@@ -157,7 +157,7 @@
           </ul>
         </div>
       </div>
-      <div class="col-12 col-md-4" id="customField">
+      <div class="col-12 col-md-4" id="customField" style="display:none">
         <label class="form-label">Custom range</label>
         <div class="d-flex gap-2">
           <input class="form-control" type="date" name="start" value="{{ range_ctx.start_value }}">

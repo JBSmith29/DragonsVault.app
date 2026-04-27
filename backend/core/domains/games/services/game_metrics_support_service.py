@@ -154,8 +154,8 @@ def _pod_options_for_user(user_id: int) -> list[dict[str, Any]]:
 
 def _pod_metrics_scope(user_id: int, pod_id: int | None = None) -> dict[str, Any] | None:
     member_pod_ids = [
-        pod_id
-        for (pod_id,) in db.session.query(GamePodMember.pod_id)
+        row_pod_id
+        for (row_pod_id,) in db.session.query(GamePodMember.pod_id)
         .join(GameRosterPlayer, GameRosterPlayer.id == GamePodMember.roster_player_id)
         .filter(GameRosterPlayer.user_id == user_id)
         .distinct()

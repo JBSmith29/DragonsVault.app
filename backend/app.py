@@ -548,6 +548,10 @@ def create_app():
 
     register_error_handlers(app)
 
+    # OpenAPI documentation
+    from shared.api.openapi import init_openapi
+    init_openapi(app)
+
     @app.before_request
     def assign_request_id():
         g.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex

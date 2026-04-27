@@ -206,6 +206,21 @@ Frontend CI is validated on Node.js 20.
 
 ## Documentation
 
+### User Documentation
+- [README](README.md) - Getting started and quickstart guide
+- [MAINTENANCE](MAINTENANCE.md) - Operations and troubleshooting
+- [DEPLOYMENT](docs/DEPLOYMENT.md) - Production deployment guide
+- [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [DATABASE_SCHEMA](docs/DATABASE_SCHEMA.md) - Database schema reference
+
+### Developer Documentation
+- [API Documentation](http://localhost/api/docs) - OpenAPI/Swagger UI (when running)
+- [Architecture Decision Records](docs/adr/) - Design decisions and rationale
+- [CONTRIBUTING](CONTRIBUTING.md) - Development setup and guidelines
+- [SECURITY](SECURITY.md) - Security policies and reporting
+
+### Build Sphinx Docs
+
 Build Sphinx docs locally:
 
 ```bash

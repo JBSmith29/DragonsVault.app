@@ -364,7 +364,7 @@ function selectPod(podId, podName, members) {
   for (let i = 1; i <= 4; i++) {
     removePlayer(i);
   }
-  
+
   // Add pod members
   members.forEach((member, index) => {
     if (index < 4) {
@@ -372,12 +372,13 @@ function selectPod(podId, podName, members) {
       gameData.players[seat] = {
         name: member.label,
         id: member.roster_id,
-        type: 'roster'
+        type: 'roster',
+        pod_id: podId,
       };
       updatePlayerSlot(seat);
     }
   });
-  
+
   validatePlayers();
   showToast(`Selected ${podName} with ${members.length} players`, 'success');
 }
@@ -501,25 +502,41 @@ function saveDeck() {
 
 function autoAssignDecks() {
   showToast('Auto-assigning decks...', 'info');
-  
-  // Simulate auto-assignment
-  setTimeout(() => {
+
+  const podIds = [...new Set(
+    Object.values(gameData.players)
+      .filter(p => p.type === 'roster' && p.pod_id)
+      .map(p => p.pod_id)
+  )];
+
+  if (!podIds.length) {
+    // No pod context — assign from available decks locally
     Object.keys(gameData.players).forEach(seat => {
-      if (!gameData.decks[seat]) {
-        const randomDeck = gameData.availableDecks[Math.floor(Math.random() * gameData.availableDecks.length)];
-        if (randomDeck) {
-          gameData.decks[seat] = {
-            name: randomDeck.label,
-            commander: 'Auto-assigned'
-          };
-        }
+      if (!gameData.decks[seat] && gameData.availableDecks.length) {
+        const deck = gameData.availableDecks[0];
+        gameData.decks[seat] = { name: deck.label, folder_id: deck.id };
       }
     });
-    
     populateDeckAssignments();
     validateDecks();
-    showToast('Decks auto-assigned successfully!', 'success');
-  }, 1500);
+    showToast('Decks assigned from your collection.', 'success');
+    return;
+  }
+
+  fetch('/api/games/auto-assign-decks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pod_ids: podIds }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message || 'Decks auto-assigned!', 'success');
+      } else {
+        showToast(data.error || 'Auto-assign failed.', 'danger');
+      }
+    })
+    .catch(() => showToast('Auto-assign request failed.', 'danger'));
 }
 
 function validateDecks() {
@@ -568,21 +585,42 @@ function populateDeckQuickSelect() {
 // Form Submission
 document.getElementById('quickGameForm').addEventListener('submit', function(e) {
   e.preventDefault();
-  
+
   const submitBtn = document.getElementById('saveGame');
   const originalText = submitBtn.innerHTML;
   submitBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Saving...';
   submitBtn.disabled = true;
-  
-  // Simulate save
-  setTimeout(() => {
-    submitBtn.innerHTML = originalText;
-    submitBtn.disabled = false;
-    showToast('Game logged successfully!', 'success');
-    setTimeout(() => {
-      window.location.href = '/games/dashboard';
-    }, 1500);
-  }, 2000);
+
+  const payload = {
+    players: gameData.players,
+    decks: gameData.decks,
+    played_at: document.getElementById('playedAt').value || null,
+    winner_seat: document.getElementById('winnerSeat').value || null,
+    win_via_combo: document.getElementById('winViaCombo').checked,
+    notes: document.querySelector('[name="notes"]').value.trim() || null,
+  };
+
+  fetch('/api/games/quick-game', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message || 'Game logged!', 'success');
+        setTimeout(() => { window.location.href = '/games/dashboard'; }, 1200);
+      } else {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+        showToast(data.error || 'Failed to save game.', 'danger');
+      }
+    })
+    .catch(() => {
+      submitBtn.innerHTML = originalText;
+      submitBtn.disabled = false;
+      showToast('Request failed. Please try again.', 'danger');
+    });
 });
 
 // Advanced Mode

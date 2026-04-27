@@ -418,6 +418,10 @@ def upgrade() -> None:
         existing_names.add(str(row[0]).casefold())
 
     if legacy_table:
+        # Validate table name to prevent SQL injection (whitelist approach)
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', legacy_table):
+            raise ValueError(f"Invalid table name: {legacy_table}")
+        # Safe to use after validation
         legacy_rows = conn.execute(
             sa.text(
                 f"SELECT tag, source, first_seen, last_seen FROM {legacy_table}"

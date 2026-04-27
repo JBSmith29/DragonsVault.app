@@ -60,9 +60,22 @@ def games_landing():
         session_shared._game_session_payload(session, current_user.id)
         for session in _recent_sessions(6, visibility_filter=metrics_support._session_visibility_filter(current_user.id))
     ]
-    quick_all = metrics_query._metrics_payload(current_user.id)
+
+    from extensions import cache
+
+    cache_key = f"user_metrics_{current_user.id}"
+    quick_all = cache.get(cache_key)
+    if quick_all is None:
+        quick_all = metrics_query._metrics_payload(current_user.id)
+        cache.set(cache_key, quick_all, timeout=300)
+
     last30_range = metrics_support._resolve_date_range({"range": "last30"})
-    quick_30 = metrics_query._metrics_payload(current_user.id, last30_range["start_at"], last30_range["end_at"])
+    cache_key_30 = f"user_metrics_30_{current_user.id}"
+    quick_30 = cache.get(cache_key_30)
+    if quick_30 is None:
+        quick_30 = metrics_query._metrics_payload(current_user.id, last30_range["start_at"], last30_range["end_at"])
+        cache.set(cache_key_30, quick_30, timeout=300)
+
     return render_template(
         "games/index.html",
         recent_games=recent_games,
@@ -153,7 +166,9 @@ def games_overview():
         .filter(metrics_support._session_visibility_filter(current_user.id))
     )
     query = metrics_support._apply_notes_search(query, q)
-    sessions = query.order_by(GameSession.played_at.desc().nullslast(), GameSession.created_at.desc()).all()
+    query = query.order_by(GameSession.played_at.desc().nullslast(), GameSession.created_at.desc())
+    # Cap at 500 rows to avoid loading unbounded data; search results are also capped.
+    sessions = query.limit(500).all()
     games = [session_shared._game_session_payload(session, current_user.id) for session in sessions]
     has_owned_games = any(session.owner_user_id == current_user.id for session in sessions)
     summary = session_shared._games_summary(current_user.id)
@@ -289,11 +304,13 @@ def games_manual_deck_update():
             if snapshot.get("power_score") is not None:
                 deck.power_score = snapshot.get("power_score")
 
-        db.session.commit()
-        flash(f"Linked {len(decks)} log entries to {folder_label}.", "success")
+        try:
+            db.session.commit()
+            flash(f"Linked {len(decks)} log entries to {folder_label}.", "success")
+        except Exception:
+            db.session.rollback()
+            flash("Unable to link deck entries right now.", "danger")
         return redirect(url_for("views.games_overview"))
-
-    commander_name_input = (request.form.get("commander_name") or "").strip()
     bracket_level = (request.form.get("bracket_level") or "").strip()
     bracket_label = (request.form.get("bracket_label") or "").strip()
     bracket_score_raw = (request.form.get("bracket_score") or "").strip()
@@ -335,8 +352,12 @@ def games_manual_deck_update():
             deck.bracket_score = bracket_score
             deck.power_score = bracket_score
 
-    db.session.commit()
-    flash(f"Updated {len(decks)} log entries.", "success")
+    try:
+        db.session.commit()
+        flash(f"Updated {len(decks)} log entries.", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Unable to update deck entries right now.", "danger")
     return redirect(url_for("views.games_overview"))
 
 
@@ -406,8 +427,12 @@ def games_deck_bracket_update():
             deck.bracket_score = bracket_score
             deck.power_score = bracket_score
 
-    db.session.commit()
-    flash(f"Updated {len(decks)} log entries.", "success")
+    try:
+        db.session.commit()
+        flash(f"Updated {len(decks)} log entries.", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Unable to update deck entries right now.", "danger")
     return redirect(url_for("views.games_overview"))
 
 
