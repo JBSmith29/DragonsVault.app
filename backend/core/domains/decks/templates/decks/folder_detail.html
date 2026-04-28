@@ -770,7 +770,7 @@
           {% for card in combo.cards %}
             <span class="combo-card-name"
                   data-card-name="{{ card.name|e }}"
-                  data-hover-src="{{ card.hover }}">
+                  {% if card.hover %}data-hover-src="{{ card.hover }}"{% endif %}>
               {{ card.label or card.name }}
             </span>
             {% if not loop.last %}

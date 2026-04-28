@@ -97,11 +97,36 @@
     }
   }
 
+  async function fetchScryImageByName(cardName) {
+    if (!cardName) return null;
+    const cacheKey = `name:${cardName}`;
+    if (cacheByScryId.has(cacheKey)) return cacheByScryId.get(cacheKey);
+    try {
+      const encoded = encodeURIComponent(cardName);
+      const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encoded}`);
+      if (!resp.ok) throw new Error('scry name lookup error');
+      const data = await resp.json();
+      let src = null;
+      if (data?.image_uris) {
+        src = data.image_uris.png || data.image_uris.large || data.image_uris.normal || data.image_uris.small || null;
+      } else if (Array.isArray(data?.card_faces) && data.card_faces.length) {
+        const f = data.card_faces[0];
+        src = f?.image_uris?.png || f?.image_uris?.large || f?.image_uris?.normal || f?.image_uris?.small || null;
+      }
+      cacheByScryId.set(cacheKey, src);
+      return src;
+    } catch {
+      cacheByScryId.set(cacheKey, null);
+      return null;
+    }
+  }
+
   function extractCardInfo(el) {
     const data = el.dataset || {};
     let cardId = data.cardId || null;
     let scryId = data.scryId || data.scryfallId || null;
     let hoverSrc = data.hoverSrc || data.img || null;
+    let cardName = data.cardName || null;
 
     if (!cardId && el.tagName === 'A' && el.getAttribute('href')) {
       const m = el.getAttribute('href').match(/\/cards\/(\d+)/);
@@ -110,7 +135,7 @@
     if (!hoverSrc && el.tagName === 'IMG') {
       hoverSrc = el.currentSrc || el.src || null;
     }
-    return { cardId, scryId, hoverSrc };
+    return { cardId, scryId, hoverSrc, cardName };
   }
 
   async function resolveImage(el) {
@@ -123,6 +148,11 @@
     }
     if (info.hoverSrc) return info.hoverSrc;
     if (info.scryId) return (await fetchScryImage(info.scryId)) || PLACEHOLDER;
+    // Fallback to card name lookup for combo cards
+    if (info.cardName) {
+      const src = await fetchScryImageByName(info.cardName);
+      if (src) return src;
+    }
     return null;
   }
 
