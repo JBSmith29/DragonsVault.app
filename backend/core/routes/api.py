@@ -7,6 +7,7 @@ from typing import Any, Dict
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import func, or_
+from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import Card, Folder, FolderShare, UserFriend
@@ -67,10 +68,15 @@ def api_folders():
     ]
     if friend_ids:
         access_filters.append(Folder.owner_user_id.in_(friend_ids))
+    
+    # Use eager loading to prevent N+1 queries on relationships
     accessible_folders = (
-        Folder.query.filter(
-            or_(*access_filters)
+        Folder.query
+        .options(
+            selectinload(Folder.shares),
+            selectinload(Folder.owner)
         )
+        .filter(or_(*access_filters))
         .order_by(func.lower(Folder.name))
         .all()
     )

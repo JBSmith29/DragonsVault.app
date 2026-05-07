@@ -54,3 +54,4 @@ data/
 
 # Windows ADS metadata created when downloading assets on Windows
 *:Zone.Identifier
+backups/

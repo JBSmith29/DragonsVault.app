@@ -367,6 +367,11 @@ def create_app():
         "views.do_not_share",
         "views.about_page",
         "views.contact_page",
+        "api_docs.swagger_ui",
+        "api_docs.openapi_spec",
+        "observability.metrics",
+        "observability.stats",
+        "observability.health",
         "static",
     }
 
@@ -513,6 +518,14 @@ def create_app():
             url_prefix=versioned_prefix,
             name=f"{blueprint.name}_v1",
         )
+    
+    # API Documentation (OpenAPI/Swagger)
+    from shared.api_docs import register_api_docs
+    register_api_docs(app)
+    
+    # Observability (metrics, stats, health)
+    from shared.observability import register_observability
+    register_observability(app)
 
     def _legacy_api_endpoint_fallback(error, endpoint: str, values: dict):
         """Gracefully map legacy views.* API endpoint names to api.* routes.

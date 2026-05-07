@@ -221,6 +221,12 @@ Frontend CI is validated on Node.js 20.
 - [CONTRIBUTING](CONTRIBUTING.md) - Development setup and guidelines
 - [SECURITY](SECURITY.md) - Security policies and reporting
 
+### Improvements & Roadmap
+- [Recent Improvements](docs/IMPROVEMENTS_APRIL_2026.md) - Latest enhancements (April 2026)
+- [Additional Enhancements](docs/ADDITIONAL_ENHANCEMENTS.md) - Database, monitoring, and performance improvements
+- [Future Improvements](docs/FUTURE_IMPROVEMENTS.md) - Planned enhancements and roadmap
+- [Previous Improvements](docs/IMPROVEMENTS_SUMMARY.md) - Security and documentation updates
+
 ### Build Sphinx Docs
 
 Build Sphinx docs locally:

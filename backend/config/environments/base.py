@@ -14,9 +14,15 @@ class BaseConfig:
 
     # Security headers
     SEND_FILE_MAX_AGE_DEFAULT = 86400
-    PERMANENT_SESSION_LIFETIME = 4 * 60 * 60  # 4 hour session timeout
-    SESSION_REFRESH_EACH_REQUEST = True
+    
+    # Session configuration with timeout and refresh
+    PERMANENT_SESSION_LIFETIME = int(os.getenv("SESSION_LIFETIME", 4 * 60 * 60))  # 4 hours default
+    SESSION_REFRESH_EACH_REQUEST = os.getenv("SESSION_REFRESH_EACH_REQUEST", "1").lower() in {"1", "true", "yes", "on"}
     SESSION_PROTECTION = os.getenv("SESSION_PROTECTION", "strong")
+    # Absolute session timeout (even with activity) - 0 means no absolute timeout
+    SESSION_ABSOLUTE_TIMEOUT = int(os.getenv("SESSION_ABSOLUTE_TIMEOUT", 24 * 60 * 60))  # 24 hours max
+    # Idle timeout (no activity) - uses PERMANENT_SESSION_LIFETIME if not set
+    SESSION_IDLE_TIMEOUT = int(os.getenv("SESSION_IDLE_TIMEOUT", 0))  # 0 means use PERMANENT_SESSION_LIFETIME
 
     # Database (absolute sqlite path; forward slashes are fine on Windows)
     DEFAULT_SQLITE = default_sqlite_uri(INSTANCE_DIR)

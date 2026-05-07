@@ -22,6 +22,14 @@ test = [
   "backend-deps",
   "pytest -m \"not ui\" --cov=backend --cov-report=html --cov-report=term-missing",
 ]
+test-cov = [
+  "backend-deps",
+  "pytest -m \"not ui\" --cov=backend --cov-report=html --cov-report=term-missing --cov-report=json",
+]
+test-cov-fail = [
+  "backend-deps",
+  "pytest -m \"not ui\" --cov=backend --cov-report=html --cov-report=term-missing --cov-fail-under=75",
+]
 test-postgres-smoke = [
   "backend-deps",
   "pytest tests/test_account.py tests/test_visibility.py -q",

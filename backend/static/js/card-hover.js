@@ -14,8 +14,38 @@
     return;
   }
 
-  const cacheByCardId = new Map();
-  const cacheByScryId = new Map();
+  // Use enhanced cache if available, otherwise fallback to Map
+  const useEnhancedCache = window.dvCardHoverCache;
+  const cacheByCardId = useEnhancedCache ? null : new Map();
+  const cacheByScryId = useEnhancedCache ? null : new Map();
+
+  function getCached(key) {
+    if (useEnhancedCache) {
+      return window.dvCardHoverCache.get(key);
+    }
+    // Legacy cache lookup
+    return cacheByCardId?.get(key) ?? cacheByScryId?.get(key);
+  }
+
+  function setCached(key, value, type = 'card') {
+    if (useEnhancedCache) {
+      window.dvCardHoverCache.set(key, value);
+    } else {
+      // Legacy cache
+      if (type === 'card') {
+        cacheByCardId?.set(key, value);
+      } else {
+        cacheByScryId?.set(key, value);
+      }
+    }
+  }
+
+  function hasCached(key) {
+    if (useEnhancedCache) {
+      return window.dvCardHoverCache.has(key);
+    }
+    return cacheByCardId?.has(key) || cacheByScryId?.has(key);
+  }
   const overlay = document.createElement('div');
   overlay.className = 'card-hover-preview';
   overlay.innerHTML = '<img alt="Card preview">';
@@ -61,23 +91,25 @@
   }
 
   async function fetchCardImage(cardId) {
-    if (cacheByCardId.has(cardId)) return cacheByCardId.get(cardId);
+    const cacheKey = `card:${cardId}`;
+    if (hasCached(cacheKey)) return getCached(cacheKey);
     try {
       const resp = await fetch(`/api/card/${cardId}`);
       if (!resp.ok) throw new Error('card api error');
       const data = await resp.json();
       const imgs = (data && data.images) || [];
       const src = imgs[0]?.png || imgs[0]?.large || imgs[0]?.normal || imgs[0]?.small || null;
-      cacheByCardId.set(cardId, src);
+      setCached(cacheKey, src, 'card');
       return src;
     } catch {
-      cacheByCardId.set(cardId, null);
+      setCached(cacheKey, null, 'card');
       return null;
     }
   }
 
   async function fetchScryImage(sid) {
-    if (cacheByScryId.has(sid)) return cacheByScryId.get(sid);
+    const cacheKey = `scry:${sid}`;
+    if (hasCached(cacheKey)) return getCached(cacheKey);
     try {
       const resp = await fetch(`https://api.scryfall.com/cards/${sid}`);
       if (!resp.ok) throw new Error('scry api error');
@@ -89,10 +121,10 @@
         const f = data.card_faces[0];
         src = f?.image_uris?.png || f?.image_uris?.large || f?.image_uris?.normal || f?.image_uris?.small || null;
       }
-      cacheByScryId.set(sid, src);
+      setCached(cacheKey, src, 'scry');
       return src;
     } catch {
-      cacheByScryId.set(sid, null);
+      setCached(cacheKey, null, 'scry');
       return null;
     }
   }
@@ -100,7 +132,7 @@
   async function fetchScryImageByName(cardName) {
     if (!cardName) return null;
     const cacheKey = `name:${cardName}`;
-    if (cacheByScryId.has(cacheKey)) return cacheByScryId.get(cacheKey);
+    if (hasCached(cacheKey)) return getCached(cacheKey);
     try {
       const encoded = encodeURIComponent(cardName);
       const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encoded}`);
@@ -113,10 +145,10 @@
         const f = data.card_faces[0];
         src = f?.image_uris?.png || f?.image_uris?.large || f?.image_uris?.normal || f?.image_uris?.small || null;
       }
-      cacheByScryId.set(cacheKey, src);
+      setCached(cacheKey, src, 'scry');
       return src;
     } catch {
-      cacheByScryId.set(cacheKey, null);
+      setCached(cacheKey, null, 'scry');
       return null;
     }
   }

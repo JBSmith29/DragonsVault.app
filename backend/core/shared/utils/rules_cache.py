@@ -46,7 +46,8 @@ def _download_rules_text() -> str:
             _RULES_SOURCE_URL,
             headers={"User-Agent": "DragonsVault.app rules fetcher"},
         )
-        with urllib.request.urlopen(request, timeout=20) as response:
+        # Add timeout to prevent hanging on slow/unresponsive servers
+        with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read()
         text = raw.decode("utf-8", errors="ignore").lstrip("\ufeff")
         if text:

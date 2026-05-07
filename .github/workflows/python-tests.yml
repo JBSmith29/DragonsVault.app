@@ -34,7 +34,7 @@ jobs:
 
     - name: Run backend tests
       run: |
-        hatch run test
+        hatch run test-cov-fail
 
   backend-postgres-smoke:
     runs-on: ubuntu-latest
