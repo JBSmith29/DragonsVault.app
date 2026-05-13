@@ -873,6 +873,10 @@
   </div>
 
   {% if folder.is_deck %}
+    {% include "components/deck_insights_panel.html" %}
+  {% endif %}
+
+  {% if folder.is_deck %}
     <div class="card synergy-card mb-3">
       <div class="card-body">
         <div class="commander-summary mb-3">

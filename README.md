@@ -21,16 +21,23 @@ DragonsVault is a Docker-first **Magic: The Gathering** collection manager for c
 ### Collection & Cards
 - Filterable cards table with art thumbnails, deck context, color identity, and wishlist badges.
 - Card detail with owned print metadata, alternate arts, tokens, rulings, and external links.
+- Condition tracking (NM/LP/MP/HP/DMG) editable from the card detail page and importable from CSV.
 - Collection insights with bucket-level stats (e.g., Mythic, Lands) and type breakdown tiles.
+- Collection Value dashboard with live totals, top cards, 30-day trend sparkline, and manual snapshots for historical charts.
 
 ### Decks & Building
 - Deck detail with commander picker, mana curve, pip breakdown, CSV export, and folder insights.
+- Deck Insights panel: format legality (Commander/Standard/Pioneer/Modern/Legacy/Vintage/Pauper/Brawl), archetype classification, mana base health, budget alternatives, and per-deck win rate.
+- Side-by-side deck comparison: shared cards, unique cards, curve/pip/type diffs.
+- Printable proxy PDF sheets generated on demand (3x3 cards per letter page, zero external dependencies).
+- Inline rules lookups: oracle text is scanned client-side against the comprehensive rules so every keyword ability links to its CR number.
 - Build-A-Deck sandbox with EDHREC integrations, role filters, list/gallery toggle, and stateful panels.
 - List checker to compare pasted deck lists against ownership and export results.
 
 ### Games & Analytics
 - Unified games dashboard with quick metrics, recent activity, and admin panel.
 - Streamlined pod management with quick pods, invitations, templates, and bulk operations.
+- Playgroup Stats panel on pods: wins per player, longest streak, commander diversity (Shannon entropy), and meta breakdown.
 - Auto deck assignment based on player ownership and preferences.
 - 3-step quick log wizard with advanced mode toggle.
 - Enhanced metrics with quick filters, leaderboards, and export tools.
@@ -134,7 +141,7 @@ docker compose exec web flask sync-spellbook-combos
 
 ### CSV / Excel import format
 
-Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `quantity`, `lang`, `foil`. Case and spacing are forgiving; the importer normalizes common variants.
+Recognized headers include `folder`, `name`, `set_code`, `collector_number`, `quantity`, `lang`, `foil`, and `condition`. Case and spacing are forgiving; the importer normalizes common variants (e.g., "Near Mint" and "NM" both map to the canonical `NM` grade).
 
 - ManaBox exports are supported: `Binder Name` maps to folders and `Binder Type` (Deck/Binder) automatically sets each folder to `deck` or `collection`.
 - Moxfield exports are supported: `Count` -> quantity, `Name` -> card name, `Edition` -> set code, `Language`, `Foil`, and `Proxy` are respected. Unused columns (Tags, Alter, Purchase Price, etc.) are ignored.
@@ -165,6 +172,46 @@ All exports include a UTF-8 BOM for compatibility with Excel.
 - Generate tokens: use `/account/api-token` or `docker compose exec web flask users token you@example.com` (Bearer token shown once).
 - Use tokens: add `Authorization: Bearer <token>` when calling protected endpoints (query params are rejected).
 - Audit trail: logins, admin actions, imports, and token rotations are stored in `audit_logs`.
+
+## API reference (MTG insights)
+
+These endpoints expose the newer analysis features. All require cookie auth or a Bearer token and honor the same folder-access rules as the rest of the app.
+
+### Deck analysis
+
+| **Endpoint** | **Purpose** |
+| -- | -- |
+| `GET /api/legality/formats` | Enumerate the formats the legality checker understands. |
+| `GET /api/folders/<id>/legality?format=commander` | Validate a deck against a single format. |
+| `GET /api/folders/<id>/legality/all` | Validate against every supported format in one call. |
+| `GET /api/folders/<id>/mana-base` | Land count, tapped/untapped split, color sources, warnings. |
+| `GET /api/folders/<id>/archetype` | Classify the deck (aggro/control/combo/stax/tribal/...) with score breakdown. |
+| `GET /api/folders/<id>/budget-alternatives?threshold=20` | Suggest cheaper replacements for expensive cards. |
+| `GET /api/decks/compare?left=<id>&right=<id>` | Side-by-side diff: shared/unique cards, curve, pips, types. |
+| `GET /folders/<id>/proxy.pdf` | Download a printable proxy sheet (3x3 per letter page). |
+
+### Collection value
+
+| **Endpoint** | **Purpose** |
+| -- | -- |
+| `GET /api/collection/value` | Live valuation with folder breakdown and top cards. |
+| `POST /api/collection/value/snapshots` | Persist a valuation snapshot for historical charts. |
+| `GET /api/collection/value/history` | Snapshots oldest-first for chart rendering. |
+| `GET /api/collection/value/trend?days=30` | Delta vs the oldest snapshot in the window. |
+
+### Card rules
+
+| **Endpoint** | **Purpose** |
+| -- | -- |
+| `POST /api/rules/keywords` | Accepts `{"text": "..."}` and returns detected Magic keyword abilities with comprehensive-rules numbers and snippets. |
+
+### Game analytics
+
+| **Endpoint** | **Purpose** |
+| -- | -- |
+| `GET /api/games/decks/<folder_id>/winrate?recent_days=30` | Per-deck win rate, seat performance, matchup table. |
+| `GET /api/games/decks/manual/winrate?deck_name=<name>` | Same analytics for decks tracked by name only. |
+| `GET /api/games/pods/<pod_id>/playgroup-stats` | Aggregated pod stats: win leaders, streaks, commander meta diversity. |
 
 ## Command reference
 
@@ -283,6 +330,8 @@ Key environment variables (defaults in parentheses):
 | `MAX_CONTENT_LENGTH` | `64 * 1024 * 1024` | Upload limit in bytes (default 64 MB). |
 | `SESSION_COOKIE_SECURE` | `0` | Set to `1` behind HTTPS. |
 | `ALLOW_RUNTIME_INDEX_BOOTSTRAP` | `0` | Enable only if you want runtime DB bootstrap in production. |
+| `LEGAL_LAST_UPDATED` | `""` | Free-form "last updated" label displayed on legal pages (overrides both the ISO variant and the default). |
+| `LEGAL_LAST_UPDATED_DATE` | `""` | ISO date (`YYYY-MM-DD`) used to render the legal-page label when no free-form label is set. Falls back to the current UTC date. |
 | `CACHE_TYPE` | `RedisCache` | Cache backend (`RedisCache` recommended; set `CACHE_REDIS_URL`). |
 | `CACHE_DEFAULT_TIMEOUT` | `600` | Cache TTL in seconds. |
 | `CACHE_REDIS_URL` | `""` | Redis connection string (used when `CACHE_TYPE=RedisCache`). |

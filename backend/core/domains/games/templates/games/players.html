@@ -121,7 +121,8 @@
         <h2 class="h6 text-uppercase text-muted mb-3">Pods</h2>
         {% if pods and pods|length %}
           {% for pod in pods %}
-            <div class="player-row">
+            <div class="player-row" data-pod-row data-pod-id="{{ pod.id }}"
+                 data-pod-stats-endpoint="{% if pod.is_owner %}{{ url_for('games_api.api_pod_playgroup_stats', pod_id=pod.id) }}{% endif %}">
               <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
                 <div>
                   <div class="fw-semibold">{{ pod.name }}</div>
@@ -129,22 +130,34 @@
                     <div class="text-muted small">Shared by {{ pod.owner_label }}</div>
                   {% endif %}
                 </div>
-                {% if pod.is_owner %}
-                  <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="remove_pod">
-                    <input type="hidden" name="pod_id" value="{{ pod.id }}">
-                    <button class="btn btn-outline-danger btn-sm" type="submit">Remove Pod</button>
-                  </form>
-                {% elif pod.self_member_id %}
-                  <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="remove_pod_member">
-                    <input type="hidden" name="member_id" value="{{ pod.self_member_id }}">
-                    <button class="btn btn-outline-secondary btn-sm" type="submit">Leave Pod</button>
-                  </form>
-                {% endif %}
+                <div class="d-flex gap-2 flex-wrap">
+                  {% if pod.is_owner %}
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-pod-stats-toggle>
+                      <i class="bi bi-graph-up-arrow me-1" aria-hidden="true"></i>Playgroup stats
+                    </button>
+                    <form method="post">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="remove_pod">
+                      <input type="hidden" name="pod_id" value="{{ pod.id }}">
+                      <button class="btn btn-outline-danger btn-sm" type="submit">Remove Pod</button>
+                    </form>
+                  {% elif pod.self_member_id %}
+                    <form method="post">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="remove_pod_member">
+                      <input type="hidden" name="member_id" value="{{ pod.self_member_id }}">
+                      <button class="btn btn-outline-secondary btn-sm" type="submit">Leave Pod</button>
+                    </form>
+                  {% endif %}
+                </div>
               </div>
+              {% if pod.is_owner %}
+                <div class="collapse" data-pod-stats-panel>
+                  <div class="border rounded p-3 mb-3 small" data-pod-stats-content>
+                    <div class="text-muted">Loading stats…</div>
+                  </div>
+                </div>
+              {% endif %}
               <div class="mb-2">
                 <div class="text-muted small mb-2">Players</div>
                 {% if pod.members and pod.members|length %}

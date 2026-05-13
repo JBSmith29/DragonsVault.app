@@ -23,14 +23,15 @@ def upgrade() -> None:
         tables = set(inspector.get_table_names())
 
         if "game_decks" in tables:
-            # Alter the column to increase length
-            op.alter_column(
-                "game_decks",
-                "commander_oracle_id",
-                type_=sa.String(128),
-                existing_type=sa.String(64),
-                nullable=True
-            )
+            # Use batch mode so SQLite (which lacks ALTER COLUMN) rebuilds
+            # the table; Postgres handles it via a regular alter.
+            with op.batch_alter_table("game_decks") as batch:
+                batch.alter_column(
+                    "commander_oracle_id",
+                    type_=sa.String(128),
+                    existing_type=sa.String(64),
+                    nullable=True,
+                )
             _LOG.info("Increased commander_oracle_id field length to 128 characters.")
         else:
             _LOG.warning("game_decks table not found, skipping migration.")
@@ -42,13 +43,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Decrease commander_oracle_id field length back to 64 characters."""
     try:
-        op.alter_column(
-            "game_decks",
-            "commander_oracle_id",
-            type_=sa.String(64),
-            existing_type=sa.String(128),
-            nullable=True
-        )
+        with op.batch_alter_table("game_decks") as batch:
+            batch.alter_column(
+                "commander_oracle_id",
+                type_=sa.String(64),
+                existing_type=sa.String(128),
+                nullable=True,
+            )
         _LOG.info("Decreased commander_oracle_id field length back to 64 characters.")
     except Exception:
         _LOG.error("Failed to decrease commander_oracle_id field length.", exc_info=True)

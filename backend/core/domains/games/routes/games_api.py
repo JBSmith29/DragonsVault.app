@@ -186,3 +186,77 @@ def quick_game_save():
 def register_games_api(app):
     """Register the games API blueprint with the Flask app."""
     app.register_blueprint(games_api)
+
+
+# ---------------------------------------------------------------------------
+# Deck win-rate analytics (feature: Deck Win Rate Analytics)
+# ---------------------------------------------------------------------------
+
+
+@games_api.get('/decks/<int:folder_id>/winrate')
+@login_required
+def api_deck_winrate(folder_id: int):
+    """Return per-deck win/loss analytics for a registered folder."""
+    from flask import request
+    from core.domains.decks.models import Folder
+    from core.domains.games.services.deck_winrate_service import (
+        deck_winrate_for_folder,
+    )
+    from shared.auth import ensure_folder_access
+    from shared.database import get_or_404
+
+    folder = get_or_404(Folder, folder_id)
+    ensure_folder_access(folder, write=False, allow_shared=True)
+    try:
+        recent_days = int(request.args.get('recent_days') or 30)
+    except (TypeError, ValueError):
+        recent_days = 30
+    report = deck_winrate_for_folder(
+        user_id=current_user.id,
+        folder=folder,
+        recent_days=max(0, recent_days),
+    )
+    return jsonify({'data': report.to_dict()})
+
+
+@games_api.get('/decks/manual/winrate')
+@login_required
+def api_manual_deck_winrate():
+    """Win-rate analytics for decks tracked by name only (no folder_id)."""
+    from flask import request
+    from core.domains.games.services.deck_winrate_service import (
+        deck_winrate_for_manual_deck,
+    )
+
+    deck_name = (request.args.get('deck_name') or '').strip()
+    if not deck_name:
+        return jsonify({'error': 'deck_name_required'}), 400
+    try:
+        recent_days = int(request.args.get('recent_days') or 30)
+    except (TypeError, ValueError):
+        recent_days = 30
+    try:
+        report = deck_winrate_for_manual_deck(
+            user_id=current_user.id,
+            deck_name=deck_name,
+            recent_days=max(0, recent_days),
+        )
+    except ValueError as exc:
+        return jsonify({'error': 'invalid_input', 'detail': str(exc)}), 400
+    return jsonify({'data': report.to_dict()})
+
+
+
+@games_api.get('/pods/<int:pod_id>/playgroup-stats')
+@login_required
+def api_pod_playgroup_stats(pod_id: int):
+    """Aggregated stats for a pod's games (feature: Playgroup Stats)."""
+    from core.domains.games.services.playgroup_stats_service import (
+        playgroup_stats_for_pod,
+    )
+
+    try:
+        report = playgroup_stats_for_pod(user_id=current_user.id, pod_id=pod_id)
+    except LookupError as exc:
+        return jsonify({'error': 'not_found', 'detail': str(exc)}), 404
+    return jsonify({'data': report.to_dict()})

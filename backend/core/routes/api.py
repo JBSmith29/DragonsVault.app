@@ -69,12 +69,13 @@ def api_folders():
     if friend_ids:
         access_filters.append(Folder.owner_user_id.in_(friend_ids))
     
-    # Use eager loading to prevent N+1 queries on relationships
+    # Use eager loading to prevent N+1 queries on relationships.
+    # NOTE: ``Folder.owner`` is a string column; the relationship is ``owner_user``.
     accessible_folders = (
         Folder.query
         .options(
             selectinload(Folder.shares),
-            selectinload(Folder.owner)
+            selectinload(Folder.owner_user),
         )
         .filter(or_(*access_filters))
         .order_by(func.lower(Folder.name))

@@ -104,5 +104,11 @@ def test_build_folder_detail_commander_context_builds_media_bracket_links_and_ed
     assert context["edhrec_commander_ready"] is True
     assert context["edhrec_ready"] is True
     assert context["is_deck_folder"] is True
-    assert context["edhrec_sections"][0]["cards"][0]["in_deck"] is True
-    assert context["edhrec_sections"][0]["cards"][1]["in_deck"] is False
+    # The service filters recommendation cards that are already in the deck
+    # (Sol Ring) and annotates the remainder with ``in_deck=False`` so the UI
+    # can render them as "buildable" suggestions.
+    remaining = context["edhrec_sections"][0]["cards"]
+    assert len(remaining) == 1
+    assert remaining[0]["oracle_id"] == "oid-other"
+    assert remaining[0]["in_deck"] is False
+    assert context["edhrec_sections"][0]["count"] == 1

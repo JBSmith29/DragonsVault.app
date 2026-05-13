@@ -11,6 +11,7 @@ from extensions import db  # shared SQLAlchemy() instance
 
 # Import models only after db exists to avoid circular imports
 from .card import Card  # type: ignore F401
+from .collection_value_snapshot import CollectionValueSnapshot  # type: ignore F401
 from .commander_cache import CommanderBracketCache  # type: ignore F401
 from .build_session import BuildSession, BuildSessionCard  # type: ignore F401
 from .folder import Folder, FolderShare  # type: ignore F401
@@ -66,6 +67,7 @@ from .role import (  # type: ignore F401
 __all__ = [
     "db",
     "Card",
+    "CollectionValueSnapshot",
     "CommanderBracketCache",
     "BuildSession",
     "BuildSessionCard",

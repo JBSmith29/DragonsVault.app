@@ -103,3 +103,63 @@ def test_process_csv_allows_duplicate_folder_names_per_user(app, create_user, tm
         assert folder_one is not None
         assert folder_two is not None
         assert folder_one.id != folder_two.id
+
+
+def test_process_csv_imports_condition_column(app, create_user, tmp_path):
+    """The CSV importer reads the optional ``condition`` column.
+
+    Values are normalized to canonical grades so "Near Mint", "NM", and
+    "lightly played" all land as NM/NM/LP respectively. Invalid strings
+    fall through as ``None``.
+    """
+    user, _password = create_user(email="condition-import@example.com", username="condition_importer")
+    csv_path = tmp_path / "condition.csv"
+    csv_path.write_text(
+        "Folder Name,Card Name,Set Code,Collector Number,Quantity,Condition\n"
+        "Condition Folder,Sol Ring,2XM,1,1,Near Mint\n"
+        "Condition Folder,Lightning Bolt,M11,146,1,lightly played\n"
+        "Condition Folder,Mox Jet,LEA,1,1,damaged\n"
+        "Condition Folder,Mystery Card,XYZ,1,1,bogus-grade\n",
+        encoding="utf-8",
+    )
+
+    with app.app_context():
+        stats, _ = process_csv(
+            str(csv_path),
+            default_folder="Unsorted",
+            dry_run=False,
+            quantity_mode="new_only",
+            owner_user_id=user.id,
+            owner_username=user.username,
+        )
+        assert stats.added == 4
+
+        by_name = {card.name: card for card in Card.query.filter_by(folder_id=Folder.query.filter_by(name="Condition Folder").one().id).all()}
+        assert by_name["Sol Ring"].condition == "NM"
+        assert by_name["Lightning Bolt"].condition == "LP"
+        assert by_name["Mox Jet"].condition == "DMG"
+        assert by_name["Mystery Card"].condition is None
+
+
+def test_process_csv_without_condition_column_leaves_condition_null(app, create_user, tmp_path):
+    """Spreadsheets that omit the condition column remain backwards compatible."""
+    user, _ = create_user(email="no-condition@example.com", username="no_condition")
+    csv_path = tmp_path / "no-condition.csv"
+    csv_path.write_text(
+        "Folder Name,Card Name,Set Code,Collector Number,Quantity\n"
+        "Legacy Folder,Sol Ring,2XM,1,1\n",
+        encoding="utf-8",
+    )
+    with app.app_context():
+        stats, _ = process_csv(
+            str(csv_path),
+            default_folder="Unsorted",
+            dry_run=False,
+            quantity_mode="new_only",
+            owner_user_id=user.id,
+            owner_username=user.username,
+        )
+        assert stats.added == 1
+        card = Card.query.filter_by(name="Sol Ring").first()
+        assert card is not None
+        assert card.condition is None

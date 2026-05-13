@@ -407,6 +407,7 @@ def process_csv(
             lang_raw = row.get(mapping.get("lang"), "en")
             lang = _norm_lang(lang_raw)
             is_foil = _to_bool(row.get(mapping.get("is_foil")))
+            condition = Card.normalize_condition(row.get(mapping.get("condition")))
 
             # ensure folder
             folder = None
@@ -524,6 +525,9 @@ def process_csv(
                 else:
                     pending_card.quantity = (pending_card.quantity or 0) + qty
                     stats.updated += 1
+                # Apply condition to the pending card if newly supplied.
+                if condition and not pending_card.condition:
+                    pending_card.condition = condition
                 per_folder[folder_name] = per_folder.get(folder_name, 0) + qty
                 processed += 1
                 if processed % 25 == 0:
@@ -589,12 +593,18 @@ def process_csv(
                                 "folder": folder_name,
                             }
                         )
+
+                # Condition is metadata: set or update without affecting the
+                # "changed" signal that drives the add/update/skip tally.
+                if condition and existing.condition != condition:
+                    existing.condition = condition
             else:
                 # New row
                 initial_qty = qty if quantity_mode == "absolute" else max(qty, 0)
                 card_kwargs = {
                     **key,
                     "quantity": initial_qty,
+                    "condition": condition,
                     "type_line": metadata.get("type_line"),
                     "rarity": metadata.get("rarity"),
                     "oracle_text": metadata.get("oracle_text"),

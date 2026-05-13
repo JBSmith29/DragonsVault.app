@@ -57,6 +57,27 @@ def _fallback_enabled() -> bool:
     return os.getenv("ENABLE_ROLE_TABLE_FALLBACK", "0").lower() in {"1", "true", "yes", "on"}
 
 
+def _warn_if_weak_secret_key(app: Flask) -> None:
+    """Emit a loud warning when SECRET_KEY looks weak.
+
+    ``config._select_config`` already refuses to boot production with a weak key,
+    but dev/testing can silently fall through. We re-check against the live app
+    config so the logger (fully wired by this point) surfaces the problem.
+    """
+    from config import _is_weak_secret  # local import to avoid circular at module load
+
+    secret = app.config.get("SECRET_KEY")
+    if not _is_weak_secret(secret):
+        return
+    env_label = (os.getenv("FLASK_ENV") or "production").lower()
+    message = (
+        "SECRET_KEY is missing or weak (%s mode). Set SECRET_KEY or SECRET_KEY_FILE "
+        "to a 32+ character random value. Sessions, CSRF tokens, password reset "
+        "tokens, and API tokens all depend on this value being strong and secret."
+    )
+    app.logger.warning(message, env_label)
+
+
 _visibility_filters_registered = False
 _VISIBILITY_SKIP_SESSION_FLAG = "_skip_visibility_filters"
 
@@ -251,6 +272,7 @@ def create_app():
     )
     app.config.from_object(Config)
     configure_request_logging(app)
+    _warn_if_weak_secret_key(app)
     app.jinja_env.globals["static_url"] = static_url
 
     # Add future template roots for staged domain migration.

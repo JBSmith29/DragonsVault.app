@@ -557,6 +557,60 @@ def api_update_card_printing(card_id: int):
 __all__ = [
     "api_card_printing_options",
     "api_update_card_printing",
+    "api_update_card_condition",
     "bulk_delete_cards",
     "bulk_move_cards",
 ]
+
+
+def api_update_card_condition(card_id: int):
+    """Set the condition grade for a single card row.
+
+    Accepts ``{"condition": "NM"}`` (or an alias like "near mint") in a JSON
+    body. Passing ``null`` or an empty string clears the condition. Invalid
+    grades return 400 so the UI can show an error instead of silently
+    dropping the input.
+    """
+    card = get_or_404(Card, card_id)
+    folder = card.folder
+    ensure_folder_access(folder, write=True, allow_shared=False)
+
+    payload = request.get_json(silent=True) or {}
+    raw_value = payload.get("condition")
+
+    if raw_value in (None, ""):
+        new_value: str | None = None
+    else:
+        new_value = Card.normalize_condition(raw_value)
+        if new_value is None:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Unknown condition grade.",
+                        "valid_grades": list(Card.CONDITION_GRADES),
+                    }
+                ),
+                400,
+            )
+
+    if card.condition != new_value:
+        card.condition = new_value
+        _safe_commit()
+        record_audit_event(
+            "card_condition_update",
+            {
+                "card_id": card.id,
+                "folder_id": folder.id if folder else None,
+                "condition": new_value,
+            },
+        )
+
+    return jsonify(
+        {
+            "success": True,
+            "card_id": card.id,
+            "condition": card.condition,
+            "condition_label": card.condition_label,
+        }
+    )

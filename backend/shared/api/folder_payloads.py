@@ -96,6 +96,9 @@ def serialize_card(
     if color_identity_mask is None:
         color_identity_mask = derived_mask
 
+    condition = getattr(card, "condition", None)
+    condition_label = getattr(card, "condition_label", None)
+
     return {
         "id": card.id,
         "name": card.name,
@@ -104,6 +107,8 @@ def serialize_card(
         "lang": card.lang,
         "quantity": card.quantity,
         "is_foil": bool(card.is_foil),
+        "condition": condition,
+        "condition_label": condition_label,
         "folder_id": card.folder_id,
         "oracle_id": card.oracle_id,
         "type_line": type_line or None,

@@ -1604,9 +1604,12 @@
     <script src="{{ static_url('js/scroll_restore.js') }}" defer></script>
     <script src="{{ static_url('js/theme-toggle.js') }}"></script>
     <script src="{{ static_url('js/dv-select.js') }}?v=20251230" defer></script>
-    <script src="{{ static_url('js/game-metrics-filters.js') }}?v=20260214-2" defer></script>
     <script src="{{ static_url('js/build-session.js') }}" defer></script>
     <script src="{{ static_url('js/build-session-view.js') }}" defer></script>
+    <script src="{{ static_url('js/deck-insights.js') }}?v=20260512-1" defer></script>
+    <script src="{{ static_url('js/collection-value.js') }}?v=20260512-1" defer></script>
+    <script src="{{ static_url('js/card-detail-enhancements.js') }}?v=20260512-1" defer></script>
+    <script src="{{ static_url('js/playgroup-stats.js') }}?v=20260512-1" defer></script>
     <script src="{{ static_url('js/ui-enhancements.js') }}" defer></script>
     <script src="{{ static_url('js/job-monitor.js') }}?v=2" defer></script>
     <script src="{{ static_url('js/search-focus.js') }}"></script>
@@ -1618,6 +1621,9 @@
     <script src="{{ static_url('js/loading-indicator.js') }}" defer></script>
     <script src="{{ static_url('js/error-handler.js') }}" defer></script>
     <script src="{{ static_url('js/keyboard-shortcuts.js') }}" defer></script>
+
+    {# Page-specific scripts injected by individual templates. #}
+    {% block page_scripts %}{% endblock %}
 
     <!-- Global form parameter cleanup -->
     <script nonce="{{ csp_nonce() }}">

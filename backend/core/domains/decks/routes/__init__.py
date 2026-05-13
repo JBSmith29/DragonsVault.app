@@ -13,8 +13,14 @@ def register_web_routes() -> None:
         return
     _web_routes_registered = True
 
+    from . import archetype  # noqa: F401
+    from . import budget  # noqa: F401
     from . import build  # noqa: F401
+    from . import compare  # noqa: F401
     from . import folders  # noqa: F401
+    from . import legality  # noqa: F401
+    from . import mana_base  # noqa: F401
+    from . import proxy_pdf  # noqa: F401
     from . import wishlist  # noqa: F401
 
 

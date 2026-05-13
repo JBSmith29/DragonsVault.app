@@ -56,6 +56,9 @@ EXPECTED = {
     "is_foil": [
         "printing", "foil", "is foil", "foil?", "is_foil",
     ],
+    "condition": [
+        "condition", "grade", "card condition", "quality",
+    ],
 }
 
 REQUIRED_FIELDS = {

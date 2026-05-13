@@ -74,6 +74,12 @@ def generate_openapi_spec(app: Flask) -> dict[str, Any]:
                         "collector_number": {"type": "string"},
                         "is_foil": {"type": "boolean"},
                         "quantity": {"type": "integer"},
+                        "condition": {
+                            "type": "string",
+                            "enum": ["NM", "LP", "MP", "HP", "DMG"],
+                            "nullable": True,
+                            "description": "TCG-standard condition grade",
+                        },
                     },
                 },
                 "Folder": {
@@ -86,13 +92,121 @@ def generate_openapi_spec(app: Flask) -> dict[str, Any]:
                         "is_public": {"type": "boolean"},
                     },
                 },
-                "Game": {
+                "LegalityIssue": {
                     "type": "object",
                     "properties": {
-                        "id": {"type": "integer"},
-                        "played_at": {"type": "string", "format": "date-time"},
-                        "winner_user_id": {"type": "integer", "nullable": True},
-                        "notes": {"type": "string", "nullable": True},
+                        "severity": {"type": "string", "enum": ["error", "warning", "info"]},
+                        "code": {"type": "string"},
+                        "message": {"type": "string"},
+                        "card_name": {"type": "string", "nullable": True},
+                        "card_id": {"type": "integer", "nullable": True},
+                        "oracle_id": {"type": "string", "nullable": True},
+                    },
+                },
+                "LegalityReport": {
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "type": "object",
+                            "properties": {
+                                "key": {"type": "string"},
+                                "label": {"type": "string"},
+                            },
+                        },
+                        "legal": {"type": "boolean"},
+                        "deck_size": {"type": "integer"},
+                        "issues": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/LegalityIssue"},
+                        },
+                        "summary": {
+                            "type": "object",
+                            "properties": {
+                                "error": {"type": "integer"},
+                                "warning": {"type": "integer"},
+                                "info": {"type": "integer"},
+                            },
+                        },
+                    },
+                },
+                "CollectionValueReport": {
+                    "type": "object",
+                    "properties": {
+                        "currency": {"type": "string"},
+                        "total_value": {"type": "string", "description": "Decimal string"},
+                        "unique_cards": {"type": "integer"},
+                        "total_cards": {"type": "integer"},
+                        "priced_cards": {"type": "integer"},
+                        "missing_prices": {"type": "integer"},
+                        "captured_at": {"type": "string", "format": "date-time"},
+                    },
+                },
+                "DeckArchetype": {
+                    "type": "object",
+                    "properties": {
+                        "primary": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "score": {"type": "number"},
+                                "reasons": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                            },
+                        },
+                        "secondary": {
+                            "type": "object",
+                            "nullable": True,
+                        },
+                    },
+                },
+                "ManaBaseReport": {
+                    "type": "object",
+                    "properties": {
+                        "total_lands": {"type": "integer"},
+                        "untapped_lands": {"type": "integer"},
+                        "tapped_lands": {"type": "integer"},
+                        "color_sources": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer"},
+                        },
+                        "warnings": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+                "DeckComparison": {
+                    "type": "object",
+                    "properties": {
+                        "shared": {"type": "array", "items": {"type": "object"}},
+                        "only_left": {"type": "array", "items": {"type": "object"}},
+                        "only_right": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+                "DeckWinRate": {
+                    "type": "object",
+                    "properties": {
+                        "games": {"type": "integer"},
+                        "wins": {"type": "integer"},
+                        "losses": {"type": "integer"},
+                        "win_rate": {"type": "number", "nullable": True},
+                    },
+                },
+                "PlaygroupStats": {
+                    "type": "object",
+                    "properties": {
+                        "pod_id": {"type": "integer", "nullable": True},
+                        "total_games": {"type": "integer"},
+                        "meta_entropy": {"type": "number", "nullable": True},
+                        "players": {"type": "array", "items": {"type": "object"}},
+                        "commanders": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+                "KeywordMatch": {
+                    "type": "object",
+                    "properties": {
+                        "keyword": {"type": "string"},
+                        "rule_number": {"type": "string"},
+                        "rule_text": {"type": "string", "nullable": True},
                     },
                 },
             },

@@ -73,6 +73,12 @@ def api_update_card_printing(card_id):
     return card_mutation_service.api_update_card_printing(card_id)
 
 
+@api_bp.post("/card/<int:card_id>/condition")
+@login_required
+def api_update_card_condition(card_id):
+    return card_mutation_service.api_update_card_condition(card_id)
+
+
 @views.route("/collection")
 def collection_overview():
     return collection_overview_service.collection_overview()

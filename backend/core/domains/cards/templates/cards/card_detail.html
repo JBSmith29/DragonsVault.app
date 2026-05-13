@@ -78,6 +78,23 @@
     {% endif %}
   </div>
 
+  {# Condition editor (owned cards only). Values map to TCG-standard grades. #}
+  {% if card and card.id %}
+    <div class="mb-3 d-flex align-items-center gap-2 flex-wrap" data-card-condition data-card-id="{{ card.id }}"
+         data-endpoint="{{ url_for('api.api_update_card_condition', card_id=card.id) }}">
+      <label class="small text-muted text-uppercase fw-semibold mb-0 me-1" for="cardCondition-{{ card.id }}">Condition</label>
+      <select class="form-select form-select-sm w-auto" id="cardCondition-{{ card.id }}" data-card-condition-select>
+        <option value="" {% if not card.condition %}selected{% endif %}>Not set</option>
+        {% set _conditions = {'NM': 'Near Mint', 'LP': 'Lightly Played', 'MP': 'Moderately Played',
+                              'HP': 'Heavily Played', 'DMG': 'Damaged'} %}
+        {% for code, label in _conditions.items() %}
+          <option value="{{ code }}" {% if card.condition == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="small text-muted" data-card-condition-status></span>
+    </div>
+  {% endif %}
+
   <!-- ---------- Commander legality badge ---------- -->
 {% if info.has_commander_legality %}
   <div class="mb-3"><span class="badge {{ info.commander_legality_class }}">Commander: {{ info.commander_legality_label }}</span></div>
@@ -160,9 +177,11 @@
       <!-- ---------- Details / Rulings ---------- -->
       {# Left column: oracle text, tokens, and external resource links. #}
       {% if info.has_oracle_text %}
-        <div class="mb-3">
+        <div class="mb-3" data-card-oracle data-oracle-text="{{ info.oracle_text or '' }}">
           <div class="fw-semibold">Card Text</div>
           <div>{{ info.oracle_text_html | safe }}</div>
+          {# Lazy-rendered keyword-ability rule lookups appear here. #}
+          <div class="mt-2" data-oracle-keywords></div>
         </div>
       {% endif %}
 

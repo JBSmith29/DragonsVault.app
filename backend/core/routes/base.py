@@ -131,7 +131,40 @@ def landing_page():
     return render_template("landing.html")
 
 
-LAST_UPDATED_TEXT = "November 17, 2025"
+import os
+from datetime import date
+
+
+def _format_legal_date(value: date) -> str:
+    """Format a date as ``Month D, YYYY`` in a cross-platform way."""
+    month = value.strftime("%B")
+    return f"{month} {value.day}, {value.year}"
+
+
+def _resolve_legal_last_updated() -> str:
+    """Return the legal-page last-updated label.
+
+    Precedence:
+      1. ``LEGAL_LAST_UPDATED`` env var (free-form text)
+      2. ``LEGAL_LAST_UPDATED_DATE`` env var as ``YYYY-MM-DD``
+      3. The current UTC date at process start
+
+    Using a function rather than a hardcoded string prevents stale dates from
+    appearing on the legal pages when the app is redeployed.
+    """
+    raw = (os.getenv("LEGAL_LAST_UPDATED") or "").strip()
+    if raw:
+        return raw
+    iso_raw = (os.getenv("LEGAL_LAST_UPDATED_DATE") or "").strip()
+    if iso_raw:
+        try:
+            return _format_legal_date(date.fromisoformat(iso_raw))
+        except ValueError:
+            pass
+    return _format_legal_date(date.today())
+
+
+LAST_UPDATED_TEXT = _resolve_legal_last_updated()
 
 
 @views.route("/legal/terms")
@@ -253,6 +286,28 @@ def api_rules_text():
     if not text:
         return jsonify({"ok": False, "error": "Rules text unavailable."}), 404
     return Response(text, mimetype="text/plain")
+
+
+@api_bp.post("/rules/keywords")
+def api_rules_keywords():
+    """Detect Magic keyword abilities in arbitrary oracle text.
+
+    Accepts JSON body ``{"text": "..."}`` and returns the keywords along with
+    their governing comprehensive-rule numbers and text snippets so the UI
+    can render inline rules lookups.
+    """
+    from core.shared.utils.card_rules_matcher import (
+        attach_rule_snippets,
+        find_keyword_abilities,
+    )
+
+    payload = request.get_json(silent=True) or {}
+    text = str(payload.get("text") or "")
+    matches = attach_rule_snippets(find_keyword_abilities(text))
+    return jsonify({
+        "ok": True,
+        "matches": [match.to_dict() for match in matches],
+    })
 
 
 @api_bp.get("/rules/workbook")

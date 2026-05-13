@@ -25,8 +25,8 @@ def upgrade() -> None:
             op.create_table(
                 "build_sessions",
                 sa.Column("id", sa.Integer(), primary_key=True),
-                sa.Column("owner_user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), index=True),
-                sa.Column("commander_oracle_id", sa.String(length=64), nullable=True, index=True),
+                sa.Column("owner_user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE")),
+                sa.Column("commander_oracle_id", sa.String(length=64), nullable=True),
                 sa.Column("commander_name", sa.String(length=200), nullable=True),
                 sa.Column("tags_json", sa.JSON(), nullable=True),
                 sa.Column("status", sa.String(length=32), nullable=False, server_default="active"),
@@ -52,8 +52,8 @@ def upgrade() -> None:
             op.create_table(
                 "build_session_cards",
                 sa.Column("id", sa.Integer(), primary_key=True),
-                sa.Column("session_id", sa.Integer(), sa.ForeignKey("build_sessions.id", ondelete="CASCADE"), nullable=False, index=True),
-                sa.Column("card_oracle_id", sa.String(length=64), nullable=False, index=True),
+                sa.Column("session_id", sa.Integer(), sa.ForeignKey("build_sessions.id", ondelete="CASCADE"), nullable=False),
+                sa.Column("card_oracle_id", sa.String(length=64), nullable=False),
                 sa.Column("quantity", sa.Integer(), nullable=False, server_default="1"),
                 sa.Column("added_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
                 sa.UniqueConstraint("session_id", "card_oracle_id", name="uq_build_session_card"),

@@ -1,0 +1,138 @@
+{#
+  Deck insights panel.
+
+  Surfaces the new analysis features (legality checker, mana base, archetype,
+  budget, win-rate, compare, proxy PDF) as deferred-load cards. Each tab
+  fetches its data lazily when opened, so the folder detail page isn't slowed
+  down for users who don't open the panel.
+
+  Requires `folder` in context and the decks/compare-picker modal macro from
+  this template below.
+#}
+{% set di_folder = folder %}
+<section class="deck-insights mb-3"
+         data-deck-insights
+         data-folder-id="{{ di_folder.id }}"
+         data-insights-endpoints='{
+           "legality": "{{ url_for("api.api_folder_legality_all", folder_id=di_folder.id) }}",
+           "archetype": "{{ url_for("api.api_folder_archetype", folder_id=di_folder.id) }}",
+           "manaBase": "{{ url_for("api.api_folder_mana_base", folder_id=di_folder.id) }}",
+           "budget": "{{ url_for("api.api_folder_budget_alternatives", folder_id=di_folder.id) }}",
+           "winRate": "{{ url_for("games_api.api_deck_winrate", folder_id=di_folder.id) }}",
+           "folders": "{{ url_for("api.api_folders") }}",
+           "compare": "{{ url_for("api.api_deck_compare") }}",
+           "proxyPdf": "{{ url_for("views.folder_proxy_pdf", folder_id=di_folder.id) }}"
+         }'>
+  <div class="card">
+    <div class="card-header d-flex flex-wrap align-items-center gap-2">
+      <div class="fw-semibold">
+        <i class="bi bi-graph-up-arrow me-1" aria-hidden="true"></i>
+        Deck Insights
+      </div>
+      <div class="ms-auto d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary btn-sm"
+           href="{{ url_for("views.folder_proxy_pdf", folder_id=di_folder.id) }}"
+           title="Download a printable 3x3 proxy sheet">
+          <i class="bi bi-printer me-1" aria-hidden="true"></i>Proxy PDF
+        </a>
+        <button type="button"
+                class="btn btn-outline-secondary btn-sm"
+                data-insights-compare-open
+                title="Compare this deck with another of your decks">
+          <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Compare…
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      <ul class="nav nav-tabs mb-3" role="tablist" data-insights-tabs>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#di-legality"
+                  data-insights-panel="legality"
+                  type="button" role="tab">Legality</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#di-archetype"
+                  data-insights-panel="archetype"
+                  type="button" role="tab">Archetype</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#di-mana"
+                  data-insights-panel="manaBase"
+                  type="button" role="tab">Mana Base</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#di-budget"
+                  data-insights-panel="budget"
+                  type="button" role="tab">Budget Ideas</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#di-winrate"
+                  data-insights-panel="winRate"
+                  type="button" role="tab">Win Rate</button>
+        </li>
+      </ul>
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="di-legality" role="tabpanel"
+             data-insights-content="legality">
+          <div class="text-muted small">Loading legality…</div>
+        </div>
+        <div class="tab-pane fade" id="di-archetype" role="tabpanel"
+             data-insights-content="archetype">
+          <div class="text-muted small">Loading archetype…</div>
+        </div>
+        <div class="tab-pane fade" id="di-mana" role="tabpanel"
+             data-insights-content="manaBase">
+          <div class="text-muted small">Loading mana base…</div>
+        </div>
+        <div class="tab-pane fade" id="di-budget" role="tabpanel"
+             data-insights-content="budget">
+          <div class="text-muted small">Loading budget ideas…</div>
+        </div>
+        <div class="tab-pane fade" id="di-winrate" role="tabpanel"
+             data-insights-content="winRate">
+          <div class="text-muted small">Loading win rate…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# Compare picker modal: fetches folders JSON, lets the user pick one, then
+   links to a compare page that renders the diff. #}
+<div class="modal fade" id="deckCompareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Compare decks</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Pick a deck to compare with <strong>{{ di_folder.name }}</strong>. We'll show shared cards, unique cards, mana curve, and color pip differences.
+        </p>
+        <div class="mb-3">
+          <input type="search" class="form-control" placeholder="Filter decks…"
+                 data-insights-compare-filter aria-label="Filter decks by name">
+        </div>
+        <div class="list-group" data-insights-compare-list>
+          <div class="text-muted small">Loading decks…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Compare result modal: rendered as a table when the user picks a second deck. #}
+<div class="modal fade" id="deckCompareResultModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Deck comparison</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" data-insights-compare-result>
+        <div class="text-muted small">Loading comparison…</div>
+      </div>
+    </div>
+  </div>
+</div>

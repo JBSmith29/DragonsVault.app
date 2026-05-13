@@ -8,8 +8,12 @@ from ..paths import INSTANCE_DIR, SECRET_KEY_VALUE
 
 
 class BaseConfig:
-    # Flask basics - ensure secure defaults
-    SECRET_KEY = SECRET_KEY_VALUE or "dev"  # override in prod!
+    # Flask basics - ensure secure defaults.
+    # ``SECRET_KEY_VALUE`` is resolved via env/file in ``config.paths``.
+    # ``config._select_config`` refuses to boot production when the value is
+    # weak, and ``app._warn_if_weak_secret_key`` logs a warning for dev/testing
+    # so the "dev" fallback is never silently in effect.
+    SECRET_KEY = SECRET_KEY_VALUE or "dev"
     TEMPLATES_AUTO_RELOAD = False
 
     # Security headers
