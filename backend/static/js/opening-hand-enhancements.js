@@ -7,21 +7,23 @@
  *
  * Features:
  *   1. "Next Turn" button — untaps all, draws a card, increments turn counter,
- *      resets land-played flag.
+ *      resets land-played flag. Guarded against empty state.
  *   2. Auto-play lands — single-click a land in hand plays it directly to the
  *      lands zone without a context menu.
  *   3. Undo stack — stores the last 10 state tokens so users can revert.
- *   4. Keyboard shortcuts — D=draw, U=untap, N=next turn, M=mulligan, Z=undo.
+ *   4. Keyboard shortcuts — D=draw, U=untap, N=next turn, M=mulligan, Z=undo,
+ *      ?=show shortcut help.
  *   5. Turn counter display — shows "Turn N" in the status bar.
  *   6. LocalStorage persistence — saves board state so page refresh doesn't
  *      lose everything.
- *   7. One-click start — auto-submits the landing form when a deck is selected.
- *   8. Inline effect shortcuts — simple draw/token effects resolve without modal.
+ *   7. Hand size + lands-played indicators in the status bar.
+ *   8. Reset confirmation — prevents accidental wipes.
+ *   9. Double-click guard on Next Turn.
+ *  10. Keyboard shortcut help panel (?).
  */
 (function () {
   "use strict";
 
-  // Wait for the core module to initialize.
   const oh = window.__openingHand;
   if (!oh) return;
 
@@ -33,63 +35,81 @@
   // -----------------------------------------------------------------
   let turnNumber = 0;
   let undoStack = [];
+  let nextTurnBusy = false;
 
   // -----------------------------------------------------------------
-  // 1. Next Turn button
+  // DOM references
   // -----------------------------------------------------------------
   const nextTurnBtn = document.getElementById("nextTurnBtn");
+  const undoBtn = document.getElementById("undoBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const handGrid = document.getElementById("handGrid");
+  const turnBadge = document.getElementById("turnCounter");
+  const handSizeBadge = document.getElementById("handSizeBadge");
+  const landsPlayedBadge = document.getElementById("landsPlayedBadge");
+
+  // -----------------------------------------------------------------
+  // 1. Next Turn button — guarded against empty state + double-click
+  // -----------------------------------------------------------------
   if (nextTurnBtn) {
     nextTurnBtn.addEventListener("click", async () => {
-      await doNextTurn();
+      if (nextTurnBusy) return;
+      // Guard: don't fire before a hand is dealt.
+      if (!oh.stateInput || !oh.stateInput.value) {
+        oh.showMessage("Shuffle a deck first.", "warning");
+        return;
+      }
+      nextTurnBusy = true;
+      nextTurnBtn.disabled = true;
+      try {
+        await doNextTurn();
+      } finally {
+        nextTurnBusy = false;
+        nextTurnBtn.disabled = false;
+      }
     });
   }
 
   async function doNextTurn() {
-    // Save undo point before the turn.
     pushUndo();
 
-    // Untap all.
-    if (oh.untapAllBoardCards) {
+    // Untap all — also clears mana pool via the untapAllBtn click listener.
+    const untapAllBtn = document.getElementById("untapAllBtn");
+    if (untapAllBtn) {
+      untapAllBtn.click();
+    } else if (oh.untapAllBoardCards) {
       oh.untapAllBoardCards();
     }
     oh.landsPlayedThisTurn = 0;
 
-    // Draw a card by clicking the draw button (delegates to the core script's
-    // draw handler which manages state token updates correctly).
+    // Draw a card via the core draw button.
     if (oh.drawBtn && !oh.drawBtn.disabled) {
       oh.drawBtn.click();
     }
 
-    // Increment turn.
     turnNumber += 1;
     updateTurnDisplay();
-    oh.showMessage(`Turn ${turnNumber} — untapped, drew a card.`, "info");
+    updateStatusBadges();
+    oh.showMessage(`Turn ${turnNumber} — untapped and drew a card.`, "info");
     persistState();
   }
 
   // -----------------------------------------------------------------
-  // 2. Auto-play lands (intercept single-click on hand cards)
+  // 2. Auto-play lands (single-click in hand)
   // -----------------------------------------------------------------
-  // We use event delegation on the hand grid. The core script already
-  // handles clicks, but we can intercept lands before the context menu
-  // fires by listening in the capture phase.
-  const handGrid = document.getElementById("handGrid");
   if (handGrid) {
     handGrid.addEventListener(
       "click",
       (event) => {
         const cardEl = event.target.closest(".hand-card");
         if (!cardEl) return;
-        // Only intercept left-click (not right-click context menu).
         if (event.button !== 0) return;
-        // Find the card data from the hand array by matching the element index.
         const allCards = Array.from(handGrid.querySelectorAll(".hand-card"));
         const idx = allCards.indexOf(cardEl);
         if (idx < 0 || idx >= oh.handCards.length) return;
         const card = oh.handCards[idx];
         if (!card || !card.is_land) return;
 
-        // Auto-play the land: remove from hand, add to lands zone.
         event.stopPropagation();
         event.preventDefault();
         pushUndo();
@@ -97,6 +117,7 @@
         oh.moveCardToBoard(card, "lands");
         oh.landsPlayedThisTurn += 1;
         oh.renderHand();
+        updateStatusBadges();
         persistState();
       },
       { capture: true }
@@ -106,7 +127,6 @@
   // -----------------------------------------------------------------
   // 3. Undo stack
   // -----------------------------------------------------------------
-  const undoBtn = document.getElementById("undoBtn");
   if (undoBtn) {
     undoBtn.addEventListener("click", () => popUndo());
   }
@@ -129,7 +149,6 @@
     const snapshot = undoStack.pop();
     if (oh.stateInput) oh.stateInput.value = snapshot.stateToken;
     oh.handCards = snapshot.handCards;
-    // Restore board state.
     const zones = Object.keys(oh.boardState);
     zones.forEach((zone) => {
       oh.boardState[zone] = snapshot.boardState[zone] || [];
@@ -139,6 +158,7 @@
     oh.renderHand();
     oh.renderBoard();
     updateTurnDisplay();
+    updateStatusBadges();
     oh.showMessage("Undid last action.", "info");
     if (undoBtn) undoBtn.disabled = undoStack.length === 0;
     persistState();
@@ -148,7 +168,6 @@
   // 4. Keyboard shortcuts
   // -----------------------------------------------------------------
   document.addEventListener("keydown", (event) => {
-    // Don't fire when typing in inputs/textareas.
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -165,7 +184,7 @@
         break;
       case "n":
         event.preventDefault();
-        if (nextTurnBtn && !nextTurnBtn.disabled) nextTurnBtn.click();
+        if (nextTurnBtn && !nextTurnBtn.disabled && !nextTurnBusy) nextTurnBtn.click();
         break;
       case "m":
         event.preventDefault();
@@ -175,21 +194,24 @@
         event.preventDefault();
         if (undoBtn && !undoBtn.disabled) undoBtn.click();
         break;
-      case "escape":
-        // Close any open modal.
+      case "?":
+        event.preventDefault();
+        toggleShortcutHelp();
+        break;
+      case "escape": {
         const openModal = document.querySelector(".modal.show");
         if (openModal && window.bootstrap) {
           bootstrap.Modal.getInstance(openModal)?.hide();
         }
+        hideShortcutHelp();
         break;
+      }
     }
   });
 
   // -----------------------------------------------------------------
   // 5. Turn counter display
   // -----------------------------------------------------------------
-  const turnBadge = document.getElementById("turnCounter");
-
   function updateTurnDisplay() {
     if (!turnBadge) return;
     if (turnNumber > 0) {
@@ -201,11 +223,132 @@
   }
 
   // -----------------------------------------------------------------
+  // 7. Hand size + lands-played status badges
+  // -----------------------------------------------------------------
+  function updateStatusBadges() {
+    if (handSizeBadge) {
+      const count = (oh.handCards || []).length;
+      handSizeBadge.textContent = `Hand: ${count}`;
+      handSizeBadge.hidden = false;
+    }
+    if (landsPlayedBadge) {
+      const played = oh.landsPlayedThisTurn || 0;
+      landsPlayedBadge.textContent = played > 0 ? `Land played` : `Land: 0`;
+      landsPlayedBadge.className = `badge ${played > 0 ? "text-bg-success" : "text-bg-secondary"}`;
+      landsPlayedBadge.hidden = false;
+    }
+  }
+
+  // Observe hand changes to keep badge current.
+  setInterval(() => {
+    if (oh.stateInput && oh.stateInput.value) updateStatusBadges();
+  }, 800);
+
+  // -----------------------------------------------------------------
+  // 8. Reset confirmation
+  // -----------------------------------------------------------------
+  if (resetBtn) {
+    // Intercept the reset button before the core handler fires.
+    resetBtn.addEventListener(
+      "click",
+      (event) => {
+        const hasState = oh.stateInput && oh.stateInput.value;
+        const hasCards = (oh.handCards || []).length > 0 ||
+          Object.values(oh.boardState || {}).some((z) => z.length > 0);
+        if (!hasState && !hasCards) return; // nothing to lose, let it through
+        if (!confirm("Reset the simulator? This will clear your hand and board.")) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        } else {
+          // Clear undo stack and turn counter on confirmed reset.
+          undoStack = [];
+          turnNumber = 0;
+          if (undoBtn) undoBtn.disabled = true;
+          updateTurnDisplay();
+          updateStatusBadges();
+          try { localStorage.removeItem(storageKey()); } catch (_) {}
+        }
+      },
+      { capture: true }
+    );
+  }
+
+  // -----------------------------------------------------------------
+  // 10. Keyboard shortcut help panel
+  // -----------------------------------------------------------------
+  const SHORTCUTS = [
+    { key: "N", desc: "Next Turn (untap + draw)" },
+    { key: "D", desc: "Draw 1 card" },
+    { key: "U", desc: "Untap all permanents" },
+    { key: "M", desc: "Mulligan" },
+    { key: "Z", desc: "Undo last action" },
+    { key: "?", desc: "Show / hide this help" },
+    { key: "Esc", desc: "Close modal / help" },
+  ];
+
+  let shortcutPanel = null;
+
+  function buildShortcutPanel() {
+    if (shortcutPanel) return shortcutPanel;
+    const panel = document.createElement("div");
+    panel.id = "shortcutHelpPanel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Keyboard shortcuts");
+    panel.style.cssText = `
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 2000; background: rgba(15,23,42,0.97);
+      border: 1px solid rgba(148,163,184,0.35); border-radius: 0.85rem;
+      padding: 1.25rem 1.5rem; min-width: 280px; max-width: 360px;
+      box-shadow: 0 1.5rem 3rem rgba(2,6,23,0.65); backdrop-filter: blur(16px);
+      display: none;
+    `;
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <span style="font-weight:700;font-size:0.9rem;color:#f1f5f9;">Keyboard Shortcuts</span>
+        <button type="button" id="shortcutHelpClose" style="background:transparent;border:0;color:rgba(148,163,184,0.7);font-size:1.1rem;line-height:1;padding:0.1rem 0.3rem;border-radius:0.3rem;cursor:pointer;" aria-label="Close">✕</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        ${SHORTCUTS.map((s) => `
+          <tr>
+            <td style="padding:0.3rem 0.5rem 0.3rem 0;white-space:nowrap;">
+              <kbd style="background:rgba(255,255,255,0.1);border:1px solid rgba(148,163,184,0.3);border-radius:0.3rem;padding:0.15rem 0.45rem;font-size:0.8rem;font-family:monospace;color:#e2e8f0;">${escapeHtml(s.key)}</kbd>
+            </td>
+            <td style="padding:0.3rem 0;font-size:0.82rem;color:rgba(203,213,225,0.9);">${escapeHtml(s.desc)}</td>
+          </tr>
+        `).join("")}
+      </table>
+      <div style="margin-top:0.75rem;font-size:0.72rem;color:rgba(148,163,184,0.6);">Press <kbd style="background:rgba(255,255,255,0.1);border:1px solid rgba(148,163,184,0.3);border-radius:0.3rem;padding:0.1rem 0.35rem;font-family:monospace;">?</kbd> or Esc to close.</div>
+    `;
+    document.body.appendChild(panel);
+    panel.querySelector("#shortcutHelpClose").addEventListener("click", hideShortcutHelp);
+    shortcutPanel = panel;
+    return panel;
+  }
+
+  function toggleShortcutHelp() {
+    const panel = buildShortcutPanel();
+    if (panel.style.display === "none" || !panel.style.display) {
+      panel.style.display = "block";
+      panel.querySelector("#shortcutHelpClose").focus();
+    } else {
+      panel.style.display = "none";
+    }
+  }
+
+  function hideShortcutHelp() {
+    if (shortcutPanel) shortcutPanel.style.display = "none";
+  }
+
+  // -----------------------------------------------------------------
   // 6. LocalStorage persistence
   // -----------------------------------------------------------------
   function storageKey() {
-    const deckId = oh.currentDeckId ? oh.currentDeckId() : "";
-    return STORAGE_KEY_PREFIX + (deckId || "custom");
+    try {
+      const deckId = oh.currentDeckId ? oh.currentDeckId() : "";
+      return STORAGE_KEY_PREFIX + (deckId || "custom");
+    } catch (_) {
+      return STORAGE_KEY_PREFIX + "custom";
+    }
   }
 
   function persistState() {
@@ -219,9 +362,7 @@
         savedAt: Date.now(),
       };
       localStorage.setItem(storageKey(), JSON.stringify(payload));
-    } catch (_err) {
-      // Storage full or unavailable — silently ignore.
-    }
+    } catch (_err) {}
   }
 
   function restoreState() {
@@ -229,7 +370,6 @@
       const raw = localStorage.getItem(storageKey());
       if (!raw) return false;
       const payload = JSON.parse(raw);
-      // Only restore if saved within the last 6 hours (matches token TTL).
       if (Date.now() - (payload.savedAt || 0) > 6 * 60 * 60 * 1000) {
         localStorage.removeItem(storageKey());
         return false;
@@ -250,82 +390,40 @@
       turnNumber = payload.turn || 0;
       oh.landsPlayedThisTurn = payload.landsPlayed || 0;
       updateTurnDisplay();
+      updateStatusBadges();
       return true;
     } catch (_err) {
       return false;
     }
   }
 
-  // Attempt restore on load (only if we have a state token already set).
+  // Restore on load.
   if (oh.stateInput && !oh.stateInput.value) {
     const restored = restoreState();
     if (restored) {
-      oh.showMessage("Restored previous session from local storage.", "info");
+      oh.showMessage("Restored previous session. Press Reset to start fresh.", "info");
       oh.updateActionVisibility();
     }
   }
 
-  // Persist after every draw/shuffle/play action by observing state changes.
-  // We hook into the draw button and shuffle button via MutationObserver on
-  // the state input.
-  if (oh.stateInput) {
-    const stateObserver = new MutationObserver(() => persistState());
-    stateObserver.observe(oh.stateInput, { attributes: true, attributeFilter: ["value"] });
-    // Also persist on value change (programmatic).
-    oh.stateInput.addEventListener("change", () => persistState());
-  }
-
-  // Persist periodically (every 5 seconds if state exists).
+  // Persist periodically.
   setInterval(() => {
     if (oh.stateInput && oh.stateInput.value) persistState();
   }, 5000);
 
   // -----------------------------------------------------------------
-  // 7. One-click start (landing page auto-submit)
-  // -----------------------------------------------------------------
-  const landingForm = document.getElementById("openingHandStartForm");
-  const landingDeckSelect = document.querySelector('[data-dv-select="opening-deck"]');
-  if (landingForm && landingDeckSelect) {
-    landingDeckSelect.addEventListener("dv-select:change", (event) => {
-      const value = event.detail && event.detail.value;
-      if (value) {
-        // Small delay so the hidden input updates before submit.
-        setTimeout(() => landingForm.submit(), 50);
-      }
-    });
-  }
-
-  // -----------------------------------------------------------------
-  // 8. Inline effect shortcuts
-  // -----------------------------------------------------------------
-  // Override the core's "resolve" flow for simple effects. When a card
-  // with a simple draw-N or create-token effect is played, we can
-  // resolve it immediately without opening the modal.
-  // This is done by intercepting the resolveModal show event.
-  const resolveModalEl = document.getElementById("resolveModal");
-  if (resolveModalEl) {
-    resolveModalEl.addEventListener("show.bs.modal", (event) => {
-      // Check if the effect is simple enough to auto-resolve.
-      const effectType = document.getElementById("resolveEffectType");
-      const drawCount = document.getElementById("resolveDrawCount");
-      if (!effectType) return;
-
-      const type = effectType.value;
-      // Auto-resolve simple "draw 1" without modal.
-      if (type === "draw" && drawCount && parseInt(drawCount.value || "0", 10) === 1) {
-        event.preventDefault();
-        // Trigger a draw via the draw button.
-        if (oh.drawBtn && !oh.drawBtn.disabled) {
-          oh.drawBtn.click();
-        }
-      }
-    });
-  }
-
-  // -----------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+  }
 
-  // Initialize turn display.
+  // -----------------------------------------------------------------
+  // Initialize
+  // -----------------------------------------------------------------
   updateTurnDisplay();
+  updateStatusBadges();
 })();

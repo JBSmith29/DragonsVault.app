@@ -953,7 +953,7 @@
         <h2 class="h6 text-uppercase text-muted mb-1">The Board</h2>
         <div class="board-note">
           Creatures rally on the left, artifacts and other permanents line the right column, lands hold the third row, and the command zone sits above a dedicated graveyard lane. Drag cards between zones, reorder them, right-click for more actions, or double-click a permanent to slip it back into your hand.
-          <span class="text-muted d-block mt-1">Shortcuts: <kbd>N</kbd> Next Turn · <kbd>D</kbd> Draw · <kbd>U</kbd> Untap All · <kbd>M</kbd> Mulligan · <kbd>Z</kbd> Undo</span>
+          <span class="text-muted d-block mt-1">Shortcuts: <kbd>N</kbd> Next Turn · <kbd>D</kbd> Draw · <kbd>U</kbd> Untap All · <kbd>M</kbd> Mulligan · <kbd>Z</kbd> Undo · <kbd>?</kbd> All shortcuts</span>
       </div>
     </div>
       <div class="board-actions">
@@ -1063,7 +1063,9 @@
           <span class="badge text-bg-primary text-uppercase" id="handDeckName">{{ selected_deck_name or 'No deck selected' }}</span>
           <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
           <span class="badge text-bg-warning text-dark" id="mulliganCount" hidden></span>
-          <span class="badge text-bg-info" id="turnCounter" hidden>Turn 0</span>
+          <span class="badge text-bg-info" id="turnCounter" hidden></span>
+          <span class="badge text-bg-secondary" id="handSizeBadge" hidden></span>
+          <span class="badge text-bg-secondary" id="landsPlayedBadge" hidden></span>
           <span id="manaPoolDisplay" hidden aria-label="Mana pool"></span>
         </div>
         <div class="hand-card-grid" id="handGrid">
@@ -1101,9 +1103,9 @@
         <button class="btn btn-outline-success" type="button" id="untapAllBtn">
           Untap All
         </button>
-        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ms-1" title="Toggle auto-tap and ETB trigger automation">
+        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ms-1" title="Auto-tap mana sources and auto-resolve ETB triggers when enabled.">
           <input class="form-check-input" type="checkbox" role="switch" id="autoModeToggle" checked>
-          <label class="form-check-label text-white small" for="autoModeToggle">Auto</label>
+          <label class="form-check-label text-white small" for="autoModeToggle" title="Auto-tap mana sources and auto-resolve ETB triggers when enabled.">Auto</label>
         </div>
         <button class="btn btn-outline-secondary" type="button" id="resetBtn">
           Reset
@@ -1116,9 +1118,12 @@
 </div>
 
 {# ===== Trigger Panel ===== #}
-<div id="triggerPanel" hidden role="complementary" aria-label="Pending triggers" aria-live="polite">
+<div id="triggerPanel" role="complementary" aria-label="Pending triggers" aria-live="polite">
   <div class="trigger-header">
-    <span><i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Pending Triggers</span>
+    <span>
+      <i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Pending Triggers
+      <span class="badge text-bg-warning text-dark ms-1" id="triggerCountBadge" hidden></span>
+    </span>
     <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="clearTriggersBtn" style="font-size:0.7rem;">Clear all</button>
   </div>
   <div id="triggerList"></div>
@@ -6558,8 +6563,8 @@
 </script>
 
 {% block page_scripts %}
-  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260513-1" defer></script>
-  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260513-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260513-2" defer></script>
+  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260513-2" defer></script>
 {% endblock %}
 
 {% endblock %}

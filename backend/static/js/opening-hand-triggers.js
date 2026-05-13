@@ -3,23 +3,16 @@
  *
  * Automation engine for the Opening Hand simulator.
  *
- * Adds:
- *   - Auto-tap for mana: clicking a land or mana-producing permanent taps it
- *     and shows what mana it produced in the status bar.
- *   - ETB trigger detection: "when ~ enters the battlefield" effects are
- *     detected and queued automatically when a card is played.
- *   - Triggered ability panel: a non-blocking toast-style panel lists any
- *     triggered abilities that fired this turn so the user can resolve them.
- *   - Bounce/exile/counter detection: new effect types added to the resolve
- *     modal so the user can apply them with one click.
- *   - Mana pool tracker: shows a live mana pool badge (W/U/B/R/G/C) that
- *     updates as lands are tapped.
- *   - Auto-resolve unambiguous ETB effects: when a card enters with a
- *     deterministic ETB (e.g. "draw a card", "create a 1/1 token"), it
- *     resolves immediately without opening the modal.
- *
- * All automation is opt-in via a toggle in the action bar. Users can turn it
- * off if they want full manual control.
+ * Fixes in this version:
+ *   - Mana pool clears on Next Turn (untapAllBtn click fires the listener)
+ *   - "Any color" mana shows a color-picker instead of adding all 5 at once
+ *   - discard ETB effect now opens the discard modal correctly
+ *   - findBoardCardByElement uses data-cardId attribute (reliable)
+ *   - Dead variables removed from detectManaProduction
+ *   - Trigger panel has count badge and fade transition
+ *   - "Clear all" has a confirmation step
+ *   - Auto toggle has a descriptive title
+ *   - Error boundary around moveCardToBoard wrapper
  */
 (function () {
   "use strict";
@@ -31,15 +24,14 @@
   // Configuration
   // -----------------------------------------------------------------
   const MANA_SYMBOLS = ["W", "U", "B", "R", "G", "C"];
-  const MANA_COLORS = { W: "#f9fafb", U: "#3b82f6", B: "#1e1b4b", R: "#ef4444", G: "#16a34a", C: "#94a3b8" };
   const MANA_LABELS = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green", C: "Colorless" };
 
   // -----------------------------------------------------------------
   // State
   // -----------------------------------------------------------------
-  let autoMode = true;          // master toggle
+  let autoMode = true;
   let manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
-  let pendingTriggers = [];     // { card, description, kind }
+  let pendingTriggers = [];
   let triggerSerial = 0;
 
   // -----------------------------------------------------------------
@@ -49,6 +41,7 @@
   const manaPoolDisplay = document.getElementById("manaPoolDisplay");
   const triggerPanel = document.getElementById("triggerPanel");
   const triggerList = document.getElementById("triggerList");
+  const triggerCountBadge = document.getElementById("triggerCountBadge");
   const clearTriggersBtn = document.getElementById("clearTriggersBtn");
 
   // -----------------------------------------------------------------
@@ -56,86 +49,148 @@
   // -----------------------------------------------------------------
   if (autoToggle) {
     autoToggle.checked = autoMode;
+    // Update the label to be more descriptive.
+    const label = autoToggle.nextElementSibling;
+    if (label) label.title = "Auto-tap mana sources and auto-resolve ETB triggers when enabled.";
     autoToggle.addEventListener("change", () => {
       autoMode = autoToggle.checked;
-      oh.showMessage(autoMode ? "Automation ON — ETB effects and mana will auto-resolve." : "Automation OFF — manual control.", "info");
+      oh.showMessage(
+        autoMode
+          ? "Automation ON — click lands/mana sources to tap them; ETB effects resolve automatically."
+          : "Automation OFF — all actions are manual.",
+        "info"
+      );
     });
   }
 
   // -----------------------------------------------------------------
   // 1. Auto-tap for mana
-  //
-  // Intercepts single-click on board cards. If the card produces mana
-  // (detected from oracle text) and is untapped, tap it and add mana
-  // to the pool. If already tapped, show a message.
   // -----------------------------------------------------------------
   const boardArea = document.getElementById("boardArea");
   if (boardArea) {
-    boardArea.addEventListener("click", (event) => {
-      if (!autoMode) return;
-      const cardEl = event.target.closest(".hand-card");
-      if (!cardEl) return;
-      // Only intercept left-click.
-      if (event.button !== 0) return;
+    boardArea.addEventListener(
+      "click",
+      (event) => {
+        if (!autoMode) return;
+        const cardEl = event.target.closest(".hand-card");
+        if (!cardEl) return;
+        if (event.button !== 0) return;
 
-      const card = findBoardCardByElement(cardEl);
-      if (!card) return;
+        const card = findBoardCardByElement(cardEl);
+        if (!card) return;
+        if (card.boardZone === "graveyard" || card.boardZone === "command") return;
 
-      // Only intercept mana-producing permanents.
-      const manaProduced = detectManaProduction(card);
-      if (!manaProduced || !manaProduced.length) return;
+        const manaProduced = detectManaProduction(card);
+        if (!manaProduced || !manaProduced.length) return;
 
-      // Don't intercept if the card is in graveyard or command zone.
-      if (card.boardZone === "graveyard" || card.boardZone === "command") return;
+        event.stopPropagation();
+        event.preventDefault();
 
-      event.stopPropagation();
-      event.preventDefault();
+        if (card.tapped) {
+          oh.showMessage(`${card.name} is already tapped.`, "warning");
+          return;
+        }
 
-      if (card.tapped) {
-        oh.showMessage(`${card.name} is already tapped.`, "warning");
-        return;
-      }
+        // "Any color" — show a color picker before tapping.
+        if (manaProduced.length === 5 && manaProduced.includes("W") && manaProduced.includes("G")) {
+          showColorPicker(card, (chosen) => {
+            card.tapped = true;
+            oh.renderBoard();
+            manaPool[chosen] = (manaPool[chosen] || 0) + 1;
+            updateManaDisplay();
+            oh.showMessage(`Tapped ${card.name} for {${chosen}}.`, "info");
+          });
+          return;
+        }
 
-      // Tap the card.
-      card.tapped = true;
-      oh.renderBoard();
-
-      // Add mana to pool.
-      manaProduced.forEach((sym) => {
-        if (manaPool[sym] !== undefined) manaPool[sym] += 1;
-      });
-      updateManaDisplay();
-
-      const manaText = manaProduced.map((s) => `{${s}}`).join("");
-      oh.showMessage(`Tapped ${card.name} for ${manaText}.`, "info");
-    }, { capture: true });
+        card.tapped = true;
+        oh.renderBoard();
+        manaProduced.forEach((sym) => {
+          manaPool[sym] = (manaPool[sym] || 0) + 1;
+        });
+        updateManaDisplay();
+        const manaText = manaProduced.map((s) => `{${s}}`).join("");
+        oh.showMessage(`Tapped ${card.name} for ${manaText}.`, "info");
+      },
+      { capture: true }
+    );
   }
 
   // -----------------------------------------------------------------
-  // 2. ETB trigger detection
-  //
-  // Hooks into the board mutation cycle. After any card enters the
-  // battlefield, scan its oracle text for "when ~ enters" patterns
-  // and queue them as pending triggers.
-  //
-  // We do this by wrapping moveCardToBoard via the bridge.
+  // Color picker for "any color" mana sources
+  // -----------------------------------------------------------------
+  function showColorPicker(card, onPick) {
+    let picker = document.getElementById("manaColorPicker");
+    if (!picker) {
+      picker = document.createElement("div");
+      picker.id = "manaColorPicker";
+      picker.setAttribute("role", "dialog");
+      picker.setAttribute("aria-label", "Choose mana color");
+      picker.style.cssText = `
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        z-index: 2100; background: rgba(15,23,42,0.97);
+        border: 1px solid rgba(148,163,184,0.35); border-radius: 0.85rem;
+        padding: 1rem 1.25rem; min-width: 260px;
+        box-shadow: 0 1.5rem 3rem rgba(2,6,23,0.65); backdrop-filter: blur(16px);
+      `;
+      document.body.appendChild(picker);
+    }
+    picker.innerHTML = `
+      <div style="font-weight:700;font-size:0.88rem;color:#f1f5f9;margin-bottom:0.65rem;">
+        Tap ${escapeHtml(card.name)} — choose a color:
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;">
+        ${["W","U","B","R","G","C"].map((s) => `
+          <button type="button" data-color="${s}" class="mana-pick-btn"
+            style="width:2.4rem;height:2.4rem;border-radius:999px;border:2px solid rgba(255,255,255,0.25);
+                   font-weight:700;font-size:0.85rem;cursor:pointer;
+                   background:${manaBackground(s)};color:${manaForeground(s)};"
+            title="${MANA_LABELS[s]}">{${s}}</button>
+        `).join("")}
+      </div>
+      <div style="margin-top:0.65rem;text-align:right;">
+        <button type="button" id="manaPickerCancel" style="background:transparent;border:1px solid rgba(148,163,184,0.3);border-radius:0.4rem;padding:0.25rem 0.65rem;font-size:0.8rem;color:rgba(148,163,184,0.8);cursor:pointer;">Cancel</button>
+      </div>
+    `;
+    picker.style.display = "block";
+    picker.querySelectorAll(".mana-pick-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        picker.style.display = "none";
+        onPick(btn.getAttribute("data-color"));
+      });
+    });
+    picker.querySelector("#manaPickerCancel").addEventListener("click", () => {
+      picker.style.display = "none";
+    });
+  }
+
+  function manaBackground(sym) {
+    return { W: "#f9fafb", U: "#3b82f6", B: "#312e81", R: "#ef4444", G: "#16a34a", C: "#94a3b8" }[sym] || "#475569";
+  }
+  function manaForeground(sym) {
+    return { W: "#1e293b", U: "#fff", B: "#e0e7ff", R: "#fff", G: "#fff", C: "#1e293b" }[sym] || "#fff";
+  }
+
+  // -----------------------------------------------------------------
+  // 2. ETB trigger detection (wraps moveCardToBoard)
   // -----------------------------------------------------------------
   const _origMoveCardToBoard = oh.moveCardToBoard.bind(oh);
   oh.moveCardToBoard = function (card, preferredZone, beforeId, stackParentId) {
-    _origMoveCardToBoard(card, preferredZone, beforeId, stackParentId);
-    if (!autoMode) return;
-    if (!card) return;
+    try {
+      _origMoveCardToBoard(card, preferredZone, beforeId, stackParentId);
+    } catch (err) {
+      console.error("[triggers] moveCardToBoard error:", err);
+      return;
+    }
+    if (!autoMode || !card) return;
     const zone = card.boardZone || preferredZone;
     const isBattlefield = zone === "creatures" || zone === "permanents" || zone === "lands";
     if (!isBattlefield) return;
-    // Detect ETB triggers.
     const etbEffects = detectEtbTriggers(card);
     etbEffects.forEach((effect) => {
       if (effect.autoResolvable) {
-        // Resolve immediately without user interaction.
         autoResolveEtb(card, effect);
       } else {
-        // Queue for the trigger panel.
         queueTrigger(card, effect);
       }
     });
@@ -152,16 +207,21 @@
       return;
     }
     manaPoolDisplay.hidden = false;
-    manaPoolDisplay.innerHTML = MANA_SYMBOLS
-      .filter((s) => manaPool[s] > 0)
-      .map((s) => {
-        const count = manaPool[s];
-        return `<span class="mana-pip mana-${s.toLowerCase()}" title="${MANA_LABELS[s]}">${count > 1 ? count : ""}{${s}}</span>`;
-      })
-      .join("");
+    const label = document.createElement("span");
+    label.style.cssText = "font-size:0.7rem;color:rgba(148,163,184,0.7);margin-right:0.2rem;";
+    label.textContent = "Mana:";
+    manaPoolDisplay.innerHTML = "";
+    manaPoolDisplay.appendChild(label);
+    MANA_SYMBOLS.filter((s) => manaPool[s] > 0).forEach((s) => {
+      const pip = document.createElement("span");
+      pip.className = `mana-pip mana-${s.toLowerCase()}`;
+      pip.title = `${manaPool[s]} ${MANA_LABELS[s]}`;
+      pip.textContent = manaPool[s] > 1 ? `${manaPool[s]}{${s}}` : `{${s}}`;
+      manaPoolDisplay.appendChild(pip);
+    });
   }
 
-  // Clear mana pool on untap all (start of turn).
+  // Clear mana pool when untap all fires.
   const untapAllBtn = document.getElementById("untapAllBtn");
   if (untapAllBtn) {
     untapAllBtn.addEventListener("click", () => {
@@ -182,40 +242,30 @@
   function renderTriggerPanel() {
     if (!triggerPanel || !triggerList) return;
     if (!pendingTriggers.length) {
-      triggerPanel.hidden = true;
+      triggerPanel.classList.remove("is-visible");
       return;
     }
-    triggerPanel.hidden = false;
-    triggerList.innerHTML = pendingTriggers.map((entry) => {
-      const { id, card, effect } = entry;
-      return `
-        <div class="trigger-entry" data-trigger-id="${id}">
-          <div class="trigger-card-name">${escapeHtml(card.name)}</div>
-          <div class="trigger-desc">${escapeHtml(effect.description)}</div>
-          <div class="trigger-actions">
-            <button type="button" class="btn btn-sm btn-outline-primary trigger-resolve-btn" data-trigger-id="${id}">
-              Resolve
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary trigger-dismiss-btn" data-trigger-id="${id}">
-              Skip
-            </button>
-          </div>
+    triggerPanel.classList.add("is-visible");
+    if (triggerCountBadge) {
+      triggerCountBadge.textContent = String(pendingTriggers.length);
+      triggerCountBadge.hidden = false;
+    }
+    triggerList.innerHTML = pendingTriggers.map(({ id, card, effect }) => `
+      <div class="trigger-entry" data-trigger-id="${id}">
+        <div class="trigger-card-name">${escapeHtml(card.name)}</div>
+        <div class="trigger-desc">${escapeHtml(effect.description)}</div>
+        <div class="trigger-actions">
+          <button type="button" class="btn btn-sm btn-outline-primary trigger-resolve-btn" data-trigger-id="${id}">Resolve</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary trigger-dismiss-btn" data-trigger-id="${id}">Skip</button>
         </div>
-      `;
-    }).join("");
+      </div>
+    `).join("");
 
-    // Bind resolve/dismiss buttons.
     triggerList.querySelectorAll(".trigger-resolve-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = parseInt(btn.getAttribute("data-trigger-id"), 10);
-        resolveTrigger(id);
-      });
+      btn.addEventListener("click", () => resolveTrigger(parseInt(btn.dataset.triggerId, 10)));
     });
     triggerList.querySelectorAll(".trigger-dismiss-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = parseInt(btn.getAttribute("data-trigger-id"), 10);
-        dismissTrigger(id);
-      });
+      btn.addEventListener("click", () => dismissTrigger(parseInt(btn.dataset.triggerId, 10)));
     });
   }
 
@@ -236,6 +286,8 @@
 
   if (clearTriggersBtn) {
     clearTriggersBtn.addEventListener("click", () => {
+      if (!pendingTriggers.length) return;
+      if (!confirm(`Clear all ${pendingTriggers.length} pending trigger${pendingTriggers.length === 1 ? "" : "s"}?`)) return;
       pendingTriggers = [];
       renderTriggerPanel();
     });
@@ -245,66 +297,43 @@
   // 5. Oracle text parsers
   // -----------------------------------------------------------------
 
-  /**
-   * Detect what mana a card produces from its oracle text.
-   * Returns an array of mana symbols e.g. ["G", "G"] for Llanowar Elves.
-   */
   function detectManaProduction(card) {
     const text = (card.oracle_text || "").toLowerCase();
-    if (!text) return [];
-
-    // Must contain "add" in a mana-production context.
-    if (!text.includes("add")) return [];
-
-    // Exclude cards that only mention "add" in other contexts.
-    // A mana ability looks like: {T}: Add {G} or "tap: add one mana of any color"
-    const manaAbilityRe = /(?:tap|{t})[^.]*?add\s+(?:{([wubrgc])(?:\/[wubrgc])?}|one mana of any|mana equal|mana of any)/i;
-    const simpleAddRe = /add\s+{([wubrgc])(?:\/[wubrgc])?}/gi;
-    const anyColorRe = /add\s+(?:one mana of any color|mana of any color)/i;
-    const colorlessRe = /add\s+{c}/i;
+    if (!text || !text.includes("add")) return [];
 
     const produced = [];
 
-    // Check for "any color" mana.
-    if (anyColorRe.test(text)) {
-      return ["W", "U", "B", "R", "G"]; // user picks; we show all options
+    // "any color" mana — return sentinel array of all 5.
+    if (/add\s+(?:one mana of any color|mana of any color)/i.test(text)) {
+      return ["W", "U", "B", "R", "G"];
     }
 
-    // Check for colorless.
-    if (colorlessRe.test(text)) {
-      produced.push("C");
-    }
+    // Colorless.
+    if (/add\s+\{c\}/i.test(text)) produced.push("C");
 
-    // Extract specific mana symbols from "add {X}" patterns.
+    // Specific symbols from "add {X}" patterns.
+    const re = /add\s+(?:\{([wubrgc])(?:\/[wubrgc])?\})+/gi;
     let match;
-    const re = /add\s+(?:{([wubrgc])(?:\/[wubrgc])?})+/gi;
     while ((match = re.exec(text)) !== null) {
       const sym = match[1].toUpperCase();
-      if (MANA_SYMBOLS.includes(sym)) produced.push(sym);
+      if (MANA_SYMBOLS.includes(sym) && !produced.includes(sym)) produced.push(sym);
     }
 
-    // Basic land types always produce their color.
+    // Basic land subtypes always produce their color.
     const typeLine = (card.type_line || "").toLowerCase();
-    if (typeLine.includes("plains") && !produced.includes("W")) produced.push("W");
-    if (typeLine.includes("island") && !produced.includes("U")) produced.push("U");
-    if (typeLine.includes("swamp") && !produced.includes("B")) produced.push("B");
-    if (typeLine.includes("mountain") && !produced.includes("R")) produced.push("R");
-    if (typeLine.includes("forest") && !produced.includes("G")) produced.push("G");
+    const subtypeMap = { plains: "W", island: "U", swamp: "B", mountain: "R", forest: "G" };
+    Object.entries(subtypeMap).forEach(([subtype, sym]) => {
+      if (typeLine.includes(subtype) && !produced.includes(sym)) produced.push(sym);
+    });
 
     return produced;
   }
 
-  /**
-   * Detect ETB triggers and static ETB effects on a card.
-   * Returns an array of effect descriptors.
-   */
   function detectEtbTriggers(card) {
     const text = card.oracle_text || "";
     if (!text) return [];
-    const lowered = text.toLowerCase();
     const effects = [];
 
-    // Pattern: "when ~ enters" or "when ~ enters the battlefield"
     const etbPatterns = [
       /when\s+(?:this|~|[\w\s,]+?)\s+enters(?:\s+the\s+battlefield)?[^.]*?[,.]/gi,
       /as\s+(?:this|~|[\w\s,]+?)\s+enters(?:\s+the\s+battlefield)?[^.]*?[,.]/gi,
@@ -314,92 +343,59 @@
       let match;
       while ((match = pattern.exec(text)) !== null) {
         const sentence = match[0];
-        const sentenceLower = sentence.toLowerCase();
+        const sl = sentence.toLowerCase();
 
-        // Draw effect.
-        const drawMatch = sentenceLower.match(/draw\s+(a|an|one|two|three|four|five|\d+)\s+card/);
+        const drawMatch = sl.match(/draw\s+(a|an|one|two|three|four|five|\d+)\s+card/);
         if (drawMatch) {
           const count = parseWordCount(drawMatch[1]);
-          effects.push({
-            kind: "draw",
-            count,
-            description: `Draw ${count} card${count === 1 ? "" : "s"} (ETB trigger)`,
-            autoResolvable: count !== null && count > 0,
-          });
+          effects.push({ kind: "draw", count, description: `Draw ${count} card${count === 1 ? "" : "s"} (ETB)`, autoResolvable: count > 0 });
         }
 
-        // Discard effect.
-        const discardMatch = sentenceLower.match(/discard\s+(a|an|one|two|three|four|five|\d+)\s+card/);
+        const discardMatch = sl.match(/discard\s+(a|an|one|two|three|four|five|\d+)\s+card/);
         if (discardMatch) {
           const count = parseWordCount(discardMatch[1]);
-          effects.push({
-            kind: "discard",
-            count,
-            description: `Discard ${count} card${count === 1 ? "" : "s"} (ETB trigger)`,
-            autoResolvable: false, // discard requires user choice
-          });
+          effects.push({ kind: "discard", count, description: `Discard ${count} card${count === 1 ? "" : "s"} (ETB)`, autoResolvable: false });
         }
 
-        // Token creation.
-        const tokenMatch = sentenceLower.match(/create\s+(a|an|one|two|three|four|five|\d+)\s+(?:\S+\s+)*token/);
+        const tokenMatch = sl.match(/create\s+(a|an|one|two|three|four|five|\d+)\s+(?:\S+\s+)*token/);
         if (tokenMatch) {
           const count = parseWordCount(tokenMatch[1]);
-          effects.push({
-            kind: "tokens",
-            count,
-            description: `Create ${count} token${count === 1 ? "" : "s"} (ETB trigger)`,
-            autoResolvable: count !== null && count > 0,
-          });
+          effects.push({ kind: "tokens", count, description: `Create ${count} token${count === 1 ? "" : "s"} (ETB)`, autoResolvable: count > 0 });
         }
 
-        // Scry.
-        const scryMatch = sentenceLower.match(/scry\s+(\d+)/);
+        const scryMatch = sl.match(/scry\s+(\d+)/);
         if (scryMatch) {
           const count = parseInt(scryMatch[1], 10);
-          effects.push({
-            kind: "scry",
-            count,
-            description: `Scry ${count} (ETB trigger)`,
-            autoResolvable: false, // scry requires user to see cards
-          });
+          effects.push({ kind: "scry", count, description: `Scry ${count} (ETB)`, autoResolvable: false });
         }
 
-        // Search library.
-        if (sentenceLower.includes("search your library")) {
-          const isBasicLand = sentenceLower.includes("basic land");
-          const toBattlefield = sentenceLower.includes("battlefield");
-          const tapped = sentenceLower.includes("tapped");
+        if (sl.includes("search your library")) {
+          const isBasicLand = sl.includes("basic land");
+          const toBattlefield = sl.includes("battlefield");
+          const tapped = sl.includes("tapped");
           effects.push({
             kind: "search",
             criteria: { kind: isBasicLand ? "basic_land" : "land" },
             destination: toBattlefield ? "battlefield" : "hand",
             tapped,
-            description: `Search library for ${isBasicLand ? "basic land" : "land"} → ${toBattlefield ? "battlefield" + (tapped ? " (tapped)" : "") : "hand"} (ETB trigger)`,
-            autoResolvable: false, // search requires user to pick
+            description: `Search library for ${isBasicLand ? "basic land" : "land"} → ${toBattlefield ? "battlefield" + (tapped ? " (tapped)" : "") : "hand"} (ETB)`,
+            autoResolvable: false,
           });
         }
 
-        // +1/+1 counters (just log, no action needed).
-        const counterMatch = sentenceLower.match(/put\s+(?:a|an|one|two|three|\d+)\s+\+1\/\+1\s+counter/);
-        if (counterMatch) {
-          effects.push({
-            kind: "counter",
-            description: `Put +1/+1 counter(s) on a creature (ETB trigger) — tap the target manually`,
-            autoResolvable: false,
-          });
+        if (sl.match(/put\s+(?:a|an|one|two|three|\d+)\s+\+1\/\+1\s+counter/)) {
+          effects.push({ kind: "counter", description: "Put +1/+1 counter(s) on a creature (ETB) — place manually", autoResolvable: false });
         }
       }
     }
 
-    // Triggered abilities: "whenever ~ attacks", "at the beginning of your upkeep"
-    // These are queued but not auto-resolved.
+    // Recurring triggered abilities — queue as reminders.
     const triggeredPatterns = [
-      { re: /whenever\s+(?:this|~|[\w\s,]+?)\s+attacks[^.]*\./gi, label: "attacks trigger" },
-      { re: /at\s+the\s+beginning\s+of\s+(?:your\s+)?upkeep[^.]*\./gi, label: "upkeep trigger" },
-      { re: /at\s+the\s+beginning\s+of\s+(?:your\s+)?end\s+step[^.]*\./gi, label: "end step trigger" },
-      { re: /whenever\s+you\s+(?:draw|cast|play)[^.]*\./gi, label: "cast/draw trigger" },
+      { re: /whenever\s+(?:this|~|[\w\s,]+?)\s+attacks[^.]*\./gi, label: "Attacks trigger" },
+      { re: /at\s+the\s+beginning\s+of\s+(?:your\s+)?upkeep[^.]*\./gi, label: "Upkeep trigger" },
+      { re: /at\s+the\s+beginning\s+of\s+(?:your\s+)?end\s+step[^.]*\./gi, label: "End step trigger" },
+      { re: /whenever\s+you\s+(?:draw|cast|play)[^.]*\./gi, label: "Cast/draw trigger" },
     ];
-
     for (const { re, label } of triggeredPatterns) {
       let match;
       while ((match = re.exec(text)) !== null) {
@@ -415,24 +411,36 @@
     return effects;
   }
 
-  /**
-   * Auto-resolve an ETB effect that doesn't need user input.
-   */
   async function autoResolveEtb(card, effect) {
     if (effect.kind === "draw" && effect.count > 0) {
       oh.showMessage(`${card.name}: drawing ${effect.count} card${effect.count === 1 ? "" : "s"}…`, "info");
       if (oh.drawCards) {
         await oh.drawCards(effect.count);
       } else {
-        // Fallback: click draw button N times.
         for (let i = 0; i < effect.count; i++) {
           if (oh.drawBtn && !oh.drawBtn.disabled) oh.drawBtn.click();
           await sleep(120);
         }
       }
+    } else if (effect.kind === "discard" && effect.count > 0) {
+      // Open the discard modal via the resolve modal with discard pre-selected.
+      oh.showMessage(`${card.name}: discard ${effect.count} card${effect.count === 1 ? "" : "s"} — choose from your hand.`, "info");
+      const resolveEffectType = document.getElementById("resolveEffectType");
+      const resolveDiscardCount = document.getElementById("resolveDiscardCount");
+      const resolveApplyBtn = document.getElementById("resolveApplyBtn");
+      const resolveModal = document.getElementById("resolveModal");
+      if (resolveEffectType && resolveDiscardCount && resolveApplyBtn && resolveModal) {
+        resolveEffectType.value = "discard";
+        resolveDiscardCount.value = String(effect.count);
+        // Trigger the field visibility update.
+        resolveEffectType.dispatchEvent(new Event("change"));
+        const instance = window.bootstrap && bootstrap.Modal
+          ? bootstrap.Modal.getOrCreateInstance(resolveModal)
+          : null;
+        if (instance) instance.show();
+      }
     } else if (effect.kind === "tokens" && effect.count > 0) {
-      oh.showMessage(`${card.name}: creating ${effect.count} token${effect.count === 1 ? "" : "s"}…`, "info");
-      // Open the token picker modal pre-filtered to this card's tokens.
+      oh.showMessage(`${card.name}: creating ${effect.count} token${effect.count === 1 ? "" : "s"} — pick from the token picker.`, "info");
       const tokenBtn = document.getElementById("tokenPickerBtn");
       if (tokenBtn) tokenBtn.click();
     } else if (effect.kind === "scry") {
@@ -444,20 +452,63 @@
         scryBtn.click();
       }
     } else if (effect.kind === "search") {
-      oh.showMessage(`${card.name}: ${effect.description}`, "info");
-      // Open the fetch card modal.
+      oh.showMessage(`${card.name}: ${effect.description} — use Fetch Card to search.`, "info");
       const fetchBtn = document.getElementById("fetchCardBtn");
       if (fetchBtn) fetchBtn.click();
     } else if (effect.kind === "triggered") {
-      // Just notify — these fire on future turns.
-      oh.showMessage(`${card.name} has a triggered ability: ${effect.description}`, "info");
+      oh.showMessage(`Reminder — ${card.name}: ${effect.description}`, "info");
     }
+    // "counter" kind: no action, just the queue entry serves as a reminder.
   }
 
   // -----------------------------------------------------------------
-  // 6. Mana pool display in the status bar
+  // Helpers
   // -----------------------------------------------------------------
-  // Inject mana pool styles.
+  function parseWordCount(word) {
+    if (!word) return 1;
+    const w = word.toLowerCase().trim();
+    const map = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5 };
+    if (map[w] !== undefined) return map[w];
+    const n = parseInt(w, 10);
+    return isNaN(n) ? 1 : n;
+  }
+
+  function findBoardCardByElement(cardEl) {
+    // Primary: use data-cardId attribute set by the core renderer.
+    const uid = cardEl.dataset.cardId;
+    if (uid) {
+      for (const zone of Object.keys(oh.boardState)) {
+        const found = (oh.boardState[zone] || []).find((c) => c.__uid === uid);
+        if (found) return found;
+      }
+    }
+    // Fallback: DOM index within zone container.
+    for (const zone of Object.keys(oh.boardState)) {
+      const container = document.getElementById(`board${zone.charAt(0).toUpperCase() + zone.slice(1)}`);
+      if (!container) continue;
+      const allEls = Array.from(container.querySelectorAll(".hand-card"));
+      const idx = allEls.indexOf(cardEl);
+      if (idx >= 0 && idx < (oh.boardState[zone] || []).length) {
+        return oh.boardState[zone][idx];
+      }
+    }
+    return null;
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+  }
+
+  // -----------------------------------------------------------------
+  // Styles
+  // -----------------------------------------------------------------
   const style = document.createElement("style");
   style.textContent = `
     #manaPoolDisplay {
@@ -498,6 +549,15 @@
       backdrop-filter: blur(12px);
       box-shadow: 0 1rem 2.5rem rgba(2, 6, 23, 0.55);
       overflow: hidden;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+    }
+    #triggerPanel.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
     }
     #triggerPanel .trigger-header {
       display: flex;
@@ -533,18 +593,9 @@
       margin-bottom: 0.4rem;
       line-height: 1.4;
     }
-    .trigger-actions {
-      display: flex;
-      gap: 0.4rem;
-    }
-    .trigger-actions .btn {
-      font-size: 0.75rem;
-      padding: 0.2rem 0.55rem;
-    }
-    #autoModeToggle + label {
-      font-size: 0.82rem;
-      cursor: pointer;
-    }
+    .trigger-actions { display: flex; gap: 0.4rem; }
+    .trigger-actions .btn { font-size: 0.75rem; padding: 0.2rem 0.55rem; }
+
     @media (max-width: 768px) {
       #triggerPanel {
         left: 0.5rem;
@@ -555,57 +606,6 @@
     }
   `;
   document.head.appendChild(style);
-
-  // -----------------------------------------------------------------
-  // Helpers
-  // -----------------------------------------------------------------
-  function parseWordCount(word) {
-    if (!word) return 1;
-    const w = word.toLowerCase().trim();
-    const map = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5 };
-    if (map[w] !== undefined) return map[w];
-    const n = parseInt(w, 10);
-    return isNaN(n) ? 1 : n;
-  }
-
-  function findBoardCardByElement(cardEl) {
-    const zones = Object.keys(oh.boardState);
-    for (const zone of zones) {
-      const cards = oh.boardState[zone] || [];
-      for (const card of cards) {
-        // Match by rendered position — find the card whose __uid matches
-        // the element's data attribute, or fall back to index matching.
-        const uid = cardEl.getAttribute("data-uid") || cardEl.dataset.uid;
-        if (uid && card.__uid === uid) return card;
-      }
-    }
-    // Fallback: find by element position in the zone container.
-    for (const zone of zones) {
-      const container = document.querySelector(`[data-board-zone="${zone}"] .board-zone-cards, #board${capitalize(zone)}`);
-      if (!container) continue;
-      const allEls = Array.from(container.querySelectorAll(".hand-card"));
-      const idx = allEls.indexOf(cardEl);
-      if (idx >= 0 && idx < (oh.boardState[zone] || []).length) {
-        return oh.boardState[zone][idx];
-      }
-    }
-    return null;
-  }
-
-  function capitalize(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
-
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  function escapeHtml(value) {
-    if (value === null || value === undefined) return "";
-    return String(value).replace(/[&<>"']/g, (ch) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    }[ch]));
-  }
 
   // -----------------------------------------------------------------
   // Initialize
