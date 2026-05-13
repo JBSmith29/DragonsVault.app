@@ -1064,6 +1064,7 @@
           <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
           <span class="badge text-bg-warning text-dark" id="mulliganCount" hidden></span>
           <span class="badge text-bg-info" id="turnCounter" hidden>Turn 0</span>
+          <span id="manaPoolDisplay" hidden aria-label="Mana pool"></span>
         </div>
         <div class="hand-card-grid" id="handGrid">
           <div class="text-muted small">
@@ -1100,6 +1101,10 @@
         <button class="btn btn-outline-success" type="button" id="untapAllBtn">
           Untap All
         </button>
+        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ms-1" title="Toggle auto-tap and ETB trigger automation">
+          <input class="form-check-input" type="checkbox" role="switch" id="autoModeToggle" checked>
+          <label class="form-check-label text-white small" for="autoModeToggle">Auto</label>
+        </div>
         <button class="btn btn-outline-secondary" type="button" id="resetBtn">
           Reset
         </button>
@@ -1110,6 +1115,14 @@
 </div>
 </div>
 
+{# ===== Trigger Panel ===== #}
+<div id="triggerPanel" hidden role="complementary" aria-label="Pending triggers" aria-live="polite">
+  <div class="trigger-header">
+    <span><i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Pending Triggers</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="clearTriggersBtn" style="font-size:0.7rem;">Clear all</button>
+  </div>
+  <div id="triggerList"></div>
+</div>
 
 {% from "macros/modal_wrapper.html" import wrap_modal %}
 {% call wrap_modal() %}
@@ -6501,7 +6514,8 @@
   window.addEventListener('resize', syncActionBarSpacing, { passive: true });
 
   // ===== Public API for supplemental modules =====
-  // Expose key functions so opening-hand-enhancements.js can hook in.
+  // Expose key functions so opening-hand-enhancements.js and
+  // opening-hand-triggers.js can hook in.
   window.__openingHand = {
     shuffleOpeningHand,
     moveCardToBoard,
@@ -6512,6 +6526,21 @@
     showMessage,
     showWarnings,
     updateActionVisibility,
+    // Effect resolution
+    resolveAutoEffects: typeof resolveAutoEffects === 'function' ? resolveAutoEffects : async function() {},
+    drawCards: typeof drawCards === 'function' ? drawCards : async function() {},
+    buildAutoEffectQueue: typeof buildAutoEffectQueue === 'function' ? buildAutoEffectQueue : function() { return []; },
+    detectDrawDiscardEffect: typeof detectDrawDiscardEffect === 'function' ? detectDrawDiscardEffect : function() { return null; },
+    detectTokenEffect: typeof detectTokenEffect === 'function' ? detectTokenEffect : function() { return null; },
+    detectSearchEffect: typeof detectSearchEffect === 'function' ? detectSearchEffect : function() { return null; },
+    detectHideawayEffect: typeof detectHideawayEffect === 'function' ? detectHideawayEffect : function() { return null; },
+    cardEntersTapped: typeof cardEntersTapped === 'function' ? cardEntersTapped : function() { return false; },
+    requiresAutoAttach: typeof requiresAutoAttach === 'function' ? requiresAutoAttach : function() { return false; },
+    classifyCard: typeof classifyCard === 'function' ? classifyCard : function() { return 'permanents'; },
+    normalizeCard: typeof normalizeCard === 'function' ? normalizeCard : function(c) { return c; },
+    untapAllBoardCards: typeof untapAllBoardCards === 'function' ? untapAllBoardCards : function() {},
+    currentDeckId: typeof currentDeckId === 'function' ? currentDeckId : function() { return ''; },
+    // Getters/setters for live state
     get handCards() { return handCards; },
     set handCards(v) { handCards = v; },
     get boardState() { return boardState; },
@@ -6524,15 +6553,13 @@
     get drawBtn() { return drawBtn; },
     get mulliganBtn() { return mulliganBtn; },
     get shuffleBtn() { return shuffleBtn; },
-    untapAllBoardCards: typeof untapAllBoardCards === 'function' ? untapAllBoardCards : function() {},
-    currentDeckId: typeof currentDeckId === 'function' ? currentDeckId : function() { return ''; },
-    normalizeCard: typeof normalizeCard === 'function' ? normalizeCard : function(c) { return c; },
   };
 })();
 </script>
 
 {% block page_scripts %}
   <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260513-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260513-1" defer></script>
 {% endblock %}
 
 {% endblock %}
