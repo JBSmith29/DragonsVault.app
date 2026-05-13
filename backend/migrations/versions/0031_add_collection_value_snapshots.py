@@ -15,7 +15,7 @@ from sqlalchemy import inspect
 
 _LOG = logging.getLogger(__name__)
 
-revision = "0031_add_collection_value_snapshots"
+revision = "0031_collection_value"
 down_revision = "0030_add_card_condition"
 branch_labels = None
 depends_on = None
