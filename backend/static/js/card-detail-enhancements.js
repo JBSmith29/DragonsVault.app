@@ -20,7 +20,7 @@
   initConditionEditor();
 
   // ------------------------------------------------------------------
-  // 1. Keyword lookup
+  // 1. Keyword lookup (on-demand, not auto-loaded)
   // ------------------------------------------------------------------
   function initOracleKeywords() {
     const wrapper = document.querySelector("[data-card-oracle]");
@@ -29,6 +29,20 @@
     const text = wrapper.getAttribute("data-oracle-text") || "";
     if (!target || !text.trim()) return;
 
+    // Create a "Show Rules" button instead of auto-loading.
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-outline-secondary btn-sm mt-2";
+    btn.innerHTML = '<i class="bi bi-journal-text me-1"></i>Show keyword rules';
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      btn.textContent = "Loading…";
+      loadKeywordRules(text, target, btn);
+    });
+    target.appendChild(btn);
+  }
+
+  function loadKeywordRules(text, target, btn) {
     fetch("/api/rules/keywords", {
       method: "POST",
       credentials: "same-origin",
@@ -42,16 +56,19 @@
       .then((resp) => (resp.ok ? resp.json() : null))
       .then((payload) => {
         const matches = (payload && payload.matches) || [];
-        if (!matches.length) return;
+        if (!matches.length) {
+          target.innerHTML = '<div class="text-muted small">No keyword abilities detected.</div>';
+          return;
+        }
         target.innerHTML = `
           <div class="small text-muted text-uppercase fw-semibold mb-1">Keyword abilities</div>
           <ul class="list-unstyled mb-0 small">
             ${matches
               .map((m) => `
-                <li class="d-flex flex-wrap gap-2">
+                <li class="d-flex flex-wrap gap-2 mb-1">
                   <span class="fw-semibold">${escapeHtml(m.keyword)}</span>
                   <span class="text-muted">CR ${escapeHtml(m.rule_number || "?")}</span>
-                  ${m.rule_text ? `<span class="flex-grow-1">${escapeHtml(m.rule_text)}</span>` : ""}
+                  ${m.rule_text ? `<span class="flex-grow-1 text-muted">${escapeHtml(m.rule_text)}</span>` : ""}
                 </li>
               `)
               .join("")}
@@ -59,7 +76,7 @@
         `;
       })
       .catch(() => {
-        /* swallow - this feature is enhancement-only */
+        target.innerHTML = '<div class="text-muted small">Unable to load rules.</div>';
       });
   }
 

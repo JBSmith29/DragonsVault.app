@@ -54,45 +54,15 @@
     }
     oh.landsPlayedThisTurn = 0;
 
-    // Draw a card.
-    const state = oh.stateInput ? oh.stateInput.value : "";
-    if (state) {
-      const csrfToken = window.csrfToken || "";
-      try {
-        const resp = await fetch(drawEndpoint(), {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            "Content-Type": "application/json",
-            ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
-          },
-          body: JSON.stringify({ state }),
-        });
-        const data = await resp.json().catch(() => null);
-        if (data && data.ok && data.card) {
-          const card = oh.normalizeCard ? oh.normalizeCard(data.card) : data.card;
-          if (card) {
-            oh.handCards.push(card);
-            oh.renderHand();
-          }
-          if (oh.stateInput) oh.stateInput.value = data.state || state;
-          if (oh.handRemaining) {
-            oh.handRemaining.hidden = false;
-            oh.handRemaining.textContent = (data.remaining || 0) + " cards remaining";
-          }
-          if (oh.drawBtn) oh.drawBtn.disabled = (data.remaining || 0) <= 0;
-        } else if (data && data.error) {
-          oh.showMessage(data.error, "warning");
-        }
-      } catch (err) {
-        oh.showMessage("Draw failed: " + (err.message || err), "danger");
-      }
+    // Draw a card by clicking the draw button (delegates to the core script's
+    // draw handler which manages state token updates correctly).
+    if (oh.drawBtn && !oh.drawBtn.disabled) {
+      oh.drawBtn.click();
     }
 
     // Increment turn.
     turnNumber += 1;
     updateTurnDisplay();
-    oh.renderBoard();
     oh.showMessage(`Turn ${turnNumber} — untapped, drew a card.`, "info");
     persistState();
   }
@@ -355,11 +325,6 @@
   // -----------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------
-  function drawEndpoint() {
-    // The draw endpoint URL is embedded in the template. We can find it
-    // from the draw button's click handler or construct it.
-    return "/opening-hand/draw";
-  }
 
   // Initialize turn display.
   updateTurnDisplay();
