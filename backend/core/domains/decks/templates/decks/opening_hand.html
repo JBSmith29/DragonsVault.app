@@ -953,6 +953,7 @@
         <h2 class="h6 text-uppercase text-muted mb-1">The Board</h2>
         <div class="board-note">
           Creatures rally on the left, artifacts and other permanents line the right column, lands hold the third row, and the command zone sits above a dedicated graveyard lane. Drag cards between zones, reorder them, right-click for more actions, or double-click a permanent to slip it back into your hand.
+          <span class="text-muted d-block mt-1">Shortcuts: <kbd>N</kbd> Next Turn · <kbd>D</kbd> Draw · <kbd>U</kbd> Untap All · <kbd>M</kbd> Mulligan · <kbd>Z</kbd> Undo</span>
       </div>
     </div>
       <div class="board-actions">
@@ -1062,6 +1063,7 @@
           <span class="badge text-bg-primary text-uppercase" id="handDeckName">{{ selected_deck_name or 'No deck selected' }}</span>
           <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
           <span class="badge text-bg-warning text-dark" id="mulliganCount" hidden></span>
+          <span class="badge text-bg-info" id="turnCounter" hidden>Turn 0</span>
         </div>
         <div class="hand-card-grid" id="handGrid">
           <div class="text-muted small">
@@ -1088,6 +1090,12 @@
         </button>
         <button class="btn btn-outline-theme" type="button" id="drawBtn" disabled>
           Draw 1
+        </button>
+        <button class="btn btn-success" type="button" id="nextTurnBtn" title="Untap all, draw a card, advance turn (N)">
+          Next Turn
+        </button>
+        <button class="btn btn-outline-secondary" type="button" id="undoBtn" disabled title="Undo last action (Z)">
+          Undo
         </button>
         <button class="btn btn-outline-success" type="button" id="untapAllBtn">
           Untap All
@@ -6491,7 +6499,40 @@
   }
 
   window.addEventListener('resize', syncActionBarSpacing, { passive: true });
+
+  // ===== Public API for supplemental modules =====
+  // Expose key functions so opening-hand-enhancements.js can hook in.
+  window.__openingHand = {
+    shuffleOpeningHand,
+    moveCardToBoard,
+    renderHand,
+    renderBoard,
+    resetSimulator,
+    setHand,
+    showMessage,
+    showWarnings,
+    updateActionVisibility,
+    get handCards() { return handCards; },
+    set handCards(v) { handCards = v; },
+    get boardState() { return boardState; },
+    get stateInput() { return stateInput; },
+    get landsPlayedThisTurn() { return landsPlayedThisTurn; },
+    set landsPlayedThisTurn(v) { landsPlayedThisTurn = v; },
+    get mulligansTaken() { return mulligansTaken; },
+    set mulligansTaken(v) { mulligansTaken = v; },
+    get handRemaining() { return handRemaining; },
+    get drawBtn() { return drawBtn; },
+    get mulliganBtn() { return mulliganBtn; },
+    get shuffleBtn() { return shuffleBtn; },
+    untapAllBoardCards: typeof untapAllBoardCards === 'function' ? untapAllBoardCards : function() {},
+    currentDeckId: typeof currentDeckId === 'function' ? currentDeckId : function() { return ''; },
+    normalizeCard: typeof normalizeCard === 'function' ? normalizeCard : function(c) { return c; },
+  };
 })();
 </script>
+
+{% block page_scripts %}
+  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260513-1" defer></script>
+{% endblock %}
 
 {% endblock %}
