@@ -38,6 +38,10 @@ instance/
 .pants.d/
 dist/
 docs/_build/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Secrets
 .env
