@@ -23,6 +23,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Playgroup Stats button on the pod management page.
 - `/api/openapi.json` now exposes schemas for every new endpoint; the stale `Game` stub was removed.
 - `LEGAL_LAST_UPDATED` and `LEGAL_LAST_UPDATED_DATE` env vars to control the legal-page "last updated" label instead of a hardcoded date.
+- **Opening Hand simulator** — full automation pass over playtesting:
+  - Quality-of-life: Next Turn button (untap + draw), single-click land plays, undo stack, keyboard shortcuts (D/U/N/M/Z/?/Esc), turn counter, hand-size badge, lands-played badge, localStorage persistence with 6-hour TTL, reset confirmation.
+  - Automation engine: auto-tap mana sources on click with mana pool display, "any color" picker, ETB trigger detection (draw / discard / tokens / scry / search / +1/+1 counter / triggered abilities), pending-trigger panel with skip/resolve, mana pool clears on Next Turn.
+  - Life tracker with +/- buttons, click-to-edit life total, low-life and dead-life styling, opponent pod manager with per-opponent life and commander damage tracking, lethal commander damage indicator at 21+.
+  - +1/+1 counter tracker with badge overlay on creatures, click to add, right-click to remove, context-menu integration, persistence per deck.
+  - Auto-tap mana on cast: when casting a non-land from hand to the battlefield, the simulator auto-taps untapped lands matching the mana cost, deducts from the existing mana pool first, and warns if mana is short.
 
 ### Changed
 - `config._select_config` now warns in dev/testing when `SECRET_KEY` is weak or unset (production already refused to boot).

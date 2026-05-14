@@ -1067,6 +1067,7 @@
           <span class="badge text-bg-secondary" id="handSizeBadge" hidden></span>
           <span class="badge text-bg-secondary" id="landsPlayedBadge" hidden></span>
           <span id="manaPoolDisplay" hidden aria-label="Mana pool"></span>
+          <span id="lifeTrackerSlot" aria-label="Life totals"></span>
         </div>
         <div class="hand-card-grid" id="handGrid">
           <div class="text-muted small">
@@ -6524,6 +6525,7 @@
   window.__openingHand = {
     shuffleOpeningHand,
     moveCardToBoard,
+    playCardFromHand: typeof playCardFromHand === 'function' ? playCardFromHand : async function() {},
     renderHand,
     renderBoard,
     resetSimulator,
@@ -6563,8 +6565,9 @@
 </script>
 
 {% block page_scripts %}
-  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260513-2" defer></script>
-  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260513-2" defer></script>
+  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260514-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260514-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260514-1" defer></script>
 {% endblock %}
 
 {% endblock %}
