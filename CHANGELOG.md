@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.0.0](https://github.com/JBSmith29/DragonsVault.app/compare/v0.1.0...v1.0.0) (2026-05-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* game-engine UI/API endpoints and service container were removed.
+
+### Features
+
+* add documentation hosting via nginx and GitHub Pages ([f9f4dfa](https://github.com/JBSmith29/DragonsVault.app/commit/f9f4dfa95e15cb74b55d47710b5c5f155c7d37cd))
+* card detail panel for opening hand simulator ([5acedff](https://github.com/JBSmith29/DragonsVault.app/commit/5acedffd57f833b781a9a40cc9c0172d1643f62c))
+* collapsible Synergy Recommendations and improved Tokens panel on folder detail ([a58330c](https://github.com/JBSmith29/DragonsVault.app/commit/a58330cc09715982dc006762d8c5d5b7934ef976))
+* comprehensive quality improvements and performance optimizations ([cd644fe](https://github.com/JBSmith29/DragonsVault.app/commit/cd644fe6e052c800860a358fccda78f76a4d9f23))
+* comprehensive security and documentation improvements ([81dbb11](https://github.com/JBSmith29/DragonsVault.app/commit/81dbb1157ef6c825b90274fc9d127bf175efa873))
+* MTG insights suite — legality, value, compare, win-rate, mana base, archetype, budget, playgroup, proxy PDF, rules lookups ([1d64c7d](https://github.com/JBSmith29/DragonsVault.app/commit/1d64c7dec6a740e8f86ea8ee675d6fd8154eb5e8))
+* opening hand automation — auto-tap, ETB triggers, mana pool ([36da540](https://github.com/JBSmith29/DragonsVault.app/commit/36da540ce1c0521ce871f292064c03aba1fc25de))
+* opening hand simulator QoL improvements ([b3c40b4](https://github.com/JBSmith29/DragonsVault.app/commit/b3c40b4bbc63319863fbe36f85d6309904ee5f37))
+* **opening-hand:** life tracker, +1/+1 counters, auto-tap on cast ([405065a](https://github.com/JBSmith29/DragonsVault.app/commit/405065a63ba50a6e58ee947abc0c43884bd7764a))
+* refactor card/deck flows and add frontend deploy plumbing ([114db2a](https://github.com/JBSmith29/DragonsVault.app/commit/114db2aef22a32a75476a4847f030f9bc6655904))
+* self-service password reset via email ([b9da4c7](https://github.com/JBSmith29/DragonsVault.app/commit/b9da4c7f90c5fdb05e2dcb4bcc21d439dc0cd11b))
+
+
+### Bug Fixes
+
+* add card name fallback for Commander Spellbook combo hover previews ([b01ed47](https://github.com/JBSmith29/DragonsVault.app/commit/b01ed47f9dbb5314a3cbcb25945936dcf3093ffe))
+* django-api PYTHONPATH missing /app/backend for shared module ([9c1da4c](https://github.com/JBSmith29/DragonsVault.app/commit/9c1da4cb7e83e9499bb43949242e786ce90b329c))
+* harden auth/service APIs and improve mobile UX ([948289a](https://github.com/JBSmith29/DragonsVault.app/commit/948289a7414cc43e89083ae163d2da2ee16488ca))
+* improve folder_detail UI and synergy recommendations ([09ababc](https://github.com/JBSmith29/DragonsVault.app/commit/09ababc181eac3d78b7e5b6cc496e3988b29f832))
+* Next Turn draws only once; rules popup is on-demand ([59ccbcd](https://github.com/JBSmith29/DragonsVault.app/commit/59ccbcdb34bca8cfe9cb31a50c44444355bdbfc2))
+* opening hand UX polish — guards, color picker, discard handler, shortcuts ([71a73e9](https://github.com/JBSmith29/DragonsVault.app/commit/71a73e93cc95e9ea3840be4545874c018810ac54))
+* **opening-hand:** life tracker badge styling and de-dup guard ([e8d7770](https://github.com/JBSmith29/DragonsVault.app/commit/e8d77703f4f6bc9044d9141dd1974bd8f7a50578))
+* **opening-hand:** style +1/+1 badge as Bootstrap pill, drop trigger panel ([23b8299](https://github.com/JBSmith29/DragonsVault.app/commit/23b82996fea37c989c9867c6823e0870fdba5d7a))
+* resolve all restarting/unhealthy containers; clean up dead deps ([41f26e2](https://github.com/JBSmith29/DragonsVault.app/commit/41f26e22bf2c19657cf457a8e7641ddebb8afef8))
+* resolve scheduler crash and nginx duplicate log_format; add scheduler status to admin dashboard ([bdea3fc](https://github.com/JBSmith29/DragonsVault.app/commit/bdea3fcaecd92b87bb28e608f3b04a242ebbc18c))
+* restore issued_token=None in manage_api_token; bump CI to Node 24 ([d0a064e](https://github.com/JBSmith29/DragonsVault.app/commit/d0a064ef95888bc1f5b26260ae410aa6b61e0eb4))
+* shorten 0031 migration revision ID to fit alembic_version varchar(32) ([163c2a4](https://github.com/JBSmith29/DragonsVault.app/commit/163c2a40ab35c796cfd6c3faa038089ce70e0edc))
+
+
+### Code Refactoring
+
+* retire game-engine service, migrate CI to Hatch, and add Sphinx docs ([bc3ab51](https://github.com/JBSmith29/DragonsVault.app/commit/bc3ab517ea57287ad8a0f8ee24f00178d8794f09))
+
 ## [Unreleased]
 
 ### Added
