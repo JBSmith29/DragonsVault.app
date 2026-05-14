@@ -1118,17 +1118,8 @@
 </div>
 </div>
 
-{# ===== Trigger Panel ===== #}
-<div id="triggerPanel" role="complementary" aria-label="Pending triggers" aria-live="polite">
-  <div class="trigger-header">
-    <span>
-      <i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Pending Triggers
-      <span class="badge text-bg-warning text-dark ms-1" id="triggerCountBadge" hidden></span>
-    </span>
-    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="clearTriggersBtn" style="font-size:0.7rem;">Clear all</button>
-  </div>
-  <div id="triggerList"></div>
-</div>
+{# Trigger panel removed — non-auto-resolvable effects now show as toast
+   messages so they don't get hidden behind the bottom action bar. #}
 
 {% from "macros/modal_wrapper.html" import wrap_modal %}
 {% call wrap_modal() %}
@@ -6565,9 +6556,9 @@
 </script>
 
 {% block page_scripts %}
-  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260514-2" defer></script>
-  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260514-2" defer></script>
-  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260514-2" defer></script>
+  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260514-3" defer></script>
+  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260514-3" defer></script>
+  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260514-3" defer></script>
 {% endblock %}
 
 {% endblock %}

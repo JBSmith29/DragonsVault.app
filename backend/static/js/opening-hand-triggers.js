@@ -31,18 +31,12 @@
   // -----------------------------------------------------------------
   let autoMode = true;
   let manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
-  let pendingTriggers = [];
-  let triggerSerial = 0;
 
   // -----------------------------------------------------------------
   // DOM references
   // -----------------------------------------------------------------
   const autoToggle = document.getElementById("autoModeToggle");
   const manaPoolDisplay = document.getElementById("manaPoolDisplay");
-  const triggerPanel = document.getElementById("triggerPanel");
-  const triggerList = document.getElementById("triggerList");
-  const triggerCountBadge = document.getElementById("triggerCountBadge");
-  const clearTriggersBtn = document.getElementById("clearTriggersBtn");
 
   // -----------------------------------------------------------------
   // Auto-mode toggle
@@ -191,7 +185,7 @@
       if (effect.autoResolvable) {
         autoResolveEtb(card, effect);
       } else {
-        queueTrigger(card, effect);
+        announceManualTrigger(card, effect);
       }
     });
   };
@@ -231,66 +225,16 @@
   }
 
   // -----------------------------------------------------------------
-  // 4. Trigger panel
+  // 4. Manual trigger announcer
+  //
+  // Non-auto-resolvable triggers (discard a card, scry, search, generic
+  // triggered abilities) are surfaced as a toast through oh.showMessage
+  // so the user gets a reminder without an extra panel hidden behind
+  // the bottom action bar.
   // -----------------------------------------------------------------
-  function queueTrigger(card, effect) {
-    const id = ++triggerSerial;
-    pendingTriggers.push({ id, card, effect });
-    renderTriggerPanel();
-  }
-
-  function renderTriggerPanel() {
-    if (!triggerPanel || !triggerList) return;
-    if (!pendingTriggers.length) {
-      triggerPanel.classList.remove("is-visible");
-      return;
-    }
-    triggerPanel.classList.add("is-visible");
-    if (triggerCountBadge) {
-      triggerCountBadge.textContent = String(pendingTriggers.length);
-      triggerCountBadge.hidden = false;
-    }
-    triggerList.innerHTML = pendingTriggers.map(({ id, card, effect }) => `
-      <div class="trigger-entry" data-trigger-id="${id}">
-        <div class="trigger-card-name">${escapeHtml(card.name)}</div>
-        <div class="trigger-desc">${escapeHtml(effect.description)}</div>
-        <div class="trigger-actions">
-          <button type="button" class="btn btn-sm btn-outline-primary trigger-resolve-btn" data-trigger-id="${id}">Resolve</button>
-          <button type="button" class="btn btn-sm btn-outline-secondary trigger-dismiss-btn" data-trigger-id="${id}">Skip</button>
-        </div>
-      </div>
-    `).join("");
-
-    triggerList.querySelectorAll(".trigger-resolve-btn").forEach((btn) => {
-      btn.addEventListener("click", () => resolveTrigger(parseInt(btn.dataset.triggerId, 10)));
-    });
-    triggerList.querySelectorAll(".trigger-dismiss-btn").forEach((btn) => {
-      btn.addEventListener("click", () => dismissTrigger(parseInt(btn.dataset.triggerId, 10)));
-    });
-  }
-
-  async function resolveTrigger(id) {
-    const idx = pendingTriggers.findIndex((e) => e.id === id);
-    if (idx < 0) return;
-    const { card, effect } = pendingTriggers[idx];
-    pendingTriggers.splice(idx, 1);
-    renderTriggerPanel();
-    await autoResolveEtb(card, effect);
-  }
-
-  function dismissTrigger(id) {
-    pendingTriggers = pendingTriggers.filter((e) => e.id !== id);
-    renderTriggerPanel();
-    oh.showMessage("Trigger skipped.", "info");
-  }
-
-  if (clearTriggersBtn) {
-    clearTriggersBtn.addEventListener("click", () => {
-      if (!pendingTriggers.length) return;
-      if (!confirm(`Clear all ${pendingTriggers.length} pending trigger${pendingTriggers.length === 1 ? "" : "s"}?`)) return;
-      pendingTriggers = [];
-      renderTriggerPanel();
-    });
+  function announceManualTrigger(card, effect) {
+    const message = `${card.name} — ${effect.description}`;
+    oh.showMessage(message, "warning");
   }
 
   // -----------------------------------------------------------------
@@ -536,74 +480,6 @@
     .mana-r { background: #ef4444; color: #fff; }
     .mana-g { background: #16a34a; color: #fff; }
     .mana-c { background: #94a3b8; color: #1e293b; }
-
-    #triggerPanel {
-      position: fixed;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 5.5rem);
-      left: calc(var(--sidebar-w, 0px) + 1rem);
-      z-index: 1050;
-      width: clamp(260px, 28vw, 360px);
-      background: rgba(15, 23, 42, 0.96);
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      border-radius: 0.85rem;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 1rem 2.5rem rgba(2, 6, 23, 0.55);
-      overflow: hidden;
-      opacity: 0;
-      transform: translateY(8px);
-      transition: opacity 0.2s ease, transform 0.2s ease;
-      pointer-events: none;
-    }
-    #triggerPanel.is-visible {
-      opacity: 1;
-      transform: translateY(0);
-      pointer-events: auto;
-    }
-    #triggerPanel .trigger-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: rgba(148, 163, 184, 0.85);
-      font-weight: 600;
-    }
-    #triggerList {
-      max-height: 280px;
-      overflow-y: auto;
-      padding: 0.4rem 0;
-    }
-    .trigger-entry {
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-    }
-    .trigger-entry:last-child { border-bottom: 0; }
-    .trigger-card-name {
-      font-weight: 600;
-      font-size: 0.85rem;
-      color: #f1f5f9;
-      margin-bottom: 0.15rem;
-    }
-    .trigger-desc {
-      font-size: 0.78rem;
-      color: rgba(148, 163, 184, 0.85);
-      margin-bottom: 0.4rem;
-      line-height: 1.4;
-    }
-    .trigger-actions { display: flex; gap: 0.4rem; }
-    .trigger-actions .btn { font-size: 0.75rem; padding: 0.2rem 0.55rem; }
-
-    @media (max-width: 768px) {
-      #triggerPanel {
-        left: 0.5rem;
-        right: 0.5rem;
-        width: auto;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 6.5rem);
-      }
-    }
   `;
   document.head.appendChild(style);
 
@@ -611,5 +487,4 @@
   // Initialize
   // -----------------------------------------------------------------
   updateManaDisplay();
-  renderTriggerPanel();
 })();

@@ -391,9 +391,28 @@
     if (!badge) {
       badge = document.createElement("button");
       badge.type = "button";
-      badge.className = "plus-counter-badge";
+      // Use a Bootstrap badge for consistent typography + colour with the
+      // rest of the app. Inline styles guarantee positioning even if the
+      // injected stylesheet hasn't been picked up yet.
+      badge.className = "badge text-bg-success plus-counter-badge";
+      badge.style.cssText = [
+        "position: absolute",
+        "top: 0.45rem",
+        "right: 0.45rem",
+        "z-index: 7",
+        "padding: 0.25rem 0.5rem",
+        "font-size: 0.7rem",
+        "font-weight: 700",
+        "letter-spacing: 0.02em",
+        "border: 1px solid rgba(255,255,255,0.45)",
+        "border-radius: 999px",
+        "cursor: pointer",
+        "box-shadow: 0 0.25rem 0.65rem rgba(2, 6, 23, 0.45)",
+        "line-height: 1",
+        "min-width: 2.4rem",
+      ].join(";");
       badge.setAttribute("aria-label", "Adjust +1/+1 counters");
-      badge.title = "Click +/- to adjust. Right-click to clear.";
+      badge.title = "Click +1, right-click −1, shift+right-click clear";
       badge.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -954,25 +973,26 @@
       background: rgba(30, 41, 59, 0.9);
     }
 
-    .plus-counter-badge {
+    .plus-counter-badge.plus-counter-badge {
       position: absolute;
-      top: 0.35rem;
-      left: 0.35rem;
-      background: rgba(34, 197, 94, 0.95);
-      color: #052e16;
-      border: 2px solid #f0fdf4;
-      border-radius: 999px;
+      top: 0.45rem;
+      right: 0.45rem;
+      z-index: 7;
+      padding: 0.25rem 0.5rem;
       font-size: 0.7rem;
-      font-weight: 800;
-      padding: 0.15rem 0.45rem;
-      z-index: 5;
-      cursor: pointer;
-      box-shadow: 0 0.25rem 0.65rem rgba(2, 6, 23, 0.4);
-      line-height: 1;
+      font-weight: 700;
       letter-spacing: 0.02em;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      border-radius: 999px;
+      cursor: pointer;
+      box-shadow: 0 0.25rem 0.65rem rgba(2, 6, 23, 0.45);
+      line-height: 1;
+      min-width: 2.4rem;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
-    .plus-counter-badge:hover {
-      transform: scale(1.08);
+    .plus-counter-badge.plus-counter-badge:hover {
+      transform: scale(1.06);
+      box-shadow: 0 0.4rem 0.9rem rgba(2, 6, 23, 0.55);
     }
     .plus-counter-badge:focus-visible {
       outline: 2px solid rgba(96, 165, 250, 0.7);
