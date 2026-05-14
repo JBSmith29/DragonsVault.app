@@ -80,20 +80,30 @@
   // =================================================================
 
   function buildLifeTracker() {
+    // Idempotent — if the tracker already exists, skip.
+    // Also remove any duplicates left by stale cached scripts.
+    const existing = document.querySelectorAll("#lifeTrackerWrap, .life-tracker");
+    if (existing.length >= 1) {
+      // Remove all but the first; if any exist we've been initialized.
+      existing.forEach((el, idx) => { if (idx > 0) el.remove(); });
+      return;
+    }
+
     const statusBar = document.querySelector(".hand-status");
     if (!statusBar) return;
 
     const wrap = document.createElement("span");
     wrap.id = "lifeTrackerWrap";
-    wrap.className = "life-tracker";
+    wrap.className = "badge text-bg-secondary life-tracker";
     wrap.setAttribute("role", "group");
     wrap.setAttribute("aria-label", "Life total");
     wrap.innerHTML = `
-      <button type="button" class="life-btn life-minus" data-life-delta="-1" aria-label="Decrease life">−</button>
-      <span class="life-display" id="lifeDisplay" title="Click to edit">${lifeTotal}</span>
-      <button type="button" class="life-btn life-plus" data-life-delta="1" aria-label="Increase life">+</button>
-      <button type="button" class="life-btn life-pod" id="lifePodBtn" aria-label="Manage opponents (commander damage)" title="Multiplayer pod & commander damage">
-        <i class="bi bi-people-fill"></i>
+      <i class="bi bi-heart-fill life-icon" aria-hidden="true"></i>
+      <button type="button" class="life-btn life-minus" data-life-delta="-1" aria-label="Decrease life" title="Subtract 1 (right-click: −5)">−</button>
+      <span class="life-display" id="lifeDisplay" title="Click to edit life total">${lifeTotal}</span>
+      <button type="button" class="life-btn life-plus" data-life-delta="1" aria-label="Increase life" title="Add 1 (right-click: +5)">+</button>
+      <button type="button" class="life-btn life-pod" id="lifePodBtn" aria-label="Manage opponents (commander damage)" title="Multiplayer pod &amp; commander damage">
+        <i class="bi bi-people-fill" aria-hidden="true"></i>
       </button>
     `;
     statusBar.appendChild(wrap);
@@ -825,78 +835,88 @@
   // =================================================================
   const style = document.createElement("style");
   style.textContent = `
-    .life-tracker {
+    .hand-status .life-tracker {
       display: inline-flex;
       align-items: center;
-      gap: 0.25rem;
-      background: rgba(15, 23, 42, 0.4);
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      border-radius: 999px;
+      gap: 0.2rem;
       padding: 0.15rem 0.45rem;
+      font-size: 0.72rem;
+      line-height: 1;
+      vertical-align: middle;
     }
-    .life-btn {
+    .hand-status .life-tracker .life-icon {
+      color: #fca5a5;
+      font-size: 0.78rem;
+      margin-right: 0.05rem;
+    }
+    .hand-status .life-tracker .life-btn {
       background: transparent;
       border: 0;
-      color: rgba(226, 232, 240, 0.85);
-      font-size: 0.95rem;
-      font-weight: 700;
-      width: 1.6rem;
-      height: 1.6rem;
-      border-radius: 999px;
+      color: inherit;
+      opacity: 0.85;
+      font-weight: 600;
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 0.25rem;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: background 0.15s ease;
       padding: 0;
       line-height: 1;
+      font-size: 0.85rem;
+      transition: background 0.15s ease, opacity 0.15s ease;
     }
-    .life-btn:hover {
-      background: rgba(148, 163, 184, 0.18);
+    .hand-status .life-tracker .life-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      opacity: 1;
     }
-    .life-btn:focus-visible {
+    .hand-status .life-tracker .life-btn:focus-visible {
       outline: 2px solid rgba(96, 165, 250, 0.7);
-      outline-offset: 2px;
+      outline-offset: 1px;
     }
-    .life-display {
-      min-width: 1.8rem;
+    .hand-status .life-tracker .life-display {
+      min-width: 1.4rem;
       text-align: center;
       font-weight: 700;
-      font-size: 0.95rem;
-      color: #f1f5f9;
       cursor: pointer;
-      padding: 0 0.25rem;
-      border-radius: 0.35rem;
+      padding: 0 0.15rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.02em;
     }
-    .life-display:hover {
-      background: rgba(148, 163, 184, 0.15);
+    .hand-status .life-tracker .life-display:hover {
+      background: rgba(255, 255, 255, 0.12);
     }
-    .life-display.life-low {
-      color: #fda4af;
+    .hand-status .life-tracker .life-display.life-low {
+      color: #fca5a5;
     }
-    .life-display.life-dead {
+    .hand-status .life-tracker .life-display.life-dead {
       color: #f87171;
       text-decoration: line-through;
     }
-    .life-pod {
+    .hand-status .life-tracker .life-pod {
       position: relative;
-      margin-left: 0.15rem;
+      margin-left: 0.1rem;
+      font-size: 0.75rem;
     }
-    .life-pod-badge {
+    .hand-status .life-tracker .life-pod-badge {
       position: absolute;
       top: -3px;
       right: -3px;
       background: #f59e0b;
       color: #1e293b;
-      font-size: 0.6rem;
+      font-size: 0.55rem;
       font-weight: 700;
-      width: 0.95rem;
-      height: 0.95rem;
+      min-width: 0.85rem;
+      height: 0.85rem;
+      padding: 0 0.15rem;
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       pointer-events: none;
+      line-height: 1;
     }
 
     .pod-icon-btn {
