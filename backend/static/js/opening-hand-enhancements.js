@@ -73,7 +73,7 @@
   async function doNextTurn() {
     pushUndo();
 
-    // Untap all — also clears mana pool via the untapAllBtn click listener.
+    // Untap all.
     const untapAllBtn = document.getElementById("untapAllBtn");
     if (untapAllBtn) {
       untapAllBtn.click();
@@ -82,9 +82,9 @@
     }
     oh.landsPlayedThisTurn = 0;
 
-    // Draw a card. Prefer the awaitable drawCards() over clicking drawBtn,
-    // so Next Turn waits for the fetch to settle before reporting Turn N.
-    // Falls back to the button click if the bridge helper is missing.
+    // Draw exactly one card via the awaitable drawCards helper.
+    // We record hand size before/after to confirm only one card was added.
+    const handBefore = (oh.handCards || []).length;
     let drewCount = 0;
     if (typeof oh.drawCards === "function") {
       try {
@@ -92,15 +92,14 @@
       } catch (_) {
         drewCount = 0;
       }
-    } else if (oh.drawBtn && !oh.drawBtn.disabled) {
-      oh.drawBtn.click();
-      drewCount = 1;
     }
+    const handAfter = (oh.handCards || []).length;
+    const actuallyDrew = handAfter - handBefore;
 
     turnNumber += 1;
     updateTurnDisplay();
     updateStatusBadges();
-    if (drewCount > 0) {
+    if (actuallyDrew > 0) {
       oh.showMessage(`Turn ${turnNumber} — untapped and drew a card.`, "info");
     } else {
       oh.showMessage(`Turn ${turnNumber} — untapped (deck empty, no draw).`, "warning");

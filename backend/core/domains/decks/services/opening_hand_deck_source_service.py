@@ -64,7 +64,9 @@ def _gather_commander_filters(folder: Folder) -> tuple[set[str], set[str]]:
     oracle_ids = {part for part in split_commander_oracle_ids(folder.commander_oracle_id) if part}
     names = set()
     if folder.commander_name:
-        for frag in re.split(r"[\/,&]+", folder.commander_name):
+        # Split on "//" (partner separator) or "&" but NOT on single "/" or ","
+        # since commas appear in many commander names (e.g., "Atraxa, Praetors' Voice").
+        for frag in re.split(r"\s*//\s*|\s*&\s*", folder.commander_name):
             value = frag.strip().lower()
             if value:
                 names.add(value)
@@ -261,7 +263,7 @@ def _deck_entries_from_list(
         commander_display_hint = commander_hint.strip()
         commander_names = {
             value.strip().lower()
-            for value in re.split(r"[\/,&]+", commander_hint)
+            for value in re.split(r"\s*//\s*|\s*&\s*", commander_hint)
             if value and value.strip()
         }
 
