@@ -34,6 +34,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - `config._select_config` now warns in dev/testing when `SECRET_KEY` is weak or unset (production already refused to boot).
 - Migration `0015_add_build_sessions_v2` no longer double-creates column-level indexes on first install.
 - Migration `0025_increase_commander_oracle_id_length` now uses `batch_alter_table` so it applies cleanly on SQLite.
+- `html { scrollbar-gutter: stable }` is now set globally so navigating between pages of different lengths no longer shifts content horizontally when the scrollbar appears or disappears. `body.modal-open` keeps `padding-right: 0` so Bootstrap modals don't double-compensate.
+- **Opening Hand counters** now track both `+1/+1` (green) and `−1/−1` (red) counters per card, render simultaneously, and stay visible on any board zone whenever a counter has been placed. Context menu adds entries for both kinds.
 
 ### Fixed
 - Migration `0014_remove_build_a_deck` imported `sa` from its docstring but never into scope, raising `NameError` on fresh installs. Fixed by importing `sqlalchemy as sa` explicitly.

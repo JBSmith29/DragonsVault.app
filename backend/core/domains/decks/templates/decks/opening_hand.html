@@ -1102,9 +1102,9 @@
         <button class="btn btn-outline-success" type="button" id="untapAllBtn">
           Untap All
         </button>
-        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ms-1" title="Auto-tap mana sources and auto-resolve ETB triggers when enabled.">
+        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ms-1" title="Auto-resolve ETB triggers (draw, tokens, scry, search prompts) when enabled.">
           <input class="form-check-input" type="checkbox" role="switch" id="autoModeToggle" checked>
-          <label class="form-check-label text-white small" for="autoModeToggle" title="Auto-tap mana sources and auto-resolve ETB triggers when enabled.">Auto</label>
+          <label class="form-check-label text-white small" for="autoModeToggle" title="Auto-resolve ETB triggers (draw, tokens, scry, search prompts) when enabled.">Auto</label>
         </div>
         <button class="btn btn-outline-secondary" type="button" id="resetBtn">
           Reset
@@ -6554,9 +6554,9 @@
 </script>
 
 {% block page_scripts %}
-  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260514-4" defer></script>
-  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260514-4" defer></script>
-  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260514-4" defer></script>
+  <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260528-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260528-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260528-1" defer></script>
 {% endblock %}
 
 {% endblock %}

@@ -326,35 +326,63 @@
   }
 
   // =================================================================
-  // 2. +1/+1 COUNTER TRACKER
+  // 2. +1/+1 and −1/−1 COUNTER TRACKER
+  //
+  // Each card slot in `counters` is { plus: int, minus: int }. Both
+  // badges render simultaneously when present so the player can see
+  // them stacking before deciding when to apply state-based actions.
   // =================================================================
 
   function loadCounters() {
-    counters = loadJson(deckScopedKey(COUNTERS_STORAGE_KEY), {}) || {};
+    const raw = loadJson(deckScopedKey(COUNTERS_STORAGE_KEY), {}) || {};
+    // Backfill: older versions stored just { plus: N }; coerce any missing
+    // minus key to 0 so reads are uniform.
+    Object.keys(raw).forEach((uid) => {
+      const entry = raw[uid] || {};
+      raw[uid] = {
+        plus: Math.max(0, parseInt(entry.plus, 10) || 0),
+        minus: Math.max(0, parseInt(entry.minus, 10) || 0),
+      };
+    });
+    counters = raw;
   }
 
   function persistCounters() {
     saveJson(deckScopedKey(COUNTERS_STORAGE_KEY), counters);
   }
 
-  function getCounter(cardUid) {
-    if (!cardUid || !counters[cardUid]) return 0;
-    return counters[cardUid].plus || 0;
+  function getCounters(cardUid) {
+    if (!cardUid || !counters[cardUid]) return { plus: 0, minus: 0 };
+    return {
+      plus: counters[cardUid].plus || 0,
+      minus: counters[cardUid].minus || 0,
+    };
   }
 
-  function setCounter(cardUid, value) {
-    if (!cardUid) return;
-    if (!value || value <= 0) {
+  function setCounter(cardUid, kind, value) {
+    if (!cardUid || (kind !== "plus" && kind !== "minus")) return;
+    const safe = Math.max(0, parseInt(value, 10) || 0);
+    const current = getCounters(cardUid);
+    const next = { ...current, [kind]: safe };
+    if (next.plus === 0 && next.minus === 0) {
       delete counters[cardUid];
     } else {
-      counters[cardUid] = { plus: value };
+      counters[cardUid] = next;
     }
     persistCounters();
     updateCounterBadgesForCard(cardUid);
   }
 
-  function adjustCounter(cardUid, delta) {
-    setCounter(cardUid, Math.max(0, getCounter(cardUid) + delta));
+  function clearCounters(cardUid) {
+    if (!cardUid) return;
+    delete counters[cardUid];
+    persistCounters();
+    updateCounterBadgesForCard(cardUid);
+  }
+
+  function adjustCounter(cardUid, kind, delta) {
+    const current = getCounters(cardUid);
+    setCounter(cardUid, kind, (current[kind] || 0) + delta);
   }
 
   function updateCounterBadgesForCard(cardUid) {
@@ -362,61 +390,88 @@
     cardEls.forEach(applyCounterBadgeToElement);
   }
 
+  function ensureBadge(cardEl, kind) {
+    const klass = kind === "plus" ? "plus-counter-badge" : "minus-counter-badge";
+    let badge = cardEl.querySelector("." + klass);
+    if (badge) return badge;
+    badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = `badge ${kind === "plus" ? "text-bg-success" : "text-bg-danger"} ${klass}`;
+    const top = kind === "plus" ? "0.45rem" : "2.05rem";
+    badge.style.cssText = [
+      "position: absolute",
+      `top: ${top}`,
+      "right: 0.45rem",
+      "z-index: 7",
+      "padding: 0.25rem 0.5rem",
+      "font-size: 0.7rem",
+      "font-weight: 700",
+      "letter-spacing: 0.02em",
+      "border: 1px solid rgba(255,255,255,0.45)",
+      "border-radius: 999px",
+      "cursor: pointer",
+      "box-shadow: 0 0.25rem 0.65rem rgba(2, 6, 23, 0.45)",
+      "line-height: 1",
+      "min-width: 2.4rem",
+    ].join(";");
+    badge.setAttribute(
+      "aria-label",
+      kind === "plus" ? "Adjust +1/+1 counters" : "Adjust −1/−1 counters"
+    );
+    badge.title =
+      kind === "plus"
+        ? "Click +1, right-click −1, shift+right-click clear"
+        : "Click +1, right-click −1, shift+right-click clear (−1/−1 counters)";
+    badge.dataset.kind = kind;
+    badge.addEventListener("click", (event) => {
+      const uid = cardEl.dataset.cardId;
+      if (!uid) return;
+      event.preventDefault();
+      event.stopPropagation();
+      adjustCounter(uid, kind, 1);
+    });
+    badge.addEventListener("contextmenu", (event) => {
+      const uid = cardEl.dataset.cardId;
+      if (!uid) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.shiftKey) {
+        setCounter(uid, kind, 0);
+      } else {
+        adjustCounter(uid, kind, -1);
+      }
+    });
+    cardEl.appendChild(badge);
+    return badge;
+  }
+
   function applyCounterBadgeToElement(cardEl) {
     if (!cardEl) return;
     const uid = cardEl.dataset.cardId;
     if (!uid) return;
-    let badge = cardEl.querySelector(".plus-counter-badge");
-    const value = getCounter(uid);
 
     const isOnBoard = cardEl.dataset.source === "board";
-    const card = findCardByUid(uid);
-    const isCreature = !!(card && card.is_creature);
+    const { plus, minus } = getCounters(uid);
 
-    if (!isOnBoard || !isCreature || value <= 0) {
-      if (badge) badge.remove();
-      return;
+    // Always show counters that have been put on a card while it is on
+    // the board (any zone). Hand / library views never show counters —
+    // counters only exist for permanents.
+    const showPlus = isOnBoard && plus > 0;
+    const showMinus = isOnBoard && minus > 0;
+
+    let plusBadge = cardEl.querySelector(".plus-counter-badge");
+    if (!showPlus && plusBadge) plusBadge.remove();
+    if (showPlus) {
+      plusBadge = ensureBadge(cardEl, "plus");
+      plusBadge.textContent = `+${plus}/+${plus}`;
     }
 
-    if (!badge) {
-      badge = document.createElement("button");
-      badge.type = "button";
-      badge.className = "badge text-bg-success plus-counter-badge";
-      badge.style.cssText = [
-        "position: absolute",
-        "top: 0.45rem",
-        "right: 0.45rem",
-        "z-index: 7",
-        "padding: 0.25rem 0.5rem",
-        "font-size: 0.7rem",
-        "font-weight: 700",
-        "letter-spacing: 0.02em",
-        "border: 1px solid rgba(255,255,255,0.45)",
-        "border-radius: 999px",
-        "cursor: pointer",
-        "box-shadow: 0 0.25rem 0.65rem rgba(2, 6, 23, 0.45)",
-        "line-height: 1",
-        "min-width: 2.4rem",
-      ].join(";");
-      badge.setAttribute("aria-label", "Adjust +1/+1 counters");
-      badge.title = "Click +1, right-click −1, shift+right-click clear";
-      badge.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        adjustCounter(uid, 1);
-      });
-      badge.addEventListener("contextmenu", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.shiftKey) {
-          setCounter(uid, 0);
-        } else {
-          adjustCounter(uid, -1);
-        }
-      });
-      cardEl.appendChild(badge);
+    let minusBadge = cardEl.querySelector(".minus-counter-badge");
+    if (!showMinus && minusBadge) minusBadge.remove();
+    if (showMinus) {
+      minusBadge = ensureBadge(cardEl, "minus");
+      minusBadge.textContent = `−${minus}/−${minus}`;
     }
-    badge.textContent = `+${value}/+${value}`;
   }
 
   function findCardByUid(uid) {
@@ -453,51 +508,52 @@
       if (menu.querySelector("[data-counter-injected]")) return;
 
       const activeCard = detectActiveContextCard(menu);
-      if (!activeCard || !activeCard.is_creature) return;
+      if (!activeCard) return;
+      // Counters live on permanents — show on creatures, other permanents,
+      // and lands (animated lands etc.). Skip graveyard / command zone.
       const zone = activeCard.boardZone;
-      if (zone !== "creatures" && zone !== "permanents") return;
+      if (zone === "graveyard" || zone === "command") return;
+
+      const uid = activeCard.__uid;
+      const { plus, minus } = getCounters(uid);
 
       const sep = document.createElement("div");
       sep.dataset.counterInjected = "1";
       sep.style.cssText = "border-top:1px solid rgba(148,163,184,0.18);margin:0.25rem 0;";
       menu.appendChild(sep);
 
-      const uid = activeCard.__uid;
-      const current = getCounter(uid);
-
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "card-context-item";
-      addBtn.dataset.counterInjected = "1";
-      addBtn.textContent = `Add +1/+1 counter${current ? ` (${current})` : ""}`;
-      addBtn.addEventListener("click", () => {
-        adjustCounter(uid, 1);
-        document.getElementById("cardContextMenu").hidden = true;
-      });
-      menu.appendChild(addBtn);
-
-      if (current > 0) {
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "card-context-item";
-        removeBtn.dataset.counterInjected = "1";
-        removeBtn.textContent = "Remove +1/+1 counter";
-        removeBtn.addEventListener("click", () => {
-          adjustCounter(uid, -1);
+      function makeItem(label, onClick) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "card-context-item";
+        btn.dataset.counterInjected = "1";
+        btn.textContent = label;
+        btn.addEventListener("click", () => {
+          onClick();
           document.getElementById("cardContextMenu").hidden = true;
         });
-        menu.appendChild(removeBtn);
+        menu.appendChild(btn);
+        return btn;
+      }
 
-        const clearBtn = document.createElement("button");
-        clearBtn.type = "button";
-        clearBtn.className = "card-context-item";
-        clearBtn.dataset.counterInjected = "1";
-        clearBtn.textContent = "Clear all counters";
-        clearBtn.addEventListener("click", () => {
-          setCounter(uid, 0);
-          document.getElementById("cardContextMenu").hidden = true;
-        });
-        menu.appendChild(clearBtn);
+      makeItem(
+        `Add +1/+1 counter${plus ? ` (${plus})` : ""}`,
+        () => adjustCounter(uid, "plus", 1)
+      );
+      if (plus > 0) {
+        makeItem("Remove +1/+1 counter", () => adjustCounter(uid, "plus", -1));
+      }
+
+      makeItem(
+        `Add −1/−1 counter${minus ? ` (${minus})` : ""}`,
+        () => adjustCounter(uid, "minus", 1)
+      );
+      if (minus > 0) {
+        makeItem("Remove −1/−1 counter", () => adjustCounter(uid, "minus", -1));
+      }
+
+      if (plus > 0 || minus > 0) {
+        makeItem("Clear all counters", () => clearCounters(uid));
       }
     });
     observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["hidden"] });
@@ -657,9 +713,9 @@
       background: rgba(30, 41, 59, 0.9);
     }
 
-    .plus-counter-badge.plus-counter-badge {
+    .plus-counter-badge.plus-counter-badge,
+    .minus-counter-badge.minus-counter-badge {
       position: absolute;
-      top: 0.45rem;
       right: 0.45rem;
       z-index: 7;
       padding: 0.25rem 0.5rem;
@@ -674,11 +730,15 @@
       min-width: 2.4rem;
       transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
-    .plus-counter-badge.plus-counter-badge:hover {
+    .plus-counter-badge.plus-counter-badge { top: 0.45rem; }
+    .minus-counter-badge.minus-counter-badge { top: 2.05rem; }
+    .plus-counter-badge.plus-counter-badge:hover,
+    .minus-counter-badge.minus-counter-badge:hover {
       transform: scale(1.06);
       box-shadow: 0 0.4rem 0.9rem rgba(2, 6, 23, 0.55);
     }
-    .plus-counter-badge:focus-visible {
+    .plus-counter-badge:focus-visible,
+    .minus-counter-badge:focus-visible {
       outline: 2px solid rgba(96, 165, 250, 0.7);
       outline-offset: 2px;
     }
@@ -704,7 +764,9 @@
     getLifeTotal: () => lifeTotal,
     setLifeTotal: (v) => { lifeTotal = v; renderLife(); persistLife(); },
     getOpponents: () => opponents,
-    getCounter,
+    getCounters,
     setCounter,
+    clearCounters,
+    adjustCounter,
   };
 })();

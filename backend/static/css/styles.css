@@ -29,6 +29,28 @@ body {
 
 html {
   scroll-behavior: smooth;
+  /*
+   * Reserve space for the vertical scrollbar gutter even on pages that
+   * don't overflow. Without this, navigating between short pages
+   * (no scrollbar) and long pages (scrollbar shown) shifts the layout
+   * horizontally by ~15px, which feels like content jumping.
+   *
+   * `scrollbar-gutter: stable` is supported in all evergreen browsers
+   * (Chrome 94+, Firefox 97+, Safari 16+). On older browsers it
+   * gracefully degrades to the prior behaviour.
+   */
+  scrollbar-gutter: stable;
+}
+
+/*
+ * Bootstrap's modal handler adds inline padding-right to the body when a
+ * modal opens to compensate for the disappearing scrollbar. With
+ * `scrollbar-gutter: stable` above, the gutter is already reserved, so
+ * Bootstrap's compensation causes a layout shift in the *opposite*
+ * direction. Override the inline padding while a modal is open.
+ */
+body.modal-open {
+  padding-right: 0 !important;
 }
 
 .form-select.select-ghost {
