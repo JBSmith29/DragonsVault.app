@@ -15,7 +15,6 @@ def register_web_routes() -> None:
 
     from . import cards  # noqa: F401
     from . import card_detail  # noqa: F401
-    from . import collection_value  # noqa: F401
     from . import importer  # noqa: F401
     from . import list_checker  # noqa: F401
     from . import scryfall  # noqa: F401

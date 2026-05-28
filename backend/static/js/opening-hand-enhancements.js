@@ -82,15 +82,29 @@
     }
     oh.landsPlayedThisTurn = 0;
 
-    // Draw a card via the core draw button.
-    if (oh.drawBtn && !oh.drawBtn.disabled) {
+    // Draw a card. Prefer the awaitable drawCards() over clicking drawBtn,
+    // so Next Turn waits for the fetch to settle before reporting Turn N.
+    // Falls back to the button click if the bridge helper is missing.
+    let drewCount = 0;
+    if (typeof oh.drawCards === "function") {
+      try {
+        drewCount = await oh.drawCards(1);
+      } catch (_) {
+        drewCount = 0;
+      }
+    } else if (oh.drawBtn && !oh.drawBtn.disabled) {
       oh.drawBtn.click();
+      drewCount = 1;
     }
 
     turnNumber += 1;
     updateTurnDisplay();
     updateStatusBadges();
-    oh.showMessage(`Turn ${turnNumber} — untapped and drew a card.`, "info");
+    if (drewCount > 0) {
+      oh.showMessage(`Turn ${turnNumber} — untapped and drew a card.`, "info");
+    } else {
+      oh.showMessage(`Turn ${turnNumber} — untapped (deck empty, no draw).`, "warning");
+    }
     persistState();
   }
 

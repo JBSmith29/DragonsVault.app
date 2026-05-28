@@ -41,9 +41,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Duplicate test module name (`tests/routes/test_proxy_decks.py` and `tests/services/test_proxy_decks.py`) caused collection to fail when both were picked up. The services file is now `test_proxy_deck_parsing.py`.
 - `test_build_folder_detail_commander_context_builds_media_bracket_links_and_edhrec` assertion updated to match actual filter-and-mark behavior (in-deck recommendations are removed, not flagged).
 - Legal pages no longer show a stale "November 17, 2025" date; the label now derives from env vars or the process start date.
+- **Opening Hand "Next Turn"** now awaits the draw fetch via `oh.drawCards(1)` instead of clicking the draw button. The previous implementation could leave the draw button disabled in flight, causing Next Turn to silently skip the draw on the next press.
 - 
 
 ### Removed
+- **Collection Value dashboard** removed at user request — the widget, route module (`/api/collection/value*`), `collection_value_service`, JS module, dashboard partial, and `CollectionValueSnapshot` model are gone. Migration `0032_drop_collection_value_snapshots` drops the persisted table.
+- **Auto-tap mana on cast** and the **mana pool tracker** removed from the Opening Hand simulator. The Auto toggle now only governs ETB trigger automation (draw, tokens, scry, search prompts).
 - 
 
 [Unreleased]: https://github.com/JBSmith29/DragonsVault/compare/main...HEAD

@@ -23,7 +23,6 @@ DragonsVault is a Docker-first **Magic: The Gathering** collection manager for c
 - Card detail with owned print metadata, alternate arts, tokens, rulings, and external links.
 - Condition tracking (NM/LP/MP/HP/DMG) editable from the card detail page and importable from CSV.
 - Collection insights with bucket-level stats (e.g., Mythic, Lands) and type breakdown tiles.
-- Collection Value dashboard with live totals, top cards, 30-day trend sparkline, and manual snapshots for historical charts.
 
 ### Decks & Building
 - Deck detail with commander picker, mana curve, pip breakdown, CSV export, and folder insights.
@@ -189,15 +188,6 @@ These endpoints expose the newer analysis features. All require cookie auth or a
 | `GET /api/folders/<id>/budget-alternatives?threshold=20` | Suggest cheaper replacements for expensive cards. |
 | `GET /api/decks/compare?left=<id>&right=<id>` | Side-by-side diff: shared/unique cards, curve, pips, types. |
 | `GET /folders/<id>/proxy.pdf` | Download a printable proxy sheet (3x3 per letter page). |
-
-### Collection value
-
-| **Endpoint** | **Purpose** |
-| -- | -- |
-| `GET /api/collection/value` | Live valuation with folder breakdown and top cards. |
-| `POST /api/collection/value/snapshots` | Persist a valuation snapshot for historical charts. |
-| `GET /api/collection/value/history` | Snapshots oldest-first for chart rendering. |
-| `GET /api/collection/value/trend?days=30` | Delta vs the oldest snapshot in the window. |
 
 ### Card rules
 

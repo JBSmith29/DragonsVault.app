@@ -1,19 +1,16 @@
 /*
  * opening-hand-life-counters.js
  *
- * Supplemental module that adds three high-impact gameplay features to the
- * Opening Hand simulator:
+ * Supplemental module for the Opening Hand simulator. Adds:
  *
- *   1. Life Tracker — primary life total with +/- buttons, optional commander
- *      damage matrix for multiplayer pods. Persists per-deck.
- *   2. +1/+1 Counter Tracker — increment/decrement counters on creatures via
- *      a small badge overlaid on the card; integrates with the ETB +1/+1
- *      counter trigger from triggers.js.
- *   3. Auto-Tap Mana on Cast — when a non-land card leaves the hand for the
- *      battlefield with the auto toggle on, automatically taps untapped
- *      lands matching the mana cost and deducts from the mana pool. Warns
- *      if mana is insufficient (does not block — Magic players get the
- *      final say).
+ *   1. Life Tracker — primary life total with +/- buttons, optional
+ *      commander damage matrix for multiplayer pods. Persists per-deck.
+ *   2. +1/+1 Counter Tracker — increment/decrement counters on creatures
+ *      via a small badge overlaid on the card; integrates with the
+ *      context menu.
+ *
+ * Auto-tap mana on cast and the mana-pool tracker were removed at user
+ * request.
  *
  * Loads after enhancements + triggers, so it can extend their wrappers.
  */
@@ -29,7 +26,6 @@
   const LIFE_STORAGE_KEY = "dv_opening_hand_life";
   const COUNTERS_STORAGE_KEY = "dv_opening_hand_counters";
   const STARTING_LIFE = 40; // Commander default; adjustable.
-  const MANA_SYMBOLS = ["W", "U", "B", "R", "G", "C"];
 
   // -----------------------------------------------------------------
   // State
@@ -80,11 +76,9 @@
   // =================================================================
 
   function buildLifeTracker() {
-    // Idempotent — if the tracker already exists, skip.
-    // Also remove any duplicates left by stale cached scripts.
+    // Idempotent — if the tracker already exists, skip and clean up dupes.
     const existing = document.querySelectorAll("#lifeTrackerWrap, .life-tracker");
     if (existing.length >= 1) {
-      // Remove all but the first; if any exist we've been initialized.
       existing.forEach((el, idx) => { if (idx > 0) el.remove(); });
       return;
     }
@@ -115,7 +109,6 @@
       });
     });
 
-    // Right-click on +/- adjusts by 5 for fast changes.
     wrap.querySelector(".life-minus").addEventListener("contextmenu", (e) => {
       e.preventDefault();
       adjustLife(-5);
@@ -125,7 +118,6 @@
       adjustLife(5);
     });
 
-    // Click on display to edit directly.
     wrap.querySelector("#lifeDisplay").addEventListener("click", () => {
       const next = prompt("Set life total:", String(lifeTotal));
       if (next === null) return;
@@ -156,7 +148,6 @@
     display.classList.toggle("life-low", lifeTotal <= 5);
     display.classList.toggle("life-dead", lifeTotal <= 0);
 
-    // Update pod button badge if there are opponents.
     const podBtn = document.getElementById("lifePodBtn");
     if (podBtn) {
       const count = opponents.length;
@@ -378,7 +369,6 @@
     let badge = cardEl.querySelector(".plus-counter-badge");
     const value = getCounter(uid);
 
-    // Only show on creatures on the board.
     const isOnBoard = cardEl.dataset.source === "board";
     const card = findCardByUid(uid);
     const isCreature = !!(card && card.is_creature);
@@ -391,9 +381,6 @@
     if (!badge) {
       badge = document.createElement("button");
       badge.type = "button";
-      // Use a Bootstrap badge for consistent typography + colour with the
-      // rest of the app. Inline styles guarantee positioning even if the
-      // injected stylesheet hasn't been picked up yet.
       badge.className = "badge text-bg-success plus-counter-badge";
       badge.style.cssText = [
         "position: absolute",
@@ -446,8 +433,7 @@
   }
 
   // Track the most recently interacted card so we know which one's
-  // context menu is open. Right-click and action button click both
-  // bubble through the board area where we can capture them.
+  // context menu is open.
   let _lastInteractedCardEl = null;
   document.addEventListener("contextmenu", (event) => {
     const cardEl = event.target.closest && event.target.closest('.hand-card[data-source="board"]');
@@ -460,9 +446,6 @@
     if (cardEl) _lastInteractedCardEl = cardEl;
   }, true);
 
-  // Add counter controls to context menu via listener on the board.
-  // We can't modify ensureContextMenu, but we can append items after the
-  // menu opens by observing it.
   function watchContextMenu() {
     const observer = new MutationObserver(() => {
       const menu = document.getElementById("cardContextMenu");
@@ -521,12 +504,10 @@
   }
 
   function detectActiveContextCard(menu) {
-    // First, prefer the most recently right-clicked / action-clicked card.
     if (_lastInteractedCardEl && _lastInteractedCardEl.isConnected) {
       const card = findCardByUid(_lastInteractedCardEl.dataset.cardId);
       if (card) return card;
     }
-    // Fallback: geometric search at the menu position.
     const x = parseFloat(menu.style.left) || 0;
     const y = parseFloat(menu.style.top) || 0;
     const cards = document.querySelectorAll('#boardArea .hand-card[data-source="board"]');
@@ -550,303 +531,6 @@
       origRender();
       refreshAllCounterBadges();
     };
-  }
-
-  // =================================================================
-  // 3. AUTO-TAP MANA WHEN CASTING
-  // =================================================================
-
-  // Wrap moveCardToBoard (already wrapped by triggers.js).
-  // To detect "card came from hand", we snapshot hand UIDs at the start
-  // of every move and check before the core wrapper splices/renders.
-  // The hand splice happens in playCardFromHand BEFORE moveCardToBoard
-  // runs, so we need to snapshot before that. Hooking renderHand catches
-  // it: renderHand fires after the splice, so by that point the card is
-  // gone from `handCards` — we want the *previous* frame's hand. We
-  // therefore snapshot inside renderHand AFTER it runs (capturing the
-  // post-splice state), and check membership in the snapshot taken
-  // BEFORE this renderHand. Sequence:
-  //   1. user clicks hand card
-  //   2. handler splices card out of handCards
-  //   3. handler calls renderHand() → our wrapper updates snapshot to
-  //      post-splice state (card NOT in snapshot)
-  //   4. handler calls playCardFromHand → moveCardToBoard
-  //   5. our move wrapper checks: was card in PREVIOUS snapshot? Need
-  //      to keep two snapshots.
-  let _prevSnapshot = new Set();
-  let _curSnapshot = new Set();
-
-  function snapshotHandIds() {
-    _prevSnapshot = _curSnapshot;
-    _curSnapshot = new Set((oh.handCards || []).map((c) => c.__uid));
-  }
-
-  if (typeof oh.renderHand === "function") {
-    const origRenderHand = oh.renderHand.bind(oh);
-    oh.renderHand = function () {
-      origRenderHand();
-      snapshotHandIds();
-    };
-  }
-
-  const _movePrev = oh.moveCardToBoard.bind(oh);
-  oh.moveCardToBoard = function (card, preferredZone, beforeId, stackParentId) {
-    const wasInHand = card && (_prevSnapshot.has(card.__uid) || _curSnapshot.has(card.__uid));
-    const result = _movePrev(card, preferredZone, beforeId, stackParentId);
-    try {
-      if (wasInHand && card && !card.is_land) {
-        const zone = card.boardZone || preferredZone;
-        const isBattlefield = zone === "creatures" || zone === "permanents";
-        if (isBattlefield) {
-          autoTapForCost(card);
-        }
-      }
-    } catch (err) {
-      console.error("[life-counters] auto-tap error:", err);
-    }
-    return result;
-  };
-
-  // Initial snapshots.
-  snapshotHandIds();
-  snapshotHandIds();
-
-  // -----------------------------------------------------------------
-  // Mana cost parsing
-  // -----------------------------------------------------------------
-  // Parses strings like "{2}{W}{U}" into { generic: 2, W: 1, U: 1 }
-  function parseManaCost(costStr) {
-    const result = { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
-    if (!costStr || typeof costStr !== "string") return result;
-    const tokens = costStr.match(/\{[^}]+\}/g) || [];
-    for (const tok of tokens) {
-      const inner = tok.slice(1, -1).toUpperCase();
-      // Pure numeric — generic mana.
-      if (/^\d+$/.test(inner)) {
-        result.generic += parseInt(inner, 10);
-        continue;
-      }
-      // X / Y / Z — generic placeholder, skip (player picks).
-      if (inner === "X" || inner === "Y" || inner === "Z") continue;
-      // Hybrid like W/U or 2/W — pick the first colored option.
-      if (inner.includes("/")) {
-        const parts = inner.split("/");
-        // 2/W means "2 generic OR W"; prefer W to ease auto-tap.
-        const colored = parts.find((p) => MANA_SYMBOLS.includes(p));
-        if (colored) {
-          result[colored] += 1;
-        } else {
-          result.generic += 1;
-        }
-        continue;
-      }
-      // Phyrexian {W/P} — assume player pays mana, treat as W.
-      if (inner.endsWith("/P")) {
-        const sym = inner[0];
-        if (MANA_SYMBOLS.includes(sym)) result[sym] += 1;
-        continue;
-      }
-      // Single colored or colorless symbol.
-      if (MANA_SYMBOLS.includes(inner)) {
-        result[inner] += 1;
-        continue;
-      }
-      // Snow {S} — treat as generic.
-      if (inner === "S") {
-        result.generic += 1;
-      }
-    }
-    return result;
-  }
-
-  function autoTapForCost(card) {
-    const autoToggle = document.getElementById("autoModeToggle");
-    if (autoToggle && !autoToggle.checked) return;
-
-    const cost = parseManaCost(card.mana_cost || "");
-    const totalCost = cost.generic + MANA_SYMBOLS.reduce((s, c) => s + cost[c], 0);
-    if (totalCost === 0) return; // free spells / no cost
-
-    // First, see how much is already in the mana pool from prior taps.
-    const pool = getManaPool();
-    const consumed = consumeFromPool(pool, cost);
-    let stillNeed = consumed.remaining;
-    let stillNeedTotal = stillNeed.generic + MANA_SYMBOLS.reduce((s, c) => s + stillNeed[c], 0);
-
-    // If the pool covered everything, just deduct and we're done.
-    if (stillNeedTotal === 0) {
-      writeManaPool(consumed.pool);
-      oh.showMessage(`Cast ${card.name}: spent mana from pool.`, "info");
-      return;
-    }
-
-    // Otherwise, look for untapped lands and try to tap enough to cover.
-    const lands = (oh.boardState && oh.boardState.lands) || [];
-    const tappedNow = [];
-    const colorsLackingMessages = [];
-
-    // Try colored requirements first — find a land that produces that color.
-    for (const sym of MANA_SYMBOLS) {
-      while (stillNeed[sym] > 0) {
-        const land = findUntappedLandFor(lands, sym, tappedNow);
-        if (!land) {
-          colorsLackingMessages.push(`{${sym}}`);
-          stillNeed[sym] -= 1; // skip, mark as missing
-          continue;
-        }
-        land.tapped = true;
-        tappedNow.push({ land, color: sym });
-        // Add to consumed pool (positive) then remove (zero out for this color).
-        stillNeed[sym] -= 1;
-      }
-    }
-
-    // Generic requirement — any untapped land works.
-    while (stillNeed.generic > 0) {
-      const land = findAnyUntappedLand(lands, tappedNow);
-      if (!land) {
-        colorsLackingMessages.push(`{${stillNeed.generic} generic}`);
-        break;
-      }
-      land.tapped = true;
-      const produced = primaryColorOf(land) || "C";
-      tappedNow.push({ land, color: produced });
-      stillNeed.generic -= 1;
-    }
-
-    // Re-render board to show taps.
-    if (tappedNow.length) {
-      if (typeof oh.renderBoard === "function") oh.renderBoard();
-    }
-
-    // Update mana pool (pool may have been partially consumed).
-    writeManaPool(consumed.pool);
-
-    if (colorsLackingMessages.length) {
-      oh.showMessage(
-        `Cast ${card.name} — short ${colorsLackingMessages.join(", ")}. Tapped ${tappedNow.length} land(s).`,
-        "warning"
-      );
-    } else if (tappedNow.length) {
-      oh.showMessage(
-        `Cast ${card.name}: auto-tapped ${tappedNow.length} land${tappedNow.length === 1 ? "" : "s"}.`,
-        "info"
-      );
-    }
-  }
-
-  // Returns the mana pool as a {W,U,B,R,G,C,generic} object by reading
-  // the trigger panel's pool display chips.
-  function getManaPool() {
-    const display = document.getElementById("manaPoolDisplay");
-    const pool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, generic: 0 };
-    if (!display || display.hidden) return pool;
-    display.querySelectorAll(".mana-pip").forEach((pip) => {
-      const txt = (pip.textContent || "").trim();
-      // Match "3{W}" or "{W}".
-      const m = txt.match(/^(\d+)?\{([WUBRGC])\}$/);
-      if (!m) return;
-      const count = m[1] ? parseInt(m[1], 10) : 1;
-      const sym = m[2];
-      if (pool[sym] !== undefined) pool[sym] += count;
-    });
-    return pool;
-  }
-
-  function writeManaPool(pool) {
-    // The triggers.js module owns the live `manaPool` object. We can't
-    // reach into its closure, but we *can* signal a clear+repopulate via
-    // a CustomEvent that triggers.js will need to listen for. As a
-    // pragmatic substitute, we simulate untap-then-add: dispatch
-    // synthetic events on the untapAllBtn (which clears the pool), then
-    // re-tap virtual sources. That's noisy. Simpler: mutate the chip DOM
-    // directly to reflect the new total, accepting that triggers.js
-    // internal state will desync until the next untap.
-    const display = document.getElementById("manaPoolDisplay");
-    if (!display) return;
-    display.innerHTML = "";
-    const total = MANA_SYMBOLS.reduce((s, sym) => s + (pool[sym] || 0), 0);
-    if (total === 0) {
-      display.hidden = true;
-      return;
-    }
-    display.hidden = false;
-    const label = document.createElement("span");
-    label.style.cssText = "font-size:0.7rem;color:rgba(148,163,184,0.7);margin-right:0.2rem;";
-    label.textContent = "Mana:";
-    display.appendChild(label);
-    MANA_SYMBOLS.filter((s) => (pool[s] || 0) > 0).forEach((s) => {
-      const pip = document.createElement("span");
-      pip.className = `mana-pip mana-${s.toLowerCase()}`;
-      pip.textContent = pool[s] > 1 ? `${pool[s]}{${s}}` : `{${s}}`;
-      display.appendChild(pip);
-    });
-  }
-
-  // Spend from pool first; returns { pool: remaining-pool, remaining: cost-still-owed }
-  function consumeFromPool(pool, cost) {
-    const newPool = { ...pool };
-    const remaining = { ...cost };
-    // Pay colored requirements with matching pool mana.
-    for (const sym of MANA_SYMBOLS) {
-      while (remaining[sym] > 0 && (newPool[sym] || 0) > 0) {
-        newPool[sym] -= 1;
-        remaining[sym] -= 1;
-      }
-    }
-    // Pay generic with any pool mana (prefer colorless first).
-    const genericOrder = ["C", "W", "U", "B", "R", "G"];
-    for (const sym of genericOrder) {
-      while (remaining.generic > 0 && (newPool[sym] || 0) > 0) {
-        newPool[sym] -= 1;
-        remaining.generic -= 1;
-      }
-    }
-    return { pool: newPool, remaining };
-  }
-
-  function findUntappedLandFor(lands, sym, alreadyTapped) {
-    const skipUids = new Set(alreadyTapped.map((e) => e.land.__uid));
-    return lands.find((land) => {
-      if (land.tapped || skipUids.has(land.__uid)) return false;
-      const produced = landColors(land);
-      return produced.includes(sym);
-    });
-  }
-
-  function findAnyUntappedLand(lands, alreadyTapped) {
-    const skipUids = new Set(alreadyTapped.map((e) => e.land.__uid));
-    return lands.find((land) => !land.tapped && !skipUids.has(land.__uid));
-  }
-
-  function primaryColorOf(land) {
-    const colors = landColors(land);
-    return colors[0] || null;
-  }
-
-  function landColors(land) {
-    if (!land) return [];
-    const text = (land.oracle_text || "").toLowerCase();
-    const typeLine = (land.type_line || "").toLowerCase();
-    const colors = [];
-
-    if (/add\s+(?:one mana of any color|mana of any color)/i.test(text)) {
-      return ["W", "U", "B", "R", "G"];
-    }
-
-    if (/add\s+\{c\}/i.test(text)) colors.push("C");
-    const re = /add\s+(?:\{([wubrgc])(?:\/[wubrgc])?\})+/gi;
-    let match;
-    while ((match = re.exec(text)) !== null) {
-      const sym = match[1].toUpperCase();
-      if (MANA_SYMBOLS.includes(sym) && !colors.includes(sym)) colors.push(sym);
-    }
-    const subtypeMap = { plains: "W", island: "U", swamp: "B", mountain: "R", forest: "G" };
-    Object.entries(subtypeMap).forEach(([sub, sym]) => {
-      if (typeLine.includes(sub) && !colors.includes(sym)) colors.push(sym);
-    });
-
-    return colors;
   }
 
   // =================================================================
@@ -1011,20 +695,16 @@
   watchContextMenu();
   refreshAllCounterBadges();
 
-  // Persist on page unload too.
   window.addEventListener("beforeunload", () => {
     persistLife();
     persistCounters();
   });
 
-  // Expose minimal API for tests / debugging.
   window.__openingHandLifeCounters = {
     getLifeTotal: () => lifeTotal,
     setLifeTotal: (v) => { lifeTotal = v; renderLife(); persistLife(); },
     getOpponents: () => opponents,
     getCounter,
     setCounter,
-    parseManaCost,
-    autoTapForCost,
   };
 })();

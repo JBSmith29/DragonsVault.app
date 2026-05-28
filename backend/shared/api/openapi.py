@@ -131,15 +131,9 @@ def generate_openapi_spec(app: Flask) -> dict[str, Any]:
                 },
                 "CollectionValueReport": {
                     "type": "object",
-                    "properties": {
-                        "currency": {"type": "string"},
-                        "total_value": {"type": "string", "description": "Decimal string"},
-                        "unique_cards": {"type": "integer"},
-                        "total_cards": {"type": "integer"},
-                        "priced_cards": {"type": "integer"},
-                        "missing_prices": {"type": "integer"},
-                        "captured_at": {"type": "string", "format": "date-time"},
-                    },
+                    "deprecated": True,
+                    "description": "Removed in 2026-05; the collection value dashboard was deleted.",
+                    "properties": {},
                 },
                 "DeckArchetype": {
                     "type": "object",

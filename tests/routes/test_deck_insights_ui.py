@@ -3,7 +3,6 @@
 Covers:
     * the folder detail page includes the deck-insights panel when the folder
       is a deck (but not for collection folders)
-    * the dashboard page embeds the collection value card
     * the proxy-PDF route returns a PDF payload
     * a selection of the new JSON endpoints respond with 200
 
@@ -86,16 +85,11 @@ def test_collection_folder_does_not_show_deck_insights(client, create_user):
     assert b"data-deck-insights" not in response.data
 
 
-def test_dashboard_embeds_collection_value_card(client, create_user):
+def test_dashboard_loads_for_authenticated_user(client, create_user):
     user, password = create_user(email="dashboard-owner@example.com")
     _login(client, user.email, password)
     response = client.get("/dashboard")
     assert response.status_code == 200
-    body = response.data.decode("utf-8", errors="replace")
-    assert "data-collection-value" in body
-    # Endpoints should be present in the markup.
-    assert "/api/collection/value/snapshots" in body
-    assert "/api/collection/value/history" in body
 
 
 def test_proxy_pdf_returns_pdf_bytes(client, create_user):
