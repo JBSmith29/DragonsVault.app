@@ -347,17 +347,11 @@ def create_app():
             return jsonify(payload), 400
         return detail, 400
 
-    @app.before_request
-    def _validate_csrf_token():
-        """Enhanced CSRF protection for all POST requests."""
-        if request.method in ['POST', 'PUT', 'DELETE', 'PATCH']:
-            # Skip CSRF for API endpoints with proper authentication
-            if request.path.startswith('/api/') and request.headers.get('Authorization'):
-                return
-            
-            # Let Flask-WTF handle CSRF validation - it's already configured
-            # This function is just for API token validation above
-            pass
+    # CSRF protection is handled globally by Flask-WTF (csrf.init_app(app)
+    # earlier in this factory). API endpoints that authenticate via the
+    # Authorization header are exempted at the route level using
+    # csrf.exempt() rather than via a before_request hook, so reviewers
+    # can see the exemption next to the route definition.
 
     public_endpoints = {
         "views.landing_page",

@@ -36,6 +36,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Migration `0025_increase_commander_oracle_id_length` now uses `batch_alter_table` so it applies cleanly on SQLite.
 - `html { scrollbar-gutter: stable }` is now set globally so navigating between pages of different lengths no longer shifts content horizontally when the scrollbar appears or disappears. `body.modal-open` keeps `padding-right: 0` so Bootstrap modals don't double-compensate.
 - **Opening Hand counters** now track both `+1/+1` (green) and `−1/−1` (red) counters per card, render simultaneously, and stay visible on any board zone whenever a counter has been placed. Context menu adds entries for both kinds.
+- **Repository hygiene**: removed the entire `backend/routes/`, `backend/utils/`, and `backend/viewmodels/` legacy shim directories along with all of `backend/services/*.py` (kept `services/refresh_scheduler.py` as the docker-compose entry point). All re-exported their canonical modules under `core.*`/`shared.*` and had no remaining imports. Eight historical "completion summary" markdowns moved from the repo root into `docs/history/` with a small index. Removed the duplicate `Config = _select_config()` call and the dead `_validate_csrf_token` before-request hook in `app.py`.
 
 ### Fixed
 - Migration `0014_remove_build_a_deck` imported `sa` from its docstring but never into scope, raising `NameError` on fresh installs. Fixed by importing `sqlalchemy as sa` explicitly.

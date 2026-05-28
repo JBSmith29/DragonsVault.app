@@ -53,9 +53,6 @@ def _select_config():
 
 Config = _select_config()
 
-
-Config = _select_config()
-
 __all__ = [
     "BaseConfig",
     "DevelopmentConfig",
