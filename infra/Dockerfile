@@ -33,6 +33,17 @@ ENV FLASK_APP=app:create_app \
     INSTANCE_DIR=/app/instance \
     PYTHONPATH=/app/backend
 
+# Run as a non-root user. uid/gid 1000 matches the host owner used by the dev
+# bind mount; in production (named volumes / no bind mount) the chowned dirs
+# below are used. NOTE: for the local bind-mounted dev stack, the root-owned
+# host instance/ and data/ dirs must be chowned to 1000:1000 before rebuilding
+# (sudo chown -R 1000:1000 instance data var).
+RUN groupadd -g 1000 appuser \
+    && useradd -u 1000 -g 1000 -m -s /usr/sbin/nologin appuser \
+    && mkdir -p /app/instance /app/data /app/var \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 5000
 
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "90", "app:create_app()"]
