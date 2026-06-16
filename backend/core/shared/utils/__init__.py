@@ -5,7 +5,6 @@ from . import error_handling
 from . import performance
 from . import rate_limiting
 from . import rules_cache
-from . import security_headers
 from . import symbols_cache
 from . import time
 
@@ -15,7 +14,6 @@ __all__ = [
     "performance",
     "rate_limiting",
     "rules_cache",
-    "security_headers",
     "symbols_cache",
     "time",
 ]
