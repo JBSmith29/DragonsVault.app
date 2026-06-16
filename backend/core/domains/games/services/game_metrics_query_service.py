@@ -10,9 +10,90 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import GameDeck, GamePlayer, GameSeat, GameSeatAssignment, GameSession
+from shared.cache.request_cache import request_cached
 
 from . import game_metrics_support_service as support
 from . import game_session_shared_service as session_shared
+
+
+def _scope_signature(scope: dict[str, Any] | None) -> str:
+    """Stable string signature of a metrics scope for request-cache keys."""
+    if not scope:
+        return "none"
+    try:
+        return repr(sorted((str(k), str(v)) for k, v in scope.items()))
+    except Exception:  # pragma: no cover - defensive
+        return repr(scope)
+
+
+def _iso(value: datetime | None) -> str:
+    return value.isoformat() if value else "none"
+
+
+def _distinct_player_rows(
+    user_id: int,
+    start_at: datetime | None,
+    end_at: datetime | None,
+    scope: dict[str, Any] | None,
+):
+    """Distinct (user_id, display_name) rows for the scope, cached per request.
+
+    Both the metrics payload (for the unique-player count) and the player
+    filter options issue this identical query; the request cache collapses them
+    into one execution when the scope matches.
+    """
+    key = ("gm:distinct_players", user_id, _iso(start_at), _iso(end_at), _scope_signature(scope))
+
+    def _compute():
+        filters = support._session_filters(user_id, start_at, end_at, scope=scope)
+        return (
+            db.session.query(
+                GamePlayer.user_id.label("user_id"),
+                GamePlayer.display_name.label("display_name"),
+            )
+            .join(GameSeatAssignment, GameSeatAssignment.player_id == GamePlayer.id)
+            .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
+            .join(GameSession, GameSession.id == GameSeat.session_id)
+            .filter(*filters)
+            .distinct()
+            .all()
+        )
+
+    return request_cached(key, _compute)
+
+
+def _top_deck_rows(
+    user_id: int,
+    start_at: datetime | None,
+    end_at: datetime | None,
+    limit: int,
+    scope: dict[str, Any] | None,
+):
+    """Top decks by plays (deck_name, plays) for the scope, cached per request.
+
+    Shared by the metrics payload and the unfiltered deck-usage list, which
+    otherwise issue the same query.
+    """
+    key = ("gm:top_decks", user_id, _iso(start_at), _iso(end_at), int(limit or 0), _scope_signature(scope))
+
+    def _compute():
+        filters = support._session_filters(user_id, start_at, end_at, scope=scope)
+        return (
+            db.session.query(
+                GameDeck.deck_name,
+                func.count(GameSeatAssignment.id).label("plays"),
+            )
+            .join(GameSeatAssignment, GameSeatAssignment.deck_id == GameDeck.id)
+            .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
+            .join(GameSession, GameSession.id == GameSeat.session_id)
+            .filter(*filters)
+            .group_by(GameDeck.deck_name)
+            .order_by(func.count(GameSeatAssignment.id).desc(), GameDeck.deck_name.asc())
+            .limit(limit)
+            .all()
+        )
+
+    return request_cached(key, _compute)
 
 __all__ = [
     "METRICS_GAMES_LIMIT",
@@ -55,18 +136,7 @@ def _metrics_payload(
     seat_counts = support._seat_counts_subquery(filters)
     avg_players = db.session.query(func.avg(seat_counts.c.seat_count)).scalar()
 
-    player_rows = (
-        db.session.query(
-            GamePlayer.user_id.label("user_id"),
-            GamePlayer.display_name.label("display_name"),
-        )
-        .join(GameSeatAssignment, GameSeatAssignment.player_id == GamePlayer.id)
-        .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
-        .join(GameSession, GameSession.id == GameSeat.session_id)
-        .filter(*filters)
-        .distinct()
-        .all()
-    )
+    player_rows = _distinct_player_rows(user_id, start_at, end_at, scope)
     unique_keys = {
         support._canonical_player_identity(row.user_id, row.display_name, scope)[0]
         for row in player_rows
@@ -98,20 +168,7 @@ def _metrics_payload(
             key=lambda item: (-item["count"], (item["label"] or "").lower()),
         )[:5]
 
-    top_decks = (
-        db.session.query(
-            GameDeck.deck_name,
-            func.count(GameSeatAssignment.id).label("plays"),
-        )
-        .join(GameSeatAssignment, GameSeatAssignment.deck_id == GameDeck.id)
-        .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
-        .join(GameSession, GameSession.id == GameSeat.session_id)
-        .filter(*filters)
-        .group_by(GameDeck.deck_name)
-        .order_by(func.count(GameSeatAssignment.id).desc(), GameDeck.deck_name.asc())
-        .limit(5)
-        .all()
-    )
+    top_decks = _top_deck_rows(user_id, start_at, end_at, 5, scope)
 
     top_commanders = (
         db.session.query(
@@ -256,26 +313,28 @@ def _deck_usage(
     player_key: str | None = None,
     scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    filters = support._session_filters(user_id, start_at, end_at, scope=scope)
-    query = (
-        db.session.query(
-            GameDeck.deck_name,
-            func.count(GameSeatAssignment.id).label("plays"),
-        )
-        .join(GameSeatAssignment, GameSeatAssignment.deck_id == GameDeck.id)
-        .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
-        .join(GameSession, GameSession.id == GameSeat.session_id)
-    )
     player_filter = support._player_key_filter(player_key, scope=scope)
-    if player_filter is not None:
-        query = query.join(GamePlayer, GamePlayer.id == GameSeatAssignment.player_id).filter(player_filter)
-    rows = (
-        query.filter(*filters)
-        .group_by(GameDeck.deck_name)
-        .order_by(func.count(GameSeatAssignment.id).desc(), GameDeck.deck_name.asc())
-        .limit(limit)
-        .all()
-    )
+    if player_filter is None:
+        # Identical to the metrics-payload top decks query; share the request cache.
+        rows = _top_deck_rows(user_id, start_at, end_at, limit, scope)
+    else:
+        filters = support._session_filters(user_id, start_at, end_at, scope=scope)
+        rows = (
+            db.session.query(
+                GameDeck.deck_name,
+                func.count(GameSeatAssignment.id).label("plays"),
+            )
+            .join(GameSeatAssignment, GameSeatAssignment.deck_id == GameDeck.id)
+            .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
+            .join(GameSession, GameSession.id == GameSeat.session_id)
+            .join(GamePlayer, GamePlayer.id == GameSeatAssignment.player_id)
+            .filter(player_filter)
+            .filter(*filters)
+            .group_by(GameDeck.deck_name)
+            .order_by(func.count(GameSeatAssignment.id).desc(), GameDeck.deck_name.asc())
+            .limit(limit)
+            .all()
+        )
     return [{"label": row.deck_name or "Unknown deck", "count": int(row.plays or 0)} for row in rows]
 
 
@@ -462,19 +521,7 @@ def _player_options(
     end_at: datetime | None = None,
     scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    filters = support._session_filters(user_id, start_at, end_at, scope=scope)
-    rows = (
-        db.session.query(
-            GamePlayer.user_id.label("user_id"),
-            GamePlayer.display_name.label("display_name"),
-        )
-        .join(GameSeatAssignment, GameSeatAssignment.player_id == GamePlayer.id)
-        .join(GameSeat, GameSeat.id == GameSeatAssignment.seat_id)
-        .join(GameSession, GameSession.id == GameSeat.session_id)
-        .filter(*filters)
-        .distinct()
-        .all()
-    )
+    rows = _distinct_player_rows(user_id, start_at, end_at, scope)
     options_map: dict[str, dict[str, Any]] = {}
     for row in rows:
         key, label = support._canonical_player_identity(row.user_id, row.display_name, scope)
