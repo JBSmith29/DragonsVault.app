@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 def clear_cached_catalog() -> None:
     """Clear cached print/token indexes after the underlying file changes."""
     get_all_prints.cache_clear()
+    _print_index_by_id.cache_clear()
     find_print_by_id.cache_clear()
     _token_name_index.cache_clear()
 
@@ -65,16 +66,29 @@ def get_all_prints(default_path: str) -> List[Dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
+@lru_cache(maxsize=8)
+def _print_index_by_id(default_path: str) -> Dict[str, Dict[str, Any]]:
+    """Build a one-time id->print index for the catalog.
+
+    Previously ``find_print_by_id`` linearly scanned the entire prints list on
+    every distinct id (O(cards * catalog_size) per deck render — ~30s on a
+    4k-card folder). Indexing once turns each lookup into an O(1) dict access.
+    Cached per catalog path like ``get_all_prints``; the first occurrence of an
+    id wins, matching the old "return first match" behavior.
+    """
+    index: Dict[str, Dict[str, Any]] = {}
+    for print_obj in get_all_prints(default_path):
+        print_id = (print_obj.get("id") or "").lower()
+        if print_id and print_id not in index:
+            index[print_id] = print_obj
+    return index
+
+
 @lru_cache(maxsize=32768)
 def find_print_by_id(default_path: str, sid: str):
     if not sid:
         return None
-    lookup_id = str(sid).lower()
-    for print_obj in get_all_prints(default_path):
-        print_id = (print_obj.get("id") or "").lower()
-        if print_id == lookup_id:
-            return print_obj
-    return None
+    return _print_index_by_id(default_path).get(str(sid).lower())
 
 
 def search_prints(
