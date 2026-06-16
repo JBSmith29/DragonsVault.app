@@ -2,11 +2,19 @@
 
 This module provides basic observability features without requiring
 external dependencies like Prometheus or OpenTelemetry initially.
+
+NOTE: metrics live in process memory, so under gunicorn each worker keeps its
+own counters and ``/observability/metrics`` reflects only the worker that
+served the scrape. Responses are labelled ``scope: per-worker`` with the worker
+PID to make this explicit. For fleet-wide aggregation use a multiprocess-aware
+collector (e.g. prometheus_client multiprocess mode) rather than backing this
+hot path with a per-request Redis write.
 """
 
 from __future__ import annotations
 
 import functools
+import os
 import time
 from collections import defaultdict
 from typing import Any, Callable, Optional, TypeVar
@@ -16,7 +24,8 @@ from flask import Blueprint, Flask, current_app, g, jsonify, request
 F = TypeVar('F', bound=Callable[..., Any])
 
 
-# In-memory metrics storage (replace with Prometheus/StatsD in production)
+# In-memory metrics storage, per worker process (see module docstring).
+# Replace with a Prometheus/StatsD multiprocess collector for cross-worker totals.
 _metrics: dict[str, dict[str, Any]] = defaultdict(lambda: {
     "count": 0,
     "total_time": 0.0,
@@ -130,8 +139,19 @@ def create_observability_blueprint() -> Blueprint:
     
     @obs_bp.route("/metrics")
     def metrics():
-        """Return application metrics in JSON format."""
-        return jsonify(get_metrics())
+        """Return application metrics in JSON format.
+
+        Metrics are collected in process memory, so each gunicorn worker reports
+        only the requests it handled. The response is labelled with the worker
+        PID and a ``scope`` of ``per-worker`` so consumers do not mistake a
+        single scrape for fleet-wide totals. Use a multiprocess collector
+        (e.g. prometheus_client multiprocess mode) for true aggregation.
+        """
+        return jsonify({
+            "scope": "per-worker",
+            "worker_pid": os.getpid(),
+            "metrics": get_metrics(),
+        })
     
     @obs_bp.route("/stats")
     def stats():
@@ -159,6 +179,8 @@ def create_observability_blueprint() -> Blueprint:
         metrics = get_metrics()
         
         return jsonify({
+            "scope": "per-worker",
+            "worker_pid": os.getpid(),
             "database": {
                 "pool": pool_stats,
             },
