@@ -51,10 +51,12 @@ htmlcov/
 # Runtime caches
 data/archidekt/
 data/
+var/
 
 # Test artifacts
 .pytest-instance/
 .pytest-instance-pg/
+.tmp-auth-review-instance/
 
 # Windows ADS metadata created when downloading assets on Windows
 *:Zone.Identifier
