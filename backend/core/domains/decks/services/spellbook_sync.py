@@ -75,10 +75,15 @@ def _get_spellbook_session() -> Session:
     session = getattr(_thread_local, "session", None)
     if session is None:
         retry = Retry(
-            total=4,
-            backoff_factor=1.5,
+            total=6,
+            backoff_factor=2.0,
+            backoff_max=120,
             status_forcelist=_RETRY_STATUS,
             allowed_methods=frozenset({"GET"}),
+            # Commander Spellbook throttles aggressively (HTTP 429). Honour the
+            # server's Retry-After hint instead of failing fast, and keep
+            # retrying long enough for the rate-limit window to clear.
+            respect_retry_after_header=True,
         )
         adapter = HTTPAdapter(max_retries=retry)
         session = requests.Session()

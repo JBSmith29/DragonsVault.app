@@ -68,7 +68,19 @@ def compute_bracket_signature(
             }
         )
 
-    normalized_cards.sort(key=lambda item: (item["name"], item["mana_cost"], item["type"], item["mana_value"], item["quantity"]))
+    # Use string coercion for mana_value in the sort key: stored values may be
+    # float (numeric) or str (missing/non-numeric), and a mixed-type tuple
+    # comparison raises TypeError when earlier fields tie. The key only governs
+    # ordering, so a type-stable string is sufficient and keeps the sort total.
+    normalized_cards.sort(
+        key=lambda item: (
+            item["name"],
+            item["mana_cost"],
+            item["type"],
+            str(item["mana_value"]),
+            item["quantity"],
+        )
+    )
 
     commander_payload = {
         "oid": (commander or {}).get("oracle_id"),
