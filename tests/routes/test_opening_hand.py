@@ -73,7 +73,12 @@ def test_opening_hand_state_tamper_and_cross_user(client, create_user, app):
     state_token = payload.get("state")
     assert state_token
 
-    tampered = state_token[:-1] + ("A" if state_token[-1] != "A" else "B")
+    # Corrupt the first character of the signature segment (after the final
+    # ".") so the HMAC never matches. Flipping the *last* token character was
+    # flaky: base64url's trailing "don't-care" bits sometimes decode unchanged.
+    head, _, signature = state_token.rpartition(".")
+    tampered_sig = ("A" if signature[0] != "A" else "B") + signature[1:]
+    tampered = f"{head}.{tampered_sig}"
     bad_resp = client.post("/opening-hand/draw", json={"state": tampered})
     assert bad_resp.status_code == 400
     bad_payload = bad_resp.get_json() or {}
