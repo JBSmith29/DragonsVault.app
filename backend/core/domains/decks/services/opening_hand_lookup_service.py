@@ -29,6 +29,7 @@ from core.domains.decks.services.opening_hand_payload_service import (
 )
 from core.domains.decks.viewmodels.opening_hand_vm import OpeningHandCardVM
 from core.shared.utils.assets import static_url
+from shared.html_safety import safe_json_dumps
 from shared.mtg import (
     _card_type_flags,
     _lookup_print_data,
@@ -266,8 +267,8 @@ def _opening_hand_lookups(deck_refs: Iterable[str]) -> tuple[str, str]:
         deck_card_lookup.setdefault(deck_key, [])
         deck_token_lookup.setdefault(deck_key, [])
     return (
-        json.dumps(deck_card_lookup, ensure_ascii=True),
-        json.dumps(deck_token_lookup, ensure_ascii=True),
+        safe_json_dumps(deck_card_lookup),
+        safe_json_dumps(deck_token_lookup),
     )
 
 

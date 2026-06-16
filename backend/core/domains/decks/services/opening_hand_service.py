@@ -30,6 +30,7 @@ from core.domains.decks.services.opening_hand_payload_service import (
 from core.domains.decks.services import opening_hand_state_service as state_service
 from core.shared.utils.assets import static_url
 from shared.cache.runtime_cache import cache_fetch as _cache_fetch
+from shared.html_safety import safe_json_dumps
 from shared.validation import ValidationError, log_validation_error
 
 HAND_SIZE = gameplay_service.HAND_SIZE
@@ -89,7 +90,7 @@ def opening_hand_play():
     selected_deck_name = ""
     commander_cards: list[dict] = []
     deck_refs: list[str] = []
-    custom_token_entries_json = json.dumps([], ensure_ascii=True)
+    custom_token_entries_json = safe_json_dumps([])
 
     if deck_id_raw:
         try:
@@ -136,16 +137,15 @@ def opening_hand_play():
                     token_seen.add(token_key)
                     token_payloads.append(_token_payload(token, placeholder))
             token_payloads.sort(key=lambda item: (item.get("name") or "").lower())
-            custom_token_entries_json = json.dumps(token_payloads, ensure_ascii=True)
+            custom_token_entries_json = safe_json_dumps(token_payloads)
     else:
         flash("Select a deck or paste a deck list to continue.", "warning")
         return redirect(url_for("views.opening_hand"))
 
     deck_card_lookup_json, deck_token_lookup_json = _opening_hand_lookups(deck_refs)
     placeholder = static_url("img/card-placeholder.svg")
-    selected_commander_cards_json = json.dumps(
+    selected_commander_cards_json = safe_json_dumps(
         [_client_card_payload(card, placeholder) for card in commander_cards],
-        ensure_ascii=True,
     )
     return render_template(
         "decks/opening_hand.html",

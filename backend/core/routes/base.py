@@ -90,6 +90,15 @@ def jinja_ci_name(ci):
     return color_identity_name(ci)
 
 
+@views.app_template_filter("nl2br")
+def jinja_nl2br(value):
+    """Escape text and convert newlines to <br> (safe replacement for the
+    ``| replace('\\n', '<br>') | safe`` pattern, which left text unescaped)."""
+    from shared.html_safety import nl2br
+
+    return nl2br(value)
+
+
 __all__ = [
     "ALLOWED_WISHLIST_STATUSES",
     "API_PAGE_SIZE",
@@ -237,15 +246,15 @@ def about_page():
 
 @views.route("/rules/magic")
 def magic_rules():
-    import json
     from core.shared.utils.rules_cache import magic_rules_metadata, magic_rules_workbook
+    from shared.html_safety import safe_json_dumps
 
     meta = magic_rules_metadata()
     workbook = magic_rules_workbook()
     return render_template(
         "site/magic_rules.html",
         rules_meta=meta,
-        rules_workbook_json=json.dumps(workbook),
+        rules_workbook_json=safe_json_dumps(workbook),
         rules_workbook=workbook,
     )
 

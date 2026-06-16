@@ -409,9 +409,9 @@
                             <div class="mana-cost-icons">{{ combo.mana_icons_html|safe }}</div>
                           {% endif %}
                           {% if combo.mana_note %}
-                            <div class="mana-cost-note small text-muted">{{ combo.mana_note | replace('\n', '<br>') | safe }}</div>
+                            <div class="mana-cost-note small text-muted">{{ combo.mana_note | nl2br }}</div>
                           {% elif combo.mana_icons_html is none and combo.mana_needed %}
-                            <div class="mana-cost-note small text-muted">{{ combo.mana_needed | replace('\n', '<br>') | safe }}</div>
+                            <div class="mana-cost-note small text-muted">{{ combo.mana_needed | nl2br }}</div>
                           {% endif %}
                         </div>
                       {% else %}

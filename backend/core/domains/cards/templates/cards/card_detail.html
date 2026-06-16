@@ -239,7 +239,7 @@
         {% for r in rulings %}
           <div class="border-start ps-2 mb-2 ruling-row">
             <div class="small text-muted">{{ r.published_at }}</div>
-            <div>{{ (r.comment or '') | replace('\n','<br>') | safe }}</div>
+            <div>{{ r.comment | nl2br }}</div>
           </div>
         {% endfor %}
       {% else %}

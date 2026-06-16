@@ -21,6 +21,7 @@ from core.shared.utils.symbols_cache import colors_to_icons, ensure_symbols_cach
 from shared.auth import ensure_folder_access
 from shared.cache.request_cache import request_cached
 from shared.database import get_or_404
+from shared.html_safety import safe_json_dumps
 from shared.mtg import (
     _collection_metadata,
     _color_letters_list,
@@ -480,7 +481,7 @@ def card_detail(card_id):
         else:
             commander_class = "bg-secondary"
 
-    prices_json = json.dumps(prices or {}, ensure_ascii=True)
+    prices_json = safe_json_dumps(prices or {})
     info_vm = CardInfoVM(
         name=info.get("name"),
         mana_cost_html=info.get("mana_cost_html"),
@@ -591,7 +592,7 @@ def card_detail(card_id):
         card=card_vm,
         info=info_vm,
         images=image_vms,
-        print_images_json=json.dumps(print_images, ensure_ascii=True),
+        print_images_json=safe_json_dumps(print_images),
         rulings=rulings,
         color_pips=pip_srcs,
         tokens_created=token_vms,

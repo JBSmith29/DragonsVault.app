@@ -29,6 +29,7 @@ from core.domains.cards.services.scryfall_shared_service import (
 )
 from core.shared.utils.symbols_cache import colors_to_icons, ensure_symbols_cache, render_mana_html, render_oracle_html
 from shared.cache.request_cache import request_cached
+from shared.html_safety import safe_json_dumps
 from shared.mtg import _collection_metadata
 
 
@@ -324,7 +325,7 @@ def scryfall_print_detail(sid):
         else:
             commander_class = "bg-secondary"
 
-    prices_json = json.dumps(prices or {}, ensure_ascii=True)
+    prices_json = safe_json_dumps(prices or {})
     has_oracle_text = bool(raw_text)
     has_mana_cost = bool(mana_cost_html)
 
@@ -425,7 +426,7 @@ def scryfall_print_detail(sid):
                     "label": label,
                 }
             )
-    print_images_json = json.dumps(print_images, ensure_ascii=True)
+    print_images_json = safe_json_dumps(print_images)
 
     return render_template(
         "cards/card_detail.html",
