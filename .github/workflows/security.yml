@@ -9,6 +9,11 @@ on:
     # Run weekly on Mondays at 9 AM UTC
     - cron: '0 9 * * 1'
 
+# Allow Trivy SARIF results to be uploaded to the Security tab.
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   pip-audit:
     name: Python Dependency Audit
@@ -87,7 +92,7 @@ jobs:
           cache-to: type=gha,mode=max
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: dragonsvault-web:test
           format: 'sarif'

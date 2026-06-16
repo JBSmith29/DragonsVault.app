@@ -9,6 +9,11 @@ on:
     # Run weekly on Monday at 9am UTC
     - cron: '0 9 * * 1'
 
+# Allow Trivy SARIF results to be uploaded to the Security tab.
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   python-security:
     runs-on: ubuntu-latest
@@ -87,7 +92,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.28.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
