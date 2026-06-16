@@ -142,15 +142,22 @@ def oracle_price_lookup(oracle_id: str | None) -> Dict[str, Any]:
 
 
 def prices_for_print(pr: Dict[str, Any] | None) -> Dict[str, Any]:
-    """Return the most useful price payload for a print, falling back to oracle data."""
+    """Return the most useful price payload for a print, falling back to oracle data.
+
+    Prefers the prices already embedded in the Scryfall catalog print. This
+    avoids a per-card HTTP round-trip to the price-service, which was an N+1 that
+    made large deck/collection pages take 10s+ (one synchronous request per card,
+    re-run on every render). The price-service is consulted only when the print
+    carries no usable embedded price, then an oracle-wide scan as a last resort.
+    """
     if not pr:
         return {}
-    service_prices = _price_service_prices_for_print(pr)
-    if price_has_value(service_prices):
-        return service_prices
     prices = pr.get("prices") or {}
     if price_has_value(prices):
         return prices
+    service_prices = _price_service_prices_for_print(pr)
+    if price_has_value(service_prices):
+        return service_prices
     return oracle_price_lookup(pr.get("oracle_id"))
 
 
