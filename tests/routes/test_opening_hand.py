@@ -256,6 +256,11 @@ def test_opening_hand_play_page_includes_automation_ui(client, create_user, app)
     for moved_id in ("handDeckName", "turnCounter", "handSizeBadge", "handRemaining"):
         assert body.index(f'id="{moved_id}"') < command_idx
 
+    # The life tracker host is centred in the action bar, between the
+    # "Select New Deck" button and the "Scry / Surveil" button.
+    assert 'id="actionLifeHost"' in body
+    assert body.index('id="newDeckBtn"') < body.index('id="actionLifeHost"') < body.index('id="scryBtn"')
+
 
 def test_opening_hand_token_search_sets_zone_hints(client, create_user, monkeypatch):
     from core.domains.decks.services import opening_hand_service

@@ -720,12 +720,20 @@
     gap: 0.65rem;
     flex-wrap: wrap;
   }
-  .opening-hand-actions .action-group-right {
-    margin-left: auto;
-    justify-content: flex-end;
-  }
   .opening-hand-actions .action-group-left {
+    flex: 1 1 0;
     justify-content: flex-start;
+  }
+  .opening-hand-actions .action-group-center {
+    flex: 0 0 auto;
+    justify-content: center;
+  }
+  .opening-hand-actions .action-group-center:empty {
+    display: none;
+  }
+  .opening-hand-actions .action-group-right {
+    flex: 1 1 0;
+    justify-content: flex-end;
   }
   @media (max-width: 992px) {
     .opening-hand-actions {
@@ -1071,7 +1079,6 @@
             <span class="badge text-bg-secondary" id="handSizeBadge" hidden></span>
             <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
           </div>
-          {# Life tracker is injected here by opening-hand-life-counters.js #}
         </div>
         <section class="board-zone board-zone-command" data-board-zone="command">
           <div class="board-zone-header">Command Zone</div>
@@ -1173,6 +1180,9 @@
         <button class="btn btn-outline-warning" type="button" id="newDeckBtn">
           Select New Deck
         </button>
+      </div>
+      <div class="action-group action-group-center" id="actionLifeHost">
+        {# Life tracker is injected here by opening-hand-life-counters.js #}
       </div>
       <div class="action-group action-group-right">
         <button class="btn btn-outline-info" type="button" id="scryBtn" data-bs-toggle="modal" data-bs-target="#scryModal" disabled>
@@ -6670,7 +6680,7 @@
 {% block page_scripts %}
   <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260528-2" defer></script>
   <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260528-2" defer></script>
-  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260617-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260617-2" defer></script>
   <script src="{{ static_url('js/opening-hand-automation.js') }}?v=20260617-2" defer></script>
 {% endblock %}
 
