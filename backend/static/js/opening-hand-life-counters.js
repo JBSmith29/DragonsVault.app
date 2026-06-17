@@ -98,10 +98,7 @@
     wrap.setAttribute("aria-label", "Life total");
     wrap.innerHTML = `
       <button type="button" class="life-btn life-minus" data-life-delta="-1" aria-label="Decrease life" title="Subtract 1 (right-click: −5)">−</button>
-      <div class="life-core">
-        <i class="bi bi-heart-fill life-heart" aria-hidden="true"></i>
-        <span class="life-display" id="lifeDisplay" title="Click to set life total">${lifeTotal}</span>
-      </div>
+      <span class="life-display" id="lifeDisplay" title="Click to set life total">${lifeTotal}</span>
       <button type="button" class="life-btn life-plus" data-life-delta="1" aria-label="Increase life" title="Add 1 (right-click: +5)">+</button>
       <button type="button" class="life-btn life-pod" id="lifePodBtn" aria-label="Manage opponents (commander damage)" title="Multiplayer pod &amp; commander damage">
         <i class="bi bi-people-fill" aria-hidden="true"></i>
@@ -601,35 +598,22 @@
   // =================================================================
   const style = document.createElement("style");
   style.textContent = `
-    /* Modern life stepper — a glassy rounded pill centred in the action bar. */
+    /* Big "− 40 +" life counter, transparent so it blends into the action bar. */
     .life-tracker {
       display: inline-flex;
       align-items: center;
-      gap: 0.25rem;
-      padding: 0.25rem;
-      border-radius: 999px;
-      background: linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      flex-wrap: nowrap;
+      gap: 0.35rem;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
       line-height: 1;
     }
-    .life-tracker .life-core {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0 0.55rem;
-    }
-    .life-tracker .life-heart {
-      color: #f87171;
-      font-size: 1.1rem;
-      display: inline-flex;
-      align-items: center;
-      filter: drop-shadow(0 1px 2px rgba(248, 113, 113, 0.4));
-    }
     .life-tracker .life-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(148, 163, 184, 0.28);
-      color: #e2e8f0;
+      background: transparent;
+      border: 0;
+      color: #94a3b8;
       font-weight: 700;
       width: 2rem;
       height: 2rem;
@@ -640,33 +624,28 @@
       cursor: pointer;
       padding: 0;
       line-height: 1;
-      font-size: 1.15rem;
-      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+      font-size: 1.9rem;
+      transition: color 0.15s ease, transform 0.1s ease;
     }
-    .life-tracker .life-btn:hover {
-      background: rgba(255, 255, 255, 0.16);
-      border-color: rgba(148, 163, 184, 0.6);
-    }
-    .life-tracker .life-btn:active {
-      transform: scale(0.92);
-    }
-    .life-tracker .life-minus:hover { color: #fca5a5; border-color: rgba(248, 113, 113, 0.6); }
-    .life-tracker .life-plus:hover { color: #86efac; border-color: rgba(134, 239, 172, 0.6); }
+    .life-tracker .life-minus:hover { color: #f87171; }
+    .life-tracker .life-plus:hover { color: #4ade80; }
+    .life-tracker .life-btn:active { transform: scale(0.88); }
     .life-tracker .life-btn:focus-visible {
       outline: 2px solid rgba(96, 165, 250, 0.7);
       outline-offset: 1px;
+      border-radius: 0.4rem;
     }
     .life-tracker .life-display {
-      min-width: 2.1rem;
+      min-width: 2ch;
       text-align: center;
       font-weight: 800;
       cursor: pointer;
       padding: 0 0.1rem;
-      border-radius: 0.4rem;
-      font-size: 1.5rem;
+      font-size: 2.4rem;
       color: #f8fafc;
       font-variant-numeric: tabular-nums;
-      letter-spacing: 0.01em;
+      letter-spacing: -0.01em;
+      line-height: 1;
       transition: color 0.15s ease;
     }
     .life-tracker .life-display:hover {
@@ -681,9 +660,14 @@
     }
     .life-tracker .life-pod {
       position: relative;
-      margin-left: 0.05rem;
-      font-size: 0.9rem;
+      margin-left: 0.4rem;
+      width: 1.7rem;
+      height: 1.7rem;
+      font-size: 0.95rem;
+      color: #64748b;
+      align-self: center;
     }
+    .life-tracker .life-pod:hover { color: #cbd5e1; }
     .life-tracker .life-pod-badge {
       position: absolute;
       top: -3px;
