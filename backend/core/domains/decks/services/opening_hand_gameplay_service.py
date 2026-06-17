@@ -169,8 +169,13 @@ def search_state(
 
     deck = list(deck)
     selected = deck.pop(selected_index)
+    # Tutoring shuffles the library. ``deck[index:]`` is a *copy*, so shuffling
+    # it in place leaves the real deck untouched; shuffle a slice and assign it
+    # back so the post-tutor library order is actually randomized.
     if index < len(deck):
-        random.shuffle(deck[index:])
+        tail = deck[index:]
+        random.shuffle(tail)
+        deck[index:] = tail
     return {
         "state": {
             **state,

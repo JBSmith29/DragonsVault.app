@@ -65,7 +65,42 @@ def test_search_state_lists_and_takes_matching_cards():
     )
     assert taken["card"]["uid"] == "land-2"
     assert taken["remaining"] == 2
-    assert [card["uid"] for card in taken["state"]["deck"]] == ["land-1", "spell-1"]
+    # The tutored card is removed; remaining library order is now randomized, so
+    # assert membership rather than a fixed order.
+    assert {card["uid"] for card in taken["state"]["deck"]} == {"land-1", "spell-1"}
+
+
+def test_search_state_take_shuffles_the_library(monkeypatch):
+    """Tutoring a card must shuffle the remaining library (a regression guard
+    against shuffling a throwaway slice copy)."""
+    state = {
+        "deck": [
+            {"uid": "fetch", "name": "Forest", "type_line": "Basic Land - Forest"},
+            *[{"uid": f"top-{idx}", "name": "Spell", "type_line": "Sorcery"} for idx in range(6)],
+        ],
+        "index": 0,
+        "deck_name": "Deck",
+        "user_id": 1,
+    }
+    # Deterministic "shuffle" that reverses, so the effect is observable.
+    monkeypatch.setattr(gameplay_service.random, "shuffle", lambda lst: lst.reverse())
+
+    taken = gameplay_service.search_state(
+        state,
+        action="take",
+        criteria={"kind": "basic_land"},
+        pick_uid="fetch",
+    )
+
+    # After removing the fetched land, the six remaining spells are reversed.
+    assert [card["uid"] for card in taken["state"]["deck"]] == [
+        "top-5",
+        "top-4",
+        "top-3",
+        "top-2",
+        "top-1",
+        "top-0",
+    ]
 
 
 def test_reorder_state_moves_surveilled_cards_to_graveyard():
