@@ -457,25 +457,42 @@
     const isOnBoard = cardEl.dataset.source === "board";
     const { plus, minus } = getCounters(uid);
 
-    // Always show counters that have been put on a card while it is on
-    // the board (any zone). Hand / library views never show counters —
-    // counters only exist for permanents.
-    const showPlus = isOnBoard && plus > 0;
-    const showMinus = isOnBoard && minus > 0;
+    // Creatures in play always show both counter controls (a dimmed ＋ / －
+    // you can click to add the first counter); any permanent that already has
+    // a counter shows its running total. Hand / library / graveyard / command
+    // never show counter controls.
+    const card = isOnBoard ? findCardByUid(uid) : null;
+    const zone = card ? card.boardZone : null;
+    const inPlay = isOnBoard && zone !== "graveyard" && zone !== "command";
+    const isCreature = !!(card && card.is_creature && inPlay);
+
+    const showPlus = isOnBoard && (plus > 0 || isCreature);
+    const showMinus = isOnBoard && (minus > 0 || isCreature);
 
     let plusBadge = cardEl.querySelector(".plus-counter-badge");
     if (!showPlus && plusBadge) plusBadge.remove();
     if (showPlus) {
       plusBadge = ensureBadge(cardEl, "plus");
-      plusBadge.textContent = `+${plus}/+${plus}`;
+      styleCounterBadge(plusBadge, plus, "+");
     }
 
     let minusBadge = cardEl.querySelector(".minus-counter-badge");
     if (!showMinus && minusBadge) minusBadge.remove();
     if (showMinus) {
       minusBadge = ensureBadge(cardEl, "minus");
-      minusBadge.textContent = `−${minus}/−${minus}`;
+      styleCounterBadge(minusBadge, minus, "−");
     }
+  }
+
+  // A zero badge is a small, dimmed ＋ / － add button; a non-zero badge is the
+  // full "+N/+N" pill. min-width / font-size are inline (set in ensureBadge), so
+  // override them inline; opacity + hover come from the .counter-empty class.
+  function styleCounterBadge(badge, value, sign) {
+    const empty = value === 0;
+    badge.textContent = empty ? (sign === "+" ? "＋" : "－") : `${sign}${value}/${sign}${value}`;
+    badge.classList.toggle("counter-empty", empty);
+    badge.style.minWidth = empty ? "1.6rem" : "2.4rem";
+    badge.style.fontSize = empty ? "0.95rem" : "0.7rem";
   }
 
   function findCardByUid(uid) {
@@ -657,6 +674,15 @@
     .life-tracker .life-display.life-dead {
       color: #f87171;
       text-decoration: line-through;
+    }
+    /* Zero-state +1/+1 / −1/−1 add buttons shown on every creature in play. */
+    .plus-counter-badge.counter-empty,
+    .minus-counter-badge.counter-empty {
+      opacity: 0.5;
+    }
+    .plus-counter-badge.counter-empty:hover,
+    .minus-counter-badge.counter-empty:hover {
+      opacity: 1;
     }
     .life-tracker .life-pod {
       position: relative;
