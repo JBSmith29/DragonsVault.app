@@ -306,38 +306,50 @@
   }
 
   // -----------------------------------------------------------------
-  // Auto-tap on manual click (capture phase, before the core handler)
+  // Auto-tap on manual click (capture phase). We own the click: tap mana when
+  // we can, then play the card ourselves so it always reaches the battlefield.
   // -----------------------------------------------------------------
   if (handGrid) {
     handGrid.addEventListener(
       "click",
-      (event) => {
+      async (event) => {
         if (event.button !== 0) return;
         if (!autoTapToggle || !autoTapToggle.checked) return;
         const cardEl = event.target.closest(".hand-card");
         if (!cardEl) return;
+        // Let action/flip buttons on the card do their own thing.
+        if (event.target.closest(".card-action-btn, .card-flip-btn")) return;
         const els = Array.from(handGrid.querySelectorAll(".hand-card"));
         const idx = els.indexOf(cardEl);
         if (idx < 0 || idx >= oh.handCards.length) return;
         const card = oh.handCards[idx];
         if (!card || card.is_land) return; // lands handled by the enhancements module.
 
+        // Take ownership of this click so the core handler doesn't also play it.
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
         const toTap = payCost(parseCost(card.mana_cost), untappedLands());
+        if (toTap && toTap.length) tapLands(toTap);
+
+        // Remove from hand and play to its preferred zone (same path the core
+        // uses), so ETB effects, attach prompts, and zone routing all run.
+        const handIdx = oh.handCards.indexOf(card);
+        if (handIdx >= 0) oh.handCards.splice(handIdx, 1);
+        oh.renderHand();
+        try {
+          await oh.playCardFromHand(card);
+        } catch (_) { /* keep the UI responsive */ }
+
+        const name = card.name || "card";
         if (toTap === null) {
-          // Block the cast: stop the core click handler from playing it.
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          oh.showMessage("Not enough untapped mana to cast " + (card.name || "that spell") + ".", "warning");
-          return;
+          oh.showMessage("Played " + name + " — not enough untapped mana, so no lands were tapped.", "info");
+        } else if (toTap.length) {
+          oh.showMessage("Tapped " + toTap.length + " land" + (toTap.length !== 1 ? "s" : "") + " to cast " + name + ".", "success");
+        } else {
+          oh.showMessage("Played " + name + ".", "success");
         }
-        // Affordable: pay now, then let the core handler play the card normally.
-        tapLands(toTap);
-        const count = toTap.length;
-        const name = card.name || "spell";
-        window.setTimeout(() => {
-          oh.showMessage("Tapped " + count + " land" + (count !== 1 ? "s" : "") + " to cast " + name + ".", "success");
-          scheduleRefresh();
-        }, 30);
+        scheduleRefresh();
       },
       true
     );
