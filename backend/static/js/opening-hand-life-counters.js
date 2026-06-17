@@ -629,11 +629,11 @@
     }
     .life-tracker .life-btn {
       background: transparent;
-      border: 0;
-      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #cbd5e1;
       font-weight: 700;
-      width: 2rem;
-      height: 2rem;
+      width: 2.1rem;
+      height: 2.1rem;
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
@@ -641,12 +641,15 @@
       cursor: pointer;
       padding: 0;
       line-height: 1;
-      font-size: 1.9rem;
-      transition: color 0.15s ease, transform 0.1s ease;
+      font-size: 1.5rem;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
     }
-    .life-tracker .life-minus:hover { color: #f87171; }
-    .life-tracker .life-plus:hover { color: #4ade80; }
-    .life-tracker .life-btn:active { transform: scale(0.88); }
+    .life-tracker .life-btn:hover {
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .life-tracker .life-minus:hover { color: #f87171; border-color: rgba(248, 113, 113, 0.6); }
+    .life-tracker .life-plus:hover { color: #4ade80; border-color: rgba(74, 222, 128, 0.6); }
+    .life-tracker .life-btn:active { transform: scale(0.9); }
     .life-tracker .life-btn:focus-visible {
       outline: 2px solid rgba(96, 165, 250, 0.7);
       outline-offset: 1px;
