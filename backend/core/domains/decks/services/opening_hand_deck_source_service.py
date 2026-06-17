@@ -60,16 +60,37 @@ def _parse_pasted_decklist(raw: str) -> list[tuple[str, int]]:
     return want
 
 
+def _normalize_commander_name(value: Optional[str]) -> str:
+    """Lower-case, collapse whitespace, and fold smart quotes so commander names
+    compare equal regardless of apostrophe style (Praetors' vs Praetors')."""
+    text = (value or "").strip()
+    text = text.replace("’", "'").replace("‘", "'").replace("`", "'")
+    text = re.sub(r"\s+", " ", text)
+    return text.lower()
+
+
+def _commander_name_forms(raw: Optional[str]) -> set[str]:
+    """All normalized forms a commander name might appear as: the full name plus
+    each face/partner fragment, so a double-faced commander whose deck card is
+    stored as "Front // Back" still matches a "Front"-only commander entry (and
+    vice versa). Splits on "//" (faces/partners) and "&" but never on "," — many
+    commander names contain commas (e.g. "Atraxa, Praetors' Voice")."""
+    forms: set[str] = set()
+    if not raw:
+        return forms
+    full = _normalize_commander_name(raw)
+    if full:
+        forms.add(full)
+    for frag in re.split(r"\s*//\s*|\s*&\s*", raw):
+        value = _normalize_commander_name(frag)
+        if value:
+            forms.add(value)
+    return forms
+
+
 def _gather_commander_filters(folder: Folder) -> tuple[set[str], set[str]]:
     oracle_ids = {part for part in split_commander_oracle_ids(folder.commander_oracle_id) if part}
-    names = set()
-    if folder.commander_name:
-        # Split on "//" (partner separator) or "&" but NOT on single "/" or ","
-        # since commas appear in many commander names (e.g., "Atraxa, Praetors' Voice").
-        for frag in re.split(r"\s*//\s*|\s*&\s*", folder.commander_name):
-            value = frag.strip().lower()
-            if value:
-                names.add(value)
+    names = _commander_name_forms(folder.commander_name)
     return oracle_ids, names
 
 
@@ -124,10 +145,9 @@ def _deck_entries_from_folder(folder_id: int) -> tuple[Optional[str], list[dict]
         if qty <= 0:
             continue
         card_name = card.name or ""
-        lower_name = card_name.strip().lower()
         if card.oracle_id and card.oracle_id in commander_oracle_ids:
             continue
-        if lower_name and lower_name in commander_names:
+        if commander_names and _commander_name_forms(card_name) & commander_names:
             continue
 
         pr = _resolve_folder_card_print(card)
@@ -191,7 +211,7 @@ def _parse_opening_hand_deck_ref(raw_value) -> tuple[str, int] | None:
 
 def _build_session_commander_filters(session: BuildSession) -> tuple[set[str], set[str]]:
     oracle_ids = {oid for oid in split_commander_oracle_ids(session.commander_oracle_id) if oid}
-    names = {name.strip().lower() for name in split_commander_names(session.commander_name) if name}
+    names = _commander_name_forms(session.commander_name)
     return oracle_ids, names
 
 
@@ -217,7 +237,7 @@ def _deck_entries_from_build_session(session_id: int) -> tuple[Optional[str], li
         except Exception:
             pr = None
         card_name = (pr or {}).get("name") or "Card"
-        if commander_names and card_name.strip().lower() in commander_names:
+        if commander_names and _commander_name_forms(card_name) & commander_names:
             continue
         imgs = _image_from_print(pr)
         back_imgs = _back_image_from_print(pr)
@@ -261,11 +281,7 @@ def _deck_entries_from_list(
     commander_display_hint = None
     if commander_hint:
         commander_display_hint = commander_hint.strip()
-        commander_names = {
-            value.strip().lower()
-            for value in re.split(r"\s*//\s*|\s*&\s*", commander_hint)
-            if value and value.strip()
-        }
+        commander_names = _commander_name_forms(commander_hint)
 
     for name, qty in parsed:
         try:
@@ -280,7 +296,7 @@ def _deck_entries_from_list(
         except Exception:
             pr = None
         resolved_name = (pr or {}).get("name") or name
-        if commander_names and resolved_name.strip().lower() in commander_names:
+        if commander_names and _commander_name_forms(resolved_name) & commander_names:
             continue
         imgs = _image_from_print(pr)
         back_imgs = _back_image_from_print(pr)
