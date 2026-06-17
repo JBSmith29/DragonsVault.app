@@ -247,6 +247,15 @@ def test_opening_hand_play_page_includes_automation_ui(client, create_user, app)
     assert "opening-hand-automation.js" in body
     assert 'id="autoPlayBtn"' not in body
 
+    # Status HUD (deck name, turn, hand, cards remaining) sits in a panel above
+    # the command zone, ahead of the board command section in the markup.
+    assert 'id="boardStatusPanel"' in body
+    panel_idx = body.index('id="boardStatusPanel"')
+    command_idx = body.index('data-board-zone="command"')
+    assert panel_idx < command_idx
+    for moved_id in ("handDeckName", "turnCounter", "handSizeBadge", "handRemaining"):
+        assert body.index(f'id="{moved_id}"') < command_idx
+
 
 def test_opening_hand_token_search_sets_zone_hints(client, create_user, monkeypatch):
     from core.domains.decks.services import opening_hand_service

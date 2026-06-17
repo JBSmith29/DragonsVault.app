@@ -298,6 +298,31 @@
     gap: 0;
     align-content: start;
   }
+  /* Status HUD above the command zone: deck name, turn, hand, cards remaining, life. */
+  .board-status-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.7rem 0.8rem;
+    margin-bottom: 0.75rem;
+    border-radius: 0.85rem;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+  }
+  .board-status-deck {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    color: #f1f5f9;
+    line-height: 1.2;
+  }
+  .board-status-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .board-status-pills:empty { display: none; }
   .board-zone {
     background: transparent;
     border: none;
@@ -1039,6 +1064,15 @@
         <div id="boardLands" class="board-zone-cards board-zone-strip" data-empty-text="No lands in play yet."></div>
       </section>
       <div class="board-column-command">
+        <div class="board-status-panel" id="boardStatusPanel">
+          <div class="board-status-deck" id="handDeckName">{{ selected_deck_name or 'No deck selected' }}</div>
+          <div class="board-status-pills">
+            <span class="badge text-bg-info" id="turnCounter" hidden></span>
+            <span class="badge text-bg-secondary" id="handSizeBadge" hidden></span>
+            <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
+          </div>
+          {# Life tracker is injected here by opening-hand-life-counters.js #}
+        </div>
         <section class="board-zone board-zone-command" data-board-zone="command">
           <div class="board-zone-header">Command Zone</div>
           <div id="boardCommand" class="board-zone-cards board-zone-strip" data-empty-text="No commanders ready yet."></div>
@@ -1117,11 +1151,7 @@
     <div class="card shadow-sm border-0 opening-hand-hand">
       <div class="card-body">
         <div class="hand-status">
-          <span class="badge text-bg-primary text-uppercase" id="handDeckName">{{ selected_deck_name or 'No deck selected' }}</span>
-          <span class="badge text-bg-secondary" id="handRemaining" hidden></span>
           <span class="badge text-bg-warning text-dark" id="mulliganCount" hidden></span>
-          <span class="badge text-bg-info" id="turnCounter" hidden></span>
-          <span class="badge text-bg-secondary" id="handSizeBadge" hidden></span>
           <span class="badge text-bg-secondary" id="landsPlayedBadge" hidden></span>
           <span class="mana-hud" id="manaHud" hidden title="Untapped mana available from your lands"></span>
         </div>
@@ -6640,7 +6670,7 @@
 {% block page_scripts %}
   <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260528-2" defer></script>
   <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260528-2" defer></script>
-  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260528-2" defer></script>
+  <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260617-1" defer></script>
   <script src="{{ static_url('js/opening-hand-automation.js') }}?v=20260617-2" defer></script>
 {% endblock %}
 
