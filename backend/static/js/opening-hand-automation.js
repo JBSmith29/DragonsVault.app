@@ -56,26 +56,46 @@
 
     if (/any\s+(one\s+)?colou?r|mana of any/.test(text)) colors.add("any");
 
-    // Parse every "add {…}" clause; track the largest run of symbols so that
-    // bounce/ramp lands ("Add {C}{C}") report producing 2 mana.
-    const addRe = /add ((?:\{[^}]+\}|\sand\s|\sor\s|,|\sof\s|\smana\s|\sone\s|\stwo\s|\sthree\s)+)/g;
+    // Produced mana = the largest single option after "add" (options are
+    // separated by "," / "or", so "Add {C}{C}, {C}{W}, or {W}{W}" makes 2, not
+    // 6) and also seeds the colour set with everything it could make.
+    let produced = 0;
     let match;
-    let maxRun = 0;
+    const addRe = /add\s+([^.;]*)/gi;
     while ((match = addRe.exec(text)) !== null) {
-      const symbols = match[1].match(/\{[^}]+\}/g) || [];
-      let run = 0;
-      symbols.forEach((sym) => {
-        const inner = sym.slice(1, -1).toUpperCase();
-        if (ALL.indexOf(inner) !== -1) {
-          colors.add(inner);
-          run += 1;
-        } else if (/^\d+$/.test(inner)) {
-          run += parseInt(inner, 10);
-        }
+      match[1].split(/,|\bor\b/).forEach((option) => {
+        let optionCount = 0;
+        (option.match(/\{[^}]+\}/g) || []).forEach((sym) => {
+          const inner = sym.slice(1, -1).toUpperCase();
+          if (ALL.indexOf(inner) !== -1) {
+            colors.add(inner);
+            optionCount += 1;
+          } else if (/^\d+$/.test(inner)) {
+            optionCount += parseInt(inner, 10);
+          }
+        });
+        if (optionCount > produced) produced = optionCount;
       });
-      if (run > maxRun) maxRun = run;
     }
-    if (maxRun > 1) count = maxRun;
+
+    // Mana paid to activate the ability (filter lands: "{1}, {T}: Add {C}{C}"
+    // taps for 2 but costs 1, so it nets only 1). Sum mana symbols before the
+    // ": add" colon, ignoring {T}/{Q}/{E}.
+    let paid = 0;
+    const costRe = /([^.;]*):\s*add\b/gi;
+    let costMatch;
+    while ((costMatch = costRe.exec(text)) !== null) {
+      let clausePaid = 0;
+      (costMatch[1].match(/\{[^}]+\}/g) || []).forEach((sym) => {
+        const inner = sym.slice(1, -1).toUpperCase();
+        if (/^\d+$/.test(inner)) clausePaid += parseInt(inner, 10);
+        else if (ALL.indexOf(inner) !== -1) clausePaid += 1;
+      });
+      if (clausePaid > paid) paid = clausePaid;
+    }
+
+    const net = produced - paid;
+    if (net > 1) count = net;
 
     // Unknown producer (utility/man-land/etc.): assume one mana of any colour so
     // the simulator stays permissive rather than wrongly blocking a cast.

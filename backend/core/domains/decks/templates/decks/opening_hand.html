@@ -1748,6 +1748,10 @@
   const ruleWarningSet = new Set();
   let landsPlayedThisTurn = 0;
   let mulligansTaken = 0;
+  // Single-flight guard for drawing. Two draw requests that overlap before the
+  // first updates the signed state token would both POST the same token and the
+  // server would return the SAME card twice. Serialize all draws to prevent it.
+  let drawInFlight = false;
 
   const boardContainers = {
     creatures: document.getElementById('boardCreatures'),
@@ -3303,6 +3307,18 @@
       showMessage('Shuffle a deck first.', 'warning');
       return 0;
     }
+    if (drawInFlight) {
+      return 0;
+    }
+    drawInFlight = true;
+    try {
+      return await drawCardsInner(count);
+    } finally {
+      drawInFlight = false;
+    }
+  }
+
+  async function drawCardsInner(count) {
     let drawn = 0;
     for (let i = 0; i < count; i += 1) {
       const payload = { state: stateInput.value };
@@ -6148,6 +6164,10 @@
       if (!state) {
         return;
       }
+      if (drawInFlight) {
+        return;
+      }
+      drawInFlight = true;
       drawBtn.disabled = true;
 
       try {
@@ -6204,6 +6224,8 @@
         console.error(err);
         showMessage('An unexpected error occurred while drawing.', 'danger');
         drawBtn.disabled = false;
+      } finally {
+        drawInFlight = false;
       }
     });
   }
@@ -6619,7 +6641,7 @@
   <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260528-2" defer></script>
   <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260528-2" defer></script>
   <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260528-2" defer></script>
-  <script src="{{ static_url('js/opening-hand-automation.js') }}?v=20260617-1" defer></script>
+  <script src="{{ static_url('js/opening-hand-automation.js') }}?v=20260617-2" defer></script>
 {% endblock %}
 
 {% endblock %}
