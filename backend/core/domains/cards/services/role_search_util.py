@@ -13,6 +13,20 @@ from __future__ import annotations
 import re
 
 
+def split_role_query_terms(text_value: str | None) -> list[str]:
+    """Split a role/keyword search into individual terms on commas (and ``;``)
+    so "flying, trample" filters to cards that have BOTH — each evergreen keyword
+    is searchable individually and they combine (AND)."""
+    if not text_value:
+        return []
+    terms: list[str] = []
+    for piece in re.split(r"[,;]+", text_value):
+        cleaned = piece.strip()
+        if cleaned:
+            terms.append(cleaned)
+    return terms
+
+
 def role_query_tokens(text_value: str | None) -> set[str]:
     """Normalized search tokens: the lower-cased term plus a variant with
     ``-``/``_`` folded to spaces (so "go-tall"/"go_tall" match "Go Tall")."""
@@ -50,5 +64,6 @@ def text_matches_role_tokens(text_value: str | None, tokens: set[str]) -> bool:
 __all__ = [
     "role_query_like_patterns",
     "role_query_tokens",
+    "split_role_query_terms",
     "text_matches_role_tokens",
 ]

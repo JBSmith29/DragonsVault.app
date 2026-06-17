@@ -24,6 +24,7 @@ from core.domains.cards.services.scryfall_cache import (
 from core.domains.cards.services.role_search_util import (
     role_query_like_patterns,
     role_query_tokens,
+    split_role_query_terms,
     text_matches_role_tokens,
 )
 from core.domains.cards.services.scryfall_search import build_query, search_cards
@@ -266,13 +267,16 @@ def scryfall_browser():
             }
         )
 
-    if role_query_text:
-        role_tokens = role_query_tokens(role_query_text)
-        role_query_patterns = role_query_like_patterns(role_query_text)
+    role_terms = split_role_query_terms(role_query_text)
+    for term in role_terms:
+        term_tokens = role_query_tokens(term)
+        term_patterns = role_query_like_patterns(term)
+        if not term_patterns:
+            continue
         matching_roles = {
             oid
             for (oid,) in db.session.query(OracleCoreRoleTag.oracle_id)
-            .filter(or_(*[func.lower(OracleCoreRoleTag.role).ilike(pattern) for pattern in role_query_patterns]))
+            .filter(or_(*[func.lower(OracleCoreRoleTag.role).ilike(pattern) for pattern in term_patterns]))
             .distinct()
             .all()
             if oid
@@ -280,20 +284,21 @@ def scryfall_browser():
         matching_evergreen = {
             oid
             for (oid,) in db.session.query(OracleEvergreenTag.oracle_id)
-            .filter(or_(*[func.lower(OracleEvergreenTag.keyword).ilike(pattern) for pattern in role_query_patterns]))
+            .filter(or_(*[func.lower(OracleEvergreenTag.keyword).ilike(pattern) for pattern in term_patterns]))
             .distinct()
             .all()
             if oid
         }
         matching_oids = matching_roles | matching_evergreen
-        # A card matches if a derived tag matches OR its type line matches the
-        # term directly (land types, subtypes, card types).
+        # Keep records matching THIS term (tag match OR type-line match); every
+        # comma-separated term must match (AND), so multiple keywords combine.
         results = [
             rec
             for rec in results
             if rec.get("oracle_id") in matching_oids
-            or text_matches_role_tokens(rec.get("type_line"), role_tokens)
+            or text_matches_role_tokens(rec.get("type_line"), term_tokens)
         ]
+    if role_terms:
         total_cards = len(results)
 
     collection_ids, _, _collection_lower = _collection_metadata()

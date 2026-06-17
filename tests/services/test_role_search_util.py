@@ -1,8 +1,17 @@
 from core.domains.cards.services.role_search_util import (
     role_query_like_patterns,
     role_query_tokens,
+    split_role_query_terms,
     text_matches_role_tokens,
 )
+
+
+def test_split_terms_on_commas_and_semicolons():
+    assert split_role_query_terms("flying, trample") == ["flying", "trample"]
+    assert split_role_query_terms(" flying ;  goblin , ") == ["flying", "goblin"]
+    assert split_role_query_terms("flying") == ["flying"]
+    assert split_role_query_terms("") == []
+    assert split_role_query_terms("  ,  ; ") == []
 
 
 def test_patterns_match_word_starts_only():
