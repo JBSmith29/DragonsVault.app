@@ -228,6 +228,25 @@ def test_opening_hand_mulligan_rejects_invalid_selection(client, create_user, ap
     assert bad_payload.get("ok") is False
 
 
+def test_opening_hand_play_page_includes_automation_ui(client, create_user, app):
+    user, password = create_user(email="automation@example.com", username="automation")
+    deck_id = _create_deck(app, user, name="Automation Deck")
+
+    _login(client, user.email, password)
+    resp = client.post(
+        "/opening-hand/play",
+        data={"deck_id": str(deck_id)},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Mana-automation controls and HUD are wired into the play page.
+    assert 'id="autoPlayBtn"' in body
+    assert 'id="autoTapToggle"' in body
+    assert 'id="manaHud"' in body
+    assert "opening-hand-automation.js" in body
+
+
 def test_opening_hand_token_search_sets_zone_hints(client, create_user, monkeypatch):
     from core.domains.decks.services import opening_hand_service
 

@@ -935,6 +935,68 @@
     border: 1px solid rgba(148, 163, 184, 0.2);
     font-size: 0.85rem;
   }
+
+  /* ===== Automation: mana HUD, castable hints, polish ===== */
+  .mana-hud {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    color: #e2e8f0;
+  }
+  .mana-hud .mana-hud-total {
+    color: #fbbf24;
+    margin-right: 0.15rem;
+  }
+  .mana-pip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.2rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #1b1b1f;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  }
+  .mana-pip-W { background: #f8f4e8; }
+  .mana-pip-U { background: #9fd1f2; }
+  .mana-pip-B { background: #b9a8c4; }
+  .mana-pip-R { background: #f3a38f; }
+  .mana-pip-G { background: #a9d6ad; }
+  .mana-pip-C { background: #d7d2cc; }
+  .mana-pip-any { background: linear-gradient(135deg, #f8f4e8, #9fd1f2, #b9a8c4, #f3a38f, #a9d6ad); color: #1b1b1f; }
+
+  .hand-card.oh-castable {
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.85), 0 6px 16px rgba(34, 197, 94, 0.25);
+    border-radius: 0.55rem;
+  }
+  .hand-card.oh-uncastable {
+    opacity: 0.62;
+    filter: saturate(0.75);
+  }
+  .hand-card.oh-uncastable:hover {
+    opacity: 0.92;
+  }
+  .hand-card { transition: box-shadow 0.16s ease, opacity 0.16s ease, transform 0.12s ease; }
+
+  #autoPlayBtn {
+    font-weight: 600;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
+  }
+  #autoPlayBtn:not(:disabled):hover { transform: translateY(-1px); }
+  .oh-auto-toggle .form-check-input:checked {
+    background-color: #10b981;
+    border-color: #10b981;
+  }
 </style>
 
 {% set selection_active = selected_deck_id or selected_deck_list %}
@@ -1066,6 +1128,7 @@
           <span class="badge text-bg-info" id="turnCounter" hidden></span>
           <span class="badge text-bg-secondary" id="handSizeBadge" hidden></span>
           <span class="badge text-bg-secondary" id="landsPlayedBadge" hidden></span>
+          <span class="mana-hud" id="manaHud" hidden title="Untapped mana available from your lands"></span>
         </div>
         <div class="hand-card-grid" id="handGrid">
           <div class="text-muted small">
@@ -1096,6 +1159,13 @@
         <button class="btn btn-success" type="button" id="nextTurnBtn" title="Untap all, draw a card, advance turn (N)">
           Next Turn
         </button>
+        <button class="btn btn-info text-dark" type="button" id="autoPlayBtn" title="Auto-play this turn: play a land and cast affordable spells, tapping mana for you (A)">
+          Auto Play
+        </button>
+        <div class="form-check form-switch oh-auto-toggle d-flex align-items-center gap-2 mb-0 ms-1" title="When on, clicking a spell auto-taps lands to pay for it (and blocks casts you can't afford).">
+          <input class="form-check-input" type="checkbox" role="switch" id="autoTapToggle" checked>
+          <label class="form-check-label text-white small" for="autoTapToggle">Auto-tap</label>
+        </div>
         <button class="btn btn-outline-secondary" type="button" id="undoBtn" disabled title="Undo last action (Z)">
           Undo
         </button>
@@ -6557,6 +6627,7 @@
   <script src="{{ static_url('js/opening-hand-enhancements.js') }}?v=20260528-2" defer></script>
   <script src="{{ static_url('js/opening-hand-triggers.js') }}?v=20260528-2" defer></script>
   <script src="{{ static_url('js/opening-hand-life-counters.js') }}?v=20260528-2" defer></script>
+  <script src="{{ static_url('js/opening-hand-automation.js') }}?v=20260617-1" defer></script>
 {% endblock %}
 
 {% endblock %}
