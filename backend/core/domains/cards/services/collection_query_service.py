@@ -20,6 +20,7 @@ from core.domains.cards.services.collection_card_list_view_service import (
     price_value_from_exact_prices,
 )
 from core.domains.cards.services.collection_request_service import CollectionBrowserRequest
+from core.domains.cards.services.role_search_util import role_query_like_patterns
 from core.domains.cards.services.pricing import (
     prices_for_print_exact as _prices_for_print_exact,
 )
@@ -144,23 +145,26 @@ def _base_card_query(params: CollectionBrowserRequest):
     if params.subrole_list:
         query = query.join(Card.subroles).filter(SubRole.label.in_(params.subrole_list))
     if params.role_query_text:
-        role_query_base = params.role_query_text.lower().strip()
-        role_query_alt = re.sub(r"[_-]+", " ", role_query_base).strip()
-        role_query_tokens = {role_query_base, role_query_alt}
-        role_query_patterns = [f"%{token}%" for token in role_query_tokens if token]
-        role_match = (
-            db.session.query(OracleCoreRoleTag.id)
-            .filter(OracleCoreRoleTag.oracle_id == Card.oracle_id)
-            .filter(or_(*[func.lower(OracleCoreRoleTag.role).ilike(pattern) for pattern in role_query_patterns]))
-            .exists()
-        )
-        evergreen_match = (
-            db.session.query(OracleEvergreenTag.id)
-            .filter(OracleEvergreenTag.oracle_id == Card.oracle_id)
-            .filter(or_(*[func.lower(OracleEvergreenTag.keyword).ilike(pattern) for pattern in role_query_patterns]))
-            .exists()
-        )
-        query = query.filter(or_(role_match, evergreen_match))
+        role_query_patterns = role_query_like_patterns(params.role_query_text)
+        if role_query_patterns:
+            role_match = (
+                db.session.query(OracleCoreRoleTag.id)
+                .filter(OracleCoreRoleTag.oracle_id == Card.oracle_id)
+                .filter(or_(*[func.lower(OracleCoreRoleTag.role).ilike(pattern) for pattern in role_query_patterns]))
+                .exists()
+            )
+            evergreen_match = (
+                db.session.query(OracleEvergreenTag.id)
+                .filter(OracleEvergreenTag.oracle_id == Card.oracle_id)
+                .filter(or_(*[func.lower(OracleEvergreenTag.keyword).ilike(pattern) for pattern in role_query_patterns]))
+                .exists()
+            )
+            # Also match the card's own type line so land types ("Forest",
+            # "Gate", "Desert"), creature subtypes ("Goblin"), and card types
+            # ("Equipment", "Saga", "Vehicle") are searchable directly — not
+            # only when a derived tag happens to exist.
+            type_match = or_(*[func.lower(Card.type_line).ilike(pattern) for pattern in role_query_patterns])
+            query = query.filter(or_(role_match, evergreen_match, type_match))
     if params.role_list or params.subrole_list:
         query = query.distinct()
     if params.role_list:

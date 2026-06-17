@@ -21,6 +21,11 @@ from core.domains.cards.services.scryfall_cache import (
     search_prints,
     set_name_for_code,
 )
+from core.domains.cards.services.role_search_util import (
+    role_query_like_patterns,
+    role_query_tokens,
+    text_matches_role_tokens,
+)
 from core.domains.cards.services.scryfall_search import build_query, search_cards
 from core.domains.cards.services.scryfall_shared_service import (
     RARITY_CHOICES,
@@ -262,10 +267,8 @@ def scryfall_browser():
         )
 
     if role_query_text:
-        role_query_base = role_query_text.lower().strip()
-        role_query_alt = re.sub(r"[_-]+", " ", role_query_base).strip()
-        role_query_tokens = {role_query_base, role_query_alt}
-        role_query_patterns = [f"%{token}%" for token in role_query_tokens if token]
+        role_tokens = role_query_tokens(role_query_text)
+        role_query_patterns = role_query_like_patterns(role_query_text)
         matching_roles = {
             oid
             for (oid,) in db.session.query(OracleCoreRoleTag.oracle_id)
@@ -283,12 +286,15 @@ def scryfall_browser():
             if oid
         }
         matching_oids = matching_roles | matching_evergreen
-        if matching_oids:
-            results = [rec for rec in results if rec.get("oracle_id") in matching_oids]
-            total_cards = len(results)
-        else:
-            results = []
-            total_cards = 0
+        # A card matches if a derived tag matches OR its type line matches the
+        # term directly (land types, subtypes, card types).
+        results = [
+            rec
+            for rec in results
+            if rec.get("oracle_id") in matching_oids
+            or text_matches_role_tokens(rec.get("type_line"), role_tokens)
+        ]
+        total_cards = len(results)
 
     collection_ids, _, _collection_lower = _collection_metadata()
     oids = [rec.get("oracle_id") for rec in results if rec.get("oracle_id")]
