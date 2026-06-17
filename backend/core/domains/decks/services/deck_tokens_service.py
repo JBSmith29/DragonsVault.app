@@ -207,15 +207,20 @@ def deck_tokens_overview():
             token_name = (token.get("name") or "Token").strip()
             token_type = (token.get("type_line") or "").strip()
             token_id = token.get("id")
+            # Colour is part of the token's identity: a white 1/1 Spirit and a
+            # black 1/1 Spirit are different tokens with different art, so they
+            # must not collapse into one entry (which would pair one image with
+            # the wrong colour label). Mirror the catalog de-dupe identity.
+            color_key = "".join(token.get("colors") or [])
             is_creature_token = "creature" in token_type.lower()
             if is_creature_token:
                 pt_key = _token_pt_key(token)
                 if pt_key:
-                    token_key = f"creature:{_normalize_token_name(token_name)}:{pt_key}"
+                    token_key = f"creature:{_normalize_token_name(token_name)}:{pt_key}:{color_key}"
                 else:
-                    token_key = token_id or f"{token_name.lower()}|{token_type.lower()}"
+                    token_key = token_id or f"{token_name.lower()}|{token_type.lower()}|{color_key}"
             else:
-                token_key = f"noncreature:{_normalize_token_name(token_name)}"
+                token_key = f"noncreature:{_normalize_token_name(token_name)}:{color_key}"
             if token_key in seen_token_keys:
                 continue
             seen_token_keys.add(token_key)
