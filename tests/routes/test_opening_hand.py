@@ -240,11 +240,12 @@ def test_opening_hand_play_page_includes_automation_ui(client, create_user, app)
     )
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    # Mana-automation controls and HUD are wired into the play page.
-    assert 'id="autoPlayBtn"' in body
+    # Auto-tap assistance + mana HUD are wired in, but there is no full-turn
+    # "Auto Play" — the automation assists decisions, it never plays for you.
     assert 'id="autoTapToggle"' in body
     assert 'id="manaHud"' in body
     assert "opening-hand-automation.js" in body
+    assert 'id="autoPlayBtn"' not in body
 
 
 def test_opening_hand_token_search_sets_zone_hints(client, create_user, monkeypatch):

@@ -988,11 +988,6 @@
   }
   .hand-card { transition: box-shadow 0.16s ease, opacity 0.16s ease, transform 0.12s ease; }
 
-  #autoPlayBtn {
-    font-weight: 600;
-    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
-  }
-  #autoPlayBtn:not(:disabled):hover { transform: translateY(-1px); }
   .oh-auto-toggle .form-check-input:checked {
     background-color: #10b981;
     border-color: #10b981;
@@ -1158,9 +1153,6 @@
         </button>
         <button class="btn btn-success" type="button" id="nextTurnBtn" title="Untap all, draw a card, advance turn (N)">
           Next Turn
-        </button>
-        <button class="btn btn-info text-dark" type="button" id="autoPlayBtn" title="Auto-play this turn: play a land and cast affordable spells, tapping mana for you (A)">
-          Auto Play
         </button>
         <div class="form-check form-switch oh-auto-toggle d-flex align-items-center gap-2 mb-0 ms-1" title="When on, clicking a spell auto-taps lands to pay for it (and blocks casts you can't afford).">
           <input class="form-check-input" type="checkbox" role="switch" id="autoTapToggle" checked>

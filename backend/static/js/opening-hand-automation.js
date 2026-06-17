@@ -4,16 +4,17 @@
  * Adds mana automation to the Opening Hand simulator without touching the
  * ~5000-line inline core script. Hooks the public API on window.__openingHand.
  *
- * Features:
+ * Scope: this module assists the *player's* decisions — it never plays the turn
+ * for you. You decide what to play; it handles the bookkeeping:
  *   1. Mana model — infers what colours each land taps for (basic subtypes +
  *      oracle "Add {…}" parsing, with a forgiving "any colour" fallback).
- *   2. Auto-tap to cast — clicking a spell taps the right untapped lands to pay
- *      for it (preferring restricted sources so flexible lands stay open), and
- *      blocks casts you can't afford. Toggle with the "Auto-tap" switch.
- *   3. Auto Play — one click (or "A") plays a land and casts every affordable
- *      spell for the turn, tapping mana automatically.
- *   4. Mana HUD — live "untapped mana" readout in the hand status bar.
- *   5. Castable hints — spells you can pay for glow green; ones you can't dim.
+ *   2. Auto-tap to cast — when you click a spell, it taps the right untapped
+ *      lands to pay for it (preferring restricted sources so flexible lands stay
+ *      open), then lets the core play it (whose Auto mode auto-resolves fetches,
+ *      tokens, draws and other ETB effects). Casts you can't afford are blocked.
+ *      Toggle with the "Auto-tap" switch.
+ *   3. Mana HUD — live "untapped mana" readout in the hand status bar.
+ *   4. Castable hints — spells you can pay for glow green; ones you can't dim.
  *
  * Everything is best-effort and defensive: a parsing miss never throws, it just
  * falls back to the most permissive interpretation so play is never blocked by
@@ -30,7 +31,6 @@
 
   const manaHud = document.getElementById("manaHud");
   const autoTapToggle = document.getElementById("autoTapToggle");
-  const autoPlayBtn = document.getElementById("autoPlayBtn");
   const handGrid = document.getElementById("handGrid");
   const boardLands = document.getElementById("boardLands");
 
@@ -111,12 +111,6 @@
       }
     });
     return { generic: generic, pips: pips, hybrids: hybrids };
-  }
-
-  function totalPips(cost) {
-    let n = cost.generic + cost.hybrids.length;
-    ALL.forEach((c) => { n += cost.pips[c]; });
-    return n;
   }
 
   // Try to pay `cost` from the given untapped lands. Returns the list of land
@@ -291,31 +285,6 @@
     (oh.boardState.lands || []).forEach((l) => { if (l && set.has(l.__uid)) l.tapped = true; });
   }
 
-  // Programmatic cast (used by Auto Play). The manual click path taps lands then
-  // lets the core script's own click handler play the card.
-  async function castSpell(card, opts) {
-    opts = opts || {};
-    const cost = parseCost(card.mana_cost);
-    const toTap = payCost(cost, untappedLands());
-    if (toTap === null) {
-      if (!opts.silent) oh.showMessage("Not enough untapped mana to cast " + (card.name || "that spell") + ".", "warning");
-      return false;
-    }
-    tapLands(toTap);
-    const idx = oh.handCards.indexOf(card);
-    if (idx >= 0) oh.handCards.splice(idx, 1);
-    oh.renderHand();
-    try {
-      await oh.playCardFromHand(card);
-    } catch (_) { /* keep going */ }
-    if (!opts.silent) {
-      const n = toTap.length;
-      oh.showMessage("Tapped " + n + " land" + (n !== 1 ? "s" : "") + " to cast " + (card.name || "spell") + ".", "success");
-    }
-    scheduleRefresh();
-    return true;
-  }
-
   // -----------------------------------------------------------------
   // Auto-tap on manual click (capture phase, before the core handler)
   // -----------------------------------------------------------------
@@ -353,108 +322,6 @@
       true
     );
   }
-
-  // -----------------------------------------------------------------
-  // Auto Play — play a land, then cast everything affordable
-  // -----------------------------------------------------------------
-
-  function pickBestLand() {
-    const lands = (oh.handCards || []).filter((c) => c && c.is_land);
-    if (!lands.length) return null;
-    const have = availableMana().distinctColors;
-    let best = null;
-    let bestScore = -Infinity;
-    lands.forEach((land) => {
-      const prod = landProduction(land);
-      let newColors = 0;
-      prod.colors.forEach((c) => {
-        if (c === "any") { if (have.size < 5) newColors += 1; }
-        else if (!have.has(c)) newColors += 1;
-      });
-      const entersTapped = oh.cardEntersTapped ? oh.cardEntersTapped(land) : false;
-      const score = newColors * 2 + (entersTapped ? 0 : 1);
-      if (score > bestScore) { bestScore = score; best = land; }
-    });
-    return best;
-  }
-
-  function pickBestCastable() {
-    const lands = untappedLands();
-    let best = null;
-    let bestValue = -Infinity;
-    (oh.handCards || []).forEach((card) => {
-      if (!card || card.is_land) return;
-      const cost = parseCost(card.mana_cost);
-      if (payCost(cost, lands) === null) return;
-      const value = typeof card.mana_value === "number" ? card.mana_value : totalPips(cost);
-      if (value > bestValue) { bestValue = value; best = card; }
-    });
-    return best;
-  }
-
-  let autoPlayBusy = false;
-  async function autoPlayTurn() {
-    if (autoPlayBusy) return;
-    if (!oh.stateInput || !oh.stateInput.value) {
-      oh.showMessage("Shuffle a deck first.", "warning");
-      return;
-    }
-    autoPlayBusy = true;
-    if (autoPlayBtn) autoPlayBtn.disabled = true;
-    try {
-      const cast = [];
-      let playedLand = null;
-
-      if ((oh.landsPlayedThisTurn || 0) < 1) {
-        const land = pickBestLand();
-        if (land) {
-          const idx = oh.handCards.indexOf(land);
-          if (idx >= 0) oh.handCards.splice(idx, 1);
-          oh.moveCardToBoard(land, "lands");
-          oh.landsPlayedThisTurn = (oh.landsPlayedThisTurn || 0) + 1;
-          oh.renderHand();
-          playedLand = land.name || "a land";
-        }
-      }
-
-      let guard = 0;
-      while (guard < 50) {
-        guard += 1;
-        const spell = pickBestCastable();
-        if (!spell) break;
-        const ok = await castSpell(spell, { silent: true });
-        if (!ok) break;
-        cast.push(spell.name || "spell");
-      }
-
-      scheduleRefresh();
-      if (!playedLand && !cast.length) {
-        oh.showMessage("Auto Play: no land to play and nothing affordable to cast.", "info");
-      } else {
-        const bits = [];
-        if (playedLand) bits.push("played " + playedLand);
-        if (cast.length) bits.push("cast " + cast.join(", "));
-        oh.showMessage("Auto Play — " + bits.join("; ") + ".", "success");
-      }
-    } finally {
-      autoPlayBusy = false;
-      if (autoPlayBtn) autoPlayBtn.disabled = false;
-    }
-  }
-
-  if (autoPlayBtn) {
-    autoPlayBtn.addEventListener("click", autoPlayTurn);
-  }
-
-  document.addEventListener("keydown", (event) => {
-    const tag = (event.target.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea" || tag === "select") return;
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key.toLowerCase() === "a") {
-      event.preventDefault();
-      autoPlayTurn();
-    }
-  });
 
   // -----------------------------------------------------------------
   // Keep the HUD + hints fresh as the board/hand change
