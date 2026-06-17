@@ -32,8 +32,8 @@ from shared.mtg import (
     _oracle_text_from_faces,
     _scryfall_card_url,
     _scryfall_set_url,
-    _token_stubs_from_oracle_text,
     _type_line_from_print,
+    resolve_created_tokens,
     _unique_art_variants,
 )
 
@@ -439,7 +439,7 @@ def card_detail(card_id):
             }
         )
 
-    tokens_created = _token_stubs_from_oracle_text(info.get("oracle_text"))
+    tokens_created = resolve_created_tokens(oracle_id, info.get("oracle_text"))
     pip_srcs = colors_to_icons(info.get("color_identity") or info.get("colors"), use_local=False)
     rulings = _request_cached_rulings(oracle_id)
 

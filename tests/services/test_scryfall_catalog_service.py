@@ -100,6 +100,59 @@ def test_search_tokens_and_tokens_from_oracle_resolve_and_dedupe(tmp_path):
     ]
 
 
+def test_tokens_from_oracle_collapses_same_token_across_printings(tmp_path):
+    """Each printing references its own token print id; the identical token
+    (same name/type/P+T) must collapse to a single entry, backfilling the image
+    from whichever printing happened to carry one."""
+    first_print = {
+        "id": "krenko-a",
+        "oracle_id": "krenko-oracle",
+        "name": "Krenko",
+        "set": "aaa",
+        "collector_number": "1",
+        "all_parts": [{"component": "token", "id": "goblin-a", "name": "Goblin"}],
+    }
+    second_print = {
+        "id": "krenko-b",
+        "oracle_id": "krenko-oracle",
+        "name": "Krenko",
+        "set": "bbb",
+        "collector_number": "2",
+        "all_parts": [{"component": "token", "id": "goblin-b", "name": "Goblin"}],
+    }
+    default_path = _write_catalog(
+        tmp_path,
+        [
+            first_print,
+            second_print,
+            # Only the second printing's token print carries art.
+            {
+                "id": "goblin-a",
+                "layout": "token",
+                "name": "Goblin",
+                "type_line": "Token Creature — Goblin",
+                "power": "1",
+                "toughness": "1",
+            },
+            {
+                "id": "goblin-b",
+                "layout": "token",
+                "name": "Goblin",
+                "type_line": "Token Creature — Goblin",
+                "power": "1",
+                "toughness": "1",
+                "image_uris": {"small": "goblin-small", "normal": "goblin-normal"},
+            },
+        ],
+    )
+
+    tokens = catalog.tokens_from_oracle(default_path, [first_print, second_print])
+
+    assert len(tokens) == 1
+    assert tokens[0]["name"] == "Goblin"
+    assert tokens[0]["images"]["small"] == "goblin-small"
+
+
 def test_tokens_from_print_returns_generic_token_without_all_parts(tmp_path):
     default_path = _write_catalog(tmp_path, [])
 

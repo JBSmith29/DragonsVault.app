@@ -271,6 +271,35 @@ def _token_stubs_from_oracle_text(text: str | None) -> list[dict]:
     return found
 
 
+def _token_is_generic(token: dict) -> bool:
+    """A token carrying no print id and no real name is a placeholder stub."""
+    name = (token.get("name") or "").strip().casefold()
+    return not token.get("id") and (not name or name == "token")
+
+
+def resolve_created_tokens(oracle_id: str | None, oracle_text: str | None) -> list[dict]:
+    """Resolve the distinct tokens a card creates.
+
+    Prefers Scryfall's ``all_parts`` data (real named tokens with art, e.g. the
+    Goblin made by Krenko or the Spirit made by Lingering Souls), which is keyed
+    by oracle id. Falls back to scanning the oracle text only when that yields
+    nothing usable — the text heuristic alone misses most named tokens and never
+    carries an image. The returned tokens are already de-duplicated across
+    printings by :func:`scryfall_catalog_service._dedupe_tokens`.
+    """
+    tokens: list[dict] = []
+    if oracle_id:
+        try:
+            tokens = sc.tokens_from_oracle(oracle_id) or []
+        except Exception:
+            tokens = []
+    if not tokens or all(_token_is_generic(token) for token in tokens):
+        stubs = _token_stubs_from_oracle_text(oracle_text)
+        if stubs:
+            tokens = stubs
+    return tokens
+
+
 def _normalize_name(s: str) -> str:
     """Normalize a card name for deduping/comparison."""
     s = (s or "").strip()

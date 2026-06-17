@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 import re
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -294,19 +295,40 @@ def search_tokens(default_path: str, *, name_q: str | None = None, limit: int = 
 
 
 def _dedupe_tokens(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen = set()
-    deduped = []
+    """Collapse functionally identical tokens.
+
+    A card's token is listed once per printing in Scryfall's ``all_parts`` data,
+    so the same token (e.g. a 1/1 Goblin) arrives many times with a different
+    print ``id`` each. Key on the token's identity (name, type line, power,
+    toughness) rather than the print id so those duplicates merge into a single
+    entry, backfilling any image or id the first occurrence happened to lack.
+    """
+    merged: "OrderedDict[tuple, Dict[str, Any]]" = OrderedDict()
     for item in items:
+        power = item.get("power")
+        toughness = item.get("toughness")
         key = (
-            item.get("id") or "",
             (item.get("name") or "").casefold(),
             (item.get("type_line") or "").casefold(),
+            "" if power is None else str(power).strip(),
+            "" if toughness is None else str(toughness).strip(),
         )
-        if key in seen:
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = dict(item)
             continue
-        seen.add(key)
-        deduped.append(item)
-    return deduped
+        if not existing.get("id") and item.get("id"):
+            existing["id"] = item.get("id")
+        existing_images = dict(existing.get("images") or {})
+        incoming_images = item.get("images") or {}
+        for size in ("small", "normal", "large"):
+            if not existing_images.get(size) and incoming_images.get(size):
+                existing_images[size] = incoming_images.get(size)
+        existing["images"] = existing_images
+        for field in ("type_line", "power", "toughness"):
+            if existing.get(field) in (None, "") and item.get(field) not in (None, ""):
+                existing[field] = item.get(field)
+    return list(merged.values())
 
 
 def _generic_token() -> Dict[str, Any]:
