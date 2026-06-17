@@ -99,6 +99,11 @@ class CardTokenVM:
     name: Optional[str]
     type_line: Optional[str]
     images: Optional[ImageSetVM]
+    power: Optional[str] = None
+    toughness: Optional[str] = None
+    colors: list[str] = field(default_factory=list)
+    pt: Optional[str] = None
+    color_label: Optional[str] = None
 
 
 @dataclass(slots=True)

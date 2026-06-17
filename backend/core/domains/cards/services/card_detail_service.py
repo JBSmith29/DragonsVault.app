@@ -34,6 +34,8 @@ from shared.mtg import (
     _scryfall_set_url,
     _type_line_from_print,
     resolve_created_tokens,
+    token_color_label,
+    token_pt_label,
     _unique_art_variants,
 )
 
@@ -561,6 +563,7 @@ def card_detail(card_id):
     token_vms: list[CardTokenVM] = []
     for token in tokens_created or []:
         image_pack = token.get("images") or sc.image_for_print(token) or {}
+        pt_label = token_pt_label(token.get("power"), token.get("toughness"))
         token_vms.append(
             CardTokenVM(
                 id=token.get("id"),
@@ -571,6 +574,11 @@ def card_detail(card_id):
                     normal=image_pack.get("normal"),
                     large=image_pack.get("large"),
                 ),
+                power=token.get("power"),
+                toughness=token.get("toughness"),
+                colors=token.get("colors") or [],
+                pt=pt_label,
+                color_label=token_color_label(token.get("colors"), has_stats=pt_label is not None),
             )
         )
 

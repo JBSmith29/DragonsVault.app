@@ -51,3 +51,19 @@ def test_resolve_created_tokens_handles_missing_oracle_id(monkeypatch):
     tokens = mtg_prints.resolve_created_tokens(None, "Create a Food token.")
 
     assert [token["name"] for token in tokens] == ["Food"]
+
+
+def test_token_pt_label():
+    assert mtg_prints.token_pt_label("1", "1") == "1/1"
+    assert mtg_prints.token_pt_label(0, 1) == "0/1"
+    assert mtg_prints.token_pt_label("*", "*") == "*/*"
+    # An artifact token (Treasure, Clue) carries no stats.
+    assert mtg_prints.token_pt_label(None, None) is None
+
+
+def test_token_color_label():
+    assert mtg_prints.token_color_label(["W"], has_stats=True) == "White"
+    assert mtg_prints.token_color_label(["W", "B"], has_stats=True) == "White/Black"
+    # A creature token with no colors is colorless; a statless artifact token is not labelled.
+    assert mtg_prints.token_color_label([], has_stats=True) == "Colorless"
+    assert mtg_prints.token_color_label([], has_stats=False) is None

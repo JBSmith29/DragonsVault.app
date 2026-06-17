@@ -300,6 +300,31 @@ def resolve_created_tokens(oracle_id: str | None, oracle_text: str | None) -> li
     return tokens
 
 
+_TOKEN_COLOR_WORDS = {"W": "White", "U": "Blue", "B": "Black", "R": "Red", "G": "Green"}
+
+
+def token_pt_label(power, toughness) -> str | None:
+    """Return a ``power/toughness`` badge string, or None when the token has no
+    stats (e.g. an artifact token like Treasure). A blank stat reads as ``0`` so
+    variable tokens such as ``*/*`` still render."""
+    power_text = "" if power is None else str(power).strip()
+    toughness_text = "" if toughness is None else str(toughness).strip()
+    if not power_text and not toughness_text:
+        return None
+    return f"{power_text or '0'}/{toughness_text or '0'}"
+
+
+def token_color_label(colors, *, has_stats: bool) -> str | None:
+    """Describe a token's color the way oracle text does (``White``,
+    ``White/Black``). Colored tokens always get a label; a token with stats but
+    no colors is ``Colorless``; a statless token with no colors (Treasure, Clue)
+    gets no color label."""
+    letters = [letter for letter in (colors or []) if letter in _TOKEN_COLOR_WORDS]
+    if letters:
+        return "/".join(_TOKEN_COLOR_WORDS[letter] for letter in letters)
+    return "Colorless" if has_stats else None
+
+
 def _normalize_name(s: str) -> str:
     """Normalize a card name for deduping/comparison."""
     s = (s or "").strip()

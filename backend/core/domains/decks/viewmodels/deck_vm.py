@@ -75,6 +75,8 @@ class DeckTokenVM:
     search_key: str = ""
     deck_ids_csv: str = ""
     owner_ids_csv: str = ""
+    pt: Optional[str] = None
+    color_label: Optional[str] = None
 
 
 @dataclass(slots=True)

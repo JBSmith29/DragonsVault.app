@@ -95,6 +95,7 @@ def test_search_tokens_and_tokens_from_oracle_resolve_and_dedupe(tmp_path):
             "type_line": "Token Artifact — Treasure",
             "power": None,
             "toughness": None,
+            "colors": [],
             "images": {"small": "treasure-small", "normal": "treasure-normal"},
         }
     ]
@@ -133,6 +134,7 @@ def test_tokens_from_oracle_collapses_same_token_across_printings(tmp_path):
                 "type_line": "Token Creature — Goblin",
                 "power": "1",
                 "toughness": "1",
+                "colors": ["R"],
             },
             {
                 "id": "goblin-b",
@@ -141,6 +143,7 @@ def test_tokens_from_oracle_collapses_same_token_across_printings(tmp_path):
                 "type_line": "Token Creature — Goblin",
                 "power": "1",
                 "toughness": "1",
+                "colors": ["R"],
                 "image_uris": {"small": "goblin-small", "normal": "goblin-normal"},
             },
         ],
@@ -150,7 +153,53 @@ def test_tokens_from_oracle_collapses_same_token_across_printings(tmp_path):
 
     assert len(tokens) == 1
     assert tokens[0]["name"] == "Goblin"
+    assert tokens[0]["power"] == "1"
+    assert tokens[0]["toughness"] == "1"
+    assert tokens[0]["colors"] == ["R"]
     assert tokens[0]["images"]["small"] == "goblin-small"
+
+
+def test_tokens_from_oracle_keeps_distinct_tokens_separate(tmp_path):
+    """Same name and stats but a different color (or P/T) is a different token
+    and must not be collapsed."""
+    source = {
+        "id": "maker",
+        "oracle_id": "maker-oracle",
+        "name": "Spirit Maker",
+        "all_parts": [
+            {"component": "token", "id": "spirit-white", "name": "Spirit"},
+            {"component": "token", "id": "spirit-black", "name": "Spirit"},
+        ],
+    }
+    default_path = _write_catalog(
+        tmp_path,
+        [
+            source,
+            {
+                "id": "spirit-white",
+                "layout": "token",
+                "name": "Spirit",
+                "type_line": "Token Creature — Spirit",
+                "power": "1",
+                "toughness": "1",
+                "colors": ["W"],
+            },
+            {
+                "id": "spirit-black",
+                "layout": "token",
+                "name": "Spirit",
+                "type_line": "Token Creature — Spirit",
+                "power": "1",
+                "toughness": "1",
+                "colors": ["B"],
+            },
+        ],
+    )
+
+    tokens = catalog.tokens_from_oracle(default_path, [source])
+
+    assert len(tokens) == 2
+    assert {tuple(token["colors"]) for token in tokens} == {("W",), ("B",)}
 
 
 def test_tokens_from_print_returns_generic_token_without_all_parts(tmp_path):
@@ -171,6 +220,7 @@ def test_tokens_from_print_returns_generic_token_without_all_parts(tmp_path):
             "type_line": None,
             "power": None,
             "toughness": None,
+            "colors": [],
             "images": {"small": None, "normal": None},
         }
     ]

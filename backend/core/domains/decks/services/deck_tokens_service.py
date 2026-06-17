@@ -25,7 +25,15 @@ from core.domains.decks.viewmodels.deck_vm import (
     DeckTokenSourceVM,
     DeckTokenVM,
 )
-from shared.mtg import _card_type_flags, _img_url_for_print, _lookup_print_data, _oracle_text_from_faces, _token_stubs_from_oracle_text
+from shared.mtg import (
+    _card_type_flags,
+    _img_url_for_print,
+    _lookup_print_data,
+    _oracle_text_from_faces,
+    _token_stubs_from_oracle_text,
+    token_color_label,
+    token_pt_label,
+)
 
 
 def _ensure_cache_ready() -> bool:
@@ -219,6 +227,9 @@ def deck_tokens_overview():
                     "id": token_id,
                     "name": token_name,
                     "type_line": token_type or "Token",
+                    "power": token.get("power"),
+                    "toughness": token.get("toughness"),
+                    "colors": token.get("colors") or [],
                     "small": images.get("small"),
                     "normal": images.get("normal"),
                     "sources": [],
@@ -232,6 +243,12 @@ def deck_tokens_overview():
                 entry["small"] = images.get("small")
             if not entry.get("normal") and images.get("normal"):
                 entry["normal"] = images.get("normal")
+            if entry.get("power") in (None, "") and token.get("power") not in (None, ""):
+                entry["power"] = token.get("power")
+            if entry.get("toughness") in (None, "") and token.get("toughness") not in (None, ""):
+                entry["toughness"] = token.get("toughness")
+            if not entry.get("colors") and token.get("colors"):
+                entry["colors"] = token.get("colors")
             if (entry.get("name") or "").lower() == "token" and token_name.lower() != "token":
                 entry["name"] = token_name
             if (not entry.get("type_line") or entry.get("type_line") == "Token") and token_type:
@@ -306,8 +323,10 @@ def deck_tokens_overview():
             if deck.get("deck_name")
         ]
         owner_labels = entry.get("owner_labels") or []
+        entry_pt = token_pt_label(entry.get("power"), entry.get("toughness")) or ""
+        entry_color = token_color_label(entry.get("colors"), has_stats=bool(entry_pt)) or ""
         search_key = (
-            f"{entry.get('name') or ''} {entry.get('type_line') or ''} "
+            f"{entry.get('name') or ''} {entry.get('type_line') or ''} {entry_pt} {entry_color} "
             f"{' '.join(deck_names)} {' '.join(owner_labels)}"
         ).lower().strip()
         deck_vms = []
@@ -329,6 +348,7 @@ def deck_tokens_overview():
                     sources=sources_vm,
                 )
             )
+        pt_label = token_pt_label(entry.get("power"), entry.get("toughness"))
         token_vms.append(
             DeckTokenVM(
                 name=entry.get("name") or "Token",
@@ -342,6 +362,8 @@ def deck_tokens_overview():
                 search_key=search_key,
                 deck_ids_csv=",".join(str(deck_id) for deck_id in deck_ids_for_token),
                 owner_ids_csv=entry.get("owner_ids_csv") or "",
+                pt=pt_label,
+                color_label=token_color_label(entry.get("colors"), has_stats=pt_label is not None),
             )
         )
 

@@ -315,8 +315,11 @@
                 {% endif %}
               </div>
               <div class="deck-token-meta flex-grow-1">
-                <div class="token-name">{{ token.name }}</div>
-                <div class="token-type">{{ token.type_line }}</div>
+                <div class="token-name d-flex align-items-center gap-2">
+                  <span>{{ token.name }}</span>
+                  {% if token.pt %}<span class="badge text-bg-dark">{{ token.pt }}</span>{% endif %}
+                </div>
+                <div class="token-type">{{ token.type_line }}{% if token.color_label %} · {{ token.color_label }}{% endif %}</div>
                 <div class="token-pill-row">
                   <span class="badge text-bg-primary">Decks: {{ token.deck_count }}</span>
                   <span class="badge text-bg-secondary">Cards: {{ token.total_sources }}</span>

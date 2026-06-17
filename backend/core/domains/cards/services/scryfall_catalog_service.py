@@ -300,8 +300,10 @@ def _dedupe_tokens(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     A card's token is listed once per printing in Scryfall's ``all_parts`` data,
     so the same token (e.g. a 1/1 Goblin) arrives many times with a different
     print ``id`` each. Key on the token's identity (name, type line, power,
-    toughness) rather than the print id so those duplicates merge into a single
-    entry, backfilling any image or id the first occurrence happened to lack.
+    toughness, colors) rather than the print id so those duplicates merge into a
+    single entry, while genuinely distinct tokens (e.g. a 1/1 vs a 2/2, or a
+    white vs a black Spirit) stay separate. Backfill any image, id, or stat the
+    first occurrence happened to lack.
     """
     merged: "OrderedDict[tuple, Dict[str, Any]]" = OrderedDict()
     for item in items:
@@ -312,6 +314,7 @@ def _dedupe_tokens(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
             (item.get("type_line") or "").casefold(),
             "" if power is None else str(power).strip(),
             "" if toughness is None else str(toughness).strip(),
+            "".join(item.get("colors") or []),
         )
         existing = merged.get(key)
         if existing is None:
@@ -328,7 +331,23 @@ def _dedupe_tokens(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         for field in ("type_line", "power", "toughness"):
             if existing.get(field) in (None, "") and item.get(field) not in (None, ""):
                 existing[field] = item.get(field)
+        if not existing.get("colors") and item.get("colors"):
+            existing["colors"] = item.get("colors")
     return list(merged.values())
+
+
+_WUBRG_ORDER = "WUBRG"
+
+
+def _normalize_colors(colors: Any) -> List[str]:
+    """Return WUBRG-ordered uppercase color letters from a Scryfall colors value."""
+    if not colors:
+        return []
+    if isinstance(colors, str):
+        letters = {ch.upper() for ch in colors if ch.upper() in _WUBRG_ORDER}
+    else:
+        letters = {str(ch).upper() for ch in colors if str(ch).upper() in _WUBRG_ORDER}
+    return [letter for letter in _WUBRG_ORDER if letter in letters]
 
 
 def _generic_token() -> Dict[str, Any]:
@@ -338,6 +357,7 @@ def _generic_token() -> Dict[str, Any]:
         "type_line": None,
         "power": None,
         "toughness": None,
+        "colors": [],
         "images": {"small": None, "normal": None},
     }
 
@@ -374,6 +394,7 @@ def tokens_from_print(default_path: str, print_obj: Dict[str, Any]) -> List[Dict
                 "type_line": type_line,
                 "power": (token_print or {}).get("power"),
                 "toughness": (token_print or {}).get("toughness"),
+                "colors": _normalize_colors((token_print or {}).get("colors")),
                 "images": {"small": images.get("small"), "normal": images.get("normal") or images.get("large")},
             }
         )
