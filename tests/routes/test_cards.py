@@ -123,3 +123,35 @@ def test_collection_overview_show_friends_includes_friend_bucket(client, create_
     html = response.get_data(as_text=True)
     assert "Friend Binder" in html
     assert "Friend Collector" in html
+
+
+def test_cards_autocomplete_requires_login(client):
+    resp = client.get("/api/cards/autocomplete?q=bolt")
+    assert resp.status_code in (301, 302, 401)
+
+
+def test_cards_autocomplete_returns_suggestion_list(client, create_user, monkeypatch):
+    from core.domains.cards.services import card_autocomplete_service as ac
+
+    user, password = create_user(email="ac@example.com", username="ac")
+    client.post(
+        "/login",
+        data={"identifier": user.email, "password": password},
+        follow_redirects=True,
+    )
+
+    monkeypatch.setattr(ac.sc, "ensure_cache_loaded", lambda *a, **k: True)
+    monkeypatch.setattr(ac.sc, "get_all_prints", lambda: [{"name": "Lightning Bolt"}, {"name": "Bolt Bend"}])
+    monkeypatch.setattr(ac.sc, "cache_epoch", lambda: 999)
+    ac._name_index.cache_clear()
+
+    resp = client.get("/api/cards/autocomplete?q=bolt&limit=5")
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    assert payload["ok"] is True
+    assert "Bolt Bend" in payload["suggestions"]
+    assert "Lightning Bolt" in payload["suggestions"]
+
+    # very short queries return nothing
+    empty = client.get("/api/cards/autocomplete?q=b").get_json()
+    assert empty["suggestions"] == []

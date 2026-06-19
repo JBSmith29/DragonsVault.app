@@ -2,13 +2,28 @@
 
 from __future__ import annotations
 
+from flask import jsonify, request
 from flask_login import login_required
 
 from extensions import limiter
 from core.domains.cards.services import card_mutation_service, collection_overview_service, collection_service, shared_folders_service
+from core.domains.cards.services.card_autocomplete_service import autocomplete_card_names
 from core.domains.decks.services import deck_service
 from core.routes.api import api_bp
 from core.routes.base import limiter_key_user_or_ip, views
+
+
+@api_bp.get("/cards/autocomplete")
+@login_required
+@limiter.limit("120 per minute", key_func=limiter_key_user_or_ip) if limiter else (lambda f: f)
+def cards_autocomplete():
+    """Card-name suggestions for as-you-type search fields."""
+    query = request.args.get("q", "")
+    try:
+        limit = int(request.args.get("limit", 10))
+    except (TypeError, ValueError):
+        limit = 10
+    return jsonify({"ok": True, "suggestions": autocomplete_card_names(query, limit)})
 
 
 @views.post("/decks/proxy")

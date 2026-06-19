@@ -1,0 +1,35 @@
+/* As-you-type card-name suggestions (EDHREC-style). Attached to any
+   input[data-card-autocomplete] by card-autocomplete.js. */
+.card-ac-menu {
+  position: absolute;
+  z-index: 1080;
+  max-height: 18rem;
+  overflow-y: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.55rem;
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.55);
+  padding: 0.25rem;
+}
+.card-ac-item {
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-ac-item.active,
+.card-ac-item:hover {
+  background: rgba(96, 165, 250, 0.18);
+}
+.card-ac-menu::-webkit-scrollbar {
+  width: 0.5rem;
+}
+.card-ac-menu::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
