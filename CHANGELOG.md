@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.0.0](https://github.com/JBSmith29/DragonsVault.app/compare/v0.1.0...v1.0.0) (2026-06-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* game-engine UI/API endpoints and service container were removed.
+
+### Features
+
+* add documentation hosting via nginx and GitHub Pages ([f9f4dfa](https://github.com/JBSmith29/DragonsVault.app/commit/f9f4dfa95e15cb74b55d47710b5c5f155c7d37cd))
+* card detail panel for opening hand simulator ([5acedff](https://github.com/JBSmith29/DragonsVault.app/commit/5acedffd57f833b781a9a40cc9c0172d1643f62c))
+* **cards:** EDHREC-style as-you-type card-name autocomplete ([070a206](https://github.com/JBSmith29/DragonsVault.app/commit/070a20678af1e6d3c30c8ad37eb3dbd75c51a60b))
+* **cards:** multi-keyword search — each evergreen keyword individually searchable ([f5b355c](https://github.com/JBSmith29/DragonsVault.app/commit/f5b355cd5073a0b645787682c3339df0cb8df7ed))
+* collapsible Synergy Recommendations and improved Tokens panel on folder detail ([a58330c](https://github.com/JBSmith29/DragonsVault.app/commit/a58330cc09715982dc006762d8c5d5b7934ef976))
+* comprehensive quality improvements and performance optimizations ([cd644fe](https://github.com/JBSmith29/DragonsVault.app/commit/cd644fe6e052c800860a358fccda78f76a4d9f23))
+* comprehensive security and documentation improvements ([81dbb11](https://github.com/JBSmith29/DragonsVault.app/commit/81dbb1157ef6c825b90274fc9d127bf175efa873))
+* MTG insights suite — legality, value, compare, win-rate, mana base, archetype, budget, playgroup, proxy PDF, rules lookups ([1d64c7d](https://github.com/JBSmith29/DragonsVault.app/commit/1d64c7dec6a740e8f86ea8ee675d6fd8154eb5e8))
+* opening hand automation — auto-tap, ETB triggers, mana pool ([36da540](https://github.com/JBSmith29/DragonsVault.app/commit/36da540ce1c0521ce871f292064c03aba1fc25de))
+* opening hand simulator QoL improvements ([b3c40b4](https://github.com/JBSmith29/DragonsVault.app/commit/b3c40b4bbc63319863fbe36f85d6309904ee5f37))
+* **opening-hand:** always show +1/+1 & −1/−1 counters on creatures in play ([3892065](https://github.com/JBSmith29/DragonsVault.app/commit/38920656765e4ae76ef694c463efef18af2f5a17))
+* **opening-hand:** drop full-turn Auto Play; keep assistive automation ([500270f](https://github.com/JBSmith29/DragonsVault.app/commit/500270f5e9bf5a13be67bf39b266b1f7efae27e8))
+* **opening-hand:** life tracker, +1/+1 counters, auto-tap on cast ([405065a](https://github.com/JBSmith29/DragonsVault.app/commit/405065a63ba50a6e58ee947abc0c43884bd7764a))
+* **opening-hand:** mana automation — auto-tap to cast, Auto Play, mana HUD ([1447507](https://github.com/JBSmith29/DragonsVault.app/commit/14475071e7cd9278d10ebd8bddc06809312c8b7e))
+* **opening-hand:** modern life tracker, centered in the bottom action bar ([82f165e](https://github.com/JBSmith29/DragonsVault.app/commit/82f165e83b24377acf6153f981315b65f351a6a5))
+* **opening-hand:** status HUD above command zone; redesigned life tracker ([315f30c](https://github.com/JBSmith29/DragonsVault.app/commit/315f30c59b3023bb0c3ad9be870e3b4107c7e984))
+* refactor card/deck flows and add frontend deploy plumbing ([114db2a](https://github.com/JBSmith29/DragonsVault.app/commit/114db2aef22a32a75476a4847f030f9bc6655904))
+* remove Collection Value dashboard; opening-hand cleanup ([99b157a](https://github.com/JBSmith29/DragonsVault.app/commit/99b157a5f7ebdd6a20e9f130b37041c0b1849137))
+* self-service password reset via email ([b9da4c7](https://github.com/JBSmith29/DragonsVault.app/commit/b9da4c7f90c5fdb05e2dcb4bcc21d439dc0cd11b))
+* stable scrollbar gutter; dual +1/+1 and -1/-1 counters ([9e3fc54](https://github.com/JBSmith29/DragonsVault.app/commit/9e3fc54bc5b205b86c82dfff137a688bbe881d7c))
+* **tokens:** show exact power/toughness, color, and produced token everywhere ([4067652](https://github.com/JBSmith29/DragonsVault.app/commit/4067652e345219ba0731778da0dc7717e5baeef8))
+
+
+### Bug Fixes
+
+* add card name fallback for Commander Spellbook combo hover previews ([b01ed47](https://github.com/JBSmith29/DragonsVault.app/commit/b01ed47f9dbb5314a3cbcb25945936dcf3093ffe))
+* **cards:** tighten core-role/evergreen/land-type search on both browsers ([65ae76e](https://github.com/JBSmith29/DragonsVault.app/commit/65ae76e81d97d9bd7f9c1fbd4d06c18081efeaa3))
+* **decks:** resolve /decks 500 from mixed-type bracket sort; harden spellbook 429 retries ([0f7be21](https://github.com/JBSmith29/DragonsVault.app/commit/0f7be21ab614cae43c46b698129b937c6a38b8a5))
+* django-api PYTHONPATH missing /app/backend for shared module ([9c1da4c](https://github.com/JBSmith29/DragonsVault.app/commit/9c1da4cb7e83e9499bb43949242e786ce90b329c))
+* harden auth/service APIs and improve mobile UX ([948289a](https://github.com/JBSmith29/DragonsVault.app/commit/948289a7414cc43e89083ae163d2da2ee16488ca))
+* improve folder_detail UI and synergy recommendations ([09ababc](https://github.com/JBSmith29/DragonsVault.app/commit/09ababc181eac3d78b7e5b6cc496e3988b29f832))
+* Next Turn draws only once; rules popup is on-demand ([59ccbcd](https://github.com/JBSmith29/DragonsVault.app/commit/59ccbcdb34bca8cfe9cb31a50c44444355bdbfc2))
+* opening hand UX polish — guards, color picker, discard handler, shortcuts ([71a73e9](https://github.com/JBSmith29/DragonsVault.app/commit/71a73e93cc95e9ea3840be4545874c018810ac54))
+* **opening-hand:** actually shuffle the library after a tutor ([af4f864](https://github.com/JBSmith29/DragonsVault.app/commit/af4f8643f7e8c0c4e1e716f7b8026a460f69b0da))
+* **opening-hand:** auto-tap click now actually plays the card (and never blocks it) ([09bcf93](https://github.com/JBSmith29/DragonsVault.app/commit/09bcf93011b93290911fe273baadf2b37e49652d))
+* **opening-hand:** commander excluded from deck; Next Turn draws once ([266b417](https://github.com/JBSmith29/DragonsVault.app/commit/266b417a7f27b469dbb3f07b27d99e1e606cac00))
+* **opening-hand:** life tracker badge styling and de-dup guard ([e8d7770](https://github.com/JBSmith29/DragonsVault.app/commit/e8d77703f4f6bc9044d9141dd1974bd8f7a50578))
+* **opening-hand:** recreate life counter as big transparent "− 40 +" ([6e7810b](https://github.com/JBSmith29/DragonsVault.app/commit/6e7810bc05d7fc0a1d52930815d58586719209ac))
+* **opening-hand:** robustly exclude the commander from the shuffled deck ([d54131f](https://github.com/JBSmith29/DragonsVault.app/commit/d54131f72b214c65e455210d17ae29dc47e366bc))
+* **opening-hand:** serialize draws (no duplicate card); net mana for filter lands ([1e7c617](https://github.com/JBSmith29/DragonsVault.app/commit/1e7c6179e2b3b63f9e251f9d0e4e9d0917257c19))
+* **opening-hand:** style +1/+1 badge as Bootstrap pill, drop trigger panel ([23b8299](https://github.com/JBSmith29/DragonsVault.app/commit/23b82996fea37c989c9867c6823e0870fdba5d7a))
+* resolve all restarting/unhealthy containers; clean up dead deps ([41f26e2](https://github.com/JBSmith29/DragonsVault.app/commit/41f26e22bf2c19657cf457a8e7641ddebb8afef8))
+* resolve scheduler crash and nginx duplicate log_format; add scheduler status to admin dashboard ([bdea3fc](https://github.com/JBSmith29/DragonsVault.app/commit/bdea3fcaecd92b87bb28e608f3b04a242ebbc18c))
+* restore issued_token=None in manage_api_token; bump CI to Node 24 ([d0a064e](https://github.com/JBSmith29/DragonsVault.app/commit/d0a064ef95888bc1f5b26260ae410aa6b61e0eb4))
+* shorten 0031 migration revision ID to fit alembic_version varchar(32) ([163c2a4](https://github.com/JBSmith29/DragonsVault.app/commit/163c2a40ab35c796cfd6c3faa038089ce70e0edc))
+* **tokens:** resolve real named tokens with art on card detail; dedupe across printings ([00dcc8e](https://github.com/JBSmith29/DragonsVault.app/commit/00dcc8ec41421500746d7018c693714489dbafeb))
+* **tokens:** tie token image to its own power/toughness and color ([c5e6d3e](https://github.com/JBSmith29/DragonsVault.app/commit/c5e6d3ef7a5e88cd3edd86210f59ef73a8255d11))
+
+
+### Performance Improvements
+
+* **catalog:** index Scryfall prints by id instead of linear scan ([e1e9af6](https://github.com/JBSmith29/DragonsVault.app/commit/e1e9af6d1711b9b552688e30256cb7b33c75db41))
+* **games:** dedupe identical metrics queries within a request ([4e9a2b8](https://github.com/JBSmith29/DragonsVault.app/commit/4e9a2b822a633482a6027cecaa97619adb26ac7b))
+* **pricing:** prefer embedded catalog prices over per-card price-service call ([03a2ab1](https://github.com/JBSmith29/DragonsVault.app/commit/03a2ab10b768380ef6191b86ac15ae6f00d547d9))
+
+
+### Code Refactoring
+
+* retire game-engine service, migrate CI to Hatch, and add Sphinx docs ([bc3ab51](https://github.com/JBSmith29/DragonsVault.app/commit/bc3ab517ea57287ad8a0f8ee24f00178d8794f09))
+
 ## [Unreleased]
 
 ### Added
