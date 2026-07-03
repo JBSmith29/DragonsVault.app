@@ -183,6 +183,35 @@ def quick_game_save():
     return games_enhanced.api_quick_game_save()
 
 
+@games_api.get('/archidekt/decks')
+@login_required
+def archidekt_list_decks():
+    """List a user's public Commander decks from Archidekt."""
+    from flask import request
+    from core.domains.games.services import archidekt_service
+    try:
+        decks = archidekt_service.list_commander_decks(request.args.get('username', ''), limit=60)
+    except archidekt_service.ArchidektError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({
+        'success': True,
+        'username': archidekt_service.normalize_username(request.args.get('username', '')),
+        'decks': decks,
+    })
+
+
+@games_api.get('/archidekt/deck/<deck_id>')
+@login_required
+def archidekt_fetch_deck(deck_id):
+    """Fetch a single Archidekt deck's name, commander(s), bracket, and cards."""
+    from core.domains.games.services import archidekt_service
+    try:
+        deck = archidekt_service.fetch_deck(deck_id)
+    except archidekt_service.ArchidektError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({'success': True, 'deck': deck})
+
+
 def register_games_api(app):
     """Register the games API blueprint with the Flask app."""
     app.register_blueprint(games_api)
