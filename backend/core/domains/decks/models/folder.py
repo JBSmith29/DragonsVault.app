@@ -43,6 +43,10 @@ class Folder(db.Model):
     )
     notes = db.Column(db.Text, nullable=True)
     sleeve_color = db.Column(db.String(64), nullable=True)
+    # Set when a deck was imported from Archidekt so re-imports refresh the same
+    # folder and the game snapshot can carry Archidekt's stated bracket.
+    archidekt_deck_id = db.Column(db.String(32), nullable=True, index=True)
+    archidekt_bracket = db.Column(db.Integer, nullable=True)
     is_public = db.Column(
         db.Boolean,
         nullable=False,

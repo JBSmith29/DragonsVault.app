@@ -212,6 +212,23 @@ def archidekt_fetch_deck(deck_id):
     return jsonify({'success': True, 'deck': deck})
 
 
+@games_api.post('/archidekt/import')
+@login_required
+def archidekt_import():
+    """Import (or refresh) an Archidekt deck as a local Folder for the user."""
+    from flask import request
+    from core.domains.games.services import archidekt_service, archidekt_import_service
+    payload = request.get_json(silent=True) or {}
+    deck_id = payload.get('deck_id')
+    try:
+        summary = archidekt_import_service.import_archidekt_deck(deck_id, owner_user_id=current_user.id)
+    except archidekt_service.ArchidektError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception:
+        return _api_error('archidekt_import')
+    return jsonify({'success': True, **summary})
+
+
 def register_games_api(app):
     """Register the games API blueprint with the Flask app."""
     app.register_blueprint(games_api)

@@ -22,6 +22,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     display_name = db.Column(db.String(120), nullable=True)
+    archidekt_username = db.Column(db.String(64), nullable=True)
     api_token_hash = db.Column(db.String(64), nullable=True, unique=True)
     api_token_hint = db.Column(db.String(12), nullable=True)
     api_token_created_at = db.Column(db.DateTime, nullable=True)
