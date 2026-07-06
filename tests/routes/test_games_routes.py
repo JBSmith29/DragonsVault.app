@@ -208,6 +208,10 @@ def test_games_new_form_loads(client, create_user):
 
     response = client.get("/games/new")
     assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    # The live Archidekt deck picker is wired into each seat's deck field.
+    assert "Pull from Archidekt" in body
+    assert "archidekt-deck-picker.js" in body
 
 
 def test_games_detail_loads_for_owner(client, create_user, app):
