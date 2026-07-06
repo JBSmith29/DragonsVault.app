@@ -212,6 +212,25 @@ def archidekt_fetch_deck(deck_id):
     return jsonify({'success': True, 'deck': deck})
 
 
+@games_api.post('/roster/<int:roster_id>/archidekt')
+@login_required
+def roster_set_archidekt(roster_id):
+    """Save a pod player's Archidekt username (mirrored to their profile)."""
+    from flask import request
+    from core.domains.games.models import GameRosterPlayer
+    from core.domains.games.services import archidekt_service
+    roster_player = GameRosterPlayer.query.filter_by(id=roster_id, owner_user_id=current_user.id).first()
+    if not roster_player:
+        return jsonify({'success': False, 'message': 'Player not found'}), 404
+    payload = request.get_json(silent=True) or {}
+    username = archidekt_service.normalize_username(payload.get('username')) or None
+    roster_player.archidekt_username = username
+    if roster_player.user and username:
+        roster_player.user.archidekt_username = username
+    db.session.commit()
+    return jsonify({'success': True, 'roster_id': roster_id, 'archidekt_username': username})
+
+
 @games_api.post('/archidekt/import')
 @login_required
 def archidekt_import():
