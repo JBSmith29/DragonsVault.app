@@ -208,10 +208,6 @@ def test_games_new_form_loads(client, create_user):
 
     response = client.get("/games/new")
     assert response.status_code == 200
-    body = response.get_data(as_text=True)
-    # The live Archidekt deck picker is wired into each seat's deck field.
-    assert "Pull from Archidekt" in body
-    assert "archidekt-deck-picker.js" in body
 
 
 def test_games_detail_loads_for_owner(client, create_user, app):
@@ -258,43 +254,3 @@ def test_games_bulk_delete_removes_owned_games(client, create_user, app):
     with app.app_context():
         assert db.session.get(GameSession, game_id_1) is None
         assert db.session.get(GameSession, game_id_2) is None
-
-
-def test_roster_set_archidekt_username_saves_and_mirrors(client, app, create_user):
-    owner, password = create_user(email="podmgr@example.com", username="podmgr")
-    linked, _ = create_user(email="linked@example.com", username="linkedplayer")
-
-    with app.app_context():
-        rp = GameRosterPlayer(owner_user_id=owner.id, user_id=linked.id, display_name="Linked Player")
-        db.session.add(rp)
-        db.session.commit()
-        roster_id = rp.id
-
-    _login(client, owner.email, password)
-
-    # Accepts a profile URL and normalizes it; mirrors onto the linked user.
-    resp = client.post(
-        f"/api/games/roster/{roster_id}/archidekt",
-        json={"username": "https://archidekt.com/u/CoolPlayer/"},
-    )
-    assert resp.status_code == 200
-    assert resp.get_json()["archidekt_username"] == "CoolPlayer"
-
-    with app.app_context():
-        from models import User
-        assert db.session.get(GameRosterPlayer, roster_id).archidekt_username == "CoolPlayer"
-        assert db.session.get(User, linked.id).archidekt_username == "CoolPlayer"
-
-
-def test_roster_set_archidekt_rejects_other_owner(client, app, create_user):
-    owner, _ = create_user(email="owner_a@example.com", username="owner_a")
-    intruder, ipw = create_user(email="owner_b@example.com", username="owner_b")
-    with app.app_context():
-        rp = GameRosterPlayer(owner_user_id=owner.id, display_name="Guest")
-        db.session.add(rp)
-        db.session.commit()
-        roster_id = rp.id
-
-    _login(client, intruder.email, ipw)
-    resp = client.post(f"/api/games/roster/{roster_id}/archidekt", json={"username": "x"})
-    assert resp.status_code == 404

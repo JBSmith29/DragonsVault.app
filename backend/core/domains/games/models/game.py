@@ -186,7 +186,6 @@ class GameRosterPlayer(db.Model):
     )
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     display_name = db.Column(db.String(120), nullable=True, index=True)
-    archidekt_username = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow, index=True)
 

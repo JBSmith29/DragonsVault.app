@@ -70,13 +70,6 @@ def _snapshot_deck(folder: Folder) -> dict[str, Any]:
             bracket_label = cache.payload.get("label")
             bracket_score = cache.payload.get("score")
             power_score = cache.payload.get("score")
-    # A deck imported from Archidekt carries its stated bracket; prefer it over
-    # the app's computed bracket so the logged game reflects the source deck.
-    archidekt_bracket = getattr(folder, "archidekt_bracket", None)
-    if archidekt_bracket is not None:
-        bracket_level = archidekt_bracket
-        if not bracket_label:
-            bracket_label = f"Bracket {archidekt_bracket}"
     return {
         "folder_id": folder.id,
         "deck_name": folder.name or f"Deck {folder.id}",

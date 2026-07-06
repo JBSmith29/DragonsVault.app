@@ -173,17 +173,11 @@
             {% for member in pod.members %}
               <div class="player-chip">
                 <span>{{ member.label }}</span>
-                {% if member.archidekt_username %}
-                  <span class="badge rounded-pill text-bg-info ms-1" title="Archidekt: {{ member.archidekt_username }}"><i class="bi bi-link-45deg"></i></span>
-                {% endif %}
                 <div class="dropdown">
                   <button class="btn btn-sm p-0 border-0 bg-transparent" type="button" data-bs-toggle="dropdown">
                     <i class="bi bi-three-dots-vertical"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#" onclick="setArchidektUsername({{ member.roster_id }}, {{ (member.archidekt_username or '')|tojson }})">
-                      <i class="bi bi-link-45deg me-2"></i>{{ 'Edit' if member.archidekt_username else 'Add' }} Archidekt username
-                    </a></li>
                     <li><a class="dropdown-item" href="#" onclick="assignDecks({{ member.roster_id }})">
                       <i class="bi bi-collection me-2"></i>Assign Decks
                     </a></li>
@@ -462,30 +456,6 @@ function removePlayer(memberId) {
 
 function assignDecks(playerId) {
   showToast('Opening deck assignment...', 'info');
-}
-
-function setArchidektUsername(rosterId, current) {
-  const value = prompt('Archidekt username (or profile URL) for this player:', current || '');
-  if (value === null) return; // cancelled
-  fetch(`/api/games/roster/${rosterId}/archidekt`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(window.csrfHeader || {}) },
-    credentials: 'same-origin',
-    body: JSON.stringify({ username: value.trim() })
-  })
-    .then((r) => r.json().catch(() => null))
-    .then((data) => {
-      if (data && data.success) {
-        showToast(
-          data.archidekt_username ? `Linked Archidekt: ${data.archidekt_username}` : 'Archidekt username cleared.',
-          'success'
-        );
-        setTimeout(() => location.reload(), 600);
-      } else {
-        showToast((data && data.message) || 'Could not save the username.', 'danger');
-      }
-    })
-    .catch(() => showToast('Could not save the username.', 'danger'));
 }
 
 function autoAssignDecks(podId) {

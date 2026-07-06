@@ -24,17 +24,12 @@ def games_streamlined_players():
         members = []
         for member in pod.members or []:
             if member.roster_player:
-                rp = member.roster_player
-                deck_count = len(rp.decks or [])
-                archidekt_username = rp.archidekt_username or (
-                    rp.user.archidekt_username if rp.user else None
-                )
+                deck_count = len(member.roster_player.decks or [])
                 members.append({
                     'member_id': member.id,
-                    'roster_id': rp.id,
-                    'label': rp.display_name or 'Player',
+                    'roster_id': member.roster_player.id,
+                    'label': member.roster_player.display_name or 'Player',
                     'deck_count': deck_count,
-                    'archidekt_username': archidekt_username,
                 })
 
         pod_data.append({

@@ -182,10 +182,6 @@
                     <li><button class="dropdown-item active" type="button" data-game-select-option data-value="" data-label="Select a deck">Select a deck</button></li>
                   </ul>
                 </div>
-                <button type="button" class="btn btn-outline-info btn-sm mt-2 archidekt-pull-btn" data-archidekt-seat="{{ seat_number }}">
-                  <i class="bi bi-link-45deg"></i> Pull from Archidekt
-                </button>
-                <div class="archidekt-pull-menu" data-archidekt-menu="{{ seat_number }}" hidden></div>
               </div>
               <div class="col-12 seat-field seat-manual-deck-field">
                 <label class="form-label" for="seat{{ seat_number }}ManualDeck">Manual deck name</label>
@@ -589,16 +585,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-  <script nonce="{{ csp_nonce() }}">
-    // roster player id -> saved Archidekt username, to pre-fill the picker.
-    window.__rosterArchidekt = {};
-    (function () {
-      var players = {{ roster_players | tojson }};
-      (players || []).forEach(function (p) {
-        if (p && p.archidekt_username) window.__rosterArchidekt[String(p.id)] = p.archidekt_username;
-      });
-    })();
-  </script>
   <script src="{{ static_url('js/game-metrics-filters.js') }}?v=20260512-1" defer></script>
-  <script src="{{ static_url('js/archidekt-deck-picker.js') }}?v=20260617-1" defer></script>
 {% endblock %}
