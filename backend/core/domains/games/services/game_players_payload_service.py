@@ -128,6 +128,8 @@ def _roster_players(owner_user_id: int) -> list[dict[str, Any]]:
                 "label": _player_label(player),
                 "user_id": player.user_id,
                 "deck_options": assigned_decks,
+                "archidekt_username": player.archidekt_username
+                or (player.user.archidekt_username if player.user else None),
             }
         )
     return payloads
