@@ -1,0 +1,350 @@
+/* Game Vault — self-contained styles.
+   Only depends on Bootstrap 5.3 (dark mode) for base resets/grid/forms.
+   All theming + custom components live here so the page renders correctly
+   independent of the rest of the app's stylesheets. */
+
+:root {
+  --gv-bg: #0b1120;
+  --gv-bg-2: #0f172a;
+  --gv-panel: rgba(30, 41, 59, 0.72);
+  --gv-panel-solid: #1e293b;
+  --gv-border: rgba(148, 163, 184, 0.22);
+  --gv-border-strong: rgba(148, 163, 184, 0.4);
+  --gv-text: #f1f5f9;
+  --gv-muted: #94a3b8;
+  --gv-faint: #64748b;
+  --gv-blue: #3b82f6;
+  --gv-purple: #8b5cf6;
+  --gv-green: #10b981;
+  --gv-amber: #f59e0b;
+  --gv-red: #ef4444;
+  --gv-radius: 16px;
+  --gv-radius-sm: 10px;
+  --gv-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
+  --gv-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* { box-sizing: border-box; }
+
+body.gv-body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(139, 92, 246, 0.18), transparent 60%),
+    radial-gradient(1000px 600px at -10% 0%, rgba(59, 130, 246, 0.16), transparent 55%),
+    var(--gv-bg);
+  color: var(--gv-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.gv-shell { max-width: 1200px; margin: 0 auto; padding: 0 1.25rem 4rem; }
+
+/* Header ------------------------------------------------------------------ */
+.gv-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: rgba(11, 17, 32, 0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--gv-border);
+}
+.gv-brand {
+  display: flex; align-items: center; gap: 0.55rem;
+  font-size: 1.2rem; font-weight: 700; letter-spacing: 0.2px;
+}
+.gv-brand i { color: var(--gv-purple); }
+.gv-brand .gv-brand-sub { color: var(--gv-faint); font-weight: 500; font-size: 0.8rem; }
+
+.gv-tabs { display: flex; gap: 0.35rem; margin-inline: auto; flex-wrap: wrap; }
+.gv-tab {
+  appearance: none; border: 1px solid transparent; background: transparent;
+  color: var(--gv-muted); font-weight: 600; font-size: 0.92rem;
+  padding: 0.5rem 0.95rem; border-radius: 999px; cursor: pointer;
+  transition: all 160ms var(--gv-ease);
+}
+.gv-tab:hover { color: var(--gv-text); background: rgba(148, 163, 184, 0.12); }
+.gv-tab.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--gv-blue), var(--gv-purple));
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.28);
+}
+.gv-header-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+/* Buttons ----------------------------------------------------------------- */
+.gv-btn {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-weight: 600; font-size: 0.9rem; line-height: 1;
+  padding: 0.6rem 1rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--gv-border-strong); background: transparent; color: var(--gv-text);
+  transition: transform 140ms var(--gv-ease), box-shadow 140ms var(--gv-ease), background 140ms;
+  text-decoration: none;
+}
+.gv-btn:hover { transform: translateY(-1px); background: rgba(148, 163, 184, 0.14); }
+.gv-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.gv-btn-primary {
+  border: none; color: #fff;
+  background: linear-gradient(135deg, var(--gv-blue), var(--gv-purple));
+}
+.gv-btn-primary:hover { box-shadow: 0 10px 24px rgba(59, 130, 246, 0.35); background: linear-gradient(135deg, var(--gv-blue), var(--gv-purple)); }
+.gv-btn-ghost { border-color: var(--gv-border); color: var(--gv-muted); }
+.gv-btn-danger { border-color: rgba(239, 68, 68, 0.5); color: #fca5a5; }
+.gv-btn-danger:hover { background: rgba(239, 68, 68, 0.15); }
+.gv-btn-sm { padding: 0.4rem 0.7rem; font-size: 0.82rem; }
+.gv-btn-icon { padding: 0.42rem 0.55rem; border-radius: 10px; }
+
+/* Panels / cards ---------------------------------------------------------- */
+.gv-panel {
+  background: var(--gv-panel);
+  border: 1px solid var(--gv-border);
+  border-radius: var(--gv-radius);
+  box-shadow: var(--gv-shadow);
+  backdrop-filter: blur(12px);
+}
+.gv-section-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap; margin: 0 0 1rem;
+}
+.gv-section-head h2 { font-size: 1.25rem; margin: 0; }
+.gv-section-head p { margin: 0.15rem 0 0; color: var(--gv-muted); font-size: 0.9rem; }
+
+/* Stat tiles -------------------------------------------------------------- */
+.gv-stat-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.gv-stat {
+  padding: 1.1rem 1.25rem; border-radius: var(--gv-radius-sm);
+  background: var(--gv-panel); border: 1px solid var(--gv-border);
+}
+.gv-stat .gv-stat-num { font-size: 2rem; font-weight: 800; line-height: 1; }
+.gv-stat .gv-stat-label { color: var(--gv-muted); font-size: 0.85rem; margin-top: 0.35rem; }
+
+/* Leaderboards ------------------------------------------------------------ */
+.gv-board-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.gv-board { padding: 1.1rem 1.25rem; }
+.gv-board h3 { font-size: 1rem; margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.gv-rank { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0; border-top: 1px solid var(--gv-border); }
+.gv-rank:first-of-type { border-top: none; }
+.gv-rank-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gv-rank-meta { color: var(--gv-faint); font-size: 0.8rem; }
+.gv-winbar { height: 6px; border-radius: 4px; background: rgba(148,163,184,0.18); overflow: hidden; width: 90px; }
+.gv-winbar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--gv-green), var(--gv-blue)); }
+.gv-winpct { width: 44px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.85rem; }
+
+/* Player cards ------------------------------------------------------------ */
+.gv-players { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.gv-player-card { padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.9rem; }
+.gv-player-top { display: flex; align-items: center; gap: 0.75rem; }
+.gv-avatar {
+  width: 42px; height: 42px; border-radius: 12px; flex: none;
+  display: grid; place-items: center; font-weight: 800; font-size: 1.05rem; color: #fff;
+  background: linear-gradient(135deg, var(--gv-blue), var(--gv-purple));
+}
+.gv-player-name { font-weight: 700; font-size: 1.05rem; }
+.gv-player-note { color: var(--gv-muted); font-size: 0.82rem; }
+.gv-player-actions { margin-left: auto; display: flex; gap: 0.35rem; }
+
+.gv-deck-list { display: flex; flex-direction: column; gap: 0.55rem; }
+.gv-deck {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 0.5rem 0.6rem; border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55); border: 1px solid var(--gv-border);
+}
+.gv-deck-art {
+  width: 52px; height: 40px; border-radius: 8px; object-fit: cover; flex: none;
+  background: rgba(148,163,184,0.15); border: 1px solid var(--gv-border);
+}
+.gv-deck-main { flex: 1; min-width: 0; }
+.gv-deck-name { font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gv-deck-sub { color: var(--gv-muted); font-size: 0.78rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.gv-deck-actions { display: flex; gap: 0.25rem; }
+.gv-empty { color: var(--gv-faint); font-size: 0.85rem; font-style: italic; padding: 0.4rem 0; }
+
+/* Source + bracket badges ------------------------------------------------- */
+.gv-badge {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+  padding: 0.12rem 0.45rem; border-radius: 999px;
+  border: 1px solid var(--gv-border-strong); color: var(--gv-muted);
+}
+.gv-badge.src-archidekt { color: #f0a35e; border-color: rgba(240,163,94,0.5); }
+.gv-badge.src-moxfield { color: #8fb7ff; border-color: rgba(143,183,255,0.5); }
+.gv-badge.src-mtggoldfish { color: #ffd166; border-color: rgba(255,209,102,0.5); }
+.gv-badge.src-manual { color: var(--gv-faint); }
+.gv-badge.gv-bracket { color: var(--gv-purple); border-color: rgba(139,92,246,0.5); }
+
+/* WUBRG color pips -------------------------------------------------------- */
+.gv-pips { display: inline-flex; gap: 2px; }
+.gv-pip { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.35); box-shadow: inset 0 0 2px rgba(0,0,0,0.4); }
+.gv-pip.W { background: #f7f3d6; }
+.gv-pip.U { background: #7ec5f0; }
+.gv-pip.B { background: #3a3a44; }
+.gv-pip.R { background: #f0796a; }
+.gv-pip.G { background: #71c39a; }
+.gv-pip.C { background: #b8b8bd; }
+
+/* Games list -------------------------------------------------------------- */
+.gv-games { display: flex; flex-direction: column; gap: 0.85rem; }
+.gv-game { padding: 0.95rem 1.1rem; }
+.gv-game-top { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.gv-game-date { font-weight: 700; }
+.gv-game-meta { color: var(--gv-muted); font-size: 0.82rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.gv-seats { display: grid; gap: 0.4rem; margin-top: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.gv-seat {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem;
+  border-radius: 10px; background: rgba(15,23,42,0.5); border: 1px solid var(--gv-border);
+  font-size: 0.85rem;
+}
+.gv-seat.winner { border-color: rgba(16,185,129,0.6); background: rgba(16,185,129,0.1); }
+.gv-seat .gv-seat-player { font-weight: 600; }
+.gv-seat .gv-seat-deck { color: var(--gv-muted); font-size: 0.78rem; }
+.gv-crown { color: var(--gv-amber); }
+
+/* Modal (custom, no Bootstrap JS) ---------------------------------------- */
+.gv-modal-overlay {
+  position: fixed; inset: 0; z-index: 100; display: none;
+  align-items: flex-start; justify-content: center;
+  background: rgba(2, 6, 23, 0.72); backdrop-filter: blur(4px); padding: 4vh 1rem;
+  overflow-y: auto;
+}
+.gv-modal-overlay.open { display: flex; }
+.gv-modal {
+  width: 100%; max-width: 620px; background: var(--gv-panel-solid);
+  border: 1px solid var(--gv-border-strong); border-radius: var(--gv-radius);
+  box-shadow: var(--gv-shadow); animation: gvPop 180ms var(--gv-ease);
+}
+@keyframes gvPop { from { transform: translateY(12px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.gv-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--gv-border); }
+.gv-modal-head h3 { margin: 0; font-size: 1.1rem; }
+.gv-modal-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+.gv-modal-foot { display: flex; justify-content: flex-end; gap: 0.6rem; padding: 1rem 1.25rem; border-top: 1px solid var(--gv-border); }
+.gv-x { background: none; border: none; color: var(--gv-muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
+.gv-x:hover { color: var(--gv-text); }
+
+/* Form fields ------------------------------------------------------------- */
+.gv-field { display: flex; flex-direction: column; gap: 0.35rem; }
+.gv-field label { font-size: 0.82rem; font-weight: 600; color: var(--gv-muted); }
+.gv-input, .gv-select, .gv-textarea {
+  width: 100%; padding: 0.6rem 0.75rem; border-radius: var(--gv-radius-sm);
+  background: rgba(15, 23, 42, 0.7); border: 1px solid var(--gv-border);
+  color: var(--gv-text); font-size: 0.92rem; font-family: inherit;
+}
+.gv-input:focus, .gv-select:focus, .gv-textarea:focus {
+  outline: none; border-color: var(--gv-blue); box-shadow: 0 0 0 3px rgba(59,130,246,0.22);
+}
+.gv-textarea { resize: vertical; min-height: 64px; }
+.gv-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.gv-row > .gv-field { flex: 1; min-width: 140px; }
+.gv-hint { color: var(--gv-faint); font-size: 0.78rem; }
+.gv-seg { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.gv-seg button {
+  flex: 1; min-width: 90px; padding: 0.5rem; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--gv-border); background: rgba(15,23,42,0.5); color: var(--gv-muted); font-weight: 600; font-size: 0.85rem;
+}
+.gv-seg button.active { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--gv-blue), var(--gv-purple)); }
+
+/* Log-game seat rows ------------------------------------------------------ */
+.gv-log-seats { display: flex; flex-direction: column; gap: 0.6rem; }
+.gv-log-seat {
+  display: grid; gap: 0.5rem; align-items: center;
+  grid-template-columns: auto 1fr 1fr auto auto;
+  padding: 0.55rem; border-radius: 12px; background: rgba(15,23,42,0.5); border: 1px solid var(--gv-border);
+}
+.gv-log-seat .gv-win {
+  display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: var(--gv-muted); cursor: pointer; white-space: nowrap;
+}
+.gv-seat-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 40px;
+  padding: 0.28rem 0.4rem; border-radius: 8px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;
+  background: rgba(59,130,246,0.16); color: #bcd3ff; border: 1px solid var(--gv-border);
+}
+.gv-seat-badge.first { background: rgba(16,185,129,0.16); color: #8ff0c8; }
+.gv-seat-badge.last { background: rgba(245,158,11,0.14); color: #ffd58a; }
+.gv-seat-ctrls { display: inline-flex; gap: 0.2rem; }
+@media (max-width: 560px) { .gv-log-seat { grid-template-columns: auto 1fr 1fr; } }
+
+/* Turn chip on logged-game seats + infinite badge ------------------------- */
+.gv-turn-chip {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 26px;
+  padding: 0.1rem 0.35rem; border-radius: 6px; font-size: 0.68rem; font-weight: 800;
+  background: rgba(59,130,246,0.16); color: #bcd3ff; border: 1px solid var(--gv-border);
+}
+.gv-badge.gv-inf { color: var(--gv-purple); border-color: rgba(139,92,246,0.5); }
+
+/* Deck mapping rows ------------------------------------------------------- */
+.gv-map-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; align-items: center;
+  padding: 0.35rem 0.5rem; border-radius: 10px; margin-bottom: 0.35rem;
+  background: rgba(15,23,42,0.45); border: 1px solid var(--gv-border);
+}
+.gv-map-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; font-weight: 600; }
+.gv-map-count { color: var(--gv-faint); font-weight: 500; font-size: 0.8rem; }
+.gv-map-match { color: var(--gv-green); font-weight: 800; }
+@media (max-width: 520px) { .gv-map-row { grid-template-columns: 1fr; } }
+
+/* Source-deck picker list ------------------------------------------------- */
+.gv-picklist { display: flex; flex-direction: column; gap: 0.4rem; max-height: 320px; overflow-y: auto; }
+.gv-pick {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.7rem; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--gv-border); background: rgba(15,23,42,0.5);
+}
+.gv-pick:hover { border-color: var(--gv-border-strong); background: rgba(59,130,246,0.1); }
+.gv-pick-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Toasts ------------------------------------------------------------------ */
+.gv-toasts { position: fixed; right: 1rem; bottom: 1rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; }
+.gv-toast {
+  min-width: 240px; max-width: 380px; padding: 0.75rem 1rem; border-radius: 12px;
+  background: var(--gv-panel-solid); border: 1px solid var(--gv-border-strong); box-shadow: var(--gv-shadow);
+  display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; animation: gvPop 160ms var(--gv-ease);
+}
+.gv-toast.ok { border-left: 3px solid var(--gv-green); }
+.gv-toast.err { border-left: 3px solid var(--gv-red); }
+.gv-toast.info { border-left: 3px solid var(--gv-blue); }
+
+/* Loading + misc ---------------------------------------------------------- */
+.gv-loading { display: flex; align-items: center; gap: 0.6rem; color: var(--gv-muted); padding: 2rem; justify-content: center; }
+.gv-spin { width: 18px; height: 18px; border: 2px solid rgba(148,163,184,0.3); border-top-color: var(--gv-blue); border-radius: 50%; animation: gvSpin 0.7s linear infinite; }
+@keyframes gvSpin { to { transform: rotate(360deg); } }
+.gv-blank { text-align: center; color: var(--gv-muted); padding: 2.5rem 1rem; }
+.gv-blank i { font-size: 2rem; color: var(--gv-faint); display: block; margin-bottom: 0.5rem; }
+[hidden] { display: none !important; }
+.gv-mt { margin-top: 1.5rem; }
+
+/* Mobile optimization ----------------------------------------------------- */
+@media (max-width: 640px) {
+  .gv-shell { padding: 0 0.8rem 3rem; }
+  .gv-header { padding: 0.55rem 0.8rem; gap: 0.4rem 0.75rem; }
+  .gv-brand { order: 1; font-size: 1.05rem; }
+  .gv-brand .gv-brand-sub { display: none; }
+  .gv-header-actions { order: 2; margin-left: auto; }
+  .gv-tabs { order: 3; width: 100%; margin: 0.15rem 0 0; justify-content: center; }
+  .gv-tab { padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+  .gv-section-head { gap: 0.6rem; }
+  .gv-section-head h2 { font-size: 1.1rem; }
+  .gv-stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.7rem; }
+  .gv-stat { padding: 0.9rem 1rem; }
+  .gv-stat .gv-stat-num { font-size: 1.6rem; }
+  .gv-players { grid-template-columns: 1fr; }
+  .gv-seats { grid-template-columns: 1fr; }
+  .gv-modal-body { padding: 1rem; }
+  .gv-modal-head, .gv-modal-foot { padding: 0.8rem 1rem; }
+  .gv-modal-overlay { padding: 2vh 0.6rem; }
+  /* Larger touch targets for the icon buttons. */
+  .gv-btn-icon { padding: 0.5rem 0.62rem; }
+  .gv-deck-actions .gv-btn, .gv-player-actions .gv-btn { padding: 0.5rem 0.6rem; }
+}
+
+@media (max-width: 460px) {
+  .gv-tab { padding: 0.4rem 0.55rem; font-size: 0.8rem; }
+  /* Seats: commander + deck selects stack for comfortable tapping. */
+  .gv-log-seat { grid-template-columns: auto 1fr; }
+  .gv-log-seat > select { grid-column: 2; }
+  .gv-log-seat .gv-win { grid-column: 2; }
+  .gv-log-seat .gv-seat-ctrls { grid-column: 1 / -1; justify-content: flex-end; }
+  .gv-row > .gv-field { min-width: 100%; }
+}

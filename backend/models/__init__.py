@@ -62,6 +62,13 @@ from .role import (  # type: ignore F401
     DeckTagEvergreenSynergy,
     DeckTagCardSynergy,
 )
+# Self-contained Game Vault models (gv_* tables; no FKs into app tables).
+from core.domains.game_vault.models import (  # type: ignore F401
+    GVPlayer,
+    GVDeck,
+    GVGame,
+    GVGameParticipant,
+)
 
 __all__ = [
     "db",
@@ -117,4 +124,8 @@ __all__ = [
     "DeckTagCoreRoleSynergy",
     "DeckTagEvergreenSynergy",
     "DeckTagCardSynergy",
+    "GVPlayer",
+    "GVDeck",
+    "GVGame",
+    "GVGameParticipant",
 ]

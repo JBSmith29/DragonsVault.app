@@ -49,7 +49,9 @@ def register_routes() -> None:
 
 def web_blueprints():
     """Return web-facing blueprints mounted by the application factory."""
-    return (views,)
+    from core.domains.game_vault.routes import game_vault_bp
+
+    return (views, game_vault_bp)
 
 
 def api_blueprints():

@@ -1029,6 +1029,17 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint == 'game_vault.index' %}active{% endif %}"
+               href="{{ url_for('game_vault.index') }}"
+               title="Game Vault"
+               aria-label="Game Vault"
+               data-hx-boost="false"
+               data-endpoints="game_vault.index">
+              <i class="bi bi-shield-lock" aria-hidden="true"></i>
+              <span class="sidebar-label">Game Vault</span>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link text-white d-flex align-items-center gap-2 {% if current_endpoint in ['views.build_landing', 'views.build_session'] %}active{% endif %}"
                href="{{ url_for('views.build_landing') }}"
                title="Build-A-Deck"

@@ -18,11 +18,13 @@ def register_web_domains() -> None:
     from .decks.routes import register_web_routes as register_decks_web_routes
     from .games.routes import register_web_routes as register_games_web_routes
     from .users.routes import register_web_routes as register_users_web_routes
+    from .game_vault.routes import register_web_routes as register_game_vault_web_routes
 
     register_cards_web_routes()
     register_decks_web_routes()
     register_games_web_routes()
     register_users_web_routes()
+    register_game_vault_web_routes()
 
 
 def register_api_domains() -> None:
