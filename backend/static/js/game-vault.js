@@ -299,14 +299,30 @@
       rel: "noopener", style: "align-self:flex-start" },
       h("i", { class: "bi bi-box-arrow-up-right" }), ` Open on ${SOURCE_LABELS[full.source] || full.source}`));
 
-    const cards = (full.cards || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    const total = cards.reduce((s, c) => s + (Number(c.quantity) || 1), 0);
-    body.append(h("div", { class: "gv-hint" }, `${cards.length} distinct cards · ${total} total`));
+    // The commander is stored separately from the 99, so surface it explicitly.
+    const commanderName = (full.commander_name || "").trim();
+    const cmdParts = new Set(commanderName ? commanderName.toLowerCase().split("//").map((s) => s.trim()) : []);
+    const cards = (full.cards || [])
+      .filter((c) => !cmdParts.has((c.name || "").trim().toLowerCase()))
+      .slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    body.append(h("div", { class: "gv-hint" }, `${commanderName ? "Commander + " : ""}${cards.length} cards`));
+
+    const cardRow = (qty, name, isCmd) => h("div", { class: "gv-cardrow" + (isCmd ? " gv-card-cmd" : "") },
+      h("span", { class: "gv-card-qty", text: qty ? `${qty}×` : "" }),
+      isCmd ? h("i", { class: "bi bi-star-fill gv-cmd-star", title: "Commander" }) : null,
+      h("span", { class: "gv-card-name", text: name }));
+
     const list = h("div", { class: "gv-cardlist" });
-    if (!cards.length) list.append(h("div", { class: "gv-empty", text: "No card list stored for this deck." }));
-    cards.forEach((c) => list.append(h("div", { class: "gv-cardrow" },
-      h("span", { class: "gv-card-qty", text: `${c.quantity || 1}×` }),
-      h("span", { class: "gv-card-name", text: c.name }))));
+    if (commanderName) {
+      list.append(h("div", { class: "gv-cardgroup", text: "Commander" }));
+      list.append(cardRow(1, commanderName, true));
+    }
+    if (cards.length) {
+      if (commanderName) list.append(h("div", { class: "gv-cardgroup", text: "Deck" }));
+      cards.forEach((c) => list.append(cardRow(c.quantity || 1, c.name)));
+    } else if (!commanderName) {
+      list.append(h("div", { class: "gv-empty", text: "No card list stored for this deck." }));
+    }
     body.append(list);
   }
 
