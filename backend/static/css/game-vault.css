@@ -144,12 +144,13 @@ body.gv-body {
   background: var(--gv-panel); border: 1px solid var(--gv-border);
 }
 .gv-stat .gv-stat-num { font-size: 2rem; font-weight: 800; line-height: 1; }
-.gv-stat .gv-stat-label { color: var(--gv-muted); font-size: 0.85rem; margin-top: 0.35rem; }
+.gv-stat .gv-stat-label { color: var(--gv-muted); font-size: 0.85rem; margin-top: 0.4rem; display: inline-flex; align-items: center; gap: 0.45rem; }
 
 /* Leaderboards ------------------------------------------------------------ */
 .gv-board-grid { display: grid; gap: 1.25rem; align-items: start; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .gv-board { padding: 1.1rem 1.25rem; }
-.gv-board h3 { font-size: 1rem; margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.gv-board h3 { font-size: 1rem; margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.55rem; }
+.gv-board h3 i { flex: none; }
 .gv-rank { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0; border-top: 1px solid var(--gv-border); }
 .gv-rank:first-of-type { border-top: none; }
 .gv-rank-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

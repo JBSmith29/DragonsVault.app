@@ -143,7 +143,7 @@
     tiles.forEach((t) => host.append(
       h("div", { class: "gv-stat" },
         h("div", { class: "gv-stat-num", text: String(t.n) }),
-        h("div", { class: "gv-stat-label" }, h("i", { class: `bi ${t.i}`, style: `color:${t.c};margin-right:.4rem` }), t.l))
+        h("div", { class: "gv-stat-label" }, h("i", { class: `bi ${t.i}`, style: `color:${t.c}` }), t.l))
     ));
   }
 
@@ -1019,7 +1019,7 @@
     const grid = h("div", { class: "gv-stat-grid" });
     cards.forEach((c) => grid.append(h("div", { class: "gv-stat" },
       h("div", { class: "gv-stat-num", text: String(c.n) }),
-      h("div", { class: "gv-stat-label" }, h("i", { class: `bi ${c.i}`, style: "margin-right:.4rem" }), c.l))));
+      h("div", { class: "gv-stat-label" }, h("i", { class: `bi ${c.i}` }), c.l))));
     body.append(grid);
 
     if (m.head_to_head && m.head_to_head.length) {
