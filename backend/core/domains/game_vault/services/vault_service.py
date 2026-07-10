@@ -236,6 +236,58 @@ def delete_deck(owner_user_id: int, deck_id: int) -> None:
     db.session.commit()
 
 
+def get_deck_detail(owner_user_id: int, deck_id: int) -> dict[str, Any]:
+    """Full deck payload including the card list (fetched on demand)."""
+    deck = GVDeck.query.filter_by(id=deck_id, owner_user_id=owner_user_id).first()
+    if not deck:
+        raise VaultError("Deck not found.")
+    data = deck.to_dict()
+    data["cards"] = deck.cards or []
+    return data
+
+
+def games_csv(owner_user_id: int) -> str:
+    """Flatten the owner's games into a CSV (one row per game, seats as cols)."""
+    import csv
+    import io
+
+    games = (
+        GVGame.query.filter_by(owner_user_id=owner_user_id)
+        .order_by(GVGame.played_at.desc(), GVGame.id.desc())
+        .all()
+    )
+    max_seats = max([len(g.participants or []) for g in games] + [1])
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    header = ["game_id", "played_at", "format", "turns", "win_condition",
+              "infinite_win", "winner", "player_count", "notes"]
+    for i in range(1, max_seats + 1):
+        header += [f"seat_{i}_player", f"seat_{i}_deck", f"seat_{i}_commander",
+                   f"seat_{i}_turn_order", f"seat_{i}_winner"]
+    writer.writerow(header)
+
+    for g in games:
+        seats = sorted(g.participants or [], key=lambda p: (p.turn_order if p.turn_order is not None else 99))
+        winner = next((p.player_name for p in seats if p.is_winner), "")
+        row = [
+            g.id,
+            g.played_at.strftime("%Y-%m-%d") if g.played_at else "",
+            g.format or "", g.turns if g.turns is not None else "",
+            g.win_condition or "", "yes" if g.infinite_win else "",
+            winner, len(seats), g.notes or "",
+        ]
+        for i in range(max_seats):
+            if i < len(seats):
+                p = seats[i]
+                row += [p.player_name or "", p.deck_name or "", p.commander_name or "",
+                        p.turn_order if p.turn_order is not None else "", "yes" if p.is_winner else ""]
+            else:
+                row += ["", "", "", "", ""]
+        writer.writerow(row)
+    return out.getvalue()
+
+
 def set_deck_bracket(owner_user_id: int, deck_id: int, bracket: Any) -> GVDeck:
     """Hand-set a deck's bracket (1-5), or clear the override (bracket=None).
 
@@ -633,7 +685,7 @@ __all__ = [
     "VaultError",
     "list_players", "create_player", "update_player", "delete_player",
     "list_source_decks", "import_deck", "sync_deck", "sync_all_decks", "delete_deck",
-    "set_deck_bracket",
+    "set_deck_bracket", "get_deck_detail", "games_csv",
     "list_games", "create_game", "update_game", "delete_game", "compute_stats",
     "deck_mapping_overview", "apply_deck_mapping",
     "detect_source",

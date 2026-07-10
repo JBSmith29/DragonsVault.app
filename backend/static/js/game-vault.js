@@ -190,16 +190,60 @@
     return card;
   }
 
-  function renderGames() {
-    const recent = $("#gvRecentGames"); clear(recent);
+  const gamesFilter = { q: "", player: "" };
+
+  function gameMatches(g) {
+    if (gamesFilter.player && !(g.participants || []).some((p) => String(p.player_id) === gamesFilter.player)) return false;
+    const q = gamesFilter.q.trim().toLowerCase();
+    if (!q) return true;
+    if ((g.notes || "").toLowerCase().includes(q)) return true;
+    if ((g.played_at_label || "").includes(q)) return true;
+    return (g.participants || []).some((p) =>
+      (p.player_name || "").toLowerCase().includes(q) ||
+      (p.deck_name || "").toLowerCase().includes(q) ||
+      (p.commander_name || "").toLowerCase().includes(q));
+  }
+
+  function buildGamesFilter() {
+    const host = $("#gvGamesFilter"); clear(host);
+    if (!state.games.length) return;
+    const q = h("input", { class: "gv-input", type: "search", value: gamesFilter.q,
+      placeholder: "Search player, deck, commander, notes…" });
+    q.addEventListener("input", () => { gamesFilter.q = q.value; renderAllGames(); });
+    const pl = h("select", { class: "gv-select" }, h("option", { value: "", text: "All players" }));
+    state.players.forEach((p) => pl.append(h("option", { value: String(p.id), text: p.name })));
+    pl.value = gamesFilter.player;
+    pl.addEventListener("change", () => { gamesFilter.player = pl.value; renderAllGames(); });
+    host.append(field("Search", q), field("Player", pl));
+  }
+
+  function renderAllGames() {
     const all = $("#gvAllGames"); clear(all);
     if (!state.games.length) {
-      recent.append(blank("bi-dice-5", "No games logged yet.", "Log game", () => openLogGame()));
       all.append(blank("bi-dice-5", "No games logged yet.", "Log game", () => openLogGame()));
       return;
     }
-    state.games.slice(0, 6).forEach((g) => recent.append(gameCard(g, { actions: true })));
-    state.games.forEach((g) => all.append(gameCard(g, { actions: true })));
+    const filtered = state.games.filter(gameMatches);
+    if (!filtered.length) {
+      all.append(h("div", { class: "gv-blank" }, h("i", { class: "bi bi-search" }),
+        h("div", { text: "No games match your filter." })));
+      return;
+    }
+    const count = h("div", { class: "gv-hint", style: "margin-bottom:.5rem" },
+      `${filtered.length} of ${state.games.length} games`);
+    all.append(count);
+    filtered.forEach((g) => all.append(gameCard(g, { actions: true })));
+  }
+
+  function renderGames() {
+    const recent = $("#gvRecentGames"); clear(recent);
+    if (!state.games.length) {
+      recent.append(blank("bi-dice-5", "No games logged yet.", "Log game", () => openLogGame()));
+    } else {
+      state.games.slice(0, 6).forEach((g) => recent.append(gameCard(g, { actions: true })));
+    }
+    buildGamesFilter();
+    renderAllGames();
   }
 
   /* -------------------------------------------------------------- players */
@@ -228,11 +272,41 @@
       h("div", { class: "gv-deck-name", text: deck.name }), sub));
 
     const actions = h("div", { class: "gv-deck-actions" });
+    actions.append(h("button", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", title: "View decklist", onclick: () => openDeckDetail(deck) }, h("i", { class: "bi bi-list-ul" })));
     if (deck.url) actions.append(h("a", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", href: deck.url, target: "_blank", rel: "noopener", title: "Open source" }, h("i", { class: "bi bi-box-arrow-up-right" })));
     if (deck.source !== "manual") actions.append(h("button", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", title: "Re-sync from source", onclick: (e) => syncDeck(deck, e.currentTarget) }, h("i", { class: "bi bi-arrow-repeat" })));
     actions.append(h("button", { class: "gv-btn gv-btn-danger gv-btn-sm gv-btn-icon", title: "Remove deck", onclick: () => confirmDelete("deck", deck) }, h("i", { class: "bi bi-trash" })));
     row.append(actions);
     return row;
+  }
+
+  async function openDeckDetail(deck) {
+    const body = h("div", {}, h("div", { class: "gv-loading" }, h("span", { class: "gv-spin" }), "Loading decklist…"));
+    openModal(deck.name, body, [btn("Close", "gv-btn-ghost", closeModal)]);
+    let full;
+    try { full = (await api("GET", `/decks/${deck.id}`)).deck; }
+    catch (e) { clear(body); body.append(h("div", { class: "gv-empty", text: e.message })); return; }
+    clear(body);
+
+    const meta = h("div", { class: "gv-deck-sub", style: "gap:.5rem" }, sourceBadge(full.source));
+    if (full.colors && full.colors.length) meta.append(pips(full.colors));
+    if (full.bracket) meta.append(h("span", { class: "gv-badge gv-bracket" },
+      `Bracket ${full.bracket}${full.bracket_is_estimated ? " · est" : ""}`));
+    if (full.commander_name) meta.append(h("span", { text: full.commander_name }));
+    body.append(meta);
+    if (full.url) body.append(h("a", { class: "gv-btn gv-btn-ghost gv-btn-sm", href: full.url, target: "_blank",
+      rel: "noopener", style: "align-self:flex-start" },
+      h("i", { class: "bi bi-box-arrow-up-right" }), ` Open on ${SOURCE_LABELS[full.source] || full.source}`));
+
+    const cards = (full.cards || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const total = cards.reduce((s, c) => s + (Number(c.quantity) || 1), 0);
+    body.append(h("div", { class: "gv-hint" }, `${cards.length} distinct cards · ${total} total`));
+    const list = h("div", { class: "gv-cardlist" });
+    if (!cards.length) list.append(h("div", { class: "gv-empty", text: "No card list stored for this deck." }));
+    cards.forEach((c) => list.append(h("div", { class: "gv-cardrow" },
+      h("span", { class: "gv-card-qty", text: `${c.quantity || 1}×` }),
+      h("span", { class: "gv-card-name", text: c.name }))));
+    body.append(list);
   }
 
   function playerCard(player) {
@@ -280,6 +354,24 @@
       catch (e) { fail++; }
     }
     toast(`Refreshed ${ok} deck${ok === 1 ? "" : "s"} for ${player.name}${fail ? `, ${fail} failed` : ""}.`, fail ? "err" : "ok");
+    button.disabled = false; button.innerHTML = label;
+    await reload();
+  }
+
+  // Refresh every source-linked deck across all players, one at a time.
+  async function refreshAllDecks(button) {
+    const ids = state.players.flatMap((p) => (p.decks || [])
+      .filter((d) => d.source && d.source !== "manual").map((d) => d.id));
+    if (!ids.length) { toast("No source-linked decks to refresh.", "info"); return; }
+    const label = button.innerHTML;
+    button.disabled = true;
+    let ok = 0, fail = 0;
+    for (let i = 0; i < ids.length; i++) {
+      button.innerHTML = `<span class="gv-spin"></span> ${i + 1}/${ids.length}`;
+      try { await api("POST", `/decks/${ids[i]}/sync`); ok++; }
+      catch (e) { fail++; }
+    }
+    toast(`Refreshed ${ok} deck${ok === 1 ? "" : "s"}${fail ? `, ${fail} failed` : ""}.`, fail ? "err" : "ok");
     button.disabled = false; button.innerHTML = label;
     await reload();
   }
@@ -818,6 +910,13 @@
       h("div", { class: "gv-stat-label" }, h("i", { class: `bi ${c.i}`, style: "margin-right:.4rem" }), c.l))));
     body.append(grid);
 
+    if (m.head_to_head && m.head_to_head.length) {
+      const focus = state.players.find((p) => String(p.id) === metricFilters.player_id);
+      body.append(h("div", { class: "gv-mt" }, ratePanel(
+        `Head-to-head — ${focus ? focus.name + "’s" : "your"} win rate when they're in the pod`,
+        "bi-people", m.head_to_head, (r) => `won ${r.wins} of ${r.games}`)));
+    }
+
     const boards = h("div", { class: "gv-board-grid gv-mt" },
       ratePanel("Player standings", "bi-trophy", m.players,
         (r) => `${r.wins}W · ${r.games} games` + (r.avg_turn_order != null ? ` · avg seat ${r.avg_turn_order}` : "")),
@@ -865,7 +964,10 @@
       if (a === "add-player") openPlayerModal();
       else if (a === "log-game") openLogGame();
       else if (a === "map-decks") openDeckMap();
+      else if (a === "refresh-all") refreshAllDecks(el);
     }));
+    const exportLink = $("#gvExportCsv");
+    if (exportLink) exportLink.href = `${API}/export/games.csv`;
     overlay().addEventListener("click", (e) => { if (e.target === overlay() || e.target.hasAttribute("data-close")) closeModal(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay().classList.contains("open")) closeModal(); });
     // Reflect the initially-active tab for assistive tech.

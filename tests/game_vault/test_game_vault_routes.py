@@ -335,6 +335,58 @@ def test_metrics_endpoint(client, create_user):
     assert r2.get_json()["metrics"]["summary"]["games"] == 1
 
 
+def test_deck_detail_and_export(client, create_user, monkeypatch):
+    user, password = create_user(email="gv-detail@example.com", username="gvdetail")
+    _login(client, user.email, password)
+    _patch_import(monkeypatch, _fake_deck())  # cards: Sol Ring x1
+    pid = client.post("/game-vault/api/players", json={"name": "Ann"}).get_json()["player"]["id"]
+    bob = client.post("/game-vault/api/players", json={"name": "Bob"}).get_json()["player"]["id"]
+    did = client.post(f"/game-vault/api/players/{pid}/decks",
+                      json={"url": "https://archidekt.com/decks/42"}).get_json()["deck"]["id"]
+
+    # Deck detail includes the card list.
+    r = client.get(f"/game-vault/api/decks/{did}")
+    assert r.status_code == 200
+    deck = r.get_json()["deck"]
+    assert deck["cards"] and deck["cards"][0]["name"] == "Sol Ring"
+
+    # A logged game, then CSV export.
+    client.post("/game-vault/api/games", json={
+        "played_at": "2026-07-01",
+        "participants": [
+            {"player_id": pid, "is_winner": True, "turn_order": 1},
+            {"player_id": bob, "is_winner": False, "turn_order": 2},
+        ],
+    })
+    r = client.get("/game-vault/api/export/games.csv")
+    assert r.status_code == 200
+    assert r.mimetype == "text/csv"
+    assert "attachment" in r.headers.get("Content-Disposition", "")
+    lines = r.get_data(as_text=True).splitlines()
+    assert lines[0].startswith("game_id,played_at")
+    assert len(lines) == 2  # header + one game
+
+
+def test_metrics_head_to_head(client, create_user):
+    user, password = create_user(email="gv-h2h@example.com", username="gvh2h")
+    _login(client, user.email, password)
+    a = client.post("/game-vault/api/players", json={"name": "Ann"}).get_json()["player"]["id"]
+    b = client.post("/game-vault/api/players", json={"name": "Bob"}).get_json()["player"]["id"]
+    client.post("/game-vault/api/games", json={
+        "played_at": "2026-07-01",
+        "participants": [
+            {"player_id": a, "is_winner": True, "turn_order": 1},
+            {"player_id": b, "is_winner": False, "turn_order": 2},
+        ],
+    })
+    # No player filter -> head_to_head empty.
+    assert client.get("/game-vault/api/metrics").get_json()["metrics"]["head_to_head"] == []
+    # Filter to Ann -> she won 1/1 vs Bob.
+    h2h = client.get(f"/game-vault/api/metrics?player_id={a}").get_json()["metrics"]["head_to_head"]
+    bob_row = next(x for x in h2h if x["label"] == "Bob")
+    assert bob_row["games"] == 1 and bob_row["wins"] == 1 and bob_row["win_rate"] == 100.0
+
+
 def test_state_endpoint(client, create_user):
     user, password = create_user(email="gv-state@example.com", username="gvstate")
     _login(client, user.email, password)

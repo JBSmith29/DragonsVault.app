@@ -193,6 +193,30 @@ def compute_metrics(owner_user_id: int, *, date_from: str | None = None, date_to
             months[g.played_at.strftime("%Y-%m")] += 1
     timeline = [{"month": m, "games": months[m]} for m in sorted(months)]
 
+    # Head-to-head: the focus player's win rate in games each opponent was in.
+    head_to_head = []
+    if player_id:
+        seats_by_game: dict[int, list] = defaultdict(list)
+        for p in parts:
+            seats_by_game[p.game_id].append(p)
+        h2h: dict[str, list] = defaultdict(lambda: [0, 0])  # opponent -> [games, focus_wins]
+        for seats in seats_by_game.values():
+            focus = next((p for p in seats if p.player_id == player_id), None)
+            if not focus:
+                continue
+            focus_won = bool(focus.is_winner)
+            for p in seats:
+                if p.player_id == player_id:
+                    continue
+                name = (p.player_name or "").strip() or "Unknown"
+                h2h[name][0] += 1
+                h2h[name][1] += 1 if focus_won else 0
+        head_to_head = [
+            {"label": opp, "games": g, "wins": w, "win_rate": _rate(w, g)}
+            for opp, (g, w) in h2h.items()
+        ]
+        head_to_head.sort(key=lambda e: (-e["games"], e["label"].lower()))
+
     # Win streaks (per player, chronological)
     streak_src: dict[str, list[tuple]] = defaultdict(list)
     for p in parts:
@@ -233,6 +257,7 @@ def compute_metrics(owner_user_id: int, *, date_from: str | None = None, date_to
         "brackets": bracket_rows,
         "timeline": timeline,
         "streaks": streaks,
+        "head_to_head": head_to_head,
         "applied": {
             "date_from": df.date().isoformat() if df else None,
             "date_to": dt.date().isoformat() if dt else None,

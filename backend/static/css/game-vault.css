@@ -113,6 +113,14 @@ body.gv-body {
 }
 .gv-section-head h2 { font-size: 1.25rem; margin: 0; }
 .gv-section-head p { margin: 0.15rem 0 0; color: var(--gv-muted); font-size: 0.9rem; }
+.gv-head-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+/* Decklist (deck detail modal) -------------------------------------------- */
+.gv-cardlist { display: flex; flex-direction: column; gap: 0.05rem; }
+.gv-cardrow { display: flex; gap: 0.55rem; padding: 0.22rem 0.4rem; border-radius: 6px; font-size: 0.88rem; }
+.gv-cardrow:nth-child(odd) { background: rgba(148, 163, 184, 0.06); }
+.gv-card-qty { color: var(--gv-muted); min-width: 30px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.gv-card-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Metrics filter bar ------------------------------------------------------ */
 .gv-filters {
@@ -381,8 +389,15 @@ button.gv-badge:focus-visible,
   .gv-brand { order: 1; font-size: 1.05rem; }
   .gv-brand .gv-brand-sub { display: none; }
   .gv-header-actions { order: 2; margin-left: auto; }
-  .gv-tabs { order: 3; width: 100%; margin: 0.15rem 0 0; justify-content: center; }
-  .gv-tab { padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+  /* Tabs scroll horizontally instead of wrapping/squishing. */
+  .gv-tabs {
+    order: 3; width: 100%; margin: 0.2rem -0.8rem 0; padding: 0 0.8rem;
+    flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .gv-tabs::-webkit-scrollbar { display: none; }
+  .gv-tab { flex: 0 0 auto; white-space: nowrap; padding: 0.45rem 0.8rem; font-size: 0.85rem; }
+  .gv-head-actions .gv-btn { flex: 1 1 auto; justify-content: center; }
   .gv-section-head { gap: 0.6rem; }
   .gv-section-head h2 { font-size: 1.1rem; }
   .gv-stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.7rem; }
@@ -402,11 +417,25 @@ button.gv-badge:focus-visible,
 }
 
 @media (max-width: 460px) {
-  .gv-tab { padding: 0.4rem 0.55rem; font-size: 0.8rem; }
-  /* Seats: commander + deck selects stack for comfortable tapping. */
+  .gv-shell { padding: 0 0.7rem 2.5rem; }
+  .gv-tab { padding: 0.4rem 0.7rem; font-size: 0.82rem; }
+  /* Filters + form rows go single-column for comfortable tapping. */
+  .gv-filters { padding: 0.8rem; gap: 0.6rem; }
+  .gv-filters .gv-field, .gv-filters .gv-seg { min-width: 100%; }
+  .gv-row > .gv-field { min-width: 100%; }
+  /* Seats: commander + deck selects stack. */
   .gv-log-seat { grid-template-columns: auto 1fr; }
   .gv-log-seat > select { grid-column: 2; }
   .gv-log-seat .gv-win { grid-column: 2; }
   .gv-log-seat .gv-seat-ctrls { grid-column: 1 / -1; justify-content: flex-end; }
-  .gv-row > .gv-field { min-width: 100%; }
+  /* Deck rows: actions drop to their own line so nothing gets crushed. */
+  .gv-deck { flex-wrap: wrap; }
+  .gv-deck-main { flex-basis: calc(100% - 62px); }
+  .gv-deck-actions { width: 100%; justify-content: flex-end; margin-top: 0.15rem; }
+  .gv-stat .gv-stat-num { font-size: 1.5rem; }
+  .gv-stat-grid { grid-template-columns: 1fr 1fr; }
+  .gv-avatar { width: 38px; height: 38px; }
+  /* Section header actions stack full-width. */
+  .gv-section-head { flex-direction: column; align-items: stretch; }
+  .gv-section-head .gv-head-actions .gv-btn { flex: 1 1 auto; justify-content: center; }
 }

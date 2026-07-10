@@ -168,6 +168,25 @@ def api_sync_all():
     return jsonify({"result": svc.sync_all_decks(_owner())})
 
 
+@game_vault_bp.get("/api/decks/<int:deck_id>")
+@login_required
+@_guard
+def api_deck_detail(deck_id: int):
+    return jsonify({"deck": svc.get_deck_detail(_owner(), deck_id)})
+
+
+@game_vault_bp.get("/api/export/games.csv")
+@login_required
+def api_export_games():
+    from flask import Response
+    csv_text = svc.games_csv(_owner())
+    return Response(
+        csv_text,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=game-vault-games.csv"},
+    )
+
+
 @game_vault_bp.patch("/api/decks/<int:deck_id>")
 @login_required
 @_guard
