@@ -208,11 +208,20 @@
     return card;
   }
 
-  const gamesFilter = { q: "", player: "" };
+  const gamesFilter = { q: "", player: "", winner: "", win_condition: "", date_from: "", date_to: "" };
 
   function gameMatches(g) {
-    if (gamesFilter.player && !(g.participants || []).some((p) => String(p.player_id) === gamesFilter.player)) return false;
-    const q = gamesFilter.q.trim().toLowerCase();
+    const f = gamesFilter;
+    if (f.player && !(g.participants || []).some((p) => String(p.player_id) === f.player)) return false;
+    if (f.winner) {
+      const w = (g.participants || []).find((p) => p.is_winner);
+      if (!(w && String(w.player_id) === f.winner)) return false;
+    }
+    if (f.win_condition && (g.win_condition || "") !== f.win_condition) return false;
+    const day = g.played_at_label || "";
+    if (f.date_from && day && day < f.date_from) return false;
+    if (f.date_to && day && day > f.date_to) return false;
+    const q = f.q.trim().toLowerCase();
     if (!q) return true;
     if ((g.notes || "").toLowerCase().includes(q)) return true;
     if ((g.played_at_label || "").includes(q)) return true;
@@ -225,14 +234,40 @@
   function buildGamesFilter() {
     const host = $("#gvGamesFilter"); clear(host);
     if (!state.games.length) return;
+    const playerOpts = (sel) => {
+      const s = h("select", { class: "gv-select" }, h("option", { value: "", text: "Any" }));
+      state.players.forEach((p) => s.append(h("option", { value: String(p.id), text: p.name })));
+      s.value = sel;
+      return s;
+    };
     const q = h("input", { class: "gv-input", type: "search", value: gamesFilter.q,
-      placeholder: "Search player, deck, commander, notes…" });
+      placeholder: "player, deck, commander, notes…" });
     q.addEventListener("input", () => { gamesFilter.q = q.value; renderAllGames(); });
-    const pl = h("select", { class: "gv-select" }, h("option", { value: "", text: "All players" }));
-    state.players.forEach((p) => pl.append(h("option", { value: String(p.id), text: p.name })));
-    pl.value = gamesFilter.player;
+    const pl = playerOpts(gamesFilter.player);
+    pl.querySelector("option").textContent = "Anyone";
     pl.addEventListener("change", () => { gamesFilter.player = pl.value; renderAllGames(); });
-    host.append(field("Search", q), field("Player", pl));
+    const win = playerOpts(gamesFilter.winner);
+    win.addEventListener("change", () => { gamesFilter.winner = win.value; renderAllGames(); });
+    const wc = h("select", { class: "gv-select" }, h("option", { value: "", text: "Any" }));
+    WIN_CONDITIONS.forEach((w) => wc.append(h("option", { value: w, text: WIN_LABELS[w] || w })));
+    wc.value = gamesFilter.win_condition;
+    wc.addEventListener("change", () => { gamesFilter.win_condition = wc.value; renderAllGames(); });
+    const from = h("input", { class: "gv-input", type: "date", value: gamesFilter.date_from });
+    from.addEventListener("change", () => { gamesFilter.date_from = from.value; renderAllGames(); });
+    const to = h("input", { class: "gv-input", type: "date", value: gamesFilter.date_to });
+    to.addEventListener("change", () => { gamesFilter.date_to = to.value; renderAllGames(); });
+    const clearBtn = btn("Clear", "gv-btn-ghost gv-btn-sm", () => {
+      Object.keys(gamesFilter).forEach((k) => { gamesFilter[k] = ""; });
+      buildGamesFilter(); renderAllGames();
+    }, { icon: "bi-x-circle" });
+    host.append(
+      field("Search", q),
+      field("Includes player", pl),
+      field("Winner", win),
+      field("Win condition", wc),
+      field("From", from),
+      field("To", to),
+      h("div", { class: "gv-field", style: "justify-content:flex-end" }, h("label", { style: "visibility:hidden" }, "."), clearBtn));
   }
 
   function renderAllGames() {
