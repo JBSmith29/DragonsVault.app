@@ -94,6 +94,8 @@ class GVDeck(db.Model):
     color_identity = db.Column(db.String(10), nullable=True)  # subset of WUBRG
     format = db.Column(db.String(32), nullable=True)
     bracket = db.Column(db.Integer, nullable=True)  # 1-5 where known
+    bracket_is_estimated = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    bracket_manual = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     card_count = db.Column(db.Integer, nullable=True)
     cards = db.Column(db.JSON, nullable=True)  # [{"name", "quantity"}]
 
@@ -121,6 +123,8 @@ class GVDeck(db.Model):
             "colors": list(self.color_identity or ""),
             "format": self.format,
             "bracket": self.bracket,
+            "bracket_is_estimated": bool(self.bracket_is_estimated),
+            "bracket_manual": bool(self.bracket_manual),
             "card_count": self.card_count,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
             "sync_status": self.sync_status,

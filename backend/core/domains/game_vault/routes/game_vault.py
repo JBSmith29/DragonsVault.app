@@ -168,6 +168,16 @@ def api_sync_all():
     return jsonify({"result": svc.sync_all_decks(_owner())})
 
 
+@game_vault_bp.patch("/api/decks/<int:deck_id>")
+@login_required
+@_guard
+def api_update_deck(deck_id: int):
+    body = _body()
+    # bracket may be an int 1-5, or null to clear the manual override.
+    deck = svc.set_deck_bracket(_owner(), deck_id, body.get("bracket"))
+    return jsonify({"deck": deck.to_dict()})
+
+
 @game_vault_bp.delete("/api/decks/<int:deck_id>")
 @login_required
 @_guard
@@ -258,6 +268,26 @@ def api_apply_deck_map():
 @_guard
 def api_stats():
     return jsonify({"stats": svc.compute_stats(_owner())})
+
+
+# --------------------------------------------------------------------------- #
+# Metrics (filterable analytics)
+# --------------------------------------------------------------------------- #
+@game_vault_bp.get("/api/metrics")
+@login_required
+@_guard
+def api_metrics():
+    from ..services import metrics_service
+    owner = _owner()
+    metrics = metrics_service.compute_metrics(
+        owner,
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
+        player_id=request.args.get("player_id"),
+        win_condition=request.args.get("win_condition"),
+        min_games=request.args.get("min_games"),
+    )
+    return jsonify({"metrics": metrics, "options": metrics_service.filter_options(owner)})
 
 
 __all__ = ["game_vault_bp"]

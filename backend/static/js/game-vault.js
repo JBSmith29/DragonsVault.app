@@ -210,7 +210,18 @@
       : h("div", { class: "gv-deck-art" }));
     const sub = h("div", { class: "gv-deck-sub" }, sourceBadge(deck.source));
     if (deck.colors && deck.colors.length) sub.append(pips(deck.colors));
-    if (deck.bracket) sub.append(h("span", { class: "gv-badge gv-bracket", text: `Bracket ${deck.bracket}` }));
+    if (deck.bracket) {
+      sub.append(h("button", {
+        class: "gv-badge gv-bracket gv-bracket-btn",
+        title: deck.bracket_manual ? "Bracket set by hand — click to change"
+          : deck.bracket_is_estimated ? "Archidekt estimated bracket — click to override"
+          : "Owner-set bracket — click to override",
+        onclick: () => openBracketModal(deck),
+      }, `Bracket ${deck.bracket}${deck.bracket_is_estimated ? " · est" : deck.bracket_manual ? " · set" : ""}`));
+    } else {
+      sub.append(h("button", { class: "gv-badge gv-bracket-btn", title: "Set a bracket",
+        onclick: () => openBracketModal(deck) }, h("i", { class: "bi bi-plus" }), " Bracket"));
+    }
     if (deck.commander_name) sub.append(h("span", { text: deck.commander_name }));
     if (deck.sync_status === "error") sub.append(h("span", { style: "color:var(--gv-red)", title: deck.sync_error || "Sync failed" }, h("i", { class: "bi bi-exclamation-triangle" })));
     row.append(h("div", { class: "gv-deck-main" },
@@ -241,9 +252,36 @@
     else list.append(h("div", { class: "gv-empty", text: "No decks yet — import one below." }));
     card.append(list);
 
-    card.append(h("button", { class: "gv-btn gv-btn-primary gv-btn-sm", style: "align-self:flex-start", onclick: () => openImportModal(player) },
-      h("i", { class: "bi bi-cloud-download" }), " Import deck"));
+    const footRow = h("div", { style: "display:flex; gap:.5rem; flex-wrap:wrap" },
+      h("button", { class: "gv-btn gv-btn-primary gv-btn-sm", onclick: () => openImportModal(player) },
+        h("i", { class: "bi bi-cloud-download" }), " Import deck"));
+    const syncable = (player.decks || []).filter((d) => d.source && d.source !== "manual");
+    if (syncable.length) {
+      footRow.append(h("button", {
+        class: "gv-btn gv-btn-ghost gv-btn-sm", title: "Re-sync all this player's decks from source",
+        onclick: (e) => refreshPlayerDecks(player, e.currentTarget),
+      }, h("i", { class: "bi bi-arrow-repeat" }), ` Refresh decks (${syncable.length})`));
+    }
+    card.append(footRow);
     return card;
+  }
+
+  // Refresh every source-linked deck for a player, one request at a time so a
+  // large roster can't blow the request timeout. Shows progress on the button.
+  async function refreshPlayerDecks(player, button) {
+    const decks = (player.decks || []).filter((d) => d.source && d.source !== "manual");
+    if (!decks.length) { toast("No source-linked decks to refresh.", "info"); return; }
+    const label = button.innerHTML;
+    button.disabled = true;
+    let ok = 0, fail = 0;
+    for (let i = 0; i < decks.length; i++) {
+      button.innerHTML = `<span class="gv-spin"></span> ${i + 1}/${decks.length}`;
+      try { await api("POST", `/decks/${decks[i].id}/sync`); ok++; }
+      catch (e) { fail++; }
+    }
+    toast(`Refreshed ${ok} deck${ok === 1 ? "" : "s"} for ${player.name}${fail ? `, ${fail} failed` : ""}.`, fail ? "err" : "ok");
+    button.disabled = false; button.innerHTML = label;
+    await reload();
   }
 
   function renderPlayers() {
@@ -259,6 +297,38 @@
     const node = h("div", { class: "gv-panel gv-blank" }, h("i", { class: `bi ${icon}` }), h("div", { text: msg }));
     if (cta) node.append(h("button", { class: "gv-btn gv-btn-primary gv-btn-sm", style: "margin-top:1rem", onclick: onCta }, cta));
     return node;
+  }
+
+  /* ---------------------------------------------------- bracket modal */
+  function openBracketModal(deck) {
+    const NAMES = { 1: "Exhibition", 2: "Core", 3: "Upgraded", 4: "Optimized", 5: "cEDH" };
+    const seg = h("div", { class: "gv-seg", style: "flex-wrap:wrap" });
+    [1, 2, 3, 4, 5].forEach((n) => seg.append(
+      h("button", { type: "button", class: deck.bracket === n ? "active" : "", onclick: () => choose(n) },
+        `${n} · ${NAMES[n]}`)));
+    async function choose(n) {
+      try {
+        await api("PATCH", `/decks/${deck.id}`, { bracket: n });
+        toast(`Bracket set to ${n} · ${NAMES[n]}.`, "ok");
+        closeModal(); await reload();
+      } catch (e) { toast(e.message, "err"); }
+    }
+    const isSource = deck.source && deck.source !== "manual";
+    const body = h("div", {},
+      h("div", { class: "gv-hint", style: "margin-bottom:.6rem" },
+        `Set the Commander bracket for “${deck.name}”. A hand-set bracket sticks through re-syncs.`),
+      seg);
+    const foot = [btn("Cancel", "gv-btn-ghost", closeModal)];
+    if (deck.bracket || deck.bracket_manual) {
+      foot.push(btn(isSource ? "Reset to source" : "Clear", "gv-btn-ghost", async () => {
+        try {
+          await api("PATCH", `/decks/${deck.id}`, { bracket: null });
+          toast(isSource ? "Reverted to the source bracket." : "Bracket cleared.", "ok");
+          closeModal(); await reload();
+        } catch (e) { toast(e.message, "err"); }
+      }));
+    }
+    openModal(`Bracket · ${deck.name}`, body, foot);
   }
 
   /* ---------------------------------------------------- player modal */
@@ -409,7 +479,11 @@
             playerId,
             deckId: p.deck_id ? String(p.deck_id) : "",
             winner: !!p.is_winner,
-            snapDeck: (!p.deck_id && p.deck_name) ? { name: p.deck_name, commander: p.commander_name || "" } : null,
+            // A seat recorded by text only (no linked deck): show the commander
+            // (matching the log) but preserve both original values on save.
+            snapDeck: (!p.deck_id && (p.commander_name || p.deck_name))
+              ? { label: p.commander_name || p.deck_name, deckName: p.deck_name || "", commander: p.commander_name || "" }
+              : null,
           });
         });
     } else {
@@ -447,8 +521,10 @@
       state.players.forEach((p) => playerSel.append(h("option", { value: String(p.id), text: p.name })));
       playerSel.value = seat.playerId || "";
 
-      const deckSel = h("select", { class: "gv-select", title: seat.snapDeck ? `Logged as “${seat.snapDeck.name}” — pick a deck to map it` : "" });
-      fillDecks(deckSel, seat.playerId, seat.deckId, seat.snapDeck ? `keep logged: ${seat.snapDeck.name}` : undefined);
+      const deckSel = h("select", { class: "gv-select",
+        title: seat.snapDeck ? `Logged as “${seat.snapDeck.label}” but not linked to a saved deck. Leave it to keep the log, or pick a deck to map it.` : "" });
+      fillDecks(deckSel, seat.playerId, seat.deckId,
+        seat.snapDeck ? `Keep “${seat.snapDeck.label}” (unmapped)` : undefined);
 
       playerSel.addEventListener("change", () => {
         seat.playerId = playerSel.value;
@@ -528,9 +604,9 @@
           seatData.deck_id = Number(s.deckId);
         } else {
           seatData.deck_id = null;
-          if (s.snapDeck) { // preserve a logged-but-unmapped deck
-            seatData.deck_name = s.snapDeck.name;
-            seatData.commander_name = s.snapDeck.commander;
+          if (s.snapDeck) { // preserve a logged-but-unmapped deck/commander
+            if (s.snapDeck.deckName) seatData.deck_name = s.snapDeck.deckName;
+            if (s.snapDeck.commander) seatData.commander_name = s.snapDeck.commander;
           }
         }
         return seatData;
@@ -643,10 +719,131 @@
     } catch (e) { toast(e.message, "err"); }
   }
 
+  /* ------------------------------------------------------------- metrics */
+  const BRACKET_NAMES = { 1: "Exhibition", 2: "Core", 3: "Upgraded", 4: "Optimized", 5: "cEDH" };
+  const metricFilters = { date_from: "", date_to: "", player_id: "", win_condition: "", min_games: "3" };
+
+  function buildMetricFilters() {
+    const host = $("#gvMetricFilters"); clear(host);
+    const playerSel = h("select", { class: "gv-select" }, h("option", { value: "", text: "All players" }));
+    state.players.forEach((p) => playerSel.append(h("option", { value: String(p.id), text: p.name })));
+    playerSel.value = metricFilters.player_id;
+    playerSel.addEventListener("change", () => { metricFilters.player_id = playerSel.value; loadMetrics(); });
+
+    const wcSel = h("select", { class: "gv-select" }, h("option", { value: "", text: "Any win condition" }));
+    WIN_CONDITIONS.forEach((w) => wcSel.append(h("option", { value: w, text: WIN_LABELS[w] || w })));
+    wcSel.value = metricFilters.win_condition;
+    wcSel.addEventListener("change", () => { metricFilters.win_condition = wcSel.value; loadMetrics(); });
+
+    const minG = h("input", { class: "gv-input", type: "number", min: "1", max: "50", value: metricFilters.min_games });
+    minG.addEventListener("change", () => { metricFilters.min_games = minG.value || "1"; loadMetrics(); });
+
+    const from = h("input", { class: "gv-input", type: "date", value: metricFilters.date_from });
+    const to = h("input", { class: "gv-input", type: "date", value: metricFilters.date_to });
+    from.addEventListener("change", () => { metricFilters.date_from = from.value; loadMetrics(); });
+    to.addEventListener("change", () => { metricFilters.date_to = to.value; loadMetrics(); });
+
+    const presetBtn = (label, days) => h("button", { type: "button", onclick: () => {
+      const f = days ? new Date(Date.now() - days * 86400000) : null;
+      metricFilters.date_from = f ? f.toISOString().slice(0, 10) : "";
+      metricFilters.date_to = "";
+      from.value = metricFilters.date_from; to.value = "";
+      loadMetrics();
+    } }, label);
+    const presets = h("div", { class: "gv-seg" },
+      presetBtn("All", 0), presetBtn("30d", 30), presetBtn("90d", 90), presetBtn("1yr", 365));
+
+    host.append(
+      field("Player", playerSel),
+      field("Win condition", wcSel),
+      field("Min games (decks/cmdrs)", minG),
+      field("From", from),
+      field("To", to),
+      field("Quick range", presets));
+  }
+
+  async function loadMetrics() {
+    const body = $("#gvMetricsBody"); clear(body);
+    body.append(h("div", { class: "gv-loading" }, h("span", { class: "gv-spin" }), "Crunching numbers…"));
+    const qs = new URLSearchParams();
+    Object.entries(metricFilters).forEach(([k, v]) => { if (v) qs.set(k, v); });
+    try {
+      const { metrics } = await api("GET", `/metrics?${qs.toString()}`);
+      renderMetrics(metrics);
+    } catch (e) { clear(body); body.append(h("div", { class: "gv-empty", text: e.message })); }
+  }
+
+  function ratePanel(title, icon, rows, metaFn, opts) {
+    const panel = h("div", { class: "gv-panel gv-board" }, h("h3", {}, h("i", { class: `bi ${icon}` }), title));
+    if (!rows || !rows.length) { panel.append(h("div", { class: "gv-empty", text: "No data for these filters." })); return panel; }
+    rows.slice(0, (opts && opts.limit) || 15).forEach((r) => {
+      const name = h("div", { class: "gv-rank-name" }, r.label);
+      if (opts && opts.sub) { const s = opts.sub(r); if (s) name.append(h("div", { class: "gv-rank-meta", text: s })); }
+      else name.append(h("div", { class: "gv-rank-meta", text: metaFn(r) }));
+      panel.append(h("div", { class: "gv-rank" }, name,
+        h("div", { class: "gv-winbar" }, h("span", { style: `width:${Math.round(r.win_rate)}%` })),
+        h("div", { class: "gv-winpct", text: `${r.win_rate}%` })));
+    });
+    return panel;
+  }
+
+  function countPanel(title, icon, rows, labelOf, valueOf, noteOf) {
+    const panel = h("div", { class: "gv-panel gv-board" }, h("h3", {}, h("i", { class: `bi ${icon}` }), title));
+    if (!rows || !rows.length) { panel.append(h("div", { class: "gv-empty", text: "No data." })); return panel; }
+    const max = Math.max(1, ...rows.map(valueOf));
+    rows.forEach((r) => {
+      panel.append(h("div", { class: "gv-rank" },
+        h("div", { class: "gv-rank-name", style: "flex:0 0 92px" }, labelOf(r),
+          noteOf ? h("div", { class: "gv-rank-meta", text: noteOf(r) }) : null),
+        h("div", { class: "gv-winbar", style: "flex:1" }, h("span", { style: `width:${Math.round(valueOf(r) / max * 100)}%` })),
+        h("div", { class: "gv-winpct", text: String(valueOf(r)) })));
+    });
+    return panel;
+  }
+
+  function renderMetrics(m) {
+    const body = $("#gvMetricsBody"); clear(body);
+    const s = m.summary || {};
+    const cards = [
+      { n: s.games || 0, l: "Games", i: "bi-dice-5" },
+      { n: s.players || 0, l: "Players", i: "bi-people" },
+      { n: s.decks || 0, l: "Decks used", i: "bi-collection" },
+      { n: s.combo_pct != null ? `${s.combo_pct}%` : "—", l: "Combo wins", i: "bi-lightning-charge" },
+      { n: s.infinite_pct != null ? `${s.infinite_pct}%` : "—", l: "Infinite wins", i: "bi-infinity" },
+    ];
+    if (s.avg_turns != null) cards.push({ n: s.avg_turns, l: "Avg turns", i: "bi-hourglass-split" });
+    const grid = h("div", { class: "gv-stat-grid" });
+    cards.forEach((c) => grid.append(h("div", { class: "gv-stat" },
+      h("div", { class: "gv-stat-num", text: String(c.n) }),
+      h("div", { class: "gv-stat-label" }, h("i", { class: `bi ${c.i}`, style: "margin-right:.4rem" }), c.l))));
+    body.append(grid);
+
+    const boards = h("div", { class: "gv-board-grid gv-mt" },
+      ratePanel("Player standings", "bi-trophy", m.players,
+        (r) => `${r.wins}W · ${r.games} games` + (r.avg_turn_order != null ? ` · avg seat ${r.avg_turn_order}` : "")),
+      ratePanel("Win rate by turn order", "bi-sort-numeric-down", m.turn_order, (r) => `${r.wins}W · ${r.games} games`),
+      ratePanel("Win rate by bracket", "bi-bar-chart-steps",
+        (m.brackets || []).map((b) => ({ label: `B${b.bracket} · ${BRACKET_NAMES[b.bracket] || ""}`.trim(), games: b.games, wins: b.wins, win_rate: b.win_rate })),
+        (r) => `${r.wins}W · ${r.games} games`),
+      countPanel("Win conditions", "bi-flag", m.win_conditions,
+        (r) => WIN_LABELS[r.label] || r.label, (r) => r.count, (r) => `${r.pct}%`),
+      ratePanel("Longest win streaks", "bi-fire",
+        (m.streaks || []).map((x) => ({ label: x.label, games: x.games, wins: x.best_streak, win_rate: x.best_streak ? Math.min(100, x.best_streak * 20) : 0 })),
+        (r) => `best ${r.wins} in a row · ${r.games} games`),
+      countPanel("Games over time", "bi-calendar3", m.timeline, (r) => r.month, (r) => r.games));
+    body.append(boards);
+
+    body.append(h("div", { class: "gv-mt" }, ratePanel("Deck performance", "bi-layers", m.decks,
+      null, { limit: 20, sub: (r) => `${r.wins}W · ${r.games} games` + (r.commander ? ` · ${r.commander}` : "") + (r.bracket ? ` · B${r.bracket}` : "") })));
+    body.append(h("div", { class: "gv-mt" }, ratePanel("Commander performance", "bi-person-badge", m.commanders,
+      (r) => `${r.wins}W · ${r.games} games`, { limit: 20 })));
+  }
+
   /* --------------------------------------------------------------- tabs */
   function switchTab(name) {
     document.querySelectorAll(".gv-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
     document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== name; });
+    if (name === "metrics") { buildMetricFilters(); loadMetrics(); }
   }
 
   /* --------------------------------------------------------------- utils */

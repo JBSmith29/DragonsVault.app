@@ -63,6 +63,28 @@ def test_archidekt_bad_id():
         archidekt.fetch_deck("https://archidekt.com/notadeck")
 
 
+def test_archidekt_estimated_bracket(monkeypatch):
+    # edhBracket null -> fall back to the site's estimated bracket (HTML scrape).
+    api_payload = {
+        "id": 55, "name": "Estimated Deck", "deckFormat": 3, "edhBracket": None,
+        "cards": [
+            {"quantity": 1, "categories": ["Commander"], "card": {"oracleCard": {"name": "Cmd"}}},
+            {"quantity": 1, "categories": [], "card": {"oracleCard": {"name": "Sol Ring"}}},
+        ],
+    }
+    html = '<button>Est<!-- --> Bracket:<!-- --> <!-- -->Upgraded (3)</button>'
+
+    def fake_get(url, **kw):
+        if "/api/decks/" in url:
+            return _Resp(payload=api_payload)
+        return _Resp(text=html)
+
+    monkeypatch.setattr(archidekt, "safe_get", fake_get)
+    deck = archidekt.fetch_deck("https://archidekt.com/decks/55")
+    assert deck.bracket == 3
+    assert deck.bracket_estimated is True
+
+
 def test_archidekt_list_filters_to_username(monkeypatch):
     payload = {
         "count": 2,

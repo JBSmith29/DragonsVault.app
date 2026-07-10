@@ -114,6 +114,17 @@ body.gv-body {
 .gv-section-head h2 { font-size: 1.25rem; margin: 0; }
 .gv-section-head p { margin: 0.15rem 0 0; color: var(--gv-muted); font-size: 0.9rem; }
 
+/* Metrics filter bar ------------------------------------------------------ */
+.gv-filters {
+  display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end;
+  padding: 0.9rem 1rem; margin-bottom: 1.25rem;
+  background: var(--gv-panel); border: 1px solid var(--gv-border); border-radius: var(--gv-radius-sm);
+}
+.gv-filters .gv-field { min-width: 130px; gap: 0.25rem; }
+.gv-filters .gv-field > label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.3px; }
+.gv-filters .gv-seg { min-width: 200px; }
+@media (max-width: 560px) { .gv-filters .gv-field { min-width: calc(50% - 0.4rem); } }
+
 /* Stat tiles -------------------------------------------------------------- */
 .gv-stat-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .gv-stat {
@@ -176,6 +187,9 @@ body.gv-body {
 .gv-badge.src-mtggoldfish { color: #ffd166; border-color: rgba(255,209,102,0.5); }
 .gv-badge.src-manual { color: var(--gv-faint); }
 .gv-badge.gv-bracket { color: var(--gv-purple); border-color: rgba(139,92,246,0.5); }
+button.gv-badge { background: transparent; font-family: inherit; cursor: pointer; }
+.gv-bracket-btn { color: var(--gv-muted); }
+.gv-bracket-btn:hover { color: var(--gv-text); border-color: var(--gv-purple); }
 
 /* WUBRG color pips -------------------------------------------------------- */
 .gv-pips { display: inline-flex; gap: 2px; }

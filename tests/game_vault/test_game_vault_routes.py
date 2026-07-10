@@ -132,6 +132,34 @@ def test_import_bad_link_returns_400(client, create_user):
     assert "error" in r.get_json()
 
 
+def test_set_deck_bracket_manual(client, create_user, monkeypatch):
+    user, password = create_user(email="gv-bracket@example.com", username="gvbracket")
+    _login(client, user.email, password)
+    _patch_import(monkeypatch, _fake_deck(bracket=3))
+    pid = client.post("/game-vault/api/players", json={"name": "Mo"}).get_json()["player"]["id"]
+    did = client.post(f"/game-vault/api/players/{pid}/decks",
+                      json={"url": "https://archidekt.com/decks/42"}).get_json()["deck"]["id"]
+
+    # Hand-set the bracket to 5.
+    r = client.patch(f"/game-vault/api/decks/{did}", json={"bracket": 5})
+    assert r.status_code == 200
+    deck = r.get_json()["deck"]
+    assert deck["bracket"] == 5 and deck["bracket_manual"] is True and deck["bracket_is_estimated"] is False
+
+    # A re-sync must NOT overwrite the manual bracket (import says 3).
+    r = client.post(f"/game-vault/api/decks/{did}/sync")
+    assert r.get_json()["deck"]["bracket"] == 5
+
+    # Out-of-range rejected.
+    assert client.patch(f"/game-vault/api/decks/{did}", json={"bracket": 9}).status_code == 400
+
+    # Clearing reverts to source (import bracket 3, no longer manual).
+    r = client.patch(f"/game-vault/api/decks/{did}", json={"bracket": None})
+    assert r.status_code == 200
+    deck = r.get_json()["deck"]
+    assert deck["bracket_manual"] is False and deck["bracket"] == 3
+
+
 def test_delete_deck(client, create_user, monkeypatch):
     user, password = create_user(email="gv-deldeck@example.com", username="gvdeldeck")
     _login(client, user.email, password)
@@ -278,6 +306,33 @@ def test_deck_mapping_by_commander(client, create_user, monkeypatch):
     sam_seats = [p for g in games for p in g["participants"] if p["player_name"] == "Sam"]
     assert sam_seats and all(s["deck_id"] == did for s in sam_seats)
     assert all(s["commander_name"] == "Atraxa, Praetors' Voice" for s in sam_seats)
+
+
+def test_metrics_endpoint(client, create_user):
+    user, password = create_user(email="gv-metrics@example.com", username="gvmetrics")
+    _login(client, user.email, password)
+    a = client.post("/game-vault/api/players", json={"name": "Ann"}).get_json()["player"]["id"]
+    b = client.post("/game-vault/api/players", json={"name": "Bob"}).get_json()["player"]["id"]
+    client.post("/game-vault/api/games", json={
+        "played_at": "2026-07-01", "win_condition": "combo", "turns": 8,
+        "participants": [
+            {"player_id": a, "is_winner": True, "turn_order": 1, "commander_name": "Atraxa"},
+            {"player_id": b, "is_winner": False, "turn_order": 2, "commander_name": "Krenko"},
+        ],
+    })
+    r = client.get("/game-vault/api/metrics?min_games=1")
+    assert r.status_code == 200
+    data = r.get_json()
+    m = data["metrics"]
+    assert m["summary"]["games"] == 1
+    assert any(p["label"] == "Ann" and p["win_rate"] == 100.0 for p in m["players"])
+    assert {"seat": 1, "label": "1st to play", "games": 1, "wins": 1, "win_rate": 100.0} in m["turn_order"]
+    assert any(w["label"] == "combo" for w in m["win_conditions"])
+    assert data["options"]["players"]  # filter options present
+
+    # player filter narrows to games including that player
+    r2 = client.get(f"/game-vault/api/metrics?player_id={a}")
+    assert r2.get_json()["metrics"]["summary"]["games"] == 1
 
 
 def test_state_endpoint(client, create_user):

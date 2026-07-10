@@ -27,6 +27,36 @@ _HEADERS = {
 }
 _EXCLUDED_CATEGORIES = {"maybeboard", "sideboard", "considering"}
 _COLOR_ORDER = "WUBRG"
+# Archidekt only returns the owner-declared bracket (edhBracket) in JSON. Its
+# auto-estimated bracket is rendered in the deck page HTML as e.g.
+# "Est Bracket: Optimized (4)" — parse the (N).
+_HTML_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; DragonsVault-GameVault/1.0; +https://github.com/JBSmith29/DragonsVault.app)",
+    "Accept": "text/html,application/xhtml+xml",
+}
+_BRACKET_PAT = re.compile(r"Bracket:(?:<!--.*?-->|\s)*[A-Za-z]+\s*\((\d)\)", re.IGNORECASE | re.DOTALL)
+
+
+def _estimated_bracket(deck_id: Any) -> Optional[int]:
+    """Best-effort scrape of Archidekt's estimated bracket from the deck page."""
+    try:
+        resp = safe_get(
+            f"https://archidekt.com/decks/{deck_id}",
+            timeout=EXTERNAL_SERVICE_TIMEOUT,
+            headers=_HTML_HEADERS,
+        )
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+    match = _BRACKET_PAT.search(resp.text or "")
+    if not match:
+        return None
+    try:
+        value = int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    return value if 1 <= value <= 5 else None
 
 
 def normalize_username(raw: str | None) -> str:
@@ -159,6 +189,15 @@ def fetch_deck(deck_ref: str) -> ImportedDeck:
             continue
         cards.append({"name": name, "quantity": qty})
 
+    # Prefer the owner-declared bracket; fall back to the site estimate.
+    bracket = data.get("edhBracket")
+    bracket_estimated = False
+    if not bracket:
+        est = _estimated_bracket(data.get("id") or deck_id)
+        if est:
+            bracket = est
+            bracket_estimated = True
+
     return ImportedDeck(
         source="archidekt",
         source_id=str(data.get("id") or deck_id),
@@ -167,7 +206,8 @@ def fetch_deck(deck_ref: str) -> ImportedDeck:
         commanders=commanders,
         color_identity=None,  # enriched from the commander via Scryfall
         format="commander" if data.get("deckFormat") == COMMANDER_FORMAT else None,
-        bracket=data.get("edhBracket"),
+        bracket=bracket,
+        bracket_estimated=bracket_estimated,
         cards=cards,
     )
 

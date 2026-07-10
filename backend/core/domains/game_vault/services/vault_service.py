@@ -150,7 +150,10 @@ def _apply_imported(deck: GVDeck, imported) -> None:
     deck.commander_name = imported.commander_name
     deck.color_identity = imported.color_identity
     deck.format = imported.format
-    deck.bracket = imported.bracket
+    # A hand-set bracket is authoritative — never clobber it on re-sync.
+    if not deck.bracket_manual:
+        deck.bracket = imported.bracket
+        deck.bracket_is_estimated = bool(getattr(imported, "bracket_estimated", False))
     deck.card_count = imported.card_count
     deck.cards = imported.cards
 
@@ -231,6 +234,37 @@ def delete_deck(owner_user_id: int, deck_id: int) -> None:
         raise VaultError("Deck not found.")
     db.session.delete(deck)
     db.session.commit()
+
+
+def set_deck_bracket(owner_user_id: int, deck_id: int, bracket: Any) -> GVDeck:
+    """Hand-set a deck's bracket (1-5), or clear the override (bracket=None).
+
+    A manual bracket is authoritative and survives re-syncs. Clearing it reverts
+    to the source's bracket/estimate (re-pulled immediately for source decks)."""
+    deck = GVDeck.query.filter_by(id=deck_id, owner_user_id=owner_user_id).first()
+    if not deck:
+        raise VaultError("Deck not found.")
+
+    value = _opt_int(bracket)
+    if value is None:
+        deck.bracket_manual = False
+        deck.bracket = None
+        deck.bracket_is_estimated = False
+        db.session.commit()
+        if deck.url or (deck.source and deck.source_id):
+            try:
+                return sync_deck(owner_user_id, deck_id)
+            except VaultError:
+                pass
+        return deck
+
+    if value < 1 or value > 5:
+        raise VaultError("Bracket must be between 1 and 5.")
+    deck.bracket = value
+    deck.bracket_manual = True
+    deck.bracket_is_estimated = False
+    db.session.commit()
+    return deck
 
 
 # --------------------------------------------------------------------------- #
@@ -599,6 +633,7 @@ __all__ = [
     "VaultError",
     "list_players", "create_player", "update_player", "delete_player",
     "list_source_decks", "import_deck", "sync_deck", "sync_all_decks", "delete_deck",
+    "set_deck_bracket",
     "list_games", "create_game", "update_game", "delete_game", "compute_stats",
     "deck_mapping_overview", "apply_deck_mapping",
     "detect_source",

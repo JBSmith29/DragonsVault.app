@@ -27,6 +27,7 @@ class ImportedDeck:
     color_identity: Optional[str] = None  # subset of WUBRG, e.g. "WUB"
     format: Optional[str] = None
     bracket: Optional[int] = None
+    bracket_estimated: bool = False  # True when the bracket is a site estimate
     cards: list[dict[str, Any]] = field(default_factory=list)  # {"name","quantity"}
 
     @property
@@ -50,6 +51,7 @@ class ImportedDeck:
             "colors": list(self.color_identity or ""),
             "format": self.format,
             "bracket": self.bracket,
+            "bracket_estimated": self.bracket_estimated,
             "card_count": self.card_count,
             "cards": self.cards,
         }
