@@ -157,7 +157,7 @@
   function gameCard(game, opts) {
     const card = h("div", { class: "gv-panel gv-game" });
     const top = h("div", { class: "gv-game-top" },
-      h("span", { class: "gv-game-date" }, h("i", { class: "bi bi-calendar3", style: "margin-right:.4rem;color:var(--gv-muted)" }), game.played_at_label || "—"));
+      h("span", { class: "gv-game-date", text: game.played_at_label || "—" }));
     const meta = h("div", { class: "gv-game-meta" });
     if (game.turns) meta.append(h("span", { text: `${game.turns} turns` }));
     if (game.win_condition) meta.append(h("span", { text: WIN_LABELS[game.win_condition] || game.win_condition }));
