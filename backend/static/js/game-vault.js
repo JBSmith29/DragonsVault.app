@@ -1036,12 +1036,8 @@
       ratePanel("Win rate by bracket", "bi-bar-chart-steps",
         (m.brackets || []).map((b) => ({ label: `B${b.bracket} · ${BRACKET_NAMES[b.bracket] || ""}`.trim(), games: b.games, wins: b.wins, win_rate: b.win_rate })),
         (r) => `${r.wins}W · ${r.games} games`),
-      countPanel("Win conditions", "bi-flag", m.win_conditions,
-        (r) => WIN_LABELS[r.label] || r.label, (r) => r.count, (r) => `${r.pct}%`),
-      ratePanel("Longest win streaks", "bi-fire",
-        (m.streaks || []).map((x) => ({ label: x.label, games: x.games, wins: x.best_streak, win_rate: x.best_streak ? Math.min(100, x.best_streak * 20) : 0 })),
-        (r) => `best ${r.wins} in a row · ${r.games} games`),
-      countPanel("Games over time", "bi-calendar3", m.timeline, (r) => r.month, (r) => r.games));
+      countPanel("Infinite wins", "bi-infinity", m.infinite_by_player || [],
+        (r) => r.label, (r) => r.count));
     body.append(boards);
 
     body.append(h("div", { class: "gv-mt" }, ratePanel("Deck performance", "bi-layers", m.decks,

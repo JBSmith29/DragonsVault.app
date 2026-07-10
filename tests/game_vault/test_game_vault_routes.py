@@ -314,7 +314,7 @@ def test_metrics_endpoint(client, create_user):
     a = client.post("/game-vault/api/players", json={"name": "Ann"}).get_json()["player"]["id"]
     b = client.post("/game-vault/api/players", json={"name": "Bob"}).get_json()["player"]["id"]
     client.post("/game-vault/api/games", json={
-        "played_at": "2026-07-01", "win_condition": "combo", "turns": 8,
+        "played_at": "2026-07-01", "win_condition": "combo", "turns": 8, "infinite_win": True,
         "participants": [
             {"player_id": a, "is_winner": True, "turn_order": 1, "commander_name": "Atraxa"},
             {"player_id": b, "is_winner": False, "turn_order": 2, "commander_name": "Krenko"},
@@ -328,6 +328,10 @@ def test_metrics_endpoint(client, create_user):
     assert any(p["label"] == "Ann" and p["win_rate"] == 100.0 for p in m["players"])
     assert {"seat": 1, "label": "1st to play", "games": 1, "wins": 1, "win_rate": 100.0} in m["turn_order"]
     assert any(w["label"] == "combo" for w in m["win_conditions"])
+    # Infinite wins credited to the winner.
+    assert m["infinite_by_player"] == [{"label": "Ann", "count": 1}]
+    # Timeline + streaks removed.
+    assert "timeline" not in m and "streaks" not in m
     assert data["options"]["players"]  # filter options present
 
     # player filter narrows to games including that player

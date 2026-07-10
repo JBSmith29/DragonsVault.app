@@ -186,12 +186,19 @@ def compute_metrics(owner_user_id: int, *, date_from: str | None = None, date_to
         bracket_rows.append({"bracket": b, "games": e["games"], "wins": e["wins"],
                              "win_rate": _rate(e["wins"], e["games"])})
 
-    # Activity timeline (games per month)
-    months: dict[str, int] = defaultdict(int)
+    # Infinite wins per player (the winner of each infinite-flagged game).
+    winner_by_game = {p.game_id: p for p in parts if p.is_winner}
+    inf_by_player: dict[str, int] = defaultdict(int)
     for g in games:
-        if g.played_at:
-            months[g.played_at.strftime("%Y-%m")] += 1
-    timeline = [{"month": m, "games": months[m]} for m in sorted(months)]
+        if g.infinite_win:
+            w = winner_by_game.get(g.id)
+            name = (w.player_name or "").strip() if w else ""
+            if name:
+                inf_by_player[name] += 1
+    infinite_by_player = sorted(
+        ({"label": n, "count": c} for n, c in inf_by_player.items()),
+        key=lambda e: (-e["count"], e["label"].lower()),
+    )
 
     # Head-to-head: the focus player's win rate in games each opponent was in.
     head_to_head = []
@@ -217,28 +224,6 @@ def compute_metrics(owner_user_id: int, *, date_from: str | None = None, date_to
         ]
         head_to_head.sort(key=lambda e: (-e["games"], e["label"].lower()))
 
-    # Win streaks (per player, chronological)
-    streak_src: dict[str, list[tuple]] = defaultdict(list)
-    for p in parts:
-        pname = (p.player_name or "").strip()
-        if pname:
-            streak_src[pname].append((played_at.get(p.game_id) or datetime.min, p.game_id, bool(p.is_winner)))
-    streaks = []
-    for name, lst in streak_src.items():
-        lst.sort()
-        best = cur = 0
-        for _, _, won in lst:
-            cur = cur + 1 if won else 0
-            best = max(best, cur)
-        trailing = 0
-        for _, _, won in reversed(lst):
-            if won:
-                trailing += 1
-            else:
-                break
-        streaks.append({"label": name, "best_streak": best, "current_streak": trailing, "games": len(lst)})
-    streaks.sort(key=lambda e: (-e["best_streak"], -e["games"], e["label"].lower()))
-
     return {
         "summary": {
             "games": total_games,
@@ -255,8 +240,7 @@ def compute_metrics(owner_user_id: int, *, date_from: str | None = None, date_to
         "turn_order": turn_rows,
         "win_conditions": win_conditions,
         "brackets": bracket_rows,
-        "timeline": timeline,
-        "streaks": streaks,
+        "infinite_by_player": infinite_by_player,
         "head_to_head": head_to_head,
         "applied": {
             "date_from": df.date().isoformat() if df else None,
