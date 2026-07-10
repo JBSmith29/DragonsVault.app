@@ -207,7 +207,7 @@
     const row = h("div", { class: "gv-deck" });
     row.append(deck.commander_image
       ? h("img", { class: "gv-deck-art", src: deck.commander_image, alt: "", loading: "lazy" })
-      : h("div", { class: "gv-deck-art" }));
+      : h("div", { class: "gv-deck-art" }, h("i", { class: "bi bi-layers" })));
     const sub = h("div", { class: "gv-deck-sub" }, sourceBadge(deck.source));
     if (deck.colors && deck.colors.length) sub.append(pips(deck.colors));
     if (deck.bracket) {
@@ -841,7 +841,11 @@
 
   /* --------------------------------------------------------------- tabs */
   function switchTab(name) {
-    document.querySelectorAll(".gv-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+    document.querySelectorAll(".gv-tab").forEach((t) => {
+      const on = t.dataset.tab === name;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", String(on));
+    });
     document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== name; });
     if (name === "metrics") { buildMetricFilters(); loadMetrics(); }
   }
@@ -864,6 +868,8 @@
     }));
     overlay().addEventListener("click", (e) => { if (e.target === overlay() || e.target.hasAttribute("data-close")) closeModal(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay().classList.contains("open")) closeModal(); });
+    // Reflect the initially-active tab for assistive tech.
+    document.querySelectorAll(".gv-tab").forEach((t) => t.setAttribute("aria-selected", String(t.classList.contains("active"))));
     reload();
   }
 

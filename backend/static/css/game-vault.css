@@ -135,13 +135,13 @@ body.gv-body {
 .gv-stat .gv-stat-label { color: var(--gv-muted); font-size: 0.85rem; margin-top: 0.35rem; }
 
 /* Leaderboards ------------------------------------------------------------ */
-.gv-board-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.gv-board-grid { display: grid; gap: 1.25rem; align-items: start; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .gv-board { padding: 1.1rem 1.25rem; }
 .gv-board h3 { font-size: 1rem; margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
 .gv-rank { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0; border-top: 1px solid var(--gv-border); }
 .gv-rank:first-of-type { border-top: none; }
 .gv-rank-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gv-rank-meta { color: var(--gv-faint); font-size: 0.8rem; }
+.gv-rank-meta { color: var(--gv-faint); font-size: 0.8rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .gv-winbar { height: 6px; border-radius: 4px; background: rgba(148,163,184,0.18); overflow: hidden; width: 90px; }
 .gv-winbar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--gv-green), var(--gv-blue)); }
 .gv-winpct { width: 44px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.85rem; }
@@ -164,10 +164,13 @@ body.gv-body {
   display: flex; align-items: center; gap: 0.7rem;
   padding: 0.5rem 0.6rem; border-radius: 12px;
   background: rgba(15, 23, 42, 0.55); border: 1px solid var(--gv-border);
+  transition: border-color 140ms var(--gv-ease), background 140ms var(--gv-ease);
 }
+.gv-deck:hover { border-color: var(--gv-border-strong); background: rgba(15, 23, 42, 0.75); }
 .gv-deck-art {
   width: 52px; height: 40px; border-radius: 8px; object-fit: cover; flex: none;
-  background: rgba(148,163,184,0.15); border: 1px solid var(--gv-border);
+  background: rgba(148,163,184,0.12); border: 1px solid var(--gv-border);
+  display: grid; place-items: center; color: var(--gv-faint); font-size: 1.05rem;
 }
 .gv-deck-main { flex: 1; min-width: 0; }
 .gv-deck-name { font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -227,15 +230,17 @@ button.gv-badge { background: transparent; font-family: inherit; cursor: pointer
 }
 .gv-modal-overlay.open { display: flex; }
 .gv-modal {
-  width: 100%; max-width: 620px; background: var(--gv-panel-solid);
+  width: 100%; max-width: 620px; max-height: 92vh;
+  display: flex; flex-direction: column;
+  background: var(--gv-panel-solid);
   border: 1px solid var(--gv-border-strong); border-radius: var(--gv-radius);
   box-shadow: var(--gv-shadow); animation: gvPop 180ms var(--gv-ease);
 }
 @keyframes gvPop { from { transform: translateY(12px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
-.gv-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--gv-border); }
-.gv-modal-head h3 { margin: 0; font-size: 1.1rem; }
-.gv-modal-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
-.gv-modal-foot { display: flex; justify-content: flex-end; gap: 0.6rem; padding: 1rem 1.25rem; border-top: 1px solid var(--gv-border); }
+.gv-modal-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--gv-border); }
+.gv-modal-head h3 { margin: 0; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gv-modal-body { flex: 1 1 auto; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+.gv-modal-foot { flex: none; display: flex; justify-content: flex-end; gap: 0.6rem; padding: 1rem 1.25rem; border-top: 1px solid var(--gv-border); }
 .gv-x { background: none; border: none; color: var(--gv-muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
 .gv-x:hover { color: var(--gv-text); }
 
@@ -329,6 +334,46 @@ button.gv-badge { background: transparent; font-family: inherit; cursor: pointer
 [hidden] { display: none !important; }
 .gv-mt { margin-top: 1.5rem; }
 
+/* Interaction polish + accessibility -------------------------------------- */
+.gv-stat { transition: border-color 140ms var(--gv-ease); }
+.gv-stat:hover { border-color: var(--gv-border-strong); }
+.gv-seat, .gv-pick { transition: border-color 140ms var(--gv-ease), background 140ms var(--gv-ease); }
+.gv-map-row { transition: border-color 140ms var(--gv-ease); }
+.gv-map-row:hover { border-color: var(--gv-border-strong); }
+.gv-winbar > span { transition: width 260ms var(--gv-ease); }
+
+.gv-btn:active:not(:disabled), .gv-tab:active { transform: translateY(0); }
+
+/* Visible keyboard focus for every interactive control. */
+.gv-btn:focus-visible,
+.gv-tab:focus-visible,
+.gv-x:focus-visible,
+button.gv-badge:focus-visible,
+.gv-seg button:focus-visible,
+.gv-pick:focus-visible,
+.gv-input:focus-visible,
+.gv-select:focus-visible,
+.gv-textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.45);
+}
+
+/* Themed scrollbars (dark). */
+.gv-body { scrollbar-color: rgba(148, 163, 184, 0.35) transparent; scrollbar-width: thin; }
+.gv-modal-body::-webkit-scrollbar, .gv-picklist::-webkit-scrollbar { width: 10px; }
+.gv-modal-body::-webkit-scrollbar-thumb, .gv-picklist::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3); border-radius: 999px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+.gv-modal-body::-webkit-scrollbar-thumb:hover, .gv-picklist::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5); background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  .gv-btn:hover, .gv-tab:hover { transform: none; }
+}
+
 /* Mobile optimization ----------------------------------------------------- */
 @media (max-width: 640px) {
   .gv-shell { padding: 0 0.8rem 3rem; }
@@ -351,6 +396,9 @@ button.gv-badge { background: transparent; font-family: inherit; cursor: pointer
   /* Larger touch targets for the icon buttons. */
   .gv-btn-icon { padding: 0.5rem 0.62rem; }
   .gv-deck-actions .gv-btn, .gv-player-actions .gv-btn { padding: 0.5rem 0.6rem; }
+  /* Toasts span the width so they never run off-screen. */
+  .gv-toasts { left: 0.8rem; right: 0.8rem; }
+  .gv-toast { max-width: none; }
 }
 
 @media (max-width: 460px) {
