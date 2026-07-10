@@ -37,6 +37,24 @@
   }
   const $ = (sel, root) => (root || document).querySelector(sel);
   const clear = (node) => { while (node.firstChild) node.removeChild(node.firstChild); };
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) { /* fall through to legacy path */ }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", "");
+      ta.style.position = "fixed"; ta.style.top = "-1000px"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
   const initials = (name) => (name || "?").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
   async function api(method, path, body) {
@@ -324,6 +342,21 @@
       list.append(h("div", { class: "gv-empty", text: "No card list stored for this deck." }));
     }
     body.append(list);
+
+    // "qty name" export text (commander first), ready to paste into other sites.
+    const lines = [];
+    if (commanderName) lines.push(`1 ${commanderName}`);
+    cards.forEach((c) => lines.push(`${c.quantity || 1} ${c.name}`));
+    const exportText = lines.join("\n");
+    const foot = $("#gvModalFoot"); clear(foot);
+    if (lines.length) {
+      foot.append(btn("Copy decklist", "gv-btn-ghost", async () => {
+        const ok = await copyText(exportText);
+        toast(ok ? `Copied ${lines.length} lines — paste into Archidekt, Moxfield, etc.`
+          : "Couldn't copy automatically — try selecting the list.", ok ? "ok" : "err");
+      }, { icon: "bi-clipboard" }));
+    }
+    foot.append(btn("Close", "gv-btn-ghost", closeModal));
   }
 
   function playerCard(player) {
