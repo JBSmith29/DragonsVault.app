@@ -335,6 +335,47 @@ def test_metrics_endpoint(client, create_user):
     assert r2.get_json()["metrics"]["summary"]["games"] == 1
 
 
+def test_manual_deck_create_and_edit(client, create_user, monkeypatch):
+    user, password = create_user(email="gv-manual@example.com", username="gvmanual")
+    _login(client, user.email, password)
+    # avoid network in scryfall enrichment
+    from core.domains.game_vault.services import vault_service
+    monkeypatch.setattr(vault_service.scryfall_lookup, "lookup_commander", lambda name: (None, None))
+    pid = client.post("/game-vault/api/players", json={"name": "Mo"}).get_json()["player"]["id"]
+
+    r = client.post(f"/game-vault/api/players/{pid}/decks/manual", json={
+        "name": "Paper Goblins",
+        "commander_name": "Krenko, Mob Boss",
+        "decklist": "Commander\n1 Krenko, Mob Boss\n\n1x Sol Ring (C21) 263\n2 Mountain\nSideboard\n1 Lightning Bolt\n",
+    })
+    assert r.status_code == 201, r.get_json()
+    deck = r.get_json()["deck"]
+    assert deck["source"] == "manual" and deck["name"] == "Paper Goblins"
+    did = deck["id"]
+
+    # cards parsed (dedup, set-code stripped)
+    detail = client.get(f"/game-vault/api/decks/{did}").get_json()["deck"]
+    names = {c["name"] for c in detail["cards"]}
+    assert {"Krenko, Mob Boss", "Sol Ring", "Mountain", "Lightning Bolt"} == names
+
+    # name required
+    assert client.post(f"/game-vault/api/players/{pid}/decks/manual", json={"name": " "}).status_code == 400
+
+    # edit: rename + change commander + shrink decklist
+    r = client.patch(f"/game-vault/api/decks/{did}", json={
+        "name": "Renamed", "commander_name": "Animar, Soul of Elements", "decklist": "1 Sol Ring",
+    })
+    assert r.status_code == 200
+    d2 = r.get_json()["deck"]
+    assert d2["name"] == "Renamed" and d2["commander_name"] == "Animar, Soul of Elements"
+    detail2 = client.get(f"/game-vault/api/decks/{did}").get_json()["deck"]
+    assert [c["name"] for c in detail2["cards"]] == ["Sol Ring"]
+
+    # manual deck's bracket can be hand-set
+    r = client.patch(f"/game-vault/api/decks/{did}", json={"bracket": 2})
+    assert r.get_json()["deck"]["bracket"] == 2 and r.get_json()["deck"]["bracket_manual"] is True
+
+
 def test_deck_detail_and_export(client, create_user, monkeypatch):
     user, password = create_user(email="gv-detail@example.com", username="gvdetail")
     _login(client, user.email, password)

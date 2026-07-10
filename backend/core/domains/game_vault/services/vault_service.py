@@ -6,6 +6,7 @@ All queries are scoped by ``owner_user_id`` and never touch tables outside the
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Any, Iterable, Optional
 
@@ -234,6 +235,102 @@ def delete_deck(owner_user_id: int, deck_id: int) -> None:
         raise VaultError("Deck not found.")
     db.session.delete(deck)
     db.session.commit()
+
+
+_QTY_LINE_RE = re.compile(r"^\s*(\d+)\s*x?\s+(.+?)\s*$", re.IGNORECASE)
+_SET_SUFFIX_RE = re.compile(r"\s+\([A-Za-z0-9]{2,6}\)(?:\s+[\w./-]+)?\s*$")
+_FOIL_MARK_RE = re.compile(r"\s*\*[^*]+\*\s*$")
+
+
+def parse_decklist_text(text: str | None) -> list[dict[str, Any]]:
+    """Parse pasted decklist text into [{name, quantity}].
+
+    Tolerant of Moxfield/Archidekt export formats: "1 Sol Ring",
+    "1x Sol Ring", "1 Sol Ring (C21) 263", section headers, and blank lines.
+    """
+    cards: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        match = _QTY_LINE_RE.match(line)
+        if not match:
+            continue  # skip section headers / labels without a leading quantity
+        qty = int(match.group(1))
+        name = _SET_SUFFIX_RE.sub("", match.group(2).strip())
+        name = _FOIL_MARK_RE.sub("", name).strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in cards:
+            cards[key]["quantity"] += qty
+        else:
+            cards[key] = {"name": name[:200], "quantity": qty}
+            order.append(key)
+    return [cards[k] for k in order]
+
+
+def _enrich_commander(deck: GVDeck) -> None:
+    if not deck.commander_name:
+        return
+    image, identity = scryfall_lookup.lookup_commander(deck.commander_name)
+    if image:
+        deck.commander_image = image
+    if identity:
+        deck.color_identity = identity
+
+
+def create_manual_deck(owner_user_id: int, player_id: int, *, name: str,
+                       commander_name: str | None = None, decklist: str | None = None) -> GVDeck:
+    """Create a hand-entered deck (source='manual') for a player."""
+    player = _get_player(owner_user_id, player_id)
+    clean = (name or "").strip()
+    if not clean:
+        raise VaultError("Enter a deck name.")
+    cards = parse_decklist_text(decklist)
+    total = sum(c["quantity"] for c in cards)
+    deck = GVDeck(
+        owner_user_id=owner_user_id,
+        player_id=player.id,
+        source="manual",
+        name=clean[:200],
+        commander_name=(commander_name or "").strip()[:200] or None,
+        format="commander",
+        cards=cards or None,
+        card_count=total or None,
+        last_synced_at=utcnow(),
+        sync_status="ok",
+    )
+    _enrich_commander(deck)
+    db.session.add(deck)
+    db.session.commit()
+    return deck
+
+
+def update_manual_deck(owner_user_id: int, deck_id: int, *, name: Any = None,
+                      commander_name: Any = None, decklist: Any = None) -> GVDeck:
+    """Edit a deck's name / commander / decklist (each optional)."""
+    deck = GVDeck.query.filter_by(id=deck_id, owner_user_id=owner_user_id).first()
+    if not deck:
+        raise VaultError("Deck not found.")
+    if name is not None:
+        clean = (name or "").strip()
+        if not clean:
+            raise VaultError("Enter a deck name.")
+        deck.name = clean[:200]
+    if commander_name is not None:
+        new_cmd = (commander_name or "").strip()[:200] or None
+        if new_cmd != deck.commander_name:
+            deck.commander_name = new_cmd
+            deck.commander_image = None
+            _enrich_commander(deck)
+    if decklist is not None:
+        cards = parse_decklist_text(decklist)
+        deck.cards = cards or None
+        deck.card_count = sum(c["quantity"] for c in cards) or None
+    db.session.commit()
+    return deck
 
 
 def get_deck_detail(owner_user_id: int, deck_id: int) -> dict[str, Any]:
@@ -686,6 +783,7 @@ __all__ = [
     "list_players", "create_player", "update_player", "delete_player",
     "list_source_decks", "import_deck", "sync_deck", "sync_all_decks", "delete_deck",
     "set_deck_bracket", "get_deck_detail", "games_csv",
+    "create_manual_deck", "update_manual_deck", "parse_decklist_text",
     "list_games", "create_game", "update_game", "delete_game", "compute_stats",
     "deck_mapping_overview", "apply_deck_mapping",
     "detect_source",

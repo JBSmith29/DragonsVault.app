@@ -273,6 +273,7 @@
 
     const actions = h("div", { class: "gv-deck-actions" });
     actions.append(h("button", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", title: "View decklist", onclick: () => openDeckDetail(deck) }, h("i", { class: "bi bi-list-ul" })));
+    if (deck.source === "manual") actions.append(h("button", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", title: "Edit deck", onclick: () => openManualDeckModal(deck) }, h("i", { class: "bi bi-pencil" })));
     if (deck.url) actions.append(h("a", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", href: deck.url, target: "_blank", rel: "noopener", title: "Open source" }, h("i", { class: "bi bi-box-arrow-up-right" })));
     if (deck.source !== "manual") actions.append(h("button", { class: "gv-btn gv-btn-ghost gv-btn-sm gv-btn-icon", title: "Re-sync from source", onclick: (e) => syncDeck(deck, e.currentTarget) }, h("i", { class: "bi bi-arrow-repeat" })));
     actions.append(h("button", { class: "gv-btn gv-btn-danger gv-btn-sm gv-btn-icon", title: "Remove deck", onclick: () => confirmDelete("deck", deck) }, h("i", { class: "bi bi-trash" })));
@@ -328,7 +329,7 @@
 
     const footRow = h("div", { style: "display:flex; gap:.5rem; flex-wrap:wrap" },
       h("button", { class: "gv-btn gv-btn-primary gv-btn-sm", onclick: () => openImportModal(player) },
-        h("i", { class: "bi bi-cloud-download" }), " Import deck"));
+        h("i", { class: "bi bi-cloud-download" }), " Add deck"));
     const syncable = (player.decks || []).filter((d) => d.source && d.source !== "manual");
     if (syncable.length) {
       footRow.append(h("button", {
@@ -449,21 +450,83 @@
 
   /* ---------------------------------------------------- import modal */
   function openImportModal(player) {
-    // Mode toggle: paste a link, or look up by username (Archidekt/Moxfield).
+    // Mode toggle: paste a link, look up by username, or add by hand.
     const seg = h("div", { class: "gv-seg" },
       h("button", { type: "button", class: "active", dataset: { mode: "url" }, text: "Paste a link" }),
-      h("button", { type: "button", dataset: { mode: "user" }, text: "By username" }));
-    const paneUrl = buildUrlPane(player);
-    const paneUser = buildUserPane(player);
-    paneUser.wrap.hidden = true;
+      h("button", { type: "button", dataset: { mode: "user" }, text: "By username" }),
+      h("button", { type: "button", dataset: { mode: "manual" }, text: "Add manually" }));
+    const panes = { url: buildUrlPane(player), user: buildUserPane(player), manual: buildManualPane(player) };
+    panes.user.wrap.hidden = true;
+    panes.manual.wrap.hidden = true;
     seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
       seg.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
-      const url = b.dataset.mode === "url";
-      paneUrl.wrap.hidden = !url; paneUser.wrap.hidden = url;
+      Object.entries(panes).forEach(([mode, p]) => { p.wrap.hidden = mode !== b.dataset.mode; });
     }));
-    const body = h("div", {}, seg, paneUrl.wrap, paneUser.wrap);
-    openModal(`Import deck for ${player.name}`, body, [btn("Done", "gv-btn-ghost", async () => { closeModal(); await reload(); })]);
+    const body = h("div", {}, seg, panes.url.wrap, panes.user.wrap, panes.manual.wrap);
+    openModal(`Add deck for ${player.name}`, body, [btn("Done", "gv-btn-ghost", async () => { closeModal(); await reload(); })]);
+  }
+
+  // Shared name/commander/decklist form for creating and editing manual decks.
+  function manualDeckForm(initial) {
+    const name = h("input", { class: "gv-input", type: "text", maxlength: "200",
+      value: (initial && initial.name) || "", placeholder: "e.g. Krenko Goblins" });
+    const cmd = h("input", { class: "gv-input", type: "text", maxlength: "200",
+      value: (initial && initial.commander_name) || "", placeholder: "e.g. Krenko, Mob Boss" });
+    const list = h("textarea", { class: "gv-textarea", style: "min-height:130px",
+      placeholder: "Optional — paste a decklist (Moxfield / Archidekt export)\n1 Sol Ring\n1 Arcane Signet\n…" },
+      (initial && initial.decklist) || "");
+    const node = h("div", {},
+      field("Deck name", name),
+      field("Commander", cmd, "Sets the deck's colours + art. Use the exact card name."),
+      field("Decklist (optional)", list, "One card per line; quantities optional. Moxfield's Export text works."));
+    return {
+      node, name,
+      payload: () => ({ name: name.value.trim(), commander_name: cmd.value.trim(), decklist: list.value }),
+      reset: () => { name.value = ""; cmd.value = ""; list.value = ""; name.focus(); },
+    };
+  }
+
+  function buildManualPane(player) {
+    const form = manualDeckForm(null);
+    const add = btn("Add deck", "gv-btn-primary", async () => {
+      const p = form.payload();
+      if (!p.name) { toast("Enter a deck name.", "err"); return; }
+      const orig = add.innerHTML; add.disabled = true; add.innerHTML = '<span class="gv-spin"></span> Adding…';
+      try {
+        const { deck } = await api("POST", `/players/${player.id}/decks/manual`, p);
+        toast(`Added “${deck.name}”.`, "ok");
+        form.reset(); await reload(); patchOpenImport(player);
+      } catch (e) { toast(e.message, "err"); }
+      add.disabled = false; add.innerHTML = orig;
+    }, { icon: "bi-plus-lg" });
+    const wrap = h("div", { style: "margin-top:1rem" },
+      h("div", { class: "gv-hint", style: "margin-bottom:.5rem" },
+        "For decks that can't be imported (Moxfield, paper, homebrew). You can set a bracket afterwards."),
+      form.node, h("div", { style: "margin-top:.75rem" }, add));
+    return { wrap };
+  }
+
+  async function openManualDeckModal(deck) {
+    const body = h("div", {}, h("div", { class: "gv-loading" }, h("span", { class: "gv-spin" }), "Loading…"));
+    openModal(`Edit ${deck.name}`, body, [btn("Cancel", "gv-btn-ghost", closeModal)]);
+    let full;
+    try { full = (await api("GET", `/decks/${deck.id}`)).deck; }
+    catch (e) { clear(body); body.append(h("div", { class: "gv-empty", text: e.message })); return; }
+    const decklistText = (full.cards || []).map((c) => `${c.quantity || 1} ${c.name}`).join("\n");
+    const form = manualDeckForm({ name: full.name, commander_name: full.commander_name, decklist: decklistText });
+    clear(body); body.append(form.node);
+    const save = btn("Save changes", "gv-btn-primary", async () => {
+      const p = form.payload();
+      if (!p.name) { toast("Enter a deck name.", "err"); return; }
+      save.disabled = true;
+      try {
+        await api("PATCH", `/decks/${deck.id}`, p);
+        toast("Deck updated.", "ok"); closeModal(); await reload();
+      } catch (e) { toast(e.message, "err"); save.disabled = false; }
+    }, { icon: "bi-check-lg" });
+    const foot = $("#gvModalFoot"); clear(foot);
+    foot.append(btn("Cancel", "gv-btn-ghost", closeModal), save);
   }
 
   function buildUrlPane(player) {

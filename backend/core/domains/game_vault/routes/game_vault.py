@@ -153,6 +153,21 @@ def api_import_deck(player_id: int):
     return jsonify({"deck": deck.to_dict()}), 201
 
 
+@game_vault_bp.post("/api/players/<int:player_id>/decks/manual")
+@login_required
+@_guard
+def api_create_manual_deck(player_id: int):
+    body = _body()
+    deck = svc.create_manual_deck(
+        _owner(),
+        player_id,
+        name=body.get("name"),
+        commander_name=body.get("commander_name"),
+        decklist=body.get("decklist"),
+    )
+    return jsonify({"deck": deck.to_dict()}), 201
+
+
 @game_vault_bp.post("/api/decks/<int:deck_id>/sync")
 @login_required
 @_guard
@@ -192,8 +207,18 @@ def api_export_games():
 @_guard
 def api_update_deck(deck_id: int):
     body = _body()
-    # bracket may be an int 1-5, or null to clear the manual override.
-    deck = svc.set_deck_bracket(_owner(), deck_id, body.get("bracket"))
+    owner = _owner()
+    deck = None
+    # Content edits (name / commander / decklist).
+    content = {k: body[k] for k in ("name", "commander_name", "decklist") if k in body}
+    if content:
+        deck = svc.update_manual_deck(owner, deck_id, **content)
+    # Bracket may be an int 1-5, or null to clear the manual override.
+    if "bracket" in body:
+        deck = svc.set_deck_bracket(owner, deck_id, body.get("bracket"))
+    if deck is None:
+        deck = svc.get_deck_detail(owner, deck_id)
+        return jsonify({"deck": deck})
     return jsonify({"deck": deck.to_dict()})
 
 
